@@ -275,4 +275,144 @@ export const capOut = {
   },
 };
 
-export const STUDY_PREP_EXIT = [setsPerOperation, inlineFull, planRejection, budgetCeiling, capOut];
+/** The migration's precondition: the topic state machine and the submit function are on this database. */
+const notMigrated = (e) => /study_prep_submit_attempt|teaching_workflow_id|study_prep_topics_state_check|violates check constraint|schema cache|does not exist/i.test(String(e?.message || e));
+
+/**
+ * Phase 5 §8.3 / D15: a missed topic goes intervention_required →
+ * awaiting_teaching (request_teaching) → retest_ready (the teaching session's
+ * end, through the real handoff completion path) → retest → understood.
+ * The teaching session is finished at once (approve → bind → finish, no
+ * socket). The plan's approved coins are set to 0 first so neither the
+ * agent's wake nor the auto-start can start a check of its own meanwhile.
+ */
+export const topicStates = {
+  name: "studyprep.topic_states", area: "study-prep", risk: "write", timeoutMs: 300_000,
+  description: "A missed topic goes intervention_required → awaiting_teaching (request_teaching makes the teaching session) → retest_ready (its end, through the handoff) → retest → understood, each state on the topic row.",
+  params: { learner: { default: "@tester45" } },
+  async run(ctx, p) {
+    const { getPracticeHarness, teachingHandoff } = await import("../../adaptive-learning/study-prep/wiring.js");
+    const harness = getPracticeHarness({ teaching: true });
+    const { me, session, s, topics } = await freshSession(ctx, p, harness);
+    if (!topics.length) ctx.expect.blocked(`no ${CLASS} ${SUBJECT} syllabus to plan from`);
+    const [linked] = await ctx.db.rows("edu.study_prep_sessions", { id: session.id }, { columns: "workflow_id", limit: 1 });
+    const wfId = linked?.workflow_id;
+    if (!wfId) ctx.expect.blocked("the session has no workflow instance (workflow engine off?)");
+    const runs = new Set();
+    const rowsMade = [];
+    ctx.cleanup(async () => {
+      await harness.cancelSession(s).catch(() => {});
+      for (const id of runs) await ctx.db.deleteOwned("edu.learner_exam_prep_runs", { ownerColumn: "learner_id", ownerId: me.id, filters: { id } });
+      for (const id of rowsMade) await ctx.db.deleteOwned("edu.adaptive_sessions", { ownerColumn: "student_id", ownerId: me.id, filters: { id } });
+      await ctx.db.deleteOwned("edu.workflow_instances", { ownerColumn: "learner_id", ownerId: me.id, filters: { parent_workflow_id: wfId } });
+      await ctx.db.deleteOwned("edu.workflow_instances", { ownerColumn: "learner_id", ownerId: me.id, filters: { id: wfId } });
+    });
+    const state = async (topicId) => (await ctx.db.rows("edu.study_prep_topics", { id: topicId }, { columns: "status, teaching_workflow_id, learner_confirmed_ready", limit: 1 }).catch((e) => {
+      if (notMigrated(e)) ctx.expect.blocked(`2026-study-prep-topic-states.sql is not applied: ${e.message}`);
+      throw e;
+    }))[0];
+
+    await harness.proposePlan({ ...s, topicIds: [topics[0].id] });
+    const { topics: planned } = await harness.confirmPlan(s);
+    const t = planned[0].id;
+    // Keep the agent and the auto-start out of the way: nothing may start a check but this scenario.
+    const [row] = await ctx.db.rows("edu.study_prep_sessions", { id: session.id }, { columns: "estimate", limit: 1 });
+    await harness.store.updateSessionConditional(session.id, "topic_active", { estimate: { ...(row?.estimate || {}), totalCoins: 0, extraCoins: 0 } });
+
+    const first = await practice(ctx, harness, { ...s, topicId: t, mode: "diagnostic" });
+    runs.add(first.run.id);
+    ctx.expect.eq("the diagnostic is out", (await state(t))?.status, "diagnostic");
+    let missed;
+    try { missed = await harness.submitPractice({ ...s, topicId: t, answers: await answersFor(ctx, first.run.id, { right: false }) }); } catch (e) {
+      if (notMigrated(e)) ctx.expect.blocked(`edu.study_prep_submit_attempt is not on this database: ${e.message}`);
+      throw e;
+    }
+    ctx.expect.eq("missed: intervention_required", `${missed.outcome}/${(await state(t))?.status}`, "retest_offered/intervention_required");
+    ctx.expect.eq("…the card still shows it active", missed.topic.status, "active");
+
+    const asked = await harness.requestTeaching({ ...s, topicId: t, strategy: "different_analogy", focusGaps: ["the missed questions"], intent: "An everyday analogy fits this gap." });
+    const waiting = await state(t);
+    ctx.expect.eq("request_teaching: awaiting_teaching", waiting?.status, "awaiting_teaching");
+    ctx.expect.eq("…on the teaching session it made", waiting?.teaching_workflow_id, asked.teaching?.workflowId);
+    const [child] = await ctx.db.rows("edu.workflow_instances", { id: asked.teaching?.workflowId }, { columns: "workflow_type, state, parent_workflow_id, metadata", limit: 1 });
+    ctx.expect.eq("a teaching child of the Study Prep workflow", `${child?.workflow_type}/${child?.parent_workflow_id === wfId}`, "teaching/true");
+    ctx.expect.eq("…with the agent's strategy", child?.metadata?.strategy, "different_analogy");
+    ctx.expect.eq("no retest while teaching waits", await rejected(() => harness.startTopicPractice({ ...s, topicId: t, mode: "retest" })), "teach_back_gate");
+
+    // The teaching session, finished at once through the handoff (its end is TEACHING_COMPLETED).
+    const handoff = teachingHandoff();
+    const approved = await handoff.approve({ workflowId: asked.teaching.workflowId, learnerId: me.id });
+    if (approved?.adaptiveSessionId) rowsMade.push(approved.adaptiveSessionId);
+    await handoff.bind({ workflowId: asked.teaching.workflowId, learnerId: me.id, liveSessionId: `gate_${me.id}_${Date.now()}` });
+    const finished = await handoff.finish({ workflowId: asked.teaching.workflowId, endResult: { totalTurns: 4, learnerEvidenceScore: 60 }, notesAdded: 2, endedBy: "objective_met" });
+    ctx.expect.eq("the teaching session completed", finished?.view?.state, "completed");
+    let ready = await state(t);
+    for (let i = 0; i < 6 && ready?.status !== "retest_ready"; i += 1) { await new Promise((r) => setTimeout(r, 500)); ready = await state(t); }
+    ctx.expect.eq("teaching done: retest_ready", `${ready?.status}/${ready?.learner_confirmed_ready}`, "retest_ready/true");
+
+    const retest = await practice(ctx, harness, { ...s, topicId: t, mode: "retest" });
+    runs.add(retest.run.id);
+    ctx.expect.eq("the retest is out", (await state(t))?.status, "retest");
+    const passed = await harness.submitPractice({ ...s, topicId: t, answers: await answersFor(ctx, retest.run.id, { right: true }) });
+    ctx.expect.eq("passed: understood", `${passed.outcome}/${(await state(t))?.status}`, "understood/understood");
+    const nodes = (await decisionNodes(ctx, session.id)).map((e) => e.decision_node).filter(Boolean);
+    ctx.note(`decisions: ${nodes.join(" → ")}`);
+    for (const node of ["teaching_requested", "teaching_completed"]) ctx.expect.ok(`${node} is on the stream`, nodes.includes(node));
+  },
+};
+
+/**
+ * Phase 5: the single-transaction submit. The same practice submitted twice
+ * at once scores once: one submit wins, the other is a recorded rejection;
+ * the attempt, the run record and the topic agree; a direct second call of
+ * the submit function changes nothing and reports the recorded score.
+ */
+export const submitAtomic = {
+  name: "studyprep.submit_atomic", area: "study-prep", risk: "write", timeoutMs: 180_000,
+  description: "Two submits of the same practice at once score once (edu.study_prep_submit_attempt): one wins, the other is refused; attempt, run and topic agree; a repeat call reports the recorded score and changes nothing.",
+  params: { learner: { default: "@tester44" } },
+  async run(ctx, p) {
+    const { getPracticeHarness } = await import("../../adaptive-learning/study-prep/wiring.js");
+    const { submitStudyPrepAttempt } = await import("../../adaptive-learning/exam-prep-service.js");
+    const harness = getPracticeHarness();
+    const { me, session, s, topics } = await freshSession(ctx, p, harness);
+    if (!topics.length) ctx.expect.blocked(`no ${CLASS} ${SUBJECT} syllabus to plan from`);
+    const runs = new Set();
+    ctx.cleanup(async () => { for (const id of runs) await ctx.db.deleteOwned("edu.learner_exam_prep_runs", { ownerColumn: "learner_id", ownerId: me.id, filters: { id } }); });
+    await harness.proposePlan({ ...s, topicIds: [topics[0].id] });
+    const { topics: planned } = await harness.confirmPlan(s);
+    const t = planned[0].id;
+    let started;
+    try { started = await practice(ctx, harness, { ...s, topicId: t, mode: "diagnostic" }); } catch (e) {
+      if (notMigrated(e)) ctx.expect.blocked(`2026-study-prep-topic-states.sql is not applied: ${e.message}`);
+      throw e;
+    }
+    runs.add(started.run.id);
+    const answers = await answersFor(ctx, started.run.id, { right: true });
+    const both = await Promise.allSettled([
+      harness.submitPractice({ ...s, topicId: t, answers }),
+      harness.submitPractice({ ...s, topicId: t, answers }),
+    ]);
+    const failure = both.find((r) => r.status === "rejected")?.reason;
+    if (failure && notMigrated(failure)) ctx.expect.blocked(`edu.study_prep_submit_attempt is not on this database: ${failure.message}`);
+    ctx.note(`results: ${both.map((r) => (r.status === "fulfilled" ? `ok:${r.value.outcome}` : `refused:${r.reason?.code || r.reason?.message}`)).join(", ")}`);
+    ctx.expect.eq("exactly one submit wins", both.filter((r) => r.status === "fulfilled").length, 1);
+    ctx.expect.eq("…the other is refused", both.filter((r) => r.status === "rejected" && r.reason?.code === "invalid_state_transition").length, 1);
+
+    const [attempt] = await ctx.db.rows("edu.learner_exam_prep_attempts", { run_id: started.run.id }, { columns: "score, submitted_at", limit: 1 });
+    const [run] = await ctx.db.rows("edu.learner_exam_prep_runs", { id: started.run.id }, { columns: "status, last_score", limit: 1 });
+    const [topic] = await ctx.db.rows("edu.study_prep_topics", { id: t }, { columns: "status", limit: 1 });
+    ctx.expect.eq("one score on the attempt", Number(attempt?.score), 1);
+    ctx.expect.eq("attempt, run and topic agree", `${run?.status}/${Number(run?.last_score)}/${topic?.status}`, "passed/1/understood");
+    const events = await decisionNodes(ctx, session.id);
+    ctx.expect.eq("one engine result", events.filter((e) => e.event_type === "engine_result").length, 1);
+
+    const again = await submitStudyPrepAttempt({ learnerId: me.id, sessionId: session.id, topicId: t, runId: started.run.id, answers: answers.map((a) => ({ ...a, answerIndex: (a.answerIndex + 1) % 4 })) });
+    ctx.expect.eq("a repeat call is a duplicate with the recorded score", `${again.applied}/${again.duplicate}/${again.score}`, "false/true/1");
+    const [after] = await ctx.db.rows("edu.learner_exam_prep_attempts", { run_id: started.run.id }, { columns: "score, submitted_at", limit: 1 });
+    ctx.expect.eq("…and changes nothing", `${Number(after?.score)}/${after?.submitted_at}`, `1/${attempt?.submitted_at}`);
+    await harness.cancelSession(s).catch(() => {});
+  },
+};
+
+export const STUDY_PREP_EXIT = [setsPerOperation, inlineFull, planRejection, budgetCeiling, capOut, topicStates, submitAtomic];

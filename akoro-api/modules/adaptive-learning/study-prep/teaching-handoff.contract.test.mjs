@@ -30,7 +30,7 @@ function world() {
     listDueProposals: async (nowIso) => (await all()).filter((i) => i.workflow_type === "teaching" && i.state === "proposed" && Date.parse(i.created_at) <= Date.parse(nowIso) - HANDOFF_AUTO_APPROVE_MS),
     studyPrep: {
       openWake: async (args) => { calls.wakeMessages.push(args); },
-      confirmTeachBack: async (args) => { calls.confirm.push(args); return { ok: true }; },
+      teachingCompleted: async (args) => { calls.confirm.push(args); return { ok: true }; },
       wake: (args) => { calls.wake.push(args); },
       createSessionRow: async (args) => { calls.rows = [...(calls.rows || []), args]; return `row-${(calls.rows || []).length}`; },
     },
@@ -145,7 +145,7 @@ test("a tap approves at once; the dashboard opens it; parts are reported; the en
 
   const done = await w.handoff.finish({ workflowId: offered.workflowId, endResult: { totalTurns: 6, learnerEvidenceScore: 72 }, notesAdded: 6 });
   assert.equal(done.view.state, "completed");
-  assert.deepEqual(w.calls.confirm, [{ sessionId: "s1", learnerId: L, topicId: "t1" }], "the retest unlocks");
+  assert.deepEqual(w.calls.confirm.map(({ sessionId, learnerId, topicId }) => ({ sessionId, learnerId, topicId })), [{ sessionId: "s1", learnerId: L, topicId: "t1" }], "TEACHING_COMPLETED: the retest unlocks");
   assert.equal(w.calls.wake[0].trigger, "teaching_done", "every part taught → the objective is met");
   assert.equal(done.outcome.objectiveMet, true);
   assert.equal(done.outcome.recommendedNextAction, "retest");

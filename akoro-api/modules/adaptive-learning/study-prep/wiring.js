@@ -7,7 +7,7 @@
  */
 
 import {
-  examPrepPolicyFor, publicAttempt, publicRun, startExamPrepRetest, startExamPrepRun, submitExamPrepAttempt,
+  examPrepPolicyFor, publicAttempt, publicRun, startExamPrepRetest, startExamPrepRun, submitStudyPrepAttempt,
 } from "../exam-prep-service.js";
 import { InsufficientBalanceError, createHarness } from "./harness.js";
 import { STUDY_PREP_COST } from "./education-engine.js";
@@ -34,6 +34,7 @@ import { publishLiveDeveloper } from "../../workflows/bus.js";
 import { keepFactual } from "../../agent-runtime/factFilter.js";
 import { aiContext } from "../../../lib/aiContext.js";
 import { makeWorkflowMirror, studyPrepWorkflow, workflowEngineEnabled } from "./workflow.js";
+import { TOPIC_STARTABLE_STATES } from "./state-machine.js";
 import { registerWorkflow } from "../../workflows/registry.js";
 import { makeTeachingHandoff } from "./teaching-handoff.js";
 import { makeAgentCheckRun } from "./agent-check-run.js";
@@ -50,7 +51,8 @@ const topicWorkflow = {
   // prepaid: the harness charged the flat practice price first (and refunds it
   // if generation fails), so generation tokens are not billed again.
   startRun: async ({ learnerId, studyPrepTopicId, request }) => startExamPrepRun({ learnerId, request, studyPrepTopicId, prepaid: true }),
-  submit: async ({ learnerId, runId, answers }) => submitExamPrepAttempt({ learnerId, runId, answers }),
+  // One transaction (edu.study_prep_submit_attempt): score + run record + topic outcome, once.
+  submitAttempt: async ({ learnerId, sessionId, topicId, runId, answers }) => submitStudyPrepAttempt({ learnerId, sessionId, topicId, runId, answers }),
   retest: async ({ learnerId, runId, learnerConfirmedReady }) => startExamPrepRetest({ learnerId, runId, learnerConfirmedReady, prepaid: true }),
   publicRun, publicAttempt,
 };
@@ -160,7 +162,9 @@ export const teachingHandoff = () => (_handoff ||= makeTeachingHandoff({
   },
   studyPrep: {
     openWake: openRunMessage,
-    confirmTeachBack: ({ sessionId, learnerId, topicId }) => getHarness().confirmTeachBack({ sessionId, learnerId, topicId }),
+    // TEACHING_COMPLETED: awaiting_teaching → retest_ready (§8.3); abandoned: the topic waits or needs a new intervention.
+    teachingCompleted: ({ sessionId, learnerId, topicId, workflowId, objectiveMet }) => getHarness().completeTeaching({ sessionId, learnerId, topicId, workflowId, objectiveMet }),
+    teachingAbandoned: ({ sessionId, learnerId, topicId, reofferedWorkflowId }) => getHarness().teachingAbandoned({ sessionId, learnerId, topicId, reofferedWorkflowId }),
     // start_teaching_session's row: an ordinary teaching session in the dashboard's list, with one
     // opening note (so the list offers it to continue, and the modal opens it by id).
     async createSessionRow({ learnerId, workflowId, topic, subject, focus }) {
@@ -184,6 +188,21 @@ export const teachingHandoff = () => (_handoff ||= makeTeachingHandoff({
 }));
 // The engine hands a finished teaching session's outcome to Study Prep through this.
 registerWorkflow(studyPrepWorkflow, { onChildOutcome: (parent, args) => teachingHandoff().controller.onChildOutcome(parent, args) });
+
+/**
+ * D15: the harness's way to Teaching — request_teaching makes the teaching
+ * session (a child of the Study Prep workflow) through the handoff. Only with
+ * the workflow engine; without it the harness has no `teaching` and the
+ * inline strategy path is the fallback.
+ */
+const teachingPort = {
+  request: async ({ session, topic, strategy, gaps, peerExplanations }) => {
+    const row = session?.workflow_id ? session : await store.getSession(session.id).catch(() => null);
+    if (!row?.workflow_id) return null;
+    return teachingHandoff().propose({ session: row, topic, outcome: "retest_offered", gaps, strategy, peerExplanations });
+  },
+};
+const teachingFor = (on) => (on ? { teaching: teachingPort } : {});
 
 /** A code-written run's own message in the chat the plan lives in (like a wake's); extraMeta rides along (a check's card). */
 async function openRunMessage({ sessionId, learnerId, wakeId, trigger, label, extraMeta = null, createThread = null }) {
@@ -241,7 +260,9 @@ export async function stopAgentCheck({ learnerId, restart = false }) {
   const refundFailed = charge?.length ? await store.refundCoins({ charge: { applied: charge }, feature: "study_prep_practice", ref: `study_prep:${row.id}` }).catch(() => 1) : 0;
   const coins = charge?.length && !refundFailed ? Number(check?.metadata?.coins) || STUDY_PREP_COST.COINS_PER_PRACTICE : 0;
   const wasRetest = topic.checkMode === "retest";
-  await store.updateTopicConditional(topic.id, "active", {
+  // §8.3: a stopped check goes back to ready (diagnostic → diagnostic_ready, retest → retest_ready).
+  await store.updateTopicConditional(topic.id, topic.state, {
+    status: wasRetest ? "retest_ready" : "diagnostic_ready",
     check_battle_id: null, check_mode: "stopped", check_scored_at: null, check_result: null,
     attempts_used: Math.max(0, Number(topic.attemptsUsed || 0) - 1),
     // A stopped retest keeps the teach-back it used, so it can start again.
@@ -327,7 +348,7 @@ export async function backfillStudyPrepWorkflows({ limit = 200 } = {}) {
 export function getHarness() {
   return createHarness({ store, topicWorkflow, syllabus, steps,
     ...(agentCheckEnabled() ? { agentCheck, protege, checkRun: checkRunOrNull() } : {}),
-    ...(workflowEngineEnabled() ? { workflowMirror: workflowMirror() } : {}) });
+    ...(workflowEngineEnabled() ? { workflowMirror: workflowMirror(), ...teachingFor(true) } : {}) });
 }
 
 /**
@@ -335,7 +356,7 @@ export function getHarness() {
  * gate's scenario (a test learner), never for a learner's request.
  */
 export function getWorkflowHarness() {
-  return createHarness({ store, topicWorkflow, syllabus, steps, ...(agentCheckEnabled() ? { agentCheck, protege, checkRun: agentCheckRun() } : {}), workflowMirror: workflowMirror() });
+  return createHarness({ store, topicWorkflow, syllabus, steps, ...(agentCheckEnabled() ? { agentCheck, protege, checkRun: agentCheckRun() } : {}), workflowMirror: workflowMirror(), ...teachingFor(true) });
 }
 
 /**
@@ -345,26 +366,30 @@ export function getWorkflowHarness() {
  */
 export function getAgentCheckHarness({ questions, secondsPerQuestion } = {}) {
   return createHarness({ store, topicWorkflow, syllabus, steps, agentCheck: makeAgentCheck({ questions, secondsPerQuestion }), protege,
-    checkRun: agentCheckRun(), workflowMirror: workflowMirror() });
+    checkRun: agentCheckRun(), workflowMirror: workflowMirror(), ...teachingFor(true) });
 }
 
 /**
  * The human-answered practice regardless of the switch (what
  * AKORO_STUDY_PREP_AGENT_CHECK=false gives) — for the gate's scenario.
  */
-export function getPracticeHarness() {
-  return createHarness({ store, topicWorkflow, syllabus });
+export function getPracticeHarness({ teaching = false } = {}) {
+  // teaching: with the workflow engine and Teaching (D15) — the human-answered practice on the full topic machine (gate only).
+  return createHarness({ store, topicWorkflow, syllabus, ...(teaching ? { workflowMirror: workflowMirror(), ...teachingFor(true) } : {}) });
 }
 
 /** The battle worker's hook when an Agent Check ends. Scores even if the switch was turned off meanwhile. */
 export async function completeAgentCheckBattle(battleId) {
-  const done = await createHarness({ store, topicWorkflow, syllabus, agentCheck, protege, checkRun: checkRunOrNull(),
-    ...(workflowEngineEnabled() ? { workflowMirror: workflowMirror() } : {}) }).completeAgentCheck({ battleId, teachingHandoff: workflowEngineEnabled() });
-  // Below the mark with tries left: a teaching session on what it missed is offered first (Phase 6),
-  // so the wake can talk about it.
+  const harness = createHarness({ store, topicWorkflow, syllabus, agentCheck, protege, checkRun: checkRunOrNull(),
+    ...(workflowEngineEnabled() ? { workflowMirror: workflowMirror(), ...teachingFor(true) } : {}) });
+  const done = await harness.completeAgentCheck({ battleId, teachingHandoff: workflowEngineEnabled() });
+  // Below the mark with tries left (intervention_required): D15 — the intervention is a teaching
+  // session on what it missed, offered at once (teach_back until the agent picks another strategy
+  // with request_teaching), so the wake can talk about it. Teaching off: the inline path.
   if (done?.outcome === "retest_offered" && workflowEngineEnabled()) {
     const row = await store.getSession(done.session.id).catch(() => null);
-    if (row) done.teaching = await teachingHandoff().propose({ session: row, topic: done.topic, outcome: done.outcome, gaps: done.result?.gaps || [] }).catch(() => null);
+    const asked = row ? await harness.requestTeaching({ sessionId: row.id, learnerId: row.learner_id, topicId: done.topic.id, strategy: "teach_back", focusGaps: done.result?.gaps || [], origin: "harness" }).catch(() => null) : null;
+    if (asked) { done.teaching = asked.teaching; done.topic = asked.topic; }
   }
   // The agent wakes on the result: explains it, and moves on, sets the topic aside or points to the teaching session.
   if (done?.session?.id) wakeStudyPrep({ sessionId: done.session.id, learnerId: done.session.learnerId || null, trigger: "check_scored", facts: { topic: done.topic?.label } });
@@ -654,7 +679,7 @@ export async function autoStartDueChecks({ nowMs = Date.now(), sessionId = null 
   const cutoff = new Date(nowMs - AUTO_START_MS).toISOString();
   // sessionId: one session only (the gate's, run with a later clock).
   let query = db.schema("edu").from("study_prep_topics").select("id, session_id")
-    .eq("status", "active").lte("updated_at", cutoff);
+    .in("status", TOPIC_STARTABLE_STATES).lte("updated_at", cutoff);
   if (sessionId) query = query.eq("session_id", sessionId);
   const { data: rows, error } = await query.order("updated_at", { ascending: true }).limit(25);
   if (error) throw error;

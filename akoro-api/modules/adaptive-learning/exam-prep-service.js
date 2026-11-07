@@ -13,6 +13,15 @@
  *
  * The router keeps auth + response envelope only. Behaviour (statuses,
  * teach-back handoff, change-approach copy) is unchanged.
+ *
+ * Phase 5 (Grand Plan §8.3): the run is an ATTEMPT RECORD. Inside Study Prep
+ * the topic state machine is the state — a Study Prep attempt is submitted
+ * through submitStudyPrepAttempt (one transaction: score + run record + topic
+ * outcome, edu.study_prep_submit_attempt), and a Study Prep run gets no
+ * separate projection. The standalone route keeps its run statuses and its
+ * `workflow` projection (adaptive_workflow_runs), now checked by the one run
+ * definition (study-prep/workflow.js examPrepRunWorkflow) — the old
+ * workflow-state.js / adaptive-workflows.js are folded in here.
  */
 import { v4 as uuid } from "uuid";
 
@@ -20,8 +29,85 @@ import db from "../../db.js";
 import { OPENAI_MODEL, openai } from "../../lib/aiModel.js";
 import { parseJsonLoose } from "../tasks/tools/_json.js";
 import { normaliseExamConfidenceQuestions } from "./exam-prep-confidence-validation.js";
-import { startExamPrepWorkflow, transitionExamPrepWorkflow } from "./adaptive-workflows.js";
 import { applyThreshold, scoreAttempt } from "./study-prep/education-engine.js";
+import { runStatusAfterScore } from "./study-prep/state-machine.js";
+import { canTransitionRun, runStepEvent } from "./study-prep/workflow.js";
+import { publicGroupedWorkflows } from "./study-prep/workflow-grouping.js";
+
+// ── the run's projection for the standalone route (was adaptive-workflows.js) ──
+
+// Default-on kill switch: workflow projections ship enabled; =false removes them.
+const projectionsEnabled = () => String(process.env.AKORO_ADAPTIVE_WORKFLOWS_ENABLED ?? "true").toLowerCase() !== "false";
+const safe = (value, maximum) => String(value || "").replace(/[\r\n\x00]+/g, " ").trim().slice(0, maximum);
+
+export async function startExamPrepWorkflow({ learnerId, examPrepRunId, topic, subject, examBoard, policyVersion, attempt }) {
+  if (!projectionsEnabled()) return null;
+  const { data: run, error } = await db.schema("edu").from("adaptive_workflow_runs").insert({
+    learner_id: learnerId, workflow_type: "exam_prep", exam_prep_run_id: examPrepRunId,
+    topic: safe(topic, 180), subject: safe(subject, 180), exam_board: safe(examBoard, 80),
+    policy_version: safe(policyVersion, 80), state: "diagnostic_ready", current_attempt: Number(attempt) || 1,
+  }).select("*").single();
+  if (error) throw error;
+  const event = runStepEvent({ state: "diagnostic_ready", attempt });
+  const { error: stepError } = await db.schema("edu").from("adaptive_workflow_steps").insert({
+    workflow_run_id: run.id, state: event.state, label: event.label, attempt_number: event.attempt,
+  });
+  if (stepError) throw stepError;
+  return publicWorkflow(run);
+}
+
+export async function transitionExamPrepWorkflow({ learnerId, examPrepRunId, from, to, attempt, score }) {
+  if (!projectionsEnabled()) return null;
+  if (!canTransitionRun(from, to)) throw new Error("Invalid adaptive workflow transition");
+  const { data: current, error: currentError } = await db.schema("edu").from("adaptive_workflow_runs")
+    .select("*").eq("learner_id", learnerId).eq("exam_prep_run_id", examPrepRunId).maybeSingle();
+  if (currentError) throw currentError;
+  // Migration/flag activation may happen after an existing exam-prep run. The
+  // workflow remains additive and starts observing from the current public state.
+  if (!current) return null;
+  if (!canTransitionRun(current.state, to)) return publicWorkflow(current);
+  const event = runStepEvent({ state: to, attempt, score });
+  const { data: updated, error } = await db.schema("edu").from("adaptive_workflow_runs").update({
+    state: to, current_attempt: event.attempt || current.current_attempt,
+    // Starting a retest must retain the prior diagnostic score; a score exists
+    // only when an assessment-recorded transition supplies one.
+    last_score: event.score == null ? current.last_score : event.score,
+    updated_at: new Date().toISOString(), completed_at: ["passed", "change_approach", "cancelled"].includes(to) ? new Date().toISOString() : null,
+  }).eq("id", current.id).eq("state", current.state).select("*").maybeSingle();
+  if (error) throw error;
+  if (!updated) return publicWorkflow(current); // a concurrent transition won; no duplicate event
+  const { error: stepError } = await db.schema("edu").from("adaptive_workflow_steps").insert({
+    workflow_run_id: updated.id, state: event.state, label: event.label,
+    attempt_number: event.attempt, score: event.score,
+  });
+  if (stepError) throw stepError;
+  return publicWorkflow(updated);
+}
+
+export function publicWorkflow(row) {
+  if (!row) return null;
+  return {
+    id: row.id, type: row.workflow_type, state: row.state, topic: row.topic,
+    subject: row.subject, examBoard: row.exam_board, currentAttempt: Number(row.current_attempt),
+    lastScore: row.last_score == null ? null : Number(row.last_score), policyVersion: row.policy_version,
+    updatedAt: row.updated_at, completedAt: row.completed_at || null,
+  };
+}
+
+export async function listLearnerWorkflows(learnerId, limit = 12) {
+  if (!projectionsEnabled()) return [];
+  // Fetch a wider window than the limit, then GROUP by study-prep session so
+  // one session (even with six topics) is a single list entry with nested
+  // topics — other workflow types stay visible beside it (Master Plan §4.8.3).
+  const capped = Math.max(1, Math.min(Number(limit) || 12, 30));
+  const { data, error } = await db.schema("edu").from("adaptive_workflow_runs").select("*")
+    .eq("learner_id", learnerId).order("updated_at", { ascending: false }).limit(capped * 3);
+  if (error) throw error;
+  return publicGroupedWorkflows(data || [], publicWorkflow).slice(0, capped);
+}
+
+/** A run that belongs to a Study Prep topic: its topic is the state, not the run. */
+const studyPrepRun = (run) => Boolean(run?.study_prep_topic_id);
 
 export class ExamPrepRequestError extends Error {}
 export class ExamPrepConflictError extends Error {
@@ -115,11 +201,13 @@ export async function getOwnedExamPrepRun(runId, learnerId) {
  */
 export const scoreSubmission = scoreAttempt;
 
-/** Deterministic status routing shared by the router and the harness. */
+/**
+ * The run record's status after a score — for the standalone route only.
+ * Study Prep never reads it to move a topic (§8.3): the topic machine does.
+ */
 export function nextRunStatus({ score, passThreshold, currentAttempt, maxAttempts }) {
   const { passed, capped } = applyThreshold({ score, passThreshold, attemptsUsed: Number(currentAttempt), maxAttempts });
-  const status = passed ? "passed" : capped ? "change_approach" : "teach_back_required";
-  return { passed, capped, status };
+  return { passed, capped, status: runStatusAfterScore({ passed, currentAttempt, maxAttempts }) };
 }
 
 /** Start a diagnostic run (optionally linked to a study-prep session topic). */
@@ -141,7 +229,8 @@ export async function startExamPrepRun({ learnerId, request, studyPrepTopicId = 
   }).select("*").single();
   if (attemptError) throw attemptError;
   let workflow = null;
-  try {
+  // A Study Prep run is only an attempt record: its topic is the state (no projection).
+  if (!studyPrepTopicId) try {
     workflow = await startExamPrepWorkflow({
       learnerId, examPrepRunId: run.id, topic: run.topic, subject: run.subject,
       examBoard: run.exam_board, policyVersion: run.policy_version, attempt: 1,
@@ -167,6 +256,10 @@ export async function submitExamPrepAttempt({ learnerId, runId, answers }) {
   if (!run) return { notFound: true };
   if (!["diagnostic_ready", "retest_ready"].includes(run.status)) {
     throw new ExamPrepConflictError("This exam-prep attempt is not ready for submission", "attempt_not_ready");
+  }
+  // One source of state: a Study Prep attempt is submitted with its topic (submitStudyPrepAttempt).
+  if (studyPrepRun(run)) {
+    throw new ExamPrepConflictError("This practice belongs to a Study Prep topic — submit it from the plan", "attempt_not_ready");
   }
   const { data: attempt, error } = await db.schema("edu").from("learner_exam_prep_attempts").select("*")
     .eq("run_id", run.id).eq("attempt_number", run.current_attempt).is("submitted_at", null).maybeSingle();
@@ -215,6 +308,45 @@ export async function submitExamPrepAttempt({ learnerId, runId, answers }) {
   return { run: updated, workflow, score, correct, total, passed, nextStatus };
 }
 
+/**
+ * Submit a Study Prep attempt (Phase 5): the Education Engine scores it here
+ * (the key never leaves the server), then ONE transaction —
+ * edu.study_prep_submit_attempt — writes the attempt's score, the run record
+ * and the topic's §8.3 outcome together, once. A second submit of the same
+ * attempt changes nothing and reports the score already recorded.
+ *   → { ok, applied, duplicate?, code?, score, correct, total, passed, capped, topic } | { notFound }
+ * Evidence is the caller's, after commit (recordLearningEvent).
+ */
+export async function submitStudyPrepAttempt({ learnerId, sessionId, topicId, runId, answers }) {
+  const run = await getOwnedExamPrepRun(runId, learnerId);
+  if (!run || run.study_prep_topic_id !== topicId) return { notFound: true };
+  const { data: attempt, error } = await db.schema("edu").from("learner_exam_prep_attempts").select("*")
+    .eq("run_id", run.id).eq("attempt_number", run.current_attempt).maybeSingle();
+  if (error) throw error;
+  if (!attempt) return { notFound: true };
+  if (attempt.submitted_at) {
+    return { ok: true, applied: false, duplicate: true, code: "attempt_already_submitted", score: attempt.score == null ? null : Number(attempt.score) };
+  }
+  let scored;
+  try {
+    scored = scoreSubmission(attempt.answer_key || {}, answers);
+  } catch {
+    throw new ExamPrepRequestError("invalid_answers");
+  }
+  const { data, error: rpcError } = await db.schema("edu").rpc("study_prep_submit_attempt", {
+    p_learner_id: learnerId, p_session_id: sessionId, p_topic_id: topicId, p_run_id: run.id, p_attempt_id: attempt.id,
+    p_submitted: scored.submitted, p_correct: scored.correct, p_total: scored.total, p_score: scored.score,
+  });
+  if (rpcError) throw rpcError;
+  const out = data || {};
+  if (out.code === "not_found") return { notFound: true };
+  return {
+    ok: out.ok === true, applied: out.applied === true, duplicate: out.duplicate === true, code: out.code || null,
+    score: out.score == null ? scored.score : Number(out.score), correct: scored.correct, total: scored.total,
+    passed: out.passed === true, capped: out.capped === true, topic: out.topic || null, runStatus: out.run_status || null,
+  };
+}
+
 /** Fresh retest — hard-gated on the learner's own teach-back confirmation. */
 export async function startExamPrepRetest({ learnerId, runId, learnerConfirmedReady, prepaid = false }) {
   const run = await getOwnedExamPrepRun(runId, learnerId);
@@ -238,7 +370,7 @@ export async function startExamPrepRetest({ learnerId, runId, learnerConfirmedRe
   }).eq("id", run.id).eq("learner_id", learnerId).eq("status", run.status).select("*").maybeSingle();
   if (runError) throw runError;
   let workflow = null;
-  try {
+  if (!studyPrepRun(run)) try {
     workflow = await transitionExamPrepWorkflow({
       learnerId, examPrepRunId: run.id, from: run.status, to: "retest_ready",
       attempt: attemptNumber,

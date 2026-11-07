@@ -242,7 +242,8 @@
     "2026-study-prep-materials-goal-type.sql",
     "2026-peer-help-opt-in.sql",
     "2026-blog-chunks.sql",
-    "2026-learning-question-signals.sql"
+    "2026-learning-question-signals.sql",
+    "2026-study-prep-topic-states.sql"
   ],
   "demo": [
     "2026-seed-school-passwords.sql",

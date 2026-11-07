@@ -12,6 +12,7 @@ import test from "node:test";
 
 import { createHarness } from "./harness.js";
 import { estimateSessionCost } from "./education-engine.js";
+import { memorySubmitAttempt } from "./submit-attempt.testkit.mjs";
 
 class MemoryStore {
   constructor() {
@@ -100,6 +101,8 @@ function examPrep({ maxAttempts = 3 } = {}) {
 function build(opts = {}) {
   const store = new MemoryStore();
   const topicWorkflow = examPrep(opts);
+  // The single-transaction submit (edu.study_prep_submit_attempt), in memory.
+  topicWorkflow.submitAttempt = memorySubmitAttempt({ store, runs: topicWorkflow.runs, key: KEY });
   const harness = createHarness({ store, topicWorkflow, syllabus: { resolveTopics: async () => SYLLABUS, prerequisiteEdges: async () => PREREQS }, now: () => "t" });
   return { store, topicWorkflow, harness };
 }
@@ -121,7 +124,8 @@ test("full Study Prep without Teaching: plan → fail → inline strategy → te
   await harness.startTopicPractice({ ...s, topicId: first.id, mode: "diagnostic" });
   const missed = await harness.submitPractice({ ...s, topicId: first.id, answers: WRONG });
   assert.equal(missed.outcome, "retest_offered");
-  assert.equal(missed.topic.status, "active", "below the mark with tries left: the topic stays active");
+  assert.equal(missed.topic.status, "active", "below the mark with tries left: the card still shows the topic active");
+  assert.equal(missed.topic.state, "intervention_required", "§8.3: it needs an intervention");
 
   // Inline: the agent offers a strategy from the library; no Teaching workflow, no child.
   const offered = await harness.offerStrategy({ ...s, topicId: first.id, strategy: "different_analogy", intent: "Try a market example." });
@@ -232,7 +236,7 @@ test("submit-status guard: a second submit, a stopped session and a missing run 
   const before = [...topicWorkflow.runs.values()].map((r) => r.status).join();
   await assert.rejects(() => harness.submitPractice({ ...s, topicId: t, answers: RIGHT }), (e) => e.code === "invalid_state_transition");
   assert.equal([...topicWorkflow.runs.values()].map((r) => r.status).join(), before, "the run is untouched");
-  assert.equal(store.topics.get(t).status, "active");
+  assert.equal(store.topics.get(t).status, "retest", "the retest stays out, unscored");
 });
 
 test("a passing score settles the topic before the evidence is written", async () => {

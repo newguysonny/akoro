@@ -140,7 +140,7 @@ export function makeSessionStateReader(harness) {
       },
       topics: view.topics.map((topic) => ({
         id: topic.id, label: topic.label, syllabusTopicId: topic.syllabusTopicId, position: topic.position,
-        status: topic.status, attemptsUsed: topic.attemptsUsed, learnerConfirmedReady: topic.learnerConfirmedReady,
+        status: topic.status, ...(topic.state && topic.state !== topic.status ? { state: topic.state } : {}), attemptsUsed: topic.attemptsUsed, learnerConfirmedReady: topic.learnerConfirmedReady,
         // The topic's last Agent Check, as marked (never the questions' answers).
         ...(topic.checkResult ? { lastCheck: { correct: topic.checkResult.correct, total: topic.checkResult.total, guessed: topic.checkResult.guessed, gaps: (topic.checkResult.gaps || []).slice(0, 4) } } : {}),
         ...(topic.checkBattleId && !topic.checkScoredAt ? { checkRunning: true } : {}),

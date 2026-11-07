@@ -118,7 +118,7 @@ export const SUITES = {
   materials: ["materials.chat_upload_filed", "materials.past_paper_structured", "materials.sort_own_folders", "writes.no_residue"],
   "study-prep": ["studyprep.plan_completes", "studyprep.practice_charged_once", "studyprep.generated_outline", "studyprep.class_syllabus_first", "studyprep.workflow_mirror", "studyprep.agent_wakes", "studyprep.replace_and_cancel", "studyprep.teaching_handoff", "workflow.event_stream", "writes.no_residue"],
   // Grand Plan Phase 4 + 5 exit: the operation → context set mapping, and Study Prep end to end without Teaching.
-  "study-prep-exit": ["context.sets_per_operation", "studyprep.inline_full", "studyprep.plan_rejection", "studyprep.budget_ceiling", "studyprep.cap_out", "writes.no_residue"],
+  "study-prep-exit": ["context.sets_per_operation", "studyprep.inline_full", "studyprep.plan_rejection", "studyprep.budget_ceiling", "studyprep.cap_out", "studyprep.topic_states", "studyprep.submit_atomic", "writes.no_residue"],
   "agent-check": ["studyprep.agent_check_battle", "studyprep.agent_check_stop", "writes.no_residue"],
   "agent-network": ["network.privacy_edges"],
   // Phase 18 items 3 and 6: the loop guard, tool time limits, asked or inferred;

@@ -129,7 +129,7 @@ test("a correct guess is not demonstrated: 3 right + 2 guessed (both lucky) is 6
   await harness.startTopicPractice({ sessionId: s.id, learnerId: LEARNER, topicId: "t1", mode: "diagnostic" });
   const done = await harness.completeAgentCheck({ battleId: "b1" });
   assert.equal(done.outcome, "retest_offered");
-  assert.equal(store.topics.get("t1").status, "active", "the topic stays active for the retest");
+  assert.equal(store.topics.get("t1").status, "intervention_required", "§8.3: below the mark → an intervention before the retest");
   assert.match(said[1].text, /Teach me what I missed/);
   const next = await harness.sessionNext({ sessionId: s.id, learnerId: LEARNER });
   assert.equal(next.step, "awaiting_submission_or_teach_back");
