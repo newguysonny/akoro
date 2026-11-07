@@ -453,6 +453,8 @@ export function setupWebSocket(io) {
           sessionType:    result.sessionType,
           workflow:       result.workflow || null,
           teachingMode:   result.teachingMode || "teach_agent",
+          // teaching.request_assessment's card (each question as marked, the score) — only on a check turn.
+          ...(result.assessment ? { assessment: result.assessment } : {}),
         });
 
         // Persist the turn and compact server-owned evidence before another

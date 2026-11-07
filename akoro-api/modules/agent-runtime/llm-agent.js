@@ -42,7 +42,7 @@ export function providerToolName(name) {
 }
 
 export function makeLlmAgent({
-  system, catalogue, feature, learnerId = null, learnerChoice = null, allowedModels = null, pick = null, intentMaxChars = 240,
+  system, catalogue, feature, learnerId = null, learnerChoice = null, allowedModels = null, pick = null, model = null, intentMaxChars = 240,
   maxTokens = 700, timeoutMs = 45_000, maxRetries = 1,
   finishHint = "This is your last step: finish now with the best you can make from what you found.",
   think = false, thinkMaxChars = 900, talk = false, talkMaxChars = 400,
@@ -101,7 +101,8 @@ export function makeLlmAgent({
       ];
       const picked = pick ? await Promise.resolve(pick()).catch(() => ({})) : {};
       const response = await openai.chat.completions.create({
-        __role: "controller", ...(learnerChoice ? { __learnerChoice: learnerChoice } : {}),
+        // model: a fixed catalogue model (checks and tests); otherwise the role's, or the learner's pick.
+        ...(model ? { model } : {}), __role: "controller", ...(learnerChoice ? { __learnerChoice: learnerChoice } : {}),
         ...(Array.isArray(allowedModels) ? { __allowedModels: allowedModels } : {}), ...(picked || {}),
         max_tokens: maxTokens, messages, tools: offered.length ? offered : tools, tool_choice: "required",
         __feature: feature, __timeoutMs: timeoutMs, __maxRetries: maxRetries,
