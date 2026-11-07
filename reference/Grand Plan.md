@@ -3111,11 +3111,22 @@ planning loop's tool names, the double practice charge, empty syllabus data).
     and exam-prep attempts → the recorder, source `backfill`, refs derived from
     the source rows (a re-run adds nothing; rows after live recording began are
     left to it). Gate `learning.backfill_idempotent`.
-  - ⏳ Still open: harness execution of the non-Teaching strategies (replan,
-    schedule, offline export) and Study Prep offer → outcome; question tags,
-    confusion pairs, timings (§7.15.1); `recommendStrategies` ranking; enforcing
-    `limits.maxUsesPerTopic`; the Python concept-state gateway routed through the
-    recorder (needs a validated-claim input).
+  - ✅ Open items closed (2026-11-07): harness execution of the non-Teaching
+    strategies (`strategies/executors.js`: replan, schedule → chat follow-ups,
+    offline_pack → Records; the learner accepts via
+    `POST /study-prep/sessions/:id/topics/:topicId/strategy`); Study Prep offer →
+    outcome (judged by the next attempt); `recommendStrategies` (own outcomes, then
+    population ≥ 5 learners, minus exhausted) with `maxUsesPerTopic` enforced in
+    offer_strategy and Teaching; the Python gateway through `recordLearningEvent({ claim })`
+    (its misconceptions open struggles; allowlist entry removed); §7.15.1
+    `edu.learning_question_signals` + `learning_confusion_pairs` from Agent Checks and
+    proctored practice. Gates `learning.strategy_recommend`, `learning.question_timings`
+    PASS; `learning.gateway_struggle` BLOCKED on the sandbox (needs
+    `AKORO_AGENT_TOOLS_SECRET` / `AKORO_AGENT_TOOLS_CAPABILITY_SECRET` there).
+  - ⏳ Still open: executors for escalate_human / peer_help / goal_clarify; tags set by
+    the question source (today derived from text); confusion-pair admin review; the
+    learner's strategy-accept button (needs a preview); outcomes for topics with no
+    approved concept are not judged.
 
 ### Phase 5 — Study Prep completion
 - Topic state machine §8.3; exam-prep run reduced to attempt record.
@@ -3143,6 +3154,23 @@ planning loop's tool names, the double practice charge, empty syllabus data).
   Agent Check tool names + locked models; §8.8 agent tools and goal type; blog
   passage search; peer help §7.13; a single-transaction submit
   (`edu.study_prep_submit_attempt`).
+- **Status (2026-11-07):** ✅ exit met and the open bullets built, all PASS on the
+  sandbox (suite `phase-closeout-2`). Topic state machine §8.3 (12 states, enforced;
+  the card keeps a coarse status); exam-prep run = attempt record
+  (`workflow-state.js` / `adaptive-workflows.js` folded in); D15 `request_teaching`
+  (missed → intervention_required → awaiting_teaching → retest_ready; inline
+  offer_strategy only when Teaching is off); single-transaction submit
+  `edu.study_prep_submit_attempt` (`2026-study-prep-topic-states.sql`). §8.8
+  `materials.list/search`, `syllabus.from_documents`, `learner.request_materials`,
+  goal type curricular / non_curricular; §7.14 blog passage search
+  (`content.blog_chunks`); §7.13 peer help from breakthroughs (opt-in
+  `help_others_opt_in`; its Settings toggle previewed, not built); §7.12 tool names
+  `practice.run_agent_check` / `agent.get_knowledge_coverage`, recall / question /
+  assessor roles locked. Gates `studyprep.topic_states`, `studyprep.submit_atomic`,
+  `materials.syllabus_from_documents`, `blog.passage_search`, `peer.breakthrough_help`,
+  `studyprep.agent_check_tools` + the four exit scenarios. Open: chat uploads →
+  Records for Study Prep; Agent Check questions from the learner's materials; blog
+  source chips; plan-card documents label (needs a preview).
 
 ### Phase 6 — Teaching Workflow (agent-driven)
 - `teaching/controller.js`, `teaching/tools.js` (agent catalogue + fixed steps), `TEACHING_POLICY`.
@@ -3157,7 +3185,7 @@ planning loop's tool names, the double practice charge, empty syllabus data).
   fallback on timeout/malformed, loop stops on reply, cap enforced,
   `propose_complete` rejected until objective met, phases unchanged vs
   today's gate tests (`state-machine.test.mjs`, `runner.test.mjs` equivalents).
-- **Status (2026-11-01): ✅ built — `teaching.agent_turns` green on the sandbox.** Open (circle back): a run to full mastery, the full Scenario B chain.
+- **Status (2026-11-01): ✅ built — `teaching.agent_turns` green on the sandbox.** Open (circle back): a run to full mastery, the full Scenario B chain. — **Done 2026-11-07:** `teaching.run_to_mastery` PASS on the sandbox (scripted explanations over the real socket reach MASTERY).
   Each turn is agent-driven (`teaching-session/controller.js`, policy in
   `policy.js`): the fixed pre-steps (load state, observe evidence), then the
   teaching agent — ≤3 decisions, 8 s each — reads the state, picks a strategy
@@ -3190,6 +3218,11 @@ planning loop's tool names, the double practice charge, empty syllabus data).
 - Outcome delivery → `StudyPrepController.onChildOutcome` → `retest_ready`.
 - Abandon/unmet handling.
 - **Exit:** Scenario B (critical end-to-end) passes, including app close and later resume.
+- **Status (2026-11-07):** `studyprep.teaching_chain` PASS on the sandbox (missed topic →
+  hand-off → taught to mastery → Study Prep callback → retest unlocked → teaching_done
+  wake). `teaching.request_assessment` built (NaNa asks, the protégé answers from what
+  it was taught, Sergeant judges, a guess never counts; ≤ 2 per session); its result
+  card is not drawn in the lesson window yet.
 - **Status (2026-11-01): ✅ built — `studyprep.teaching_outcomes` green on the sandbox.** Open (circle back): the mid-session assessment tool (`teaching.request_assessment`).
   Ended before any teaching → `abandoned` (reason learner_ended), no
   teach-back, offered once more on the card (a fresh proposal; once), wake
@@ -3304,6 +3337,17 @@ planning loop's tool names, the double practice charge, empty syllabus data).
   plan-locked models, confirm on dearer models, refusal notice. School portal
   "Learner Struggles" page. UI gate suite `phase11` PASS (phone). Kept as is by
   decision: the Study Prep teaching offer's own "Confirm teaching session".
+- **Status (2026-11-07, Scenario K):** ✅ PASS on the sandbox. The model picker is on by
+  default (`AI_MODEL_PICKER_ENABLED` off only when set false). The pick is saved on
+  the chat (`chat_sessions.model_selection`) and on open Study Prep / Teaching
+  workflows (`model.changed` event), follows the learner across devices, and reaches
+  Study Prep controller decisions and Teaching controller + persona replies, billed
+  at the resolved model's price; locked roles stay locked. No forced tool_choice
+  reaches Claude; a refusal comes back as `model_refusal` answered by the fallback
+  (which obeys `AI_FORCE_MODEL`). Gates `models.pick_persisted`,
+  `models.pick_reaches_workflows`, `models.no_forced_tool_choice_claude`,
+  `models.refusal_fallback`, `models.tier_lists`. Open: streamed refusals;
+  developer-mode audience (Q9).
 
 ### Phase 12 — Hardening and rollout
 - Failure tests §19; data migration §14.3; flag-by-flag rollout; observability
