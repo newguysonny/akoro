@@ -17,6 +17,7 @@ import StudentsPage from './pages/StudentsPage.jsx';
 import BattlesPage  from './pages/BattlesPage.jsx';
 import SelfStudyPage from './pages/SelfStudyPage.jsx';
 import TasksPage    from './pages/TasksPage.jsx';
+import LearnerStrugglesPage from './pages/LearnerStrugglesPage.jsx';
 import ChatPage     from './pages/ChatPage.jsx';
 import AiChatPage   from './pages/AiChatPage.jsx';
 import GuestChatPage from './pages/GuestChatPage.jsx';
@@ -331,6 +332,7 @@ function AppRoutes() {
       <Route path="/mgmt/weekly-forecast"      element={<ProtectedRoute><WeeklyForecastPage /></ProtectedRoute>} />
       <Route path="/mgmt/daily-schedule"       element={<ProtectedRoute><DailySchedulePage /></ProtectedRoute>} />
       <Route path="/mgmt/teaching-materials"   element={<ProtectedRoute anyRole><TeachingMaterialsPage /></ProtectedRoute>} />
+      <Route path="/mgmt/learner-struggles"    element={<ProtectedRoute><LearnerStrugglesPage /></ProtectedRoute>} />
       <Route path="/mgmt/promote-students"     element={<ProtectedRoute><PromoteStudentsPage /></ProtectedRoute>} />
       {/* Management — Finance & Fees */}
       <Route path="/mgmt/fees-dashboard"       element={<ProtectedRoute><FeesDashboardPage /></ProtectedRoute>} />
