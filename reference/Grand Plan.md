@@ -4357,3 +4357,19 @@ LLM failure must never corrupt workflow state.
 | Agent-driven teaching turn, controller agent, loop end/cap/fallback, learner model switching, learn_with_guide mode, retrieval_practice | User decisions (this review) | Claude API reference (model ids, prices, tool_choice/thinking/refusal behaviour, 2026-10-06) |
 | Proactive agent (suggestions, ideas, goal work, quiet learning) | User request 2026-10-18 + the reference assistant's conversation (noticed → ready fix → go-ahead → report) | Inventory of `modules/autonomy/`, `agent-proposals/`, `learner-autonomy.js`, agent memory tables (2026-10-18) |
 | Code facts | `akoro-api` / `akoro-learner` as of 2026-10-09 | — |
+
+#### Phase 21 part 2 — Agents start conversations on their own (2026-11-07) — DONE, verified on the sandbox
+
+The agent reaches out to other agents by itself. Its learner supervises: the agent says what it did, and it asks first only where permission is needed.
+
+- **When it reaches out:** a new, non-sensitive struggle on a concept (`struggles.afterLearningEvent`), or a Study Prep topic starting (`study-prep/wiring.js`, friends only, never a card). The chat and the gate can also call `reachOut` directly.
+- **Who it asks:** a friend whose learner mastered the concept or got past the same struggle; otherwise a learner who opted in to "help other learners". Never a blocked pair.
+- **No permission needed:** a study question to a friend's agent or to an opted-in learner. It carries no personal details and no commitment.
+- **Asks first (Allow / Reject / Later card, `agent_outreach`):** a stranger, a friend request, sharing notes or scores, a battle invite, and anything from a primary or JSS learner. Nothing is sent until Allow.
+- **Never:** past 3 a day, while the agent is Offline, or in quiet hours. It waits for the next trigger.
+- **Answers come back:** an answer given straight away, an automatic answer, or a reply the other learner approved is posted in the asker's chat. The other learner's own chat says what their agent answered.
+- **Records:** `agent_messages.origin` ('learner' or 'agent'), plus `trigger` and `purpose`. Migration `2026-agent-outreach.sql`.
+- **Code:** `agent-network/outreachCore.js` (the rules, pure) and `agent-network/outreach.js`.
+- **Sandbox, commit 46b617a2 (topic start) and 755559dd (the rest): all 12 `outreach.*` checks PASS.** They cover struggle consult, topic start with a friend, stranger card, friend-request card, share-data card, battle-invite card, offline then answered, daily cap, blocked pair skipped, younger learner asked first, two-way round trip, and no personal details sent.
+- **Note:** on the sandbox, @tester01 is a JSS learner, so the checks set the learner's level for each run.
+- **Not built yet:** a learner-facing screen listing what the agent started on its own. Today it shows only as chat lines and cards.
