@@ -6,14 +6,9 @@
  * verified custom domain in edu.school_domains.
  */
 import db from "../../db.js";
+import { hostOf, isReservedSubdomain } from "./hostNames.js";
 
-// Bare registrable host from a URL (or host string): drops scheme, path, port
-// and a leading www./api. label. e.g. "https://akoro.name.ng/x" → "akoro.name.ng".
-export function hostOf(url) {
-  if (!url) return "";
-  let h = String(url).trim().toLowerCase().replace(/^[a-z]+:\/\//, "").split("/")[0].split(":")[0];
-  return h.replace(/^(www|api)\./, "");
-}
+export { hostOf };
 
 // Wildcard base domain(s). Not hardcoded — derived from the main learner/site
 // URL that Railway already defines (FRONTEND_URL / MAIN_SITE_URL). Change the
@@ -70,6 +65,7 @@ export function isTenantHost(host) {
     if (bare === base || !bare.endsWith(`.${base}`)) continue;
     const sub = bare.slice(0, -(base.length + 1));
     if (sub.includes(".")) return true;               // deeper nesting is never ours
+    if (isReservedSubdomain(sub)) return false;       // app., admin., api. … are our own apps, never a school
     if (!tenantCacheLoaded) return true;              // unknown → treat as a school
     return tenantSlugs.has(sub);
   }
@@ -87,7 +83,7 @@ export async function resolveSchoolByHost(rawHost) {
   for (const base of SITE_BASE_DOMAINS) {
     if (!bare.endsWith(`.${base}`)) continue;
     const sub = bare.slice(0, -(base.length + 1));
-    if (sub && !sub.includes(".")) {
+    if (sub && !sub.includes(".") && !isReservedSubdomain(sub)) {
       const { data } = await db.from("school_profiles").select(SCHOOL_SELECT).eq("slug", sub).maybeSingle();
       if (data) return data;
     }

@@ -11,6 +11,7 @@ import ConfirmHost      from './components/common/ConfirmHost.jsx';
 import OfflineBanner     from './components/common/OfflineBanner.jsx';
 import UpdatePrompt      from './components/common/UpdatePrompt.jsx';
 import PresenceHeartbeat from './components/network/PresenceHeartbeat.jsx';
+import { TARGET, whereTo } from './config/target.js';
 
 // Route-level code splitting: each page is its own chunk, fetched on demand, so
 // the first load ships only the shell instead of the whole app in one bundle.
@@ -100,6 +101,21 @@ function GuestRoute({ children }) {
   return children;
 }
 
+/* The app's own front door: signed in → the dashboard, otherwise → sign in. (The landing owns the marketing home.) */
+function AppHome() {
+  const { isAuthenticated } = useAuth();
+  return <Navigate to={isAuthenticated ? '/app' : '/signin'} replace />;
+}
+
+/* A path that belongs to the other site of a split deployment goes there; anything else is a 404. */
+function OtherSite() {
+  const { pathname, search, hash } = useLocation();
+  const where = whereTo(TARGET, pathname, search, hash);
+  useEffect(() => { if (where && where.to) window.location.replace(where.to); }, [where]);
+  if (where && where.to) return <RouteFallback />;
+  return <NotFoundPage />;
+}
+
 function ScrollToTop() {
   const { pathname } = useLocation();
   useEffect(() => { window.scrollTo(0, 0); }, [pathname]);
@@ -117,63 +133,66 @@ function RouteFallback() {
 }
 
 function AppRoutes() {
+  const site = TARGET !== 'app';        // marketing pages: the landing (and a full build)
+  const product = TARGET !== 'landing'; // the learner product: the app (and a full build)
   return (
     <>
       <ScrollToTop />
       <Suspense fallback={<RouteFallback />}>
       <Routes>
-      <Route path="/" element={<LandingPage />}/>
-      <Route path="/onboarding" element={<OnboardingRoute><OnboardingPage /></OnboardingRoute>}/>
-      <Route path="/app" element={<ProtectedRoute><LearnerDashboard /></ProtectedRoute>}/>
-      <Route path="/settings/*" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>}/>
-      <Route path="/fde-admin" element={<ProtectedRoute><FDEAdminPage /></ProtectedRoute>}/>
-      <Route path="/notifications" element={<ProtectedRoute><NotificationsPage /></ProtectedRoute>}/>
-      <Route path="/activities" element={<ProtectedRoute><ActivityPage /></ProtectedRoute>}/>
-      <Route path="/activities/:id" element={<ProtectedRoute><ActivityDetailPage /></ProtectedRoute>}/>
-      <Route path="/gradebook" element={<ProtectedRoute><GradebookPage /></ProtectedRoute>}/>
-      <Route path="/library" element={<ProtectedRoute><LibraryPage /></ProtectedRoute>}/>
-      <Route path="/communities" element={<ProtectedRoute><CommunityPage /></ProtectedRoute>}/>
-      <Route path="/communities/:communityId" element={<ProtectedRoute><CommunityActivityPage /></ProtectedRoute>}/>
-      <Route path="/communities/:communityId/profile" element={<ProtectedRoute><CommunityProfilePage /></ProtectedRoute>}/>
-      <Route path="/communities/:communityId/settings" element={<ProtectedRoute><CommunitySettingsPage /></ProtectedRoute>}/>
-      <Route path="/communities/:communityId/people" element={<ProtectedRoute><CommunityPeoplePage /></ProtectedRoute>}/>
-      <Route path="/communities/:communityId/analytics" element={<ProtectedRoute><CommunityAnalyticsPage /></ProtectedRoute>}/>
-      <Route path="/draw"       element={<ProtectedRoute><DrawPage /></ProtectedRoute>}/>
-      <Route path="/assessment"  element={<ProtectedRoute><AssessmentPage /></ProtectedRoute>}/>
-      <Route path="/course/:slug"  element={<CourseDetailsPage />}/>
-      <Route path="/agent/:id"  element={<ProtectedRoute><AgentProfilePage /></ProtectedRoute>}/>
-      <Route path="/cart"       element={<ProtectedRoute><CartPage /></ProtectedRoute>}/>
-      <Route path="/wallet"     element={<ProtectedRoute><WalletPage /></ProtectedRoute>}/>
-      <Route path="/checkout"   element={<ProtectedRoute><CheckoutPage /></ProtectedRoute>}/>
-      <Route path="/orders"     element={<ProtectedRoute><OrderHistoryPage /></ProtectedRoute>}/>
-      <Route path="/privacy"  element={<PrivacyPolicyPage />}/>
-      <Route path="/terms"    element={<TermsOfServicePage />}/>
-      <Route path="/instructor-info"    element={<InstructorInfoPage />}/>
-      <Route path="/student-info"    element={<StudentInfoPage />}/>
-      <Route path="/school-info"    element={<SchoolInfoPage />}/>
+      <Route path="/" element={TARGET === 'app' ? <AppHome /> : <LandingPage />}/>
+      {product && <Route path="/onboarding" element={<OnboardingRoute><OnboardingPage /></OnboardingRoute>}/>}
+      {product && <Route path="/app" element={<ProtectedRoute><LearnerDashboard /></ProtectedRoute>}/>}
+      {product && <Route path="/settings/*" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>}/>}
+      {product && <Route path="/fde-admin" element={<ProtectedRoute><FDEAdminPage /></ProtectedRoute>}/>}
+      {product && <Route path="/notifications" element={<ProtectedRoute><NotificationsPage /></ProtectedRoute>}/>}
+      {product && <Route path="/activities" element={<ProtectedRoute><ActivityPage /></ProtectedRoute>}/>}
+      {product && <Route path="/activities/:id" element={<ProtectedRoute><ActivityDetailPage /></ProtectedRoute>}/>}
+      {product && <Route path="/gradebook" element={<ProtectedRoute><GradebookPage /></ProtectedRoute>}/>}
+      {product && <Route path="/library" element={<ProtectedRoute><LibraryPage /></ProtectedRoute>}/>}
+      {product && <Route path="/communities" element={<ProtectedRoute><CommunityPage /></ProtectedRoute>}/>}
+      {product && <Route path="/communities/:communityId" element={<ProtectedRoute><CommunityActivityPage /></ProtectedRoute>}/>}
+      {product && <Route path="/communities/:communityId/profile" element={<ProtectedRoute><CommunityProfilePage /></ProtectedRoute>}/>}
+      {product && <Route path="/communities/:communityId/settings" element={<ProtectedRoute><CommunitySettingsPage /></ProtectedRoute>}/>}
+      {product && <Route path="/communities/:communityId/people" element={<ProtectedRoute><CommunityPeoplePage /></ProtectedRoute>}/>}
+      {product && <Route path="/communities/:communityId/analytics" element={<ProtectedRoute><CommunityAnalyticsPage /></ProtectedRoute>}/>}
+      {product && <Route path="/draw"       element={<ProtectedRoute><DrawPage /></ProtectedRoute>}/>}
+      {product && <Route path="/assessment"  element={<ProtectedRoute><AssessmentPage /></ProtectedRoute>}/>}
+      {product && <Route path="/course/:slug"  element={<CourseDetailsPage />}/>}
+      {product && <Route path="/agent/:id"  element={<ProtectedRoute><AgentProfilePage /></ProtectedRoute>}/>}
+      {product && <Route path="/cart"       element={<ProtectedRoute><CartPage /></ProtectedRoute>}/>}
+      {product && <Route path="/wallet"     element={<ProtectedRoute><WalletPage /></ProtectedRoute>}/>}
+      {product && <Route path="/checkout"   element={<ProtectedRoute><CheckoutPage /></ProtectedRoute>}/>}
+      {product && <Route path="/orders"     element={<ProtectedRoute><OrderHistoryPage /></ProtectedRoute>}/>}
+      {site && <Route path="/privacy"  element={<PrivacyPolicyPage />}/>}
+      {site && <Route path="/terms"    element={<TermsOfServicePage />}/>}
+      {site && <Route path="/instructor-info"    element={<InstructorInfoPage />}/>}
+      {site && <Route path="/student-info"    element={<StudentInfoPage />}/>}
+      {site && <Route path="/school-info"    element={<SchoolInfoPage />}/>}
         
         
-      <Route path="/pricing"  element={<PricingPage />}/>
-      <Route path="/apply"   element={<PilotApplicationPage />}/>
-      <Route path="/upgrade" element={<UpgradePage />}/>
-      <Route path="/compare"  element={<ComparisonPage />}/>
-      <Route path="/about"    element={<AboutPage />}/>
-      <Route path="/contact"  element={<ContactPage />}/>
-      <Route path="/careers"  element={<CareersPage />}/>
-      <Route path="/blog"     element={<BlogPage />}/>
-      <Route path="/blog/:slug" element={<BlogPostPage />}/>
+      {site && <Route path="/pricing"  element={<PricingPage />}/>}
+      {site && <Route path="/apply"   element={<PilotApplicationPage />}/>}
+      {product && <Route path="/upgrade" element={<UpgradePage />}/>}
+      {site && <Route path="/compare"  element={<ComparisonPage />}/>}
+      {site && <Route path="/about"    element={<AboutPage />}/>}
+      {site && <Route path="/contact"  element={<ContactPage />}/>}
+      {site && <Route path="/careers"  element={<CareersPage />}/>}
+      {site && <Route path="/blog"     element={<BlogPage />}/>}
+      {site && <Route path="/blog/:slug" element={<BlogPostPage />}/>}
       {/* Learner-authored blogs (higherEd library) — /blog* is the public marketing blog */}
-      <Route path="/write/blog/new" element={<ProtectedRoute><BlogEditorPage /></ProtectedRoute>}/>
-      <Route path="/write/blog/:id" element={<ProtectedRoute><BlogEditorPage /></ProtectedRoute>}/>
-      <Route path="/partners" element={<PartnersPage />}/>
-      <Route path="/signin"          element={<GuestRoute><SigninPage /></GuestRoute>}/>
-      <Route path="/signup"          element={<GuestRoute><SignupPage /></GuestRoute>}/>
-      <Route path="/forgot-password" element={<GuestRoute><ForgotPasswordPage /></GuestRoute>}/>
-      <Route path="/reset-password"  element={<ResetPasswordPage />}/>
-      <Route path="/auth/callback"   element={<AuthCallback />}/>
-      <Route path="/join/:token"     element={<JoinPage />}/>
+      {product && <Route path="/write/blog/new" element={<ProtectedRoute><BlogEditorPage /></ProtectedRoute>}/>}
+      {product && <Route path="/write/blog/:id" element={<ProtectedRoute><BlogEditorPage /></ProtectedRoute>}/>}
+      {site && <Route path="/partners" element={<PartnersPage />}/>}
+      {product && <Route path="/signin"          element={<GuestRoute><SigninPage /></GuestRoute>}/>}
+      {product && <Route path="/signup"          element={<GuestRoute><SignupPage /></GuestRoute>}/>}
+      {product && <Route path="/forgot-password" element={<GuestRoute><ForgotPasswordPage /></GuestRoute>}/>}
+      {product && <Route path="/reset-password"  element={<ResetPasswordPage />}/>}
+      {product && <Route path="/auth/callback"   element={<AuthCallback />}/>}
+      {product && <Route path="/join/:token"     element={<JoinPage />}/>}
       {import.meta.env.DEV && <Route path="/dev/shell" element={<ShellPreviewPage />}/>}
-      <Route path="*" element={<NotFoundPage />}/>
+      {/* Anything else: the other site of a split deployment, or a 404 */}
+      <Route path="*" element={<OtherSite />}/>
     </Routes>
       </Suspense>
     </>

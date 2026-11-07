@@ -35,7 +35,7 @@ window.addEventListener('unhandledrejection', (e) => { if (isChunkError(e?.reaso
 // configure: the learner site URL, else the API URL (leading www./api.
 // stripped). Override with VITE_SITE_BASE_DOMAIN if ever needed.
 const hostOf = (url) => String(url || '').trim().toLowerCase()
-  .replace(/^[a-z]+:\/\//, '').split('/')[0].split(':')[0].replace(/^(www|api)\./, '');
+  .replace(/^[a-z]+:\/\//, '').split('/')[0].split(':')[0].replace(/^(www|api|app)\./, '');   // app. too: the learner app moves to app.<base domain>
 const BASE_DOMAIN = (
   import.meta.env.VITE_SITE_BASE_DOMAIN ||
   hostOf(import.meta.env.VITE_LEARNER_URL) ||
