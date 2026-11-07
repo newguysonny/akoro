@@ -23,6 +23,7 @@ import {
   normaliseMode, fallbackReply, validateDecision, objectiveMet, boundedEnd, teachingStrategy,
 } from "./policy.js";
 import { guideTeach } from "./guideTeacher.js";
+import { assessmentConcepts, protegeLine, runTeachingAssessment } from "./assessment.js";
 import { recommendNextAction } from "../adaptive-engine.js";
 
 export const AGENT_TURN_POLICY_VERSION = "adaptive-teaching-agent-v1";
@@ -35,6 +36,7 @@ const AGENT_LABELS = {
   guide_teach: "Preparing the guide's reply",
   teaching_propose_complete: "Checking whether the session is complete",
   teaching_propose_pause: "Pausing the session",
+  teaching_request_assessment: "Checking what your protégé learned",
   assess_learner_response: "Checking your answer",
 };
 
@@ -48,6 +50,7 @@ export function controllerTools(mode) {
     guide_teach: { description: "END THE TURN with NaNa's teaching reply to the learner, in one move.", parameters: { type: "object", properties: { move: { type: "string", enum: Object.keys(GUIDE_MOVES), description: Object.entries(GUIDE_MOVES).map(([k, v]) => `${k}: ${v}`).join("; ") }, focusConcept: { type: "string" } }, required: ["move"] } },
     teaching_propose_complete: { description: "END THE TURN by proposing the session is complete. Accepted only when every part is verified (the gate decides); otherwise you get objective_not_met and must reply instead.", parameters: { type: "object", properties: {} } },
     teaching_propose_pause: { description: "END THE TURN by pausing the session (the learner wants to stop for now, or is too frustrated to go on).", parameters: { type: "object", properties: { reason: { type: "string" } }, required: ["reason"] } },
+    teaching_request_assessment: { description: `END THE TURN with a short check of the protégé on the parts just taught (NaNa asks, the protégé answers only from what it was taught, Sergeant judges; at most ${TEACHING_POLICY.MAX_ASSESSMENTS} per session). Use when the learner has taught a part and wants to see whether it landed.`, parameters: { type: "object", properties: { conceptIds: { type: "array", items: { type: "string" }, description: "The parts to check (by name); default: the parts taught so far." } } } },
   };
   return TOOLS_BY_MODE[normaliseMode(mode)].map((name) => ({ type: "function", function: { name, ...defs[name] } }));
 }
@@ -108,7 +111,7 @@ async function defaultPick({ orchestrator }) {
   return pickFields({ learnerId: orchestrator.userId || orchestrator.studentId, workflow: orchestrator.teachingWorkflowId || null, role: "persona" });
 }
 
-export async function executeAgentTeachingTurn({ orchestrator, humanMessage, callbacks = {}, phaseLabels, actionForDialogueMove, mode, decide = modelDecide, policy = TEACHING_POLICY, tools: harnessTools = null, teachGuide = guideTeach, pickFor = defaultPick }) {
+export async function executeAgentTeachingTurn({ orchestrator, humanMessage, callbacks = {}, phaseLabels, actionForDialogueMove, mode, decide = modelDecide, policy = TEACHING_POLICY, tools: harnessTools = null, teachGuide = guideTeach, pickFor = defaultPick, assess = runTeachingAssessment }) {
   const session = orchestrator?.session;
   if (!orchestrator?.studentAgent || !orchestrator?.studentAgentRecord || !session?.topic) throw new Error("Adaptive teaching workflow requires an initialized session");
   const context = {
@@ -148,7 +151,11 @@ export async function executeAgentTeachingTurn({ orchestrator, humanMessage, cal
     if (!decision && !error) error = "no_decision";
     if (error) { context.decisions.push({ iteration: i + 1, error }); break; }
     session.toolCalls += 1;
-    const valid = validateDecision(context.mode, decision, { strategyChanges: session.strategyChanges || 0 });
+    const valid = validateDecision(context.mode, decision, {
+      strategyChanges: session.strategyChanges || 0, assessments: session.assessments || 0,
+      // A check needs something taught first: the learner's earlier teaching messages.
+      taughtTurns: context.history.filter((h) => h?.role === "human_teacher").length,
+    });
     context.decisions.push({ iteration: i + 1, tool: PLAN_NAME[decision.tool] || decision.tool, args: decision.args || {}, ok: valid.ok, ...(valid.ok ? {} : { error: valid.error }) });
     if (!valid.ok) { observations.push({ tool: decision.tool, error: valid.error }); continue; }
     const args = decision.args || {};
@@ -188,7 +195,19 @@ export async function executeAgentTeachingTurn({ orchestrator, humanMessage, cal
   // the one reply
   const part = context.mustKnowParts[context.mustKnowIndex] || context.topic;
   step(reply.tool, "started");
-  if (reply.tool === "guide_teach") {
+  if (reply.tool === "teaching_request_assessment") {
+    // A short Agent Check on what was taught: the result is the turn's card; the protégé says how it did.
+    session.assessments = (Number(session.assessments) || 0) + 1;
+    const concepts = assessmentConcepts({ requested: reply.args.conceptIds, parts: context.mustKnowParts.length ? context.mustKnowParts : [context.topic], index: context.mustKnowIndex });
+    // This turn's message is part of what was taught.
+    const taughtNow = { ...orchestrator, session: { ...session, history: [...context.history, { role: "human_teacher", content: humanMessage }] } };
+    let result;
+    try { result = await assess({ orchestrator: taughtNow, concepts, modelPick: context.modelPick }); }
+    catch (e) { result = { concepts, items: [], correct: 0, total: 0, outcome: "unavailable", error: String(e?.message || e).slice(0, 120) }; }
+    context.assessment = { ...result, number: session.assessments };
+    context.studentReply = result.outcome === "unavailable" ? "I couldn't take the check just now — keep teaching me and we'll try again." : protegeLine(result);
+    callbacks.onStudentChunk?.(context.studentReply);
+  } else if (reply.tool === "guide_teach") {
     context.guideReply = await teachGuide({
       orchestrator, humanMessage, topic: context.topic, part, move: reply.args.move, focusConcept: reply.args.focusConcept,
       phaseLabel: phaseLabels?.[session.phase], evidence: context.evidenceUpdate?.current || {}, history: context.history,
@@ -244,6 +263,7 @@ export async function executeAgentTeachingTurn({ orchestrator, humanMessage, cal
   context.publicWorkflow = {
     type: "adaptive_teaching_turn", policyVersion: AGENT_TURN_POLICY_VERSION, state: "completed", mode: context.mode,
     completedTools: [...context.completedTools], reply: context.reply, fallback: context.fallback ? context.fallback.reason : null,
+    ...(context.assessment ? { assessment: { correct: context.assessment.correct, total: context.assessment.total, outcome: context.assessment.outcome, number: context.assessment.number } } : {}),
     ...(context.endRequested ? { endRequested: context.endRequested } : {}), ...(context.pauseRequested ? { pauseRequested: true } : {}),
   };
   return context;

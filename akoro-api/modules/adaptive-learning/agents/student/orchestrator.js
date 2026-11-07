@@ -391,6 +391,8 @@ export class StudentSessionOrchestrator extends BaseOrchestrator {
       pauseRequested: workflow.pauseRequested || null,
       decisions: workflow.decisions || [],
       fallback: workflow.fallback || null,
+      // teaching.request_assessment's result card (concepts, each question as marked, the score).
+      assessment: workflow.assessment || null,
       // The guide's ideas for the human's next message (shown as pills, not a message).
       guideSuggestions: Array.isArray(guideResult.suggestions) ? guideResult.suggestions : null,
       guideNextAction: guideResult.nextAction || null,
