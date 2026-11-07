@@ -406,7 +406,7 @@ const NAME_FOR_TYPE = {
   'reply.delta': 'delta', 'reply': 'done',
 };
 export function eventNameOf(event, data) {
-  const known = event === 'delta' || event === 'done' || event === 'status' || event === 'error' || event === 'thinking' || TRACE_EVENTS.has(event);
+  const known = event === 'delta' || event === 'done' || event === 'saved' || event === 'status' || event === 'error' || event === 'thinking' || TRACE_EVENTS.has(event);
   return known ? event : (NAME_FOR_TYPE[data?.envelope?.type] || event);
 }
 
@@ -448,7 +448,7 @@ export async function streamGet(path, { onEvent, signal } = {}) {
   }
 }
 
-export async function streamPost(path, body, { onDelta, onDone, onThinking, onStatus, onTrace, onCard, onSuggestions, signal } = {}) {
+export async function streamPost(path, body, { onDelta, onDone, onThinking, onStatus, onTrace, onCard, onSuggestions, onSaved, signal } = {}) {
   const r = await authedFetch(`${API}${path}`, {
     ...BASE_OPTS,
     method:  'POST',
@@ -484,6 +484,8 @@ export async function streamPost(path, body, { onDelta, onDone, onThinking, onSt
     // A card to act on, the moment the tool made it; the reply's chips right after done.
     else if (event === 'card') { onCard?.(parsed); }
     else if (event === 'suggestions') { onSuggestions?.(parsed?.suggestions || []); }
+    // The reply was shown at done; its stored id arrives once the save is finished.
+    else if (event === 'saved') { onSaved?.(parsed || {}); }
     else if (event === 'error') { throw new Error(parsed.error || 'stream error'); }
   };
 

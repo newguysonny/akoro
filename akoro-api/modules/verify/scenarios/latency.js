@@ -35,12 +35,14 @@ export const chatLatency = {
         body: { message: prompt, history: [], inlineSuggestions: true, conversationId, turnId: `gate-${Date.now().toString(36)}-${rows.length}` } });
       const events = sseEvents(typeof res.body === "string" ? res.body : "");
       const done = events.find((e) => e.event === "done")?.data;
-      const t = done?.metadata?.timings || {};
+      // The full timings come with "saved" (after the save); "done" carries them up to the reply.
+      const t = events.find((e) => e.event === "saved")?.data?.timings || done?.metadata?.timings || {};
       rows.push({ prompt, status: res.status, roundTripMs: res.ms, suggestions: events.some((e) => e.event === "suggestions"), ...t });
       ctx.note(`"${prompt}": round trip ${res.ms} ms · ${JSON.stringify(t)}`);
       ctx.expect.ok(`"${prompt}" answered`, res.status === 200 && !!done?.reply, { status: res.status, events: events.map((e) => e.event).slice(0, 12) });
     }
     const slowest = Math.max(...rows.map((r) => r.firstVisibleMs ?? r.totalMs ?? 0));
+    ctx.note(`reply complete ("done") at: ${rows.map((r) => r.doneMs ?? "?").join(" / ")} ms`);
     ctx.note(`slowest first visible output: ${slowest} ms (budget ${p.firstVisibleBudgetMs} ms)`);
     ctx.expect.ok("every turn shows something within the budget", slowest <= Number(p.firstVisibleBudgetMs), rows);
   },

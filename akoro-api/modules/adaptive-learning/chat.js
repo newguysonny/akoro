@@ -4568,6 +4568,8 @@ router.post("/agent", async (req, res) => {
   const timings = {};
   let lastMark = t0;
   const mark = (name) => { const now = Date.now(); timings[name] = (timings[name] || 0) + (now - lastMark); lastMark = now; };
+  // One lookup's own time (they overlap; the slowest is what the turn waits for).
+  const timed = (name, promise) => { const s0 = Date.now(); return Promise.resolve(promise).finally(() => { (timings.parts ||= {})[name] = Date.now() - s0; }); };
   const send = (event, data) => {
     if (timings.firstVisibleMs == null && event !== "status") timings.firstVisibleMs = Date.now() - t0;
     if (res.destroyed || res.writableEnded) return;
@@ -4661,9 +4663,9 @@ router.post("/agent", async (req, res) => {
         // without re-running an action tool — the session-bound turn key covers the visible
         // response as well as transcript persistence.
         const [loaded, retrieved, completedReply] = await Promise.all([
-          loadLearnerAgentConversationContext({ conversationId, userId: req.user.id }),
-          retrieveLearnerAgentMemory({ query: userMessage, userId: req.user.id }),
-          completedLearnerAgentConversationTurn({ conversationId, userId: req.user.id, sessionId: agentSessionId(conversationId), turnId }),
+          timed("transcript", loadLearnerAgentConversationContext({ conversationId, userId: req.user.id })),
+          timed("memories", retrieveLearnerAgentMemory({ query: userMessage, userId: req.user.id })),
+          timed("retryCheck", completedLearnerAgentConversationTurn({ conversationId, userId: req.user.id, sessionId: agentSessionId(conversationId), turnId })),
         ]);
         conversation = loaded;
         // The server-owned exact transcript is authoritative for durable Agent
@@ -4714,8 +4716,8 @@ router.post("/agent", async (req, res) => {
       } catch { return ""; /* table not migrated yet — the chat works without goals */ }
     })() : Promise.resolve("");
     const groundingP = Promise.all([
-      getSyllabusGrounding(userMessage, { limit: sylLimit }).catch(() => ({ context: "", refs: [] })),
-      getPastQuestionGrounding(userMessage, { limit: pastLimit }).catch(() => ({ context: "", refs: [] })),
+      timed("syllabus", getSyllabusGrounding(userMessage, { limit: sylLimit }).catch(() => ({ context: "", refs: [] }))),
+      timed("pastQuestions", getPastQuestionGrounding(userMessage, { limit: pastLimit }).catch(() => ({ context: "", refs: [] }))),
       wantsCurriculum
         ? getCurriculumGrounding(userMessage, { limit: 3 }).catch(() => ({ context: "", refs: [] }))
         : Promise.resolve({ context: "", refs: [] }),
@@ -4723,8 +4725,8 @@ router.post("/agent", async (req, res) => {
       // knows of the subject (protege.js). A lookup failure must not dim the
       // chat — it reads as "nothing taught on this".
       role === "student"
-        ? loadTaughtKnowledge({ studentId: req.user.id, query: userMessage, deps: protegeDeps })
-          .catch((e) => { console.warn("[/chat/agent] taught knowledge unavailable:", e.message); return { chunks: [], topics: [], taughtAnything: false }; })
+        ? timed("taught", loadTaughtKnowledge({ studentId: req.user.id, query: userMessage, deps: protegeDeps })
+          .catch((e) => { console.warn("[/chat/agent] taught knowledge unavailable:", e.message); return { chunks: [], topics: [], taughtAnything: false }; }))
         : Promise.resolve(null),
     ]);
     // Messages from other learners' agents waiting for this one.
@@ -4787,7 +4789,8 @@ router.post("/agent", async (req, res) => {
       goalsCtx,
       [{ context: syllabusCtx, refs: syllabusRefs }, { context: pastCtx, refs: pastRefs }, { context: curriculumCtx, refs: curriculumRefs }, taught],
       ingests, chatFilesCtx, inboxCtx, runningCtx, att, { on: selfToolOn, forced: forceSelfTool }, protege, pendingDrafts,
-    ] = await Promise.all([goalsP, groundingP, ingestsP, chatFilesP, inboxP, runningP, attP, selfToolP, protegeP, draftsP]);
+    ] = await Promise.all([goalsP, groundingP, ingestsP, chatFilesP, inboxP, runningP, attP, selfToolP, protegeP, draftsP]
+      .map((pr, i) => timed(["goals", "grounding", "ingests", "chatFiles", "inbox", "running", "attachments", "selfTool", "protege", "drafts"][i], pr)));
     const protegeCtx = taught ? `\n\n${await loadDoctrine("policies/PROTEGE.md")}${renderTaughtContext(taught)}` : "";
     // The reply's trace and meta (previews, materials, the uploads' cards), and the uploads pointed at it.
     let savedReplyId = null;   // the stored reply's id: the episode's label key comes from it
@@ -5051,12 +5054,24 @@ router.post("/agent", async (req, res) => {
       ? suggestionsFor({ user: req.user, body: { reply, ask: userMessage, role: "student", conversationId,
         tools: prepared.toolExecutions.map((x) => ({ tool: x?.tool, topic: x?.teach?.topic || x?.guide?.teach?.topic || null })) } }).catch(() => [])
       : null;
+    // The reply is final: the learner gets "done" now (cards, chips, approvals settle) and
+    // saving follows; the saved message's id comes after as "saved" (realtime, 2026-11-07:
+    // the save took 3–35 s on the sandbox and held everything back).
+    let doneSent = false;
+    if (wantsStream) {
+      timings.doneMs = Date.now() - t0;
+      send("done", { reply, thinking, syllabus: syllabusRefs, pastQuestions: pastRefs, curriculum: curriculumRefs, mode,
+        metadata: { model: usedModel, responseTimeMs: Date.now() - t0, timings, retrieval, toolExecutions: prepared.toolExecutions, ...(durable ? { durableContext: true } : {}), ...(modelNotice ? { modelNotice } : {}) },
+        toolExecutions: prepared.toolExecutions, trace: traceBlocks, stopped: stopped() });
+      doneSent = true;
+      if (suggestionsP && !stopped()) suggestionsP.then((suggestions) => send("suggestions", { suggestions }));
+    }
     let turnSaved = false;   // one outcome line per turn — see the log below
     if (conversationId) {
       if (durable) {
         if (wantsStream) status("saving", "Saving this study context…");
         try {
-          const persisted = await persistLearnerAgentConversationTurn({
+          const persisted = await timed("persistTurn", persistLearnerAgentConversationTurn({
             conversationId,
             userId: req.user.id,
             sessionId: agentSessionId(conversationId),
@@ -5066,9 +5081,9 @@ router.post("/agent", async (req, res) => {
             summary: compactAgentSummary(conversation?.summary, userMessage, reply),
             scratchpad: nextLedger(ledgerIn, prepared.ledger || null, userMessage, prepared.toolExecutions),
             memories: safeMemoryUpdates(userMessage),
-          });
+          }));
           turnSaved = true;
-          await saveTurn(persisted?.assistantMessageId);
+          await timed("saveTrace", saveTurn(persisted?.assistantMessageId));
         } catch (persistError) {
           // The reply already happened — never lose the transcript to a
           // durable-write hiccup. Fall back to the plain two-row append.
@@ -5120,13 +5135,11 @@ router.post("/agent", async (req, res) => {
     if (!wantsStream) {
       return res.json({ success: true, reply, response: reply, thinking, syllabus: syllabusRefs, pastQuestions: pastRefs, curriculum: curriculumRefs, mode, metadata, toolExecutions: prepared.toolExecutions, trace: traceBlocks, messageId: savedReplyId });
     }
-    send("done", { reply, thinking, syllabus: syllabusRefs, pastQuestions: pastRefs, curriculum: curriculumRefs, mode, metadata, toolExecutions: prepared.toolExecutions, trace: traceBlocks, stopped: stopped(), messageId: savedReplyId });
-    // The chips on the same stream, straight after the reply (the app used to ask
-    // for them with a second request once the reply ended).
-    if (suggestionsP && !stopped()) {
-      const suggestions = await suggestionsP;
-      send("suggestions", { suggestions });
-    }
+    if (!doneSent) send("done", { reply, thinking, syllabus: syllabusRefs, pastQuestions: pastRefs, curriculum: curriculumRefs, mode, metadata, toolExecutions: prepared.toolExecutions, trace: traceBlocks, stopped: stopped(), messageId: savedReplyId });
+    // The stored reply's id (ratings attach to it), once the save is done — plus the turn's full timings.
+    send("saved", { messageId: savedReplyId, saved: turnSaved, timings });
+    // The chips (started with the answer) — wait for them before closing the stream.
+    if (suggestionsP) await suggestionsP.catch(() => []);
     return res.end();
   } catch (error) {
     console.error("[/chat/agent]", error);

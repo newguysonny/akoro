@@ -110,7 +110,7 @@ test("stop (■) ends the turn between steps and while the answer streams", () =
 
 test("the reply trace is returned and stored for reload, and history tolerates the pending column", () => {
   assert.match(route, /trace: traceBlocks/);
-  assert.match(route, /await saveTurn\(persisted\?\.assistantMessageId\)/);
+  assert.match(route, /await timed\("saveTrace", saveTurn\(persisted\?\.assistantMessageId\)\)/);
   assert.match(route, /await saveTurn\(saved\?\.assistantMessageId\)/);
   assert.match(route, /saveMessageTrace\(\{ messageId, userId: req\.user\.id, trace: traceBlocks/);
   assert.match(chatSource, /loadMessages\("id, role, text, created_at, trace"\)/);

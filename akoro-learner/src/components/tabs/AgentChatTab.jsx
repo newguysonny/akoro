@@ -1011,6 +1011,8 @@ function AgentChatTab({
         onCard: (c)=>{ if(!c?.confirm?.confirmationId) return; ensureBubble(); setMessages(prev=>prev.map(m=>m.id===replyId?{...m,confirm:c.confirm}:m)); },
         // The chips arrive on the same stream (no second request).
         onSuggestions: (list)=>{ inlineIdeas=true; const ideas=cleanIdeas(list); if(ideas.length) setMessages(prev=>prev.map(m=>m.id===replyId?{...m,ideas}:m)); },
+        // The stored reply's id (ratings), sent once the save finishes — after done.
+        onSaved: ({ messageId })=>{ if(messageId) setMessages(prev=>prev.map(m=>m.id===replyId?{...m,serverId:messageId}:m)); },
         onDone: ({ reply, syllabus, pastQuestions, thinking, toolExecutions, trace, stopped, messageId })=>{
           gotDone=true;
           ensureBubble(); setStatusLabel("");
