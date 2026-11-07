@@ -3123,10 +3123,16 @@ planning loop's tool names, the double practice charge, empty syllabus data).
     proctored practice. Gates `learning.strategy_recommend`, `learning.question_timings`
     PASS; `learning.gateway_struggle` BLOCKED on the sandbox (needs
     `AKORO_AGENT_TOOLS_SECRET` / `AKORO_AGENT_TOOLS_CAPABILITY_SECRET` there).
+  - ✅ (2026-11-07, preview approved) The Study Prep card answers the agent's strategy
+    offer with Allow / Reject / Later (`view.strategyOffer`; Reject records
+    `strategy_declined`); plans from the learner's files carry "Outline drawn from your
+    files (N files). Not your school's official syllabus."; Settings → Agent "Let my
+    agent help other learners" built, ON by default (the learner's choice recorded in
+    `help_others_chosen_at`, `2026-peer-help-default-on.sql`). Sandbox PASS:
+    `studyprep.inline_full`, `peer.breakthrough_help`, `studyprep.topic_states`.
   - ⏳ Still open: executors for escalate_human / peer_help / goal_clarify; tags set by
-    the question source (today derived from text); confusion-pair admin review; the
-    learner's strategy-accept button (needs a preview); outcomes for topics with no
-    approved concept are not judged.
+    the question source (today derived from text); confusion-pair admin review;
+    outcomes for topics with no approved concept are not judged.
 
 ### Phase 5 — Study Prep completion
 - Topic state machine §8.3; exam-prep run reduced to attempt record.
