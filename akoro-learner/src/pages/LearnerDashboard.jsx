@@ -10,6 +10,7 @@ import { useCart } from '../contexts/CartContext.jsx';
 
 // Components
 import TeacherNudge   from '../components/TeacherNudge.jsx';
+import NeedsYouHomeCard from '../components/dashboard/NeedsYouHomeCard.jsx';
 import { onActivityEvent } from '../services/activitySocket.js';
 import InstallBanner  from '../components/common/InstallBanner.jsx';
 import SessionCard    from '../components/sessions/SessionCard.jsx';
@@ -1037,6 +1038,7 @@ export default function LearnerDashboard() {
         <div className="ak-dash-scroll" style={{ flex:1,overflowY:"auto",paddingBottom:showNowBar?136:72 }}>
           <div style={{ padding:"10px 12px 0" }}><InstallBanner/></div>
           <TeacherNudge/>
+          {tab==="sessions"&&<NeedsYouHomeCard/>}
           {tab==="sessions"&&(
             <div style={{ background:"var(--ak-surface)",display:"flex",flexDirection:"column",minHeight:"100%" }}>
               {/* ── Top session type tabs ── */}

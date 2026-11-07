@@ -280,6 +280,8 @@ export const EN = {
   'agent.needs_blocked':    'Stopped',
   'agent.needs_failed':     "Didn't work",
   'agent.working_on':       'Working on',
+  'home.pick_up':           'Pick up where you left off',
+  'home.needs_more':        'Needs you · {n} more',
   'agent.needs_partial':    'Some items could not be loaded right now.',
   'agent.ideas_empty':      'No ideas right now. Your agent brings a few each night from your notes, goals and weak topics.',
   'agent.ideas_note':       '"Do it" opens your chat with the idea as your message. Each idea goes after 7 days.',

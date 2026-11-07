@@ -31,7 +31,7 @@ import AgentCheckCard from './agentChat/AgentCheckCard.jsx';
 import TraceBlocks from './agentChat/TraceBlocks.jsx';
 import { applyTraceEvent, blocksFromSavedTrace, ingestRunBlocks, promoteActivity, settleRunning, splitWakes, studyPrepEventBlocks, workflowRunBlocks } from '../../lib/agentChatTrace.js';
 import { CHAT_STARTERS, cleanIdeas, cleanMaterials, protegeMoves } from '../../lib/chatIdeas.js';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import NeedsYouList, { useNeedsYou } from './agentChat/NeedsYouList.jsx';
 import ReplyRating, { ratableId, useReplyRatings } from './agentChat/ReplyRating.jsx';
 import AgentCards from '../network/AgentCards.jsx';
@@ -605,6 +605,14 @@ function AgentChatTab({
   const needsYou=useNeedsYou();
   // Ratings on replies (Phase 18 item 4): the learner's own, never shown to the agent.
   const [replyRatings,setReplyRating]=useReplyRatings(messages);
+  // ?tasks=needs|suggestions (Home's Needs you card): open that Tasks list.
+  const location=useLocation();
+  useEffect(()=>{
+    const want=new URLSearchParams(location.search).get('tasks');
+    if(want!=='needs'&&want!=='suggestions') return;
+    setInnerTab('tasks'); setTaskFilter(want);
+    if(want==='needs') needsYou.reload();
+  },[location.search]); // eslint-disable-line react-hooks/exhaustive-deps
   const openNeed=(it)=>{
     const href=it?.action?.href||'';
     if(href.includes('inbox=')){ setTaskFilter('suggestions'); return; }
