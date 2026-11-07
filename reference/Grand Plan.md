@@ -3392,6 +3392,17 @@ flag-by-flag rollout; old paths removed only after a release with flags on.
   near the limit, a scheduled Verification Gate run failing.
 - **Exit:** a deliberately broken route and a slow AI call each show up in
   error tracking, a trace and the dashboard, and fire an alert, within 5 minutes.
+- **Chat latency (2026-11-07):** every chat turn returns `metadata.timings` (each
+  preparation step and lookup, first visible output, reply complete, save) and logs
+  one `[chat-timing]` line; gate `chat.latency` fails when the first visible output
+  is over 6 s. Measured on the sandbox — before → after: first words 4.7–10.1 s →
+  2.5–3.6 s; reply complete ("done") 13–49 s → 5.9–7.1 s. Done by running the
+  turn's independent lookups together, one shared embedding per question,
+  suggestions alongside the save, and "done" sent before the save ("saved" brings
+  the stored id). Still open: the save itself takes 3–17 s on the sandbox database
+  (off the learner's path now, but worth fixing under 12.4); the intent step adds
+  ~1 s when it runs; a permission approval builds its tool (~4 s) before the chat
+  carries on.
 
 **12.2 Reliability — what happens when something fails, and recovery.**
 - Have today: circuit breakers and fallback models per AI provider; deferred
