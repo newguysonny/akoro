@@ -58,7 +58,7 @@ export function chatPicker(server, { mode = 'default', modelId = null } = {}) {
       ...(m.available ? {} : { note: m.note || 'Coming soon.' }),
       ...(m.locked === 'plan' ? { locked: true } : {}),
       // A dearer model asks once before it is used (1.5× the default or more).
-      ...(m.available && !m.default && Number(m.costMultiple) >= 1.5 ? { confirm: `${m.costHint || 'More coins per message'}. Use it?` } : {}),
+      ...(m.available && !m.default && Number(m.costMultiple) >= 1.5 ? { confirm: 'Costs more than the default.' } : {}),
       disabled: !m.available,
     })),
     ...modes.filter((m) => m.id === 'think' || m.id === 'research').map((m, i) => ({

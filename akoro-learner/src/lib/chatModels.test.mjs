@@ -67,6 +67,6 @@ test('picker with tier lists: plan badge, locked models, cost hints, a confirm o
   assert.equal(by['model:pro'].disabled, true);
   assert.match(by['model:deep'].description, /Fewer coins/);
   assert.equal(by['model:deep'].confirm, undefined, 'a cheaper model needs no confirm');
-  assert.match(by['model:big'].confirm, /3× coins per message\. Use it\?/);
+  assert.equal(by['model:big'].confirm, 'Costs more than the default.');
   assert.equal(chatPicker({ ...server, picker: { enabled: false, tier: 'Freemium' } }, {}).tier, null, 'no badge with the picker off');
 });
