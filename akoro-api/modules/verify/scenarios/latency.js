@@ -32,7 +32,7 @@ export const chatLatency = {
     const rows = [];
     for (const prompt of PROMPTS) {
       const res = await ctx.http({ as: p.learner, method: "POST", path: "/api/adaptive/chat/agent?stream=1", headers: { Accept: "text/event-stream" },
-        body: { message: prompt, history: [], inlineSuggestions: true, conversationId } });
+        body: { message: prompt, history: [], inlineSuggestions: true, conversationId, turnId: `gate-${Date.now().toString(36)}-${rows.length}` } });
       const events = sseEvents(typeof res.body === "string" ? res.body : "");
       const done = events.find((e) => e.event === "done")?.data;
       const t = done?.metadata?.timings || {};
