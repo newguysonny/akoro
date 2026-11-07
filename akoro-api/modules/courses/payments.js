@@ -24,6 +24,7 @@ import { recordPaymentItems, logPaymentEvent } from "../webhooks/paymentAudit.js
 import { notify }                           from "../notifications/events.js";
 import { paystackSignatureValid } from "../../lib/safeCompare.js";
 import { requireCourseManager }             from "./courseAccess.js";
+import { urlFor } from "../../lib/urls.js";
 
 const asyncHandler = (fn) => (req, res, next) =>
   Promise.resolve(fn(req, res, next)).catch(next);
@@ -268,7 +269,7 @@ const paymentHandlers = {
         // Where Paystack redirects the learner's browser after payment. Must be
         // a frontend page (the webhook POST /api/payments/verify handles the
         // enrolment server-side). The course page re-checks access on ?payment.
-        callback_url: `${process.env.FRONTEND_URL || "https://akoro.app"}/course/${course.slug}?payment=success`,
+        callback_url: `${urlFor("FRONTEND_URL")}/course/${course.slug}?payment=success`,
       },
       { headers: { Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}` } }
     );

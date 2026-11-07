@@ -18,7 +18,7 @@
     "test:settings": "node --test src/pages/settings/groups.test.mjs",
     "build:landing": "VITE_TARGET=landing vite build",
     "build:app": "VITE_TARGET=app vite build",
-    "test:split": "node --test src/config/target.test.mjs"
+    "test:split": "node --test src/config/target.test.mjs src/config/urls.test.mjs"
   },
   "dependencies": {
     "@excalidraw/excalidraw": "^0.17.6",

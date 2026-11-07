@@ -25,6 +25,7 @@ import { notify }                          from "../notifications/events.js";
 import { redeemVoucher, VoucherError, voucherRedeemConfigured } from "../../lib/voucherRedeem.js";
 import { creditTopup, debitCoins, refundCoins, hasCoins } from "../../lib/coins.js";
 import { nairaToCoins }                    from "../../lib/aiPricing.js";
+import { urlFor } from "../../lib/urls.js";
 
 // Build normalized payment_items rows from resolved cart line items.
 const toPaymentItems = (items) => items.map((i) => ({
@@ -692,7 +693,7 @@ const handlers = {
         // Where Paystack redirects the BROWSER after payment — a real frontend
         // page, not the webhook. Fulfilment happens via the Paystack webhook
         // (POST /api/payments/verify), configured in the Paystack dashboard.
-        callback_url: `${process.env.FRONTEND_URL || "https://akoro.app"}/checkout?payment=success&items=${checkoutItems.length}&amount=${totalKobo}`,
+        callback_url: `${urlFor("FRONTEND_URL")}/checkout?payment=success&items=${checkoutItems.length}&amount=${totalKobo}`,
       },
       { headers: { Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}` } }
     );

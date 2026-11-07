@@ -1,4 +1,5 @@
 import { apiGet, apiPatch, apiPost } from './api.js';
+import { API as API_URL } from '../config/urls.js';
 
 export const getMyProfile = () => apiGet('/api/profiles/me');
 
@@ -23,7 +24,7 @@ export const putAgent = (agentPatch) => {
   if (agentPatch.examBoard   != null) body.exam_board   = agentPatch.examBoard;
   if (agentPatch.subjects    != null) body.subjects     = agentPatch.subjects;
   if (agentPatch.goal        != null) body.goal         = agentPatch.goal;
-  return fetch(`${import.meta.env.VITE_API_URL || 'https://akoro.onrender.com'}/api/user/agent`, {
+  return fetch(`${API_URL}/api/user/agent`, {
     method: 'PUT',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
@@ -42,7 +43,7 @@ export const setDefaultAgent = ({ userId, agentPairId, activeAgentId }) =>
   apiPost('/api/adaptive/marketplace/set-default', { userId, agentPairId, activeAgentId }, { queueOffline: true });
 
 export const changePassword = ({ currentPassword, newPassword }) => {
-  const API = import.meta.env.VITE_API_URL || 'https://akoro.onrender.com';
+  const API = API_URL;
   return fetch(`${API}/api/auth/change-password`, {
     method: 'POST',
     credentials: 'include',
@@ -52,12 +53,12 @@ export const changePassword = ({ currentPassword, newPassword }) => {
 };
 
 export const setup2FA = () => {
-  const API = import.meta.env.VITE_API_URL || 'https://akoro.onrender.com';
+  const API = API_URL;
   return fetch(`${API}/api/auth/2fa/setup`, { method: 'POST', credentials: 'include' }).then(r => r.json());
 };
 
 export const enable2FA = (code) => {
-  const API = import.meta.env.VITE_API_URL || 'https://akoro.onrender.com';
+  const API = API_URL;
   return fetch(`${API}/api/auth/2fa/enable`, {
     method: 'POST', credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
@@ -66,7 +67,7 @@ export const enable2FA = (code) => {
 };
 
 export const disable2FA = (code) => {
-  const API = import.meta.env.VITE_API_URL || 'https://akoro.onrender.com';
+  const API = API_URL;
   return fetch(`${API}/api/auth/2fa/disable`, {
     method: 'POST', credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
@@ -75,12 +76,12 @@ export const disable2FA = (code) => {
 };
 
 export const deactivateAccount = () => {
-  const API = import.meta.env.VITE_API_URL || 'https://akoro.onrender.com';
+  const API = API_URL;
   return fetch(`${API}/api/profiles/me/deactivate`, { method: 'POST', credentials: 'include' }).then(r => r.json());
 };
 
 export const deleteAccount = () => {
-  const API = import.meta.env.VITE_API_URL || 'https://akoro.onrender.com';
+  const API = API_URL;
   return fetch(`${API}/api/profiles/me`, { method: 'DELETE', credentials: 'include' }).then(r => r.json());
 };
 
@@ -91,7 +92,7 @@ export async function uploadAvatar(dataUrl, type = 'user') {
   const form = new FormData();
   form.append('file', blob, `avatar.${blob.type.split('/')[1] || 'jpg'}`);
   form.append('type', type);
-  const API = import.meta.env.VITE_API_URL || 'https://akoro.onrender.com';
+  const API = API_URL;
   const r = await fetch(`${API}/api/profiles/me/avatar`, {
     method: 'POST',
     credentials: 'include',

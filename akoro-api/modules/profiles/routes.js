@@ -42,6 +42,7 @@ import { notifyUser }                      from "../notify.js";
 import { authenticateToken, requireRole, endSession, invalidateCachedUser,
          signCourseInvite, verifyCourseInvite, INVITE_MAX_DAYS } from "../auth/routes.js";
 import multerLib                           from "multer";
+import { urlFor } from "../../lib/urls.js";
 
 const asyncHandler = (fn) => (req, res, next) =>
   Promise.resolve(fn(req, res, next)).catch(next);
@@ -1176,7 +1177,7 @@ router.get("/instructor/students", authenticateToken, requireRole(["instructor",
  * up, and redeems it (POST /api/profiles/invite/redeem). The token is a typed
  * `course_invite` signed by the auth module's key — it never signs anyone in.
  */
-const LEARNER_APP_URL = () => (process.env.FRONTEND_URL || "https://akoro.app").replace(/\/+$/, "");
+const LEARNER_APP_URL = () => urlFor("FRONTEND_URL");
 const escHtml = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
 router.post("/teacher/invite", authenticateToken, requireRole(["instructor", "admin"]), asyncHandler(async (req, res) => {

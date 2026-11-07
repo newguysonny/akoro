@@ -3,9 +3,10 @@
  * shared section-label / button primitives.
  */
 import { useState, useEffect, useRef } from 'react';
+import { INSTRUCTOR_URL } from '../../config/urls.js';
 
 /* ── Instructor portal (separate deployment) ── */
-const INSTRUCTOR_URL = import.meta.env.VITE_INSTRUCTOR_URL || 'https://instructor.akoro.app';
+
 
 /* ── Brand tokens ── */
 const B  = '#6C3BFF';   // primary purple

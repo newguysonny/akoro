@@ -10,6 +10,7 @@ import LiveClassWizard from '../../components/LiveClassWizard.jsx';
 import OnDemandWizard from '../../components/OnDemandWizard.jsx';
 import CourseCurriculum from '../../components/CourseCurriculum.jsx';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, PURPLE, BLUE, FONT } from '../../constants.js';
+import { LEARNER_URL as APP_LEARNER_URL } from '../../config/urls.js';
 
 /* ── Mock data ─────────────────────────────────────────────────────── */
 
@@ -142,7 +143,7 @@ function EditCourseModal({ open, course, onClose, onSave }) {
 }
 
 /* ── Course Card ────────────────────────────────────────────────────── */
-const LEARNER_URL = import.meta.env.VITE_LEARNER_URL || 'https://akoro.app';
+const LEARNER_URL = APP_LEARNER_URL;
 
 function CourseCard({ course, onManage, onEdit, onDelete }) {
   const [copied, setCopied] = useState(false);

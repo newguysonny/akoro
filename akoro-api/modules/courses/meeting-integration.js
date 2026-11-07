@@ -62,7 +62,7 @@ const toUi    = (p) => (p === "google" ? "meet" : p);
 // No default: with neither set, connecting a meeting/streaming account is off (a
 // known key would let anyone forge a state and bind their tokens to another user).
 const STATE_SECRET   = process.env.OAUTH_STATE_SECRET || process.env.COOKIE_SECRET || null;
-const INSTRUCTOR_URL = process.env.INSTRUCTOR_URL || "https://instructor.akoro.app";
+const INSTRUCTOR_URL = urlFor("INSTRUCTOR_FRONTEND_URL", { alias: ["INSTRUCTOR_URL"] });
 
 const signState = (userId, provider) =>
   jwt.sign({ uid: userId, provider, n: uuidv4() }, STATE_SECRET, { expiresIn: "10m" });
@@ -214,7 +214,7 @@ const providerConfig = (provider) => {
       tokenUrl:     "https://oauth2.googleapis.com/token",
       clientId:     process.env.YOUTUBE_CLIENT_ID     || process.env.GOOGLE_CLIENT_ID,
       clientSecret: process.env.YOUTUBE_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET,
-      redirectUri:  process.env.REDIRECT_URI_YOUTUBE  || `${process.env.API_URL || "https://api.akoro.app"}/api/meeting/auth/callback/youtube`,
+      redirectUri:  process.env.REDIRECT_URI_YOUTUBE  || `${urlFor("API_URL")}/api/meeting/auth/callback/youtube`,
     },
   };
   const cfg = configs[provider];
@@ -701,6 +701,7 @@ const meetingHandlers = {
 // Behind the shared jobs gate like every recurring job — a 6-hourly token
 // refresh is not something to run with the rest deliberately stood down.
 import { skipJob } from "../../lib/jobsGate.js";
+import { urlFor } from "../../lib/urls.js";
 if (skipJob("provider token refresh")) {
   console.log("[cron] provider-token refresh NOT registered (jobs gate)");
 } else cron.schedule("0 */6 * * *", async () => {

@@ -33,6 +33,7 @@ import { authenticateToken, requireRole } from "../auth/routes.js";
 import { validatePilotSchoolInput, buildPilotPatch, todayStr } from "../../lib/pilotModel.js";
 import { fillTemplate } from "../../lib/messageModel.js";
 import { queueMessage, getBillingSettings } from "../billing/delivery.js";
+import { urlFor } from "../../lib/urls.js";
 
 const router    = Router();
 const adminOnly = [authenticateToken, requireRole(["admin"])];
@@ -47,7 +48,7 @@ const asyncHandler = (fn) => (req, res, next) => Promise.resolve(fn(req, res, ne
  * can show it until the school sets their own. Idempotent: once the roster
  * row carries a login + profile link, calls only resend the email.
  */
-const SCHOOL_PORTAL_URL = process.env.SCHOOL_FRONTEND_URL || "https://school.akoro.app";
+const SCHOOL_PORTAL_URL = urlFor("SCHOOL_FRONTEND_URL");
 const RESET_TTL_MS      = 60 * 60 * 1000; // 1 hour, same as forgot-password
 const hashToken         = (raw) => crypto.createHash("sha256").update(raw).digest("hex");
 

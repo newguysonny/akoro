@@ -7,6 +7,7 @@
  */
 import db from "../../db.js";
 import { hostOf, isReservedSubdomain } from "./hostNames.js";
+import { URL_DEFAULTS } from "../../lib/urls.js";
 
 export { hostOf };
 
@@ -15,7 +16,7 @@ export { hostOf };
 // domain there and tenant subdomains follow. SITE_BASE_DOMAIN may still be set
 // explicitly (comma list) to add extra zones (e.g. keep the old akoro.app).
 const derivedBase = hostOf(process.env.FRONTEND_URL || process.env.MAIN_SITE_URL);
-export const SITE_BASE_DOMAINS = (process.env.SITE_BASE_DOMAIN || derivedBase || "akoro.name.ng")
+export const SITE_BASE_DOMAINS = (process.env.SITE_BASE_DOMAIN || derivedBase || hostOf(URL_DEFAULTS.MAIN_SITE_URL))
   .toLowerCase().split(",").map((s) => s.trim()).filter(Boolean);
 export const SITE_BASE_DOMAIN = SITE_BASE_DOMAINS[0];
 export const SCHOOL_SELECT = "id, name, slug, logo_url, address, phone, acronym, principal_name";

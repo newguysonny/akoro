@@ -17,7 +17,7 @@ import { ipKeyGenerator } from "express-rate-limit";
 import db from "../../db.js";
 import { openai, OPENAI_MODEL, llmComplete } from "../../lib/aiModel.js";
 import { authenticateToken, requireRole } from "../auth/routes.js";
-import { resolveSchoolByHost } from "./tenant.js";
+import { resolveSchoolByHost, SITE_BASE_DOMAIN } from "./tenant.js";
 import { getSyllabusContext } from "../adaptive-learning/syllabus.js";
 
 const router = Router();
@@ -134,7 +134,7 @@ async function runTool(name, args, ctx) {
         return { child: `${c.first_name} ${c.last_name}`, class: c.classes?.name, count: list.length, materials: list };
       }
       if (name === "get_payment_link") {
-        const host = school.host || `${school.slug}.akoro.name.ng`;
+        const host = school.host || `${school.slug}.${SITE_BASE_DOMAIN}`;
         return { url: `https://${host}/pay`, note: "Open this link to pay outstanding fees online." };
       }
     }

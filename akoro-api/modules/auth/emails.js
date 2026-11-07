@@ -10,12 +10,16 @@
  * Images live in akoro-learner/public/email/ and are served from ASSET_BASE.
  */
 
+import { urlFor, displayHost } from "../../lib/urls.js";
+
 const EMAIL_FROM = process.env.RESEND_FROM_EMAIL || "noreply@akoro.app";
 
 // Public base that serves the app's static assets (akoro-learner/public).
 // Uses the frontend URL (FRONTEND_URL) since that deployment serves /logo/* and
 // /email/*; override with EMAIL_ASSET_BASE if the assets are hosted elsewhere.
-const ASSET_BASE = (process.env.EMAIL_ASSET_BASE || process.env.FRONTEND_URL || "https://akoro.app").replace(/\/+$/, "");
+const ASSET_BASE = urlFor("EMAIL_ASSET_BASE", { alias: ["FRONTEND_URL"] });
+// Help / Privacy / Terms live on the marketing site, not the learner app.
+const SITE_BASE  = urlFor("MAIN_SITE_URL");
 const img        = (name) => `${ASSET_BASE}/email/${name}`;
 const MARK_URL   = img("mark.png");
 
@@ -93,14 +97,14 @@ ${preheader ? `<div style="display:none;max-height:0;overflow:hidden;opacity:0;c
       <tr><td style="padding:22px 12px 0;text-align:center;">
         <p class="m" style="margin:0 0 8px;font-size:12px;color:${MUTED};line-height:1.6;">Need help? Just reply to this email.</p>
         <p style="margin:0;font-size:12px;line-height:1.6;">
-          <a class="lnk" href="${ASSET_BASE}/contact" style="color:${PURPLE};text-decoration:none;font-weight:600;">Help</a>
+          <a class="lnk" href="${SITE_BASE}/contact" style="color:${PURPLE};text-decoration:none;font-weight:600;">Help</a>
           <span class="m" style="color:${MUTED};">&nbsp;·&nbsp;</span>
-          <a class="lnk" href="${ASSET_BASE}/privacy" style="color:${PURPLE};text-decoration:none;font-weight:600;">Privacy</a>
+          <a class="lnk" href="${SITE_BASE}/privacy" style="color:${PURPLE};text-decoration:none;font-weight:600;">Privacy</a>
           <span class="m" style="color:${MUTED};">&nbsp;·&nbsp;</span>
-          <a class="lnk" href="${ASSET_BASE}/terms" style="color:${PURPLE};text-decoration:none;font-weight:600;">Terms</a>
+          <a class="lnk" href="${SITE_BASE}/terms" style="color:${PURPLE};text-decoration:none;font-weight:600;">Terms</a>
         </p>
         <p class="m" style="margin:10px 0 0;font-size:11px;color:${MUTED};opacity:.8;line-height:1.6;">
-          You're receiving this because you have an account at akoro.app.<br />© ${new Date().getFullYear()} Akoro Learning Ltd
+          You're receiving this because you have an account at ${displayHost(urlFor("MAIN_SITE_URL"))}.<br />© ${new Date().getFullYear()} Akoro Learning Ltd
         </p>
       </td></tr>
 

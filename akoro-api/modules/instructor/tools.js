@@ -25,11 +25,11 @@ import {
   verifyTransaction,
   generateReference,
 } from "../adaptive-learning/marketplace/paystackService.js";
+import { urlFor } from "../../lib/urls.js";
 
 const router = Router();
 const VALID_TARGETS = ["lesson_plan", "worksheet", "report", "exam_prep", "generic"];
-const INSTRUCTOR_APP_URL =
-  process.env.INSTRUCTOR_APP_URL || "https://instructor.akoro.app";
+const INSTRUCTOR_APP_URL = urlFor("INSTRUCTOR_FRONTEND_URL", { alias: ["INSTRUCTOR_APP_URL"] });
 
 const toNaira = (kobo) => Math.round((kobo || 0) / 100);
 

@@ -43,3 +43,15 @@ portal after the move. The learner deployment's own tenant guard (`src/main.jsx`
 - The two builds drop each other's pages at build time: the landing JS went from 10.7 MB (192 files) to 0.9 MB (48 files); the app from 10.7 MB to 10.4 MB (the marketing
   pages are small). The landing no longer runs the presence heartbeat or the update prompt, and registers no service worker.
 - The landing's "Install app" button opens `app.akoro.name.ng` (a PWA installs from its own origin).
+
+
+
+## Addresses are configuration (done)
+
+No domain is spelled in code. **API:** `lib/urls.js` — env vars `FRONTEND_URL`, `MAIN_SITE_URL`, `*_FRONTEND_URL`, `API_URL`, `GOOGLE_CALLBACK_URL`,
+`SITE_BASE_DOMAIN`, with current-host defaults and a boot warning naming any that are unset in production. **Frontends:** `src/config/urls.js` per app
+(`VITE_API_URL`, `VITE_SITE_URL`, `VITE_APP_URL`, `VITE_LEARNER_URL`, `VITE_INSTRUCTOR_URL`, …). Each app's `.env.example` lists them. A test
+(`akoro-learner/src/config/urls.test.mjs`) fails if a retired or platform address creeps back into code.
+
+Left alone on purpose: `JWT_ISSUER` / `JWT_AUDIENCE` (opaque claims inside issued tokens — changing them signs everyone out) and mailboxes
+(`noreply@`, `hello@…akoro.app`: they need real mailboxes on a verified sending domain, so they're a mail-setup decision, not a URL).

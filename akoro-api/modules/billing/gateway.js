@@ -29,6 +29,7 @@ import db from "../../db.js";
 import { authenticateToken } from "../auth/routes.js";
 import { paystackPost } from "../../lib/paystackBreaker.js";
 import { addCycleDays, todayStr } from "../../lib/billingModel.js";
+import { urlFor } from "../../lib/urls.js";
 
 const router = Router();
 const asyncHandler = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
@@ -107,7 +108,7 @@ router.post("/checkout", authenticateToken, asyncHandler(async (req, res) => {
         tier_id: tier.id,
         cycle,
       },
-      callback_url: `${process.env.FRONTEND_URL || "https://akoro.app"}/upgrade?payment=return`,
+      callback_url: `${urlFor("FRONTEND_URL")}/upgrade?payment=return`,
     }));
   } catch (e) {
     console.error("[billing:gateway] initialize failed:", e.message);

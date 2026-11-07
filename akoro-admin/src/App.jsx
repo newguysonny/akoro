@@ -53,6 +53,7 @@ import SigninPage           from './pages/auth/SigninPage.jsx';
 import AuthCallback         from './pages/auth/AuthCallback.jsx';
 import ForgotPasswordPage   from './pages/auth/ForgotPasswordPage.jsx';
 import ResetPasswordPage    from './pages/auth/ResetPasswordPage.jsx';
+import { SITE_URL } from './config/urls.js';
 
 function AdminRoute({ children }) {
   const { isAuthenticated, user, initializing } = useAuth();
@@ -64,7 +65,7 @@ function AdminRoute({ children }) {
       <div style={{ textAlign:'center' }}>
         <h2 style={{ fontSize:22, marginBottom:8 }}>Access denied</h2>
         <p style={{ color:'#6B6B80', marginBottom:20 }}>This portal is for Akoro admins only.</p>
-        <a href="https://akoro.app" style={{ color:'#E8884A', fontWeight:600 }}>Back to Akoro</a>
+        <a href={SITE_URL} style={{ color:'#E8884A', fontWeight:600 }}>Back to Akoro</a>
       </div>
     </div>
   );

@@ -9,11 +9,10 @@
  * is sent there (old links keep working): /signin typed on the landing → the app; /pricing typed on the app → the landing.
  * Everything here is pure, so the routing decision is unit-tested.
  */
+import { APP_URL, SITE_URL } from './urls.js';
+export { APP_URL, SITE_URL };
 const RAW = typeof import.meta !== 'undefined' ? import.meta.env || {} : {};
 export const TARGET = ['landing', 'app'].includes(RAW.VITE_TARGET) ? RAW.VITE_TARGET : 'full';
-const trim = (u) => String(u || '').replace(/\/+$/, '');
-export const APP_URL = trim(RAW.VITE_APP_URL) || 'https://app.akoro.name.ng';
-export const SITE_URL = trim(RAW.VITE_SITE_URL) || 'https://akoro.name.ng';
 
 /** Marketing paths — the landing's. (Learner-authored blogs, /write/blog/*, are the app's.) */
 const MARKETING = [

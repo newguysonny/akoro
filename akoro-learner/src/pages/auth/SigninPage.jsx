@@ -4,6 +4,7 @@ import { useAuth } from '../../contexts/AuthContext.jsx';
 import { nextPath } from '../../utils/nextPath.js';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 import AkoroLogo from '../../components/common/AkoroLogo.jsx';
+import { SITE_URL } from '../../config/urls.js';
 
 const BRAND = '#6C3BFF';
 const RED   = '#EF4444';
@@ -142,8 +143,8 @@ export default function SigninPage() {
             </form>
             <p style={{ textAlign:'center', fontSize:11.5, color:'var(--ak-text-muted)', marginTop:14, marginBottom:0, lineHeight:1.6 }}>
               By signing in, you agree to our{' '}
-              <a href="https://akoro.app/terms" target="_blank" rel="noreferrer" style={{ color:BRAND, fontWeight:700, textDecoration:'none' }}>Terms of Service</a>{' '}and{' '}
-              <a href="https://akoro.app/privacy" target="_blank" rel="noreferrer" style={{ color:BRAND, fontWeight:700, textDecoration:'none' }}>Privacy Policy</a>.
+              <a href={`${SITE_URL}/terms`} target="_blank" rel="noreferrer" style={{ color:BRAND, fontWeight:700, textDecoration:'none' }}>Terms of Service</a>{' '}and{' '}
+              <a href={`${SITE_URL}/privacy`} target="_blank" rel="noreferrer" style={{ color:BRAND, fontWeight:700, textDecoration:'none' }}>Privacy Policy</a>.
             </p>
             <p style={{ textAlign:'center', fontSize:13, color:'var(--ak-text-sub)', marginTop:20, marginBottom:0 }}>
               {t('auth.no_account')}{' '}

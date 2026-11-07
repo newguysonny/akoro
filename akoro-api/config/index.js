@@ -12,6 +12,7 @@
  */
 
 import crypto from "crypto";
+import { URL_DEFAULTS, missingUrlEnv } from "../lib/urls.js";
 
 const env     = process.env;
 const isProd  = env.NODE_ENV === "production";
@@ -142,7 +143,7 @@ const config = {
   paystack: {
     secretKey: env.PAYSTACK_SECRET_KEY,
     publicKey: env.PAYSTACK_PUBLIC_KEY,
-    appUrl:    env.APP_URL ?? "https://api.akoro.app",
+    appUrl:    env.APP_URL ?? URL_DEFAULTS.API_URL,
   },
 
   // ── AI / Anthropic ───────────────────────────────────────────────────────
@@ -175,6 +176,13 @@ if (isProd) {
   if (missing.length) {
     console.error(`❌  Missing required env vars in production: ${missing.join(", ")}`);
     process.exit(1);
+  }
+
+  // Not fatal: each address falls back to its current default (lib/urls.js) — but a fallback is silent in the product,
+  // so name what isn't set.
+  const unsetUrls = missingUrlEnv(env);
+  if (unsetUrls.length) {
+    console.warn(`⚠️  URL env vars not set (using the built-in defaults, lib/urls.js): ${unsetUrls.join(", ")}`);
   }
 }
 

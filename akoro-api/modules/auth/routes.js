@@ -42,6 +42,7 @@ import {
   sendPasswordResetEmail,
   sendPasswordChangedEmail,
 } from "./emails.js";
+import { urlFor } from "../../lib/urls.js";
 
 // ─── § CONSTANTS ──────────────────────────────────────────────────────────────
 
@@ -50,12 +51,12 @@ const PUBLIC_KEY   = (process.env.JWT_PUBLIC_KEY   || "").replace(/\\n/g, "\n").
 
 const JWT_ISSUER   = process.env.JWT_ISSUER   || "https://api.akoro.app";
 const JWT_AUDIENCE = process.env.JWT_AUDIENCE || "https://akoro.app";
-const FRONTEND_URL            = process.env.FRONTEND_URL             || "https://akoro.app";
-const INSTRUCTOR_FRONTEND_URL = process.env.INSTRUCTOR_FRONTEND_URL  || "https://instructor.akoro.app";
-const ADMIN_FRONTEND_URL      = process.env.ADMIN_FRONTEND_URL       || "https://admin.akoro.app";
-const SCHOOL_FRONTEND_URL     = process.env.SCHOOL_FRONTEND_URL      || "https://school.akoro.app";
-const AGENT_FRONTEND_URL      = process.env.AGENT_FRONTEND_URL       || "https://agent.akoro.app";
-const BUSINESS_FRONTEND_URL   = process.env.BUSINESS_FRONTEND_URL    || "https://business.akoro.app";
+const FRONTEND_URL            = urlFor("FRONTEND_URL");
+const INSTRUCTOR_FRONTEND_URL = urlFor("INSTRUCTOR_FRONTEND_URL");
+const ADMIN_FRONTEND_URL      = urlFor("ADMIN_FRONTEND_URL");
+const SCHOOL_FRONTEND_URL     = urlFor("SCHOOL_FRONTEND_URL");
+const AGENT_FRONTEND_URL      = urlFor("AGENT_FRONTEND_URL");
+const BUSINESS_FRONTEND_URL   = urlFor("BUSINESS_FRONTEND_URL");
 
 // Map a portal name to its frontend base URL.
 const portalUrl = (portal) =>
@@ -1017,7 +1018,7 @@ const authHandlers = {
 
 // ─── § GOOGLE OAUTH ───────────────────────────────────────────────────────────
 
-const CALLBACK_URL = process.env.GOOGLE_CALLBACK_URL || "https://api.akoro.app/api/auth/google/callback";
+const CALLBACK_URL = process.env.GOOGLE_CALLBACK_URL || `${urlFor("API_URL")}/api/auth/google/callback`;
 
 passport.use(new GoogleStrategy(
   {

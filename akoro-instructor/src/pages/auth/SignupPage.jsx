@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext.jsx';
 import { C, tint } from '../../theme/colors.js';
+import { SITE_URL } from '../../config/urls.js';
 
 const RED   = '#EF4444';
 
@@ -148,8 +149,8 @@ export default function SignupPage() {
 
         <p style={{ textAlign: 'center', fontSize: 11.5, color: C.muted2, marginTop: 14, marginBottom: 0, lineHeight: 1.6 }}>
           By signing up, you agree to our{' '}
-          <a href="https://akoro.app/terms" target="_blank" rel="noreferrer" style={{ color: C.brand, fontWeight: 700, textDecoration: 'none' }}>Terms of Service</a>{' '}and{' '}
-          <a href="https://akoro.app/privacy" target="_blank" rel="noreferrer" style={{ color: C.brand, fontWeight: 700, textDecoration: 'none' }}>Privacy Policy</a>.
+          <a href={`${SITE_URL}/terms`} target="_blank" rel="noreferrer" style={{ color: C.brand, fontWeight: 700, textDecoration: 'none' }}>Terms of Service</a>{' '}and{' '}
+          <a href={`${SITE_URL}/privacy`} target="_blank" rel="noreferrer" style={{ color: C.brand, fontWeight: 700, textDecoration: 'none' }}>Privacy Policy</a>.
         </p>
 
         <p style={{ textAlign: 'center', fontSize: 13, color: C.muted, marginTop: 16, marginBottom: 0 }}>

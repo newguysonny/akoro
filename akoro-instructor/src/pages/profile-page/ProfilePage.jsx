@@ -14,6 +14,7 @@ import { GREEN, RED } from '../../constants.js';
 import { C } from '../../theme/colors.js';
 
 import { ACCENT_DEFAULT, BRAND, FONTF, ALL_SUBJECTS, SCHOOL_TYPES, COUNTRIES, ACCENTS, ProgressBar, SubjectChip, Section, rowBase, Row, AvatarCircle, Sheet, SheetButtons, AvatarPickerSheet, SubjectsSheet, GenericSheet, PublishSheet, SubjectsRow, TPL_TOOLS, ToolTemplatesSection, ProfileTab, AgentTab, LoadingSkeleton } from './parts.jsx';
+import { API as API_URL } from '../../config/urls.js';
 
 export default function ProfilePage() {
   const { user } = useAuth();
@@ -58,7 +59,7 @@ export default function ProfilePage() {
       })
       .finally(() => setLoading(false));
 
-    fetch(`${import.meta.env.VITE_API_URL || 'https://akoro.onrender.com'}/api/instructor/stats`, { credentials: 'include', headers: { 'X-Akoro-Portal': 'instructor' } })
+    fetch(`${API_URL}/api/instructor/stats`, { credentials: 'include', headers: { 'X-Akoro-Portal': 'instructor' } })
       .then((r) => r.json()).then((res) => setStats(res?.data ?? {})).catch(() => {});
   }, [user]);
 
