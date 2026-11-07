@@ -14,7 +14,9 @@ import { STUDY_PREP_COST } from "./education-engine.js";
 import { supabaseStore as store } from "./store.js";
 import { prerequisiteEdges, resolveTopics, resolveSyllabusChain, topicsForSource } from "./syllabus-resolver.js";
 import { generateOutline, generatedTopics } from "./syllabus-generator.js";
-import { materialQuestions, materialTopics } from "../../materials/studySource.js";
+import { materialQuestions } from "../../materials/studySource.js";
+import { documentTopics, studyPrepMaterials } from "./materials-source.js";
+import { goalTypeHint } from "./goal-type.js";
 import * as readToolsModule from "./read-tools.js";
 import { makeLlmAgent } from "./llm-agent.js";
 import { buildRegistry } from "../tools/registry.js";
@@ -55,7 +57,8 @@ const topicWorkflow = {
 
 // generateOutline / generatedTopics: the AI-drafted outline fallback (§8.7).
 // materialTopics / materialQuestions: a learner's own materials folder as the syllabus (§7.17.3).
-const syllabus = { resolveTopics, prerequisiteEdges, generateOutline, generatedTopics, resolveSyllabusChain, topicsForSource, materialTopics, materialQuestions };
+// materials (§8.8): the learner's files as agent tools; a documents session's topics fall back to its drawn outline.
+const syllabus = { resolveTopics, prerequisiteEdges, generateOutline, generatedTopics, resolveSyllabusChain, topicsForSource, materialTopics: documentTopics, materialQuestions, materials: studyPrepMaterials };
 
 /**
  * D45: practice as an Agent Check battle — ON by default, no env needed.
@@ -397,7 +400,7 @@ export async function runStudyPrepPlanningStep({ sessionId, learnerId }) {
       setName,
       goal: view.session.goal,
     session: view.session,
-      dynamic: { hint: "Research before you plan: the syllabus, the learner's state, their practice history, what earlier sessions showed (memory) and the prerequisites. Then validate and propose one plan, ordered weakest-first within the prerequisites." },
+      dynamic: { hint: `Research before you plan: the syllabus, the learner's state, their practice history, what earlier sessions showed (memory) and the prerequisites. Then validate and propose one plan, ordered weakest-first within the prerequisites. ${goalTypeHint(view.session.goalType)}` },
     });
   } catch (error) {
     console.warn(`[study-prep] context_unavailable for ${sessionId} (${operation}): ${error?.message || error}`);
@@ -433,9 +436,9 @@ export async function runStudyPrepPlanningStep({ sessionId, learnerId }) {
  * background: the step runs after this returns (the chat tool) — the card
  * streams it live, and the plan-ready message lands in `conversationId`.
  */
-export async function startStudyPrepSession({ learnerId, goal, subject, classLevel, examBoard, materials = null, background = false, conversationId = null }) {
+export async function startStudyPrepSession({ learnerId, goal, subject, classLevel, examBoard, materials = null, background = false, conversationId = null, goalType = null }) {
   const harness = getHarness();
-  const session = await harness.createSession({ learnerId, goal, subject, classLevel, examBoard, materials });
+  const session = await harness.createSession({ learnerId, goal, subject, classLevel, examBoard, materials, goalType });
   if (background) {
     planInBackground({ sessionId: session.id, learnerId, conversationId });
     return harness.getSessionView({ sessionId: session.id, learnerId, eventLimit: 10 });

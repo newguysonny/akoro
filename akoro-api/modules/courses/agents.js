@@ -187,6 +187,13 @@ const handlers = {
     }
 
     if (error) throw new Error(error.message);
+    // §7.13.1a "Let my agent help other learners": saved with the agent, and it
+    // marks the learner's non-sensitive struggle records shareable as stories (or not).
+    if (typeof req.body.help_others_opt_in === "boolean") {
+      const { setHelpOthersOptIn } = await import("../adaptive-learning/peerConsult.js");
+      const saved = await setHelpOthersOptIn(req.user.id, req.body.help_others_opt_in);
+      return res200(res, { ...data, help_others_opt_in: saved.helpOthersOptIn });
+    }
     res200(res, data);
   }),
 
@@ -323,6 +330,7 @@ router.put ("/user/agent",                    authenticateToken, [
   body("exam_board").optional().trim(),
   body("subjects").optional().isArray(),
   body("goal").optional().trim(),
+  body("help_others_opt_in").optional().isBoolean(),
 ], runValidation, handlers.upsert);
 router.post("/user/agent/reply",              authenticateToken, [
   body("courseId").notEmpty(),

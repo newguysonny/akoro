@@ -197,7 +197,8 @@ export async function generate({
   // Which model writes them. Defaults to the platform's, but an eval run needs
   // to point the SAME generation path at a different tier — comparing models is
   // the only way "cheaper without quality loss" is more than an assertion.
-  model = OPENAI_MODEL,
+  // Locked (§7.12.2, D23): the env's question_generator model, never the learner's pick.
+  model = process.env.AI_MODEL_ROLE_QUESTION_GENERATOR || OPENAI_MODEL,
   feature = "battle_generate",
   basedOn = [],
 }) {
@@ -230,6 +231,7 @@ export async function generate({
     // Runs outside a request, so nothing sets the feature for it — without
     // this its cost lands in the unattributable "ai" bucket.
     __feature: feature,
+    __role: "question_generator",
     // Charged explicitly below, to the creator. Without this the metered
     // client ALSO charged whoever's request it ran in — the creator, twice.
     __payer: "platform",

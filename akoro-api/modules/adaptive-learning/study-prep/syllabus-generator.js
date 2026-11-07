@@ -87,7 +87,8 @@ export async function draftOutline({ subject, classLevel, examBoard, goal }) {
 }
 
 async function findProvisional({ subject, classLevel, examBoard }) {
-  let q = edu().from("generated_syllabi").select("id, topics").eq("status", "provisional")
+  // Only drafted outlines are shared by scope — one drawn from a learner's own files is theirs (§8.8).
+  let q = edu().from("generated_syllabi").select("id, topics").eq("status", "provisional").neq("source", "documents")
     .ilike("subject", normaliseSubject(subject)).ilike("class_level", normaliseClassLevel(classLevel)).is("term", null);
   q = examBoard ? q.eq("exam_board", examBoard) : q.is("exam_board", null);
   const { data, error } = await q.limit(1).maybeSingle();
@@ -115,6 +116,74 @@ export async function generateOutline({ subject, classLevel, examBoard = null, g
   }
   if (error) throw error;
   return { id: data.id, topics: data.topics, reused: false };
+}
+
+/* ── §8.8 syllabus.from_documents: an outline drawn from the learner's files ── */
+
+export const DOCUMENTS_PROMPT_VERSION = "study-prep-outline-documents-v1";
+
+function documentsPrompt({ subject, classLevel, goal, text, fix = null }) {
+  return [
+    `A learner uploaded these materials to prepare for: ${String(goal || `${classLevel} ${subject}`).slice(0, 300)}.`,
+    `Draw a study outline from THESE MATERIALS ONLY — the topics they cover, in a sensible order. Do not add topics the materials do not mention.`,
+    `Give ${OUTLINE_LIMITS.minTopics}-${OUTLINE_LIMITS.maxTopics} topics. Each topic: a short label (under ${OUTLINE_LIMITS.labelMax} characters) and ${OUTLINE_LIMITS.minObjectives}-${OUTLINE_LIMITS.maxObjectives} learning objectives in plain words.`,
+    "Plain text only: no links, no markdown, no numbering inside labels.",
+    fix ? `Your previous draft failed these checks — fix them: ${fix.join("; ")}` : "",
+    `Return JSON only: {"subject":"${subject}","classLevel":"${classLevel}","topics":[{"label":"...","objectives":["...","..."]}]}`,
+    `MATERIALS:\n${String(text || "").slice(0, 12_000)}`,
+  ].filter(Boolean).join("\n");
+}
+
+/** One outline drafted from the files' text that passed the same checks as syllabus.generate's, or throws. */
+export async function draftOutlineFromText({ subject, classLevel, goal, text }) {
+  let fix = null;
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    const response = await openai.chat.completions.create({
+      model: OPENAI_MODEL, max_tokens: 1800, response_format: { type: "json_object" },
+      messages: [{ role: "user", content: documentsPrompt({ subject, classLevel, goal, text, fix }) }],
+      __feature: "study_prep_syllabus", __timeoutMs: 45_000, __maxRetries: 1,
+    });
+    const checked = checkOutline(parseJsonLoose(response.choices?.[0]?.message?.content || ""), { subject, classLevel });
+    if (checked.ok) return { topics: checked.topics, model: OPENAI_MODEL };
+    fix = checked.errors.slice(0, 6);
+  }
+  const error = new Error(`The outline drawn from the files failed its checks: ${fix.join("; ")}`);
+  error.code = "outline_invalid";
+  throw error;
+}
+
+/** The learner's newest outline drawn from this folder. → { id, topics, grounding } | null */
+export async function documentsOutlineFor({ folderId, learnerId }) {
+  if (!folderId || !learnerId) return null;
+  const { data, error } = await edu().from("generated_syllabi").select("id, topics, grounding")
+    .eq("source", "documents").eq("created_by_learner", learnerId).eq("grounding->>folderId", String(folderId))
+    .order("created_at", { ascending: false }).limit(1).maybeSingle();
+  if (error) throw error;
+  return data || null;
+}
+
+/**
+ * Save (or refresh) the outline drawn from a learner's folder: labelled
+ * source 'documents', with the record ids it came from (§8.8). Private to the
+ * learner — never reused by scope like a drafted outline.
+ */
+export async function saveDocumentsOutline({ learnerId, folderId, subject, classLevel, topics, recordIds = [], from = "structure", model = null }) {
+  const row = {
+    topics: topics.map((t) => ({ id: t.id, label: t.label, objectives: t.objectives || [] })),
+    record_ids: (recordIds || []).slice(0, 50), grounding: { folderId, from }, model, prompt_version: DOCUMENTS_PROMPT_VERSION,
+  };
+  const existing = await documentsOutlineFor({ folderId, learnerId });
+  if (existing) {
+    const { error } = await edu().from("generated_syllabi").update(row).eq("id", existing.id);
+    if (error) throw error;
+    return { id: existing.id, reused: true };
+  }
+  const { data, error } = await edu().from("generated_syllabi").insert({
+    ...row, created_by_learner: learnerId, source: "documents", status: "provisional",
+    subject: normaliseSubject(subject).slice(0, 180) || "General", class_level: normaliseClassLevel(classLevel).slice(0, 40) || "ANY",
+  }).select("id").single();
+  if (error) throw error;
+  return { id: data.id, reused: false };
 }
 
 /** The topics of a saved outline, shaped like syllabus.resolve's. */

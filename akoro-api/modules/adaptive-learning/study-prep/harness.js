@@ -24,6 +24,8 @@ import { autoStartFor, checkBudget, spentOnChecks } from "./wake.js";
 import {
   STRATEGY_LIBRARY, STUDY_PREP_COST, applyThreshold, estimateSessionCost, isPermittedStrategy, masteryWriteBack,
 } from "./education-engine.js";
+import { classifyGoal } from "./goal-type.js";
+import { generateGate, isNonCurricular, makeMaterialsOps } from "./materials-ops.js";
 
 /** Thrown/mapped when the wallet cannot cover a charge → session pauses. */
 export class InsufficientBalanceError extends Error {
@@ -40,11 +42,15 @@ const HTTP_FOR_CODE = {
   prerequisite_violation: 422, topic_not_in_syllabus: 422, plan_too_large: 422, duplicate_topic: 422,
   deferred_retry_used: 409, insufficient_balance: 402, over_estimate: 409, teach_back_gate: 409, agent_loop_cap: 409,
   session_tool_call_cap: 409, unknown_action: 400, syllabus_exists: 409, outline_invalid: 502,
+  // §8.8 files and non-curricular goals.
+  no_materials: 422, materials_already_requested: 409, materials_not_requested: 409,
 };
 
 /** Study Prep's check plug-in: the state each action needs (copy and codes unchanged). */
 export const STUDY_PREP_CHECKS = Object.freeze({
   generate_syllabus: [stateIs(["planning", "replanning"], "An outline can only be drafted while planning")],
+  syllabus_from_documents: [stateIs(["planning", "replanning"], "An outline can only be drawn from the files while planning")],
+  request_materials: [stateIs(["planning", "replanning"], "Materials can only be asked for while planning")],
   propose_plan: [stateIs(["planning", "replanning"], "A plan can only be proposed while planning")],
   confirm_plan: [stateIs("awaiting_confirmation", "There is no plan waiting for confirmation")],
   adjust_plan: [stateIs("awaiting_confirmation", "The plan can only be adjusted before it is confirmed")],
@@ -113,6 +119,8 @@ export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentC
     toolCallsUsed: Number(row.tool_calls_used || 0), createdAt: row.created_at, updatedAt: row.updated_at,
     completedAt: row.completed_at || null, topics: topics ? topics.map(publicTopic) : undefined,
     syllabusSource: row.syllabus_source || "platform",
+    // §8.8: a school exam, or a scholarship / competition / professional exam / own topic.
+    goalType: row.goal_type || "curricular", materialsRequested: Boolean(row.materials_requested_at),
     syllabusLabel: row.syllabus_source === "generated" ? GENERATED_OUTLINE_LABEL : null,
     workflowId: row.workflow_id || null,
   });
@@ -134,7 +142,8 @@ export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentC
   };
 
   /** The real syllabus for a session, most specific first (class → school → platform). */
-  const realSyllabus = async (session) => (syllabus.resolveSyllabusChain
+  // A non-curricular goal (§8.8) never plans from a class or school syllabus: only Akoro's platform one counts.
+  const realSyllabus = async (session) => (syllabus.resolveSyllabusChain && !isNonCurricular(session)
     ? syllabus.resolveSyllabusChain({ learnerId: session.learner_id, subject: session.subject, classLevel: session.class_level, exam: session.exam_board })
     : { source: "platform", ref: null, topics: await syllabus.resolveTopics({ subject: session.subject, classLevel: session.class_level, exam: session.exam_board }) });
 
@@ -164,6 +173,11 @@ export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentC
       return { ...base, found: true, source: "generated", label: GENERATED_OUTLINE_LABEL, topics: topics.map((t) => ({ id: t.id, label: t.label })) };
     }
     const real = await realSyllabus(session);
+    if (!real.topics.length && isNonCurricular(session)) {
+      return { ...base, topics: [], found: false, goalType: "non_curricular", next: session.materials_requested_at
+        ? "No syllabus on Akoro for this goal, and you already asked the learner for materials. If they uploaded files, call syllabus.from_documents; if they said to draft one, call syllabus.generate."
+        : "No syllabus on Akoro for this goal (it isn't a school exam). Check materials.list: if they uploaded files, call syllabus.from_documents; otherwise ask once with learner.request_materials and wait." };
+    }
     if (!real.topics.length) {
       return { ...base, topics: [], found: false, next: "No syllabus exists for this subject and class — not the learner's class or school, not on Akoro. Call syllabus.generate to draft an outline, then propose a plan from its topics." };
     }
@@ -198,6 +212,9 @@ export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentC
     if (!syllabus.generateOutline) return reject(session, "tool_not_permitted", "Outline drafting is not available");
     // Planned from the learner's own materials: those are the syllabus.
     if (session.syllabus_source === "documents") return reject(session, "syllabus_exists", "This plan comes from the learner's own materials — plan from syllabus.resolve");
+    // A non-curricular goal asks the learner for materials (once) before an outline is drafted (§8.8).
+    const gate = generateGate(session);
+    if (gate) return reject(session, gate.code, gate.message);
     // Only after the class, school and platform syllabi all came back empty.
     const real = await realSyllabus(session);
     if (real.topics.length) {
@@ -233,16 +250,19 @@ export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentC
 
   // ── Session lifecycle ────────────────────────────────────────────────────
 
-  async function createSession({ learnerId, goal, subject, classLevel = "JSS1", examBoard = "WAEC", entryMode = "syllabus", materials = null }) {
+  async function createSession({ learnerId, goal, subject, classLevel = "JSS1", examBoard = "WAEC", entryMode = "syllabus", materials = null, goalType = null }) {
     const active = await store.findActiveSession(learnerId);
     if (active) throw new HarnessRejection("invalid_state_transition", "You already have an active study-prep session — finish or cancel it first", 409);
     // From a materials folder (§7.17.3): the folder is the syllabus from the start.
     const fromMaterials = materials?.folderId ? { entry_mode: "material", syllabus_source: "documents", syllabus_ref: materials.folderId } : { entry_mode: entryMode };
+    // §8.8: the goal type decides the syllabus order. The column defaults to curricular, so only the other is written.
+    const kind = classifyGoal(goal, { goalType });
     const session = await store.createSession({
       learner_id: learnerId, goal, subject, class_level: classLevel, ...fromMaterials,
       exam_board: examBoard, status: "planning", policy_version: "study-prep-v1",
+      ...(kind === "non_curricular" ? { goal_type: kind } : {}),
     });
-    await log(session.id, null, { eventType: "observation", origin: "harness", facts: { goal, subject, classLevel, entryMode: fromMaterials.entry_mode, ...(materials?.folderId ? { materials: materials.name || "folder" } : {}) } });
+    await log(session.id, null, { eventType: "observation", origin: "harness", facts: { goal, subject, classLevel, entryMode: fromMaterials.entry_mode, goalType: kind, ...(materials?.folderId ? { materials: materials.name || "folder" } : {}) } });
     if (materials?.folderId) {
       await log(session.id, null, {
         eventType: "harness_decision", origin: "harness", decisionNode: "syllabus_resolved",
@@ -964,9 +984,13 @@ export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentC
     return { session, topics, step, activeTopic: current ? publicTopic(current) : null };
   }
 
+  // §8.8 files: materials.list / materials.search / syllabus.from_documents / learner.request_materials.
+  const materialsOps = makeMaterialsOps({ store, materials: syllabus?.materials || null, log, reject, check, ownedSession, now });
+
   return {
     // The guarded store (definition checks + workflow mirror): the agent loop writes through it too.
     store,
+    ...materialsOps,
     createSession, proposePlan, confirmPlan, adjustPlan,
     startTopicPractice, submitPractice, completeAgentCheck, confirmTeachBack, offerStrategy,
     advanceTopic, deferTopic, retryDeferredTopic, flagTopic,

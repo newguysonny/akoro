@@ -69,6 +69,11 @@ export const ROLES = Object.freeze({
   persona: { caps: [] },                    // protégé, NaNa
   assessor: { caps: [], locked: true },     // Sargeant: grading stays consistent across learners
   evidence: { caps: [], locked: true },     // evidence analysis
+  // Agent Check (§7.12.2, D23): the learner's agent answering from its notes, and NaNa's
+  // questions. A stronger model would answer from general knowledge, and question
+  // difficulty must not change with the learner's plan — scores stay comparable.
+  agent_recall: { caps: [], locked: true },
+  question_generator: { caps: [], locked: true },
   background: { caps: [] },                 // schedulers, prewarm, tasks — no learner chose them
 });
 

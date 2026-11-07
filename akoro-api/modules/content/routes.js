@@ -58,6 +58,8 @@ const checkValidation = (req, res) => {
 };
 
 const adminOnly = [authenticateToken, requireRole(["admin"])];
+// §7.14: a saved post's passages are re-indexed for the agent's blog search (after the response; never fails the save).
+const reindexBlogPost = (postId) => { import("../adaptive-learning/blogResearch.js").then((m) => m.indexBlogPost({ postId })).catch(() => {}); };
 
 // ════════════════════════════════════════════════════════════════════════════
 //  BLOG — public
@@ -244,6 +246,7 @@ router.post("/admin/blog/posts", adminOnly, blogWriteValidators,
     };
     const { data, error } = await contentDb.from("blog_posts").insert(row).select("*").single();
     if (error) return res400(res, error.message);
+    reindexBlogPost(data.id);
     return res201(res, data);
   }));
 
@@ -267,6 +270,7 @@ router.patch("/admin/blog/posts/:id", adminOnly,
       .update(patch).eq("id", req.params.id).select("*").maybeSingle();
     if (error) return res400(res, error.message);
     if (!data) return res404(res);
+    reindexBlogPost(data.id);
     return res200(res, data);
   }));
 

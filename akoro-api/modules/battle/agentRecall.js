@@ -25,7 +25,8 @@ import { openai } from "../../lib/aiModel.js";
 import { rerank, rerankEnabled } from "../../lib/rerank.js";
 
 /** The model that answers. Small on purpose — this is a lookup, not an essay. */
-const ANSWER_MODEL = process.env.BATTLE_ANSWER_MODEL || "gpt-4o-mini";
+// Locked (§7.12.2, D23): set by env only, never by the learner's model pick.
+export const ANSWER_MODEL = process.env.BATTLE_ANSWER_MODEL || process.env.AI_MODEL_ROLE_AGENT_RECALL || "gpt-4o-mini";
 
 /** How many notes end up in front of the model. */
 const RECALL_LIMIT = 4;
@@ -181,6 +182,7 @@ export async function answerFromRecall({
     temperature: 0,
     __feature: payer === "platform" ? "agent_check_answer" : "battle_answer",
     __userId: userId,
+    __role: "agent_recall",
     ...(payer === "platform" ? { __payer: "platform" } : {}),
     response_format: { type: "json_object" },
     messages: [

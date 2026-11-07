@@ -55,7 +55,9 @@ router.post("/sessions", async (req, res) => {
     const classLevel = text(req.body?.classLevel || "JSS1", 40);
     const examBoard = text(req.body?.examBoard || "WAEC", 80).toUpperCase();
     if (goal.length < 3 || subject.length < 2) return fail(res, 422, "tool_schema_invalid", "A goal (3+ chars) and subject are required");
-    const view = await startStudyPrepSession({ learnerId: req.user.id, goal, subject, classLevel, examBoard });
+    // §8.8: optional — otherwise the goal's words decide (classifyGoal).
+    const goalType = ["curricular", "non_curricular"].includes(req.body?.goalType) ? req.body.goalType : null;
+    const view = await startStudyPrepSession({ learnerId: req.user.id, goal, subject, classLevel, examBoard, goalType });
     return res.status(201).json(shapeView(view));
   } catch (error) { return rejection(res, error); }
 });

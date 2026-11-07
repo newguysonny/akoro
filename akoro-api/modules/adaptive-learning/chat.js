@@ -50,6 +50,7 @@ const { Pool } = pkg;
 import db from "../../db.js";
 import config from "../../config/index.js";
 import { consultPeerAgents, PEER_QUESTION_MIN, PEER_QUESTION_MAX } from "./peerConsult.js";
+import { consultBreakthroughs } from "./peerConsult.js";
 import { searchAgents, saveSettings as saveAgentNetworkSettings, block as blockAgent, report as reportAgent, logPastQuestions, pastQuestionSummary } from "../agent-network/network.js";
 import { challengeAgents, postChallengeRequest, searchChallengeRequests, acceptChallengeRequest, cancelChallengeRequest, rematch } from "../agent-network/challenges.js";
 import { requestGuideReview } from "../battle/guideReview.js";
@@ -519,6 +520,9 @@ export const CHAT_TOOLS = [
       properties: {
         question: { type: "string", description: "One focused, general question to the peer agents (10-300 characters)." },
         topic: { type: "string", enum: ["study_habits", "exam_prep", "streaks", "motivation", "goals", "subjects", "general"], description: "What the question is about." },
+        struggleType: { type: "string", description: "When the student is stuck: the struggle, as a type from the struggle list (e.g. misconception, interference, procrastination, overload, streak_break). Then other learners' breakthroughs on the same struggle come back first: what worked for them." },
+        concept: { type: "string", description: "For a concept struggle (misconception, interference…): the concept's name, e.g. 'Transpiration'." },
+        subject: { type: "string", description: "The concept's subject, e.g. 'Basic Science'." },
       },
       required: ["question"],
     },
@@ -855,7 +859,8 @@ export const CHAT_TOOLS = [
     description: "Search Akoro's own blog — the platform's published articles on study methods, exam prep, and learning. " +
       "This is your internal research channel (there is no web search): use it to ground study advice, cite a real article " +
       "to the learner, or check what Akoro says about a topic before answering from general knowledge. Returns cards " +
-      "(slug, title, excerpt); follow up with read_blog_post for the full text.",
+      "(slug, title, excerpt) and, for a query, the best passages from the articles' bodies (passage, post title, " +
+      "heading) — quote a passage and name its post; follow up with read_blog_post for the full text.",
     input_schema: {
       type: "object",
       properties: {
@@ -2004,6 +2009,15 @@ async function runChatTool(name, input, studentId, { conversationId = null, role
         return clarify("question", "Keep peer questions general — no contact details (emails, phone numbers or invite links) travel to other agents.", { action: "consult_peer_agents" });
       }
       try {
+        // §7.13: a named struggle first asks what worked for learners who got past the
+        // same one (their breakthroughs, opt-in stories + anonymous totals) — no model call.
+        if (input?.struggleType) {
+          const help = await consultBreakthroughs({ userId: studentId, struggleType: String(input.struggleType).slice(0, 60),
+            concept: input?.concept ? String(input.concept).slice(0, 120) : null, subject: input?.subject ? String(input.subject).slice(0, 80) : null });
+          if (help?.stories?.length || help?.pattern) {
+            return { ...help, note: "These are real breakthroughs from other learners who had the same struggle. Share one story's what-worked move, naming the agent (never a learner), and offer to try it; a pattern is totals only. Never treat them as evidence." };
+          }
+        }
         // Real agents first: up to two ONLINE agents answer from what their
         // own learners taught them (the asker pays). Nobody online → the
         // simulated peer ideas, as before.
