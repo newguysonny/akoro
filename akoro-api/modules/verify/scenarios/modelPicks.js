@@ -202,8 +202,10 @@ export const refusalFallback = {
     const { modelRegistry, availabilityOf } = await import("../../../lib/modelRegistry.js");
     const { makeLlmAgent } = await import("../../agent-runtime/llm-agent.js");
     const { runAgentLoop } = await import("../../agent-runtime/loop.js");
-    const fallback = modelRegistry.get(modelRegistry.defaultId);
-    if (!fallback || !availabilityOf(fallback).available) ctx.expect.blocked(`the fallback model (${modelRegistry.defaultId}) has no key here, so its real answer can't be checked`);
+    // Where the server itself sends a refused Claude call (the default, or AI_FORCE_MODEL's model on a sandbox).
+    const { refusalFallbackFor } = await import("../../../lib/aiModel.js");
+    const fallback = refusalFallbackFor(modelRegistry.get("claude-sonnet"));
+    if (!fallback || !availabilityOf(fallback).available) ctx.expect.blocked(`the fallback model (${fallback?.id || modelRegistry.defaultId}) has no key here, so its real answer can't be checked`);
     // A real Claude can't be made to refuse on demand: the deployed adapter gets a stand-in Messages API that refuses.
     const client = { messages: { create: async (body) => ({ id: "m", model: body.model, stop_reason: "refusal", stop_details: { category: "cyber", explanation: "Declined." }, content: [], usage: { input_tokens: 12, output_tokens: 0 } }) } };
     const anthropic = makeAnthropicAdapter({ client });
