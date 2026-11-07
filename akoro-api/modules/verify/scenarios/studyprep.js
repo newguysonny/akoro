@@ -224,8 +224,12 @@ export const agentCheckBattle = {
     const events = await ctx.db.rows("edu.study_prep_events", { session_id: id, event_type: "engine_result" }, { columns: "facts", limit: 5 });
     const engine = events.find((e) => e.facts?.source === "agent_recall");
     ctx.expect.ok("the Engine scored it as the agent's answers", !!engine);
-    const expected = engine?.facts?.outcome === "retest_offered" ? "active" : engine?.facts?.outcome;
-    ctx.expect.eq("the topic follows the Engine's outcome", scored.status, expected);
+    // Topic states (§8.3, 2026-11-07): a miss needs an intervention — the topic waits there,
+    // or has already been handed to a teaching session (D15); a pass / cap-out is as before.
+    const missed = engine?.facts?.outcome === "retest_offered";
+    const state = scored.state || scored.status;
+    if (missed) ctx.expect.ok("the topic follows the Engine's outcome (a miss needs an intervention)", ["intervention_required", "awaiting_teaching"].includes(state), { status: scored.status, state: scored.state });
+    else ctx.expect.eq("the topic follows the Engine's outcome", state, engine?.facts?.outcome);
     const said = await ctx.db.rows("chat_messages", { session_id: id }, { columns: "text, meta", limit: 20 });
     const checkRow = async () => (await ctx.db.rows("edu.workflow_instances", { workflow_type: "practice", learner_id: me.id }, { columns: "id, state, parent_workflow_id, metadata", limit: 20, order: { column: "created_at", ascending: false } }))
       .find((w) => w.metadata?.battleId === battleId);
