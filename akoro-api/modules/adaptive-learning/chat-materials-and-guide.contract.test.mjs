@@ -86,3 +86,13 @@ test("not taught yet: Akoro's own material on the topic, as links; never study m
   const protege = await readFile(new URL("../../akoro-agent/policies/PROTEGE.md", import.meta.url), "utf8");
   assert.match(protege, /Flashcards, notes, summaries and quizzes are study material: write them only from what you were taught/);
 });
+
+test("blog passages the answer used: post + section first (opening the post), then the posts; deduped", () => {
+  const out = collectMaterials([materialsFrom("search_blog_posts", {
+    passages: [{ title: "How plants lose water", slug: "how-plants-lose-water", heading: "Stomata and the leaf" }],
+    posts: [{ title: "How plants lose water", slug: "how-plants-lose-water" }, { title: "Evaporation made simple", slug: "evaporation-made-simple" }],
+  })]);
+  assert.deepEqual(out[0], { kind: "blog_passage", title: "How plants lose water", href: "/blog/how-plants-lose-water", sub: "Akoro blog · Stomata and the leaf" });
+  assert.equal(out.filter((m) => m.href === "/blog/how-plants-lose-water").length, 1, "the post itself isn't listed twice");
+  assert.equal(out[1].href, "/blog/evaporation-made-simple");
+});

@@ -72,7 +72,7 @@ export function cleanMaterials(list) {
     const key = href || `teach:${teach.topic.toLowerCase()}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    out.push({ kind: String(m.kind || ''), title: title.slice(0, 90), ...(href ? { href } : { teach }) });
+    out.push({ kind: String(m.kind || ''), title: title.slice(0, 90), ...(m.sub ? { sub: String(m.sub).slice(0, 90) } : {}), ...(href ? { href } : { teach }) });
     if (out.length >= 8) break;
   }
   return out;
