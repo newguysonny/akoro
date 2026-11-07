@@ -72,7 +72,7 @@ test("wiring: on by default (a switch can turn it off), gated in the catalogue a
   assert.match(access, /export const selfToolingEnabled = \(\) => onUnlessOff\("AKORO_SELF_TOOLING_ENABLED"\);/);
   assert.match(access, /export const selfToolingRealUsers = \(\) => onUnlessOff\("AKORO_SELF_TOOLING_REAL_USERS"\);/);
   assert.match(chatSrc, /self_tooling: selfToolingEnabled\(\) && selfTooling,/);
-  assert.match(chatSrc, /const selfToolOn = \(role === "student" \|\| role === "instructor"\) && await selfToolingAllowedFor\(req\.user\.id\);/);
+  assert.match(chatSrc, /const on = \(role === "student" \|\| role === "instructor"\) && await selfToolingAllowedFor\(req\.user\.id\);/);
   assert.match(chatSrc, /selfTooling: selfToolOn,/);
   assert.match(chatSrc, /case "schema_lookup": \{\n\s+if \(!SELF_TOOLING_ROLES\.has\(role\)\)[^\n]*\n\s+if \(!\(await selfToolingAllowedFor\(studentId\)\)\)/);
   const sql = readFileSync(new URL("../../migrations/2026-self-tooling-grants.sql", import.meta.url), "utf8");

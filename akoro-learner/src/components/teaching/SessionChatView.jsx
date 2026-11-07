@@ -8,6 +8,7 @@ import QuoteChip from '../common/QuoteChip.jsx';
 import { parseQuoted } from '../../lib/quotedMessage.js';
 import StreamCaret from '../common/StreamCaret.jsx';
 import BlockRenderer from '../sessions/BlockRenderer.jsx';
+import LessonCheckCard from './LessonCheckCard.jsx';
 import { citeLabel, toReaderCite } from '../../lib/askAnswer.js';
 import { Answer } from './ReaderAsk.jsx';
 import { AgentAvatar } from '../common/AgentAvatar.jsx';
@@ -427,7 +428,9 @@ function SessionChatView({
       ) : (
       <div ref={scrollRef} style={{ flex:1,overflowY:"auto",padding:"14px 16px",
         display:"flex",flexDirection:"column",gap:8 }}>
-        {blocks.map((b,i) => (
+        {blocks.map((b,i) => b.type === "lesson-check" ? (
+          <LessonCheckCard key={i} assessment={b.assessment} agentName={agentName || 'Your agent'} topic={b.topic || ''} onTeachNext={onInputChange}/>
+        ) : (
           <BlockRenderer key={i} block={b} agentName={agentName} agentEmoji={agentEmoji} onCite={onCite}/>
         ))}
         {/* The guide doesn't speak in the conversation: its ideas for what to say next sit under the protégé's latest reply. */}

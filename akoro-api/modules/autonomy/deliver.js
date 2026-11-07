@@ -203,6 +203,12 @@ export function reportFor(p, result = {}) {
       return result.draft ? { text: `Here's the draft — ${t}. Check it, change anything, and tap Assign when it's right. Nothing is sent before that.`, meta: { previews: [result.draft], tools: ["prepare_activity"] } } : null;
     case "agent_friend":
       return { text: `Done — you and ${result.with || "them"} are friends now. Our agents can chat and study together.` };
+    case "agent_outreach": {
+      const who = result.to?.name || pl.toName || "them";
+      if (result.answer) return { text: `I asked ${who}'s agent${pl.topic ? ` about ${pl.topic}` : ""}. They said: “${String(result.answer).slice(0, 500)}”` };
+      return { text: pl.purpose === "friend_request" ? `Sent — I've asked ${who}'s agent if you two can be study friends. I'll tell you their answer.`
+        : `Sent — I've asked ${who}'s agent. I'll tell you what they say.` };
+    }
     case "agent_reply":
       return { text: `Sent — I replied to ${result.to || "them"}${result.text ? `: “${String(result.text).slice(0, 200)}”` : "."}` };
     default:

@@ -3184,7 +3184,7 @@ planning loop's tool names, the double practice charge, empty syllabus data).
   — **2026-11-07:** chat uploads join the open Study Prep session in their subject
   (`attachUploadsToStudyPrep`); a check for a session with linked files takes its facts
   from the learner's own notes first (`notesBlock`); plan-card files label built. Blog
-  source chips: preview drawn, waiting for approval.
+  source chips built (post + section under the answer; UI gate `chat.blog_sources` PASS).
 
 ### Phase 6 — Teaching Workflow (agent-driven)
 - `teaching/controller.js`, `teaching/tools.js` (agent catalogue + fixed steps), `TEACHING_POLICY`.
@@ -3236,7 +3236,7 @@ planning loop's tool names, the double practice charge, empty syllabus data).
   hand-off → taught to mastery → Study Prep callback → retest unlocked → teaching_done
   wake). `teaching.request_assessment` built (NaNa asks, the protégé answers from what
   it was taught, Sergeant judges, a guess never counts; ≤ 2 per session); its result
-  card is not drawn in the lesson window yet (preview drawn 2026-11-07, waiting for approval).
+  result card is drawn in the lesson window (`LessonCheckCard`, built 2026-11-07 after preview approval).
 - **Status (2026-11-01): ✅ built — `studyprep.teaching_outcomes` green on the sandbox.** Open (circle back): the mid-session assessment tool (`teaching.request_assessment`).
   Ended before any teaching → `abandoned` (reason learner_ended), no
   teach-back, offered once more on the card (a fresh proposal; once), wake
@@ -3364,11 +3364,166 @@ planning loop's tool names, the double practice charge, empty syllabus data).
   before any text → the fallback model's stream takes over; mid-reply → ends with a
   `model_refusal` marker. Q9 decided: developer mode stays open to anyone who turns it on.
 
-### Phase 12 — Hardening and rollout
-- Failure tests §19; data migration §14.3; flag-by-flag rollout; observability
-  (workflow_id, type, learner, operation, state, tool, latency, tokens, cost,
-  result, error — never answer keys or reasoning).
-- **Exit:** all scenarios A–K pass in staging with flags on; old paths removed only after a release with flags on.
+### Phase 12 — Hardening, production readiness and rollout (expanded 2026-11-07)
+Deployed is not the same as production ready. Phase 12 makes Akoro answer six
+questions with evidence, not intentions: how we know it runs well, what happens
+when it fails, how users' data is protected, what happens at 10x / 100x, how a
+bad release is undone, and whether learners actually get what they need. Each
+part has its own exit; the phase exits when all six (and the original rollout
+items) are met.
+
+**12.0 Rollout (the original items).** Failure tests §19; data migration §14.3;
+flag-by-flag rollout; old paths removed only after a release with flags on.
+- **Exit:** all scenarios A–K pass in staging with flags on.
+
+**12.1 Observability — how we know the system is running well.**
+- Have today: every AI call timed and costed (`aiTelemetry`, admin AI spend);
+  `/health` (Render health check); the Verification Gate as synthetic checks.
+- Build: one structured log line per request and per workflow step (request
+  id, workflow_id, type, learner, operation, state, tool, latency, tokens,
+  cost, result, error — never answer keys, reasoning, or sensitive struggles);
+  error tracking for the API and the three apps (exceptions grouped, with
+  release and route); traces across API → AI provider → database → sockets
+  for slow requests; a service dashboard (requests, error rate, p50/p95
+  latency, socket connections, queue depth, AI provider errors and spend).
+- Alerts (to a named on-call person, not just a page): API error rate or p95
+  over the SLO, `/health` failing, deferred-job queue backing up, an AI
+  provider's breaker open, AI spend at 80% of budget, database connections
+  near the limit, a scheduled Verification Gate run failing.
+- **Exit:** a deliberately broken route and a slow AI call each show up in
+  error tracking, a trace and the dashboard, and fire an alert, within 5 minutes.
+- **Chat latency (2026-11-07):** every chat turn returns `metadata.timings` (each
+  preparation step and lookup, first visible output, reply complete, save) and logs
+  one `[chat-timing]` line; gate `chat.latency` fails when the first visible output
+  is over 6 s. Measured on the sandbox — before → after: first words 4.7–10.1 s →
+  2.5–3.6 s; reply complete ("done") 13–49 s → 5.9–7.1 s. Done by running the
+  turn's independent lookups together, one shared embedding per question,
+  suggestions alongside the save, and "done" sent before the save ("saved" brings
+  the stored id). Still open: the save itself takes 3–17 s on the sandbox database
+  (off the learner's path now, but worth fixing under 12.4); the intent step adds
+  ~1 s when it runs; a permission approval builds its tool (~4 s) before the chat
+  carries on.
+
+**12.2 Reliability — what happens when something fails, and recovery.**
+- Have today: circuit breakers and fallback models per AI provider; deferred
+  jobs in Postgres (survive restarts); idempotent steps (no double charge or
+  write); refusals fall back.
+- Build: written SLOs — API availability (e.g. 99.5% monthly), p95 latency for
+  page APIs (e.g. < 800 ms) and first chat token (e.g. < 3 s), job pickup time
+  — with an error budget and what we do when it is spent (freeze features, fix
+  reliability); a failure-mode table (database down, Redis/queue down, an AI
+  provider down or out of credit, RunPod paused, socket server restart, storage
+  unreachable) with the expected behaviour and how each recovers; tested
+  database backups with point-in-time restore; a short incident runbook (who
+  is on call, how to declare, how to communicate, the post-incident review).
+- **Exit:** SLOs written and shown on the dashboard; each failure mode in the
+  table exercised once on the sandbox with the expected result; one database
+  restore done to a scratch database and timed.
+
+**12.3 Security — protecting users' data and permissions; compromised credentials.**
+- Have today: no built-in fallback secrets (gate `security.no_fallback_secrets`);
+  shared secrets fail closed; ownership reads; sensitive struggles never shown;
+  real accounts are read/dry for the gate (V4); Phase 15 audit follow-ups.
+- Build: a secrets inventory (every key: what it unlocks, where it lives, who
+  can rotate it, how often); a compromise runbook per secret class — rotate,
+  revoke sessions (JWT signing key rotation logs everyone out), invalidate
+  capability tokens, review audit logs, tell affected users within the legal
+  window (NDPR); scheduled rotation for the long-lived keys; least-privilege
+  database roles; dependency and secret scanning in CI; an access review of
+  who can reach production and the admin app; a permissions test per role
+  (learner, instructor, school admin, admin) on the sensitive routes.
+- **Exit:** the inventory exists; one full rotation of a real secret done on the
+  sandbox following the runbook with no downtime; the per-role permission tests
+  pass in CI.
+- **Basic protections (added 2026-11-07)** — each built, then proved by a test:
+  1. *Sign-up and login rate-limited* — built (`strictLimit`: 5 per 15 min per IP;
+     `refreshLimit` on refresh). Add: a gate check that the 6th wrong login in 15
+     minutes gets 429, and a per-account lockout/backoff after repeated failures.
+  2. *Every AI endpoint on the AI limit* — today only tasks, voice, teaching tools and
+     self-study planning use `aiLimit` (10/min); `/api/adaptive` (Agent Chat, teaching)
+     is on `teachingLimit` (50/min) and records study tools, Study Prep and chat
+     uploads on `standardLimit` (100/min). Add: every route that calls a model gets a
+     per-user AI limit (chat may keep a higher one, but a model call never sits only
+     behind the read limit); a contract test lists model-calling routes and fails if
+     one has no AI limit.
+  3. *Monthly AI spend capped* — today: per-learner coins and the agent's weekly
+     budget (alert 80%, stop 100%). Add: a platform-wide monthly cap
+     (`AI_MONTHLY_BUDGET_USD`) from the AI telemetry costs — alert at 80%, at 100%
+     only paid / essential calls continue (learner-paid turns, grading) and background
+     work stops; shown on the AI spend page.
+  4. *Bot protection on public forms* — none today. Add: a challenge (e.g. Cloudflare
+     Turnstile) on sign-up, login after failures, password reset, contact / enquiry
+     and admission forms, verified server-side; honeypot fields as a fallback.
+  5. *No stack traces to users* — built (production 500s return only a message and an
+     instance id; the stack only in development). Add: a gate check that a forced
+     500 in production carries no `stack`, file path or SQL text.
+  6. *Every failed login logged* — not today (a wrong login only returns "Invalid
+     credentials"). Add: an `auth_events` record (account if known, IP, user agent,
+     reason, time — never the password) for failed and successful logins, resets and
+     2FA; an alert on a spike; visible in the admin audit log.
+  7. *Uptime alerts* — see 12.1 (`/health` failing alerts a person, from outside
+     Render, every minute).
+  8. *The AI API going down* — mostly built (breakers, fallback models, refusal
+     fallback, typed 503s, `AI_FORCE_MODEL`); the 12.2 failure table proves it, plus a
+     learner-facing "AI is busy, try again shortly" state in chat and lessons.
+  9. *Users' data isolated* — a gate and browser check of the exact attack: create
+     learners A and B; as A open a private record, a chat, a Study Prep session, an
+     upload folder, a teaching session and a task; copy each URL / API path; as B (a
+     separate browser session) open each → "not found" (404, never A's data, never a
+     403 that confirms it exists). Same for instructor-owned drafts and school data
+     across two schools. Finishes the Phase 15 ownership audit (`security.ownership_reads`)
+     route by route.
+  10. *Roles isolated* — admin, learner (user), teacher, instructor, school admin: for
+      every route group, each role that must not reach it gets 401/403/404 (a matrix
+      test generated from the route list), and the role can't be raised by the
+      client (no role in a request body or token claim is trusted without the server's
+      record).
+  - **Exit (basic protections):** all ten checks pass on the sandbox — the A/B URL
+    test and the role matrix included — and run in CI on every release.
+
+**12.4 Scalability — 10x and 100x traffic, and the first bottleneck.**
+- Have today: nothing measured.
+- Build: a load test of the main journeys (sign-in, dashboard, Agent Chat turn,
+  teaching socket session, Study Prep check, uploads) at today's peak, 10x and
+  100x, against the sandbox with AI calls stubbed and, separately, a small real
+  AI run for provider limits; name the first bottleneck and the next two
+  (likely: database connections and slow queries, the single API instance,
+  AI provider rate limits, the socket server, the deferred-job worker); the plan
+  for each (connection pooling, indexes, horizontal API instances, socket
+  adapter, queue workers, per-provider limits and fallbacks); a cost-per-learner
+  estimate at each level.
+- **Exit:** the 10x run meets the SLO (or the fix for what didn't is shipped and
+  re-run); the 100x run's first bottleneck is named with its fix planned.
+
+**12.5 Deployment and recovery — a bad release; roll back or roll forward.**
+- Have today: Render deploys on commit; every change goes to the sandbox and its
+  Verification Gate first; migrations are idempotent and run on deploy.
+- Build: a written release path (branch → sandbox gate → production) with a
+  required gate pass before production; rollback (Render redeploy of the last
+  good build) and roll-forward (a fix through the same path) steps, with the rule
+  for which to use; migrations that are backward compatible for one release
+  (expand → migrate → contract) so a rollback never meets a schema it can't read;
+  feature flags as the first lever (turn the feature off, not the release);
+  a staged rollout option (a percentage or a pilot school first); a release log.
+- Measure: time from a merged fix to production, and from a reported break to
+  recovery.
+- **Exit:** one rollback and one roll-forward done on the sandbox from the
+  runbook and timed; the release path enforced (no production deploy without a
+  gate pass).
+
+**12.6 Product health — are learners getting what they need.**
+- Have today: admin analytics; struggles and breakthroughs; Study Prep results;
+  strategy outcomes.
+- Define the metrics, each with a target and an owner: weekly active learners;
+  lessons started vs finished; Agent Check / retest pass rate; time from a
+  struggle opened to its breakthrough; topics understood per Study Prep session;
+  7- and 30-day retention; chat answers rated helpful; teachers and schools
+  active; free → paid conversion and coins spent; cost per active learner.
+- Build: a weekly product-health view in admin (trends, not just totals), with
+  the agent's own outcomes beside the learners' (what worked, what didn't) and
+  no personal data beyond what each role may see.
+- **Exit:** the metrics are defined with targets, the weekly view is live, and
+  one product decision is made from it and written down.
 
 ### Phase 13 — Proactive agent (§7.16)
 - Can start now: it builds on the shipped autonomy planner, not on Phases 1–12.
@@ -4202,3 +4357,19 @@ LLM failure must never corrupt workflow state.
 | Agent-driven teaching turn, controller agent, loop end/cap/fallback, learner model switching, learn_with_guide mode, retrieval_practice | User decisions (this review) | Claude API reference (model ids, prices, tool_choice/thinking/refusal behaviour, 2026-10-06) |
 | Proactive agent (suggestions, ideas, goal work, quiet learning) | User request 2026-10-18 + the reference assistant's conversation (noticed → ready fix → go-ahead → report) | Inventory of `modules/autonomy/`, `agent-proposals/`, `learner-autonomy.js`, agent memory tables (2026-10-18) |
 | Code facts | `akoro-api` / `akoro-learner` as of 2026-10-09 | — |
+
+#### Phase 21 part 2 — Agents start conversations on their own (2026-11-07) — DONE, verified on the sandbox
+
+The agent reaches out to other agents by itself. Its learner supervises: the agent says what it did, and it asks first only where permission is needed.
+
+- **When it reaches out:** a new, non-sensitive struggle on a concept (`struggles.afterLearningEvent`), or a Study Prep topic starting (`study-prep/wiring.js`, friends only, never a card). The chat and the gate can also call `reachOut` directly.
+- **Who it asks:** a friend whose learner mastered the concept or got past the same struggle; otherwise a learner who opted in to "help other learners". Never a blocked pair.
+- **No permission needed:** a study question to a friend's agent or to an opted-in learner. It carries no personal details and no commitment.
+- **Asks first (Allow / Reject / Later card, `agent_outreach`):** a stranger, a friend request, sharing notes or scores, a battle invite, and anything from a primary or JSS learner. Nothing is sent until Allow.
+- **Never:** past 3 a day, while the agent is Offline, or in quiet hours. It waits for the next trigger.
+- **Answers come back:** an answer given straight away, an automatic answer, or a reply the other learner approved is posted in the asker's chat. The other learner's own chat says what their agent answered.
+- **Records:** `agent_messages.origin` ('learner' or 'agent'), plus `trigger` and `purpose`. Migration `2026-agent-outreach.sql`.
+- **Code:** `agent-network/outreachCore.js` (the rules, pure) and `agent-network/outreach.js`.
+- **Sandbox, commit 46b617a2 (topic start) and 755559dd (the rest): all 12 `outreach.*` checks PASS.** They cover struggle consult, topic start with a friend, stranger card, friend-request card, share-data card, battle-invite card, offline then answered, daily cap, blocked pair skipped, younger learner asked first, two-way round trip, and no personal details sent.
+- **Note:** on the sandbox, @tester01 is a JSS learner, so the checks set the learner's level for each run.
+- **Not built yet:** a learner-facing screen listing what the agent started on its own. Today it shows only as chat lines and cards.

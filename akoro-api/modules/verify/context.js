@@ -74,13 +74,15 @@ export function createContext({ scenario, sink, evidence, realUsers, runId = "lo
       status = r.status;
       resHeaders = Object.fromEntries([...r.headers.entries()].filter(([k]) => /^ratelimit|^x-ratelimit|^content-type$|^retry-after$/i.test(k)));
       const text = await r.text();
-      try { resBody = JSON.parse(text); } catch { resBody = text.slice(0, 2000); }
+      // A streamed reply (text/event-stream) is returned whole to the scenario; evidence keeps a short copy.
+      const streamed = /text\/event-stream/i.test(r.headers.get("content-type") || "");
+      try { resBody = JSON.parse(text); } catch { resBody = streamed ? text : text.slice(0, 2000); }
     } catch (e) {
       throw new BlockedError(`API unreachable at ${API_BASE}: ${e.message}`);
     }
     const out = { status, body: resBody, headers: resHeaders, ms: Date.now() - t0 };
     evidence.http.push({ method, path, as: acct?.username || null, status, ms: out.ms, headers: resHeaders,
-      request: redact(body ?? null, { realUser: realUser() }), response: redact(resBody, { realUser: realUser() }) });
+      request: redact(body ?? null, { realUser: realUser() }), response: redact(typeof resBody === "string" ? resBody.slice(0, 2000) : resBody, { realUser: realUser() }) });
     return out;
   }
 

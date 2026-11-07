@@ -175,7 +175,21 @@ router.post("/observations", requireAgentToolsCredential, async (req, res) => {
     const { claims, scope } = authorised(request);
     const principal = await activePrincipal(claims);
     await approvedConcepts(request.observations.map((item) => item.conceptId), scope);
+    return res.json({ success: true, states: await recordGatewayObservations(principal.id, request) });
+  } catch (error) {
+    return sendError(res, error);
+  }
+});
 
+/**
+ * What the gateway does once a request is authenticated and its concepts are
+ * approved: each observation through the one recorder (the guardian's claim
+ * passed through), the guardian review, the tracker. Exported so the
+ * Verification Gate can check this path in-process where the gateway secrets
+ * aren't configured — the HTTP route above stays the only way in from outside.
+ */
+export async function recordGatewayObservations(principalId, request) {
+    const principal = { id: principalId };
     const states = [];
     for (const observation of request.observations) {
       const recorded = await recordLearningEvent({
@@ -201,10 +215,7 @@ router.post("/observations", requireAgentToolsCredential, async (req, res) => {
       if (!state) throw new ConceptStateGatewayError(503, "Learner concept state was not returned");
       states.push(publicState(state, observation.conceptId));
     }
-    return res.json({ success: true, states });
-  } catch (error) {
-    return sendError(res, error);
-  }
-});
+    return states;
+}
 
 export default router;

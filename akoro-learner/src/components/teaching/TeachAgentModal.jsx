@@ -503,7 +503,7 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
         if (at >= 0) next[at] = { ...next[at], text: (next[at].text || "") + (d?.token ?? "") };
         return next;
       }));
-      ws.on("turn_complete", ({ blocks: newBlocks, currentPhase, teachingMode }) => {
+      ws.on("turn_complete", ({ blocks: newBlocks, currentPhase, teachingMode, assessment }) => {
         setLoading(false);
         clearLiveStream();
         if (teachingMode === "learn_with_guide") {
@@ -513,10 +513,12 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
           ws.emit("get_state");
           return;
         }
-        if (newBlocks?.length) {
-          setBlocks(prev => [...prev, ...newBlocks]);
+        // A short-check turn (teaching.request_assessment): its result card sits just before the protégé's line about it.
+        const checkBlock = assessment?.items?.length ? [{ type: "lesson-check", assessment, topic }] : [];
+        if (newBlocks?.length || checkBlock.length) {
+          setBlocks(prev => [...prev, ...checkBlock, ...(newBlocks || [])]);
           // TTS only when the human used voice — modality mirrors input.
-          const agentBlock = newBlocks.find(b => b.type === "student-agent");
+          const agentBlock = (newBlocks || []).find(b => b.type === "student-agent");
           maybeSpeak(agentBlock?.text);
           // Instant understanding read from the agent block; confusion comes
           // from the authoritative state snapshot we request below.

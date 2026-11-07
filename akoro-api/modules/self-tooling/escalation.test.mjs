@@ -139,7 +139,7 @@ test("questions about other players in battles force create_tool, own-task chang
   for (const q of ["How many battles have I won?", "Find me a battle to join", "How did the other players do in the weekly league?",
     "Compare my accuracy by subject"]) assert.ok(!asksAboutOthersInBattles(q), q);
   const chat = readFileSync(new URL("../adaptive-learning/chat.js", import.meta.url), "utf8");
-  assert.match(chat, /const forceSelfTool = selfToolOn && role === "student" \? await forcedSelfTool\(req\.user\.id, userMessage\)/);
+  assert.match(chat, /const forced = on && role === "student" \? await forcedSelfTool\(req\.user\.id, userMessage\)/);
   // forcedSelfTool names the tool: create_tool (others in battles) or schema_lookup (a change to their own tasks).
   assert.match(chat, /: forceSelfTool \? forceSelfTool/);
   const pipe = readFileSync(new URL("./pipeline.js", import.meta.url), "utf8");

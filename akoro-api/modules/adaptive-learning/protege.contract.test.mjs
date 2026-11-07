@@ -68,7 +68,7 @@ test("the rules: taught-only, point to sources and ask, the guide only on insist
 });
 
 test("wiring: every learner turn carries the taught knowledge; the two tools; the app's Teach me and guide mark", () => {
-  assert.match(chat, /role === "student"\s*\? loadTaughtKnowledge\(\{ studentId: req\.user\.id, query: userMessage, deps: protegeDeps \}\)/);
+  assert.match(chat, /role === "student"\s*\? timed\("taught", loadTaughtKnowledge\(\{ studentId: req\.user\.id, query: userMessage, deps: protegeDeps \}\)/);
   assert.match(chat, /const protegeCtx = taught \? `\\n\\n\$\{await loadDoctrine\("policies\/PROTEGE\.md"\)\}\$\{renderTaughtContext\(taught\)\}` : "";/);
   assert.match(chat, /\(goalsCtx \|\| ""\) \+\n\s*protegeCtx \+/);
   assert.match(chat, /name: "ask_to_be_taught",/);

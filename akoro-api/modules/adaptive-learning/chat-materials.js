@@ -14,6 +14,7 @@ const MAX = 8;
 const TOOL_LABEL = { quiz: "Quiz", flashcards: "Flashcards", summary: "Summary", notes: "Notes", podcast: "Podcast" };
 const clip = (s, n = 90) => String(s ?? "").replace(/\s+/g, " ").trim().slice(0, n);
 const link = (kind, title, href) => (title && ALLOWED.some((re) => re.test(href)) ? { kind, title: clip(title), href } : null);
+const withSub = (m, sub) => (m && sub ? { ...m, sub: clip(sub, 90) } : m);
 const teach = (topic, subject) => (topic ? { kind: "topic", title: clip(topic), action: { type: "teach", topic: clip(topic, 120), subject: clip(subject, 80) || null } } : null);
 
 /** One tool's result → its materials. */
@@ -21,7 +22,11 @@ export function materialsFrom(tool, result) {
   const r = result && typeof result === "object" ? result : {};
   switch (tool) {
     case "search_blog_posts":
-      return (r.posts || []).map((p) => link("blog", p.title, `/blog/${p.slug}`));
+      // The passages the answer used come first (post title + the section they're from), then the posts.
+      return [
+        ...(r.passages || []).map((p) => withSub(link("blog_passage", p.title, `/blog/${p.slug}`), `Akoro blog${p.heading ? ` · ${p.heading}` : ""}`)),
+        ...(r.posts || []).map((p) => link("blog", p.title, `/blog/${p.slug}`)),
+      ];
     case "read_blog_post":
       return [r.found !== false && r.slug ? link("blog", r.title, `/blog/${r.slug}`) : null, ...(r.related || []).map((p) => link("blog", p.title, `/blog/${p.slug}`))];
     case "list_my_blogs":

@@ -35,6 +35,6 @@ test("not read yet, undone, and nothing at all", () => {
 
 test("the chat turn adds it for learners", () => {
   const chat = readFileSync(new URL("../adaptive-learning/chat.js", import.meta.url), "utf8");
-  assert.match(chat, /chatFilesCtx = chatFilesBrief\(data \|\| \[\]\);/);
+  assert.match(chat, /return chatFilesBrief\(data \|\| \[\]\);/);
   assert.match(chat, /ingestCtx \+ chatFilesCtx \+/);
 });

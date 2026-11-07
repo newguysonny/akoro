@@ -154,3 +154,61 @@ export function makeSessionStateReader(harness) {
     };
   };
 }
+
+// ── topic.related_covered (2026-11-07) ──────────────────────────────────────
+const STOP = new Set(["the", "and", "of", "in", "a", "an", "to", "for", "on", "its", "their", "with", "by", "from", "introduction", "basic", "part", "simple"]);
+const slug = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 120);
+const words = (s) => new Set(String(s || "").toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length > 2 && !STOP.has(w)).map((w) => w.replace(/(ies|es|s)$/, "")));
+
+/**
+ * PURE: the topics the learner has ALREADY covered that connect to `topic` —
+ * its prerequisites (approved edges, one and two steps back) and topics that
+ * share its key ideas — with how well each is held, and the prerequisites they
+ * have not covered yet.
+ *   covered: [{ label, mastery 0–1 }]   edges: [{ before, after, beforeLabel }]
+ */
+export function relatedCoveredFrom({ topic, covered = [], edges = [] }) {
+  const key = slug(topic);
+  const direct = edges.filter((e) => e.after === key);
+  const twoBack = edges.filter((e) => direct.some((d) => d.before === e.after));
+  const prereq = new Map([...direct, ...twoBack].map((e) => [e.before, e.beforeLabel || e.before]));
+  const mine = words(topic);
+  const out = [];
+  const seen = new Set();
+  for (const c of covered) {
+    const k = slug(c.label);
+    if (!k || k === key || seen.has(k)) continue;
+    const shared = [...words(c.label)].filter((w) => mine.has(w));
+    const relation = prereq.has(k) ? "prerequisite" : shared.length ? "shares_ideas" : null;
+    if (!relation) continue;
+    seen.add(k);
+    const mastery = round4(Math.max(0, Math.min(1, Number(c.mastery) || 0)));
+    out.push({ topic: c.label, relation, mastery, held: mastery >= 0.7 ? "well" : mastery >= 0.4 ? "partly" : "weakly", ...(shared.length && relation !== "prerequisite" ? { sharedIdeas: shared.slice(0, 3) } : {}) });
+  }
+  out.sort((a, b) => (a.relation === b.relation ? b.mastery - a.mastery : a.relation === "prerequisite" ? -1 : 1));
+  const coveredKeys = new Set(covered.map((c) => slug(c.label)));
+  const notCovered = [...prereq.entries()].filter(([k]) => !coveredKeys.has(k)).map(([, label]) => label);
+  return {
+    topic, related: out.slice(0, 8), prerequisitesNotCovered: notCovered.slice(0, 6),
+    next: out.some((r) => r.relation === "prerequisite" && r.held === "weakly") || notCovered.length
+      ? "A prerequisite is weak or not covered: start one step lower (a short warm-up or that topic first)."
+      : out.length ? "Build on what they already hold: open by connecting to the strongest related topic." : "Nothing related covered yet: start from the basics and check prior class knowledge lightly.",
+  };
+}
+
+/** topic.related_covered — what this learner already covered that connects to a topic. */
+export async function getRelatedCovered({ learnerId, subject, topic }) {
+  const pattern = `%${String(subject || "").trim()}%`;
+  const [state, confidence, edges] = await Promise.all([
+    db.schema("edu").from("learner_concept_state")
+      .select("mastery, concept:concept_catalog(title, subject, topic_key)").eq("learner_id", learnerId).limit(200),
+    db.schema("edu").from("knowledge_confidence").select("topic, subject, confidence").eq("student_id", learnerId).ilike("subject", pattern).limit(100),
+    prerequisiteEdges({ subject }).catch(() => []),
+  ]);
+  const sub = String(subject || "").trim().toLowerCase();
+  const covered = [
+    ...((state.data || []).filter((r) => r.concept && (!sub || String(r.concept.subject || "").toLowerCase().includes(sub))).map((r) => ({ label: r.concept.title || r.concept.topic_key, mastery: r.mastery }))),
+    ...((confidence.data || []).map((r) => ({ label: r.topic, mastery: Number(r.confidence) > 1 ? Number(r.confidence) / 100 : r.confidence }))),
+  ].filter((c) => c.label);
+  return relatedCoveredFrom({ topic, covered, edges });
+}

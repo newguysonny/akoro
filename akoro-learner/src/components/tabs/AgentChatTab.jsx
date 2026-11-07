@@ -1011,6 +1011,8 @@ function AgentChatTab({
         onCard: (c)=>{ if(!c?.confirm?.confirmationId) return; ensureBubble(); setMessages(prev=>prev.map(m=>m.id===replyId?{...m,confirm:c.confirm}:m)); },
         // The chips arrive on the same stream (no second request).
         onSuggestions: (list)=>{ inlineIdeas=true; const ideas=cleanIdeas(list); if(ideas.length) setMessages(prev=>prev.map(m=>m.id===replyId?{...m,ideas}:m)); },
+        // The stored reply's id (ratings), sent once the save finishes — after done.
+        onSaved: ({ messageId })=>{ if(messageId) setMessages(prev=>prev.map(m=>m.id===replyId?{...m,serverId:messageId}:m)); },
         onDone: ({ reply, syllabus, pastQuestions, thinking, toolExecutions, trace, stopped, messageId })=>{
           gotDone=true;
           ensureBubble(); setStatusLabel("");
@@ -1369,7 +1371,17 @@ function AgentChatTab({
                   {/* Materials the tools found — each opens the material (or teaches the topic). */}
                   {!isMe&&msg.materials?.length>0&&(
                     <div aria-label={t('agent.materials')} style={{ display:"flex",flexWrap:"wrap",gap:6,marginTop:8 }}>
-                      {msg.materials.map((m)=>(
+                      {msg.materials.map((m)=>m.sub?(
+                        // A blog passage the answer used: the post and its section, opening the post (preview approved 2026-11-07).
+                        <button key={m.href} type="button" data-material={m.kind} onClick={()=>navigate(m.href)}
+                          style={{ display:"flex",alignItems:"center",gap:7,maxWidth:"100%",padding:"6px 10px",borderRadius:12,border:"1px solid var(--ak-border2)",background:"var(--ak-surface)",cursor:"pointer",fontFamily:"'Nunito',sans-serif",textAlign:"left" }}>
+                          <span style={{ fontSize:10,fontWeight:900,color:BRAND,background:`${BRAND}18`,borderRadius:5,padding:"1px 5px",flexShrink:0 }}>Blog</span>
+                          <span style={{ display:"grid",minWidth:0 }}>
+                            <span style={{ fontSize:12,fontWeight:800,color:"var(--ak-text)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{m.title}</span>
+                            <span style={{ fontSize:10.5,color:"var(--ak-text-sub)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{m.sub}</span>
+                          </span>
+                        </button>
+                      ):(
                         <button key={m.href||`t:${m.teach.topic}`} type="button" data-material={m.kind}
                           onClick={()=>{ if(m.href) navigate(m.href); else if(onTeachTopic) onTeachTopic(m.teach); }}
                           disabled={!m.href&&!onTeachTopic} title={m.href?t('agent.materials'):t('agent.syllabus_hint')}

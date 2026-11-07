@@ -208,6 +208,12 @@ export async function approveProposal(userId, id) {
       const r = await sendApprovedReply(userId, payload.messageId, payload.draft);
       ref = payload.messageId;
       detail = { replied: true, to: r.to, text: r.text };
+    } else if (kind === "agent_outreach") {
+      // Phase 21 part 2: Allow on "Shall I ask X's agent…?" — the agent sends it now.
+      const { approveOutreach } = await import("../agent-network/outreach.js");
+      const r = await approveOutreach(userId, payload);
+      ref = r.messageId;
+      detail = { sent: true, to: r.to, delivered: r.delivered, ...(r.answer ? { answer: r.answer } : {}) };
     } else if (kind === "fix_it" && payload.fix === "overdue_tasks") {
       const { data: tasks } = await db.from("tasks").select("id, due_at").eq("creator_id", userId).in("id", (payload.taskIds || []).slice(0, 6)).in("status", ["pending", "queued"]);
       const moves = spreadDue(tasks || []);

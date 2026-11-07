@@ -402,6 +402,7 @@ const readTools = {
   getLearnerHistory: readToolsModule.getLearnerHistory,
   getRelevantMemory: readToolsModule.getRelevantMemory,
   getPrerequisites: readToolsModule.getPrerequisites,
+  getRelatedCovered: readToolsModule.getRelatedCovered,
   searchContent: async () => ({ disabled: true, reason: "content.search is not enabled in this loop" }),
   getSessionState: null, // bound per session below
 };
@@ -472,7 +473,7 @@ export async function startStudyPrepSession({ learnerId, goal, subject, classLev
 }
 
 /** What the planner reads before proposing (deep research, 2026-10-19). */
-export const PLANNING_READS = Object.freeze(["syllabus.resolve", "learner.get_state", "learner.get_history", "learner.get_relevant_memory", "concept.get_prerequisites"]);
+export const PLANNING_READS = Object.freeze(["syllabus.resolve", "learner.get_state", "learner.get_history", "learner.get_relevant_memory", "concept.get_prerequisites", "topic.related_covered"]);
 
 const planning = new Set();
 /**
@@ -625,7 +626,12 @@ export async function runStudyPrepWake({ sessionId, learnerId = null, trigger, f
   }
   await workflowMirror().wakeMark(sessionId, store, { wakeId, trigger, label, phase: "completed" });
   // A new topic is a new wake (its own message in the chat).
-  if (moved === "advance") wakeStudyPrep({ sessionId, learnerId: owner, trigger: "topic_started", facts: { topic: (await harness.getSessionView({ sessionId, learnerId: owner, eventLimit: 1 }).catch(() => null))?.topics?.find((t) => t.status === "active")?.label } });
+  if (moved === "advance") {
+    const view = await harness.getSessionView({ sessionId, learnerId: owner, eventLimit: 1 }).catch(() => null);
+    const active = view?.topics?.find((t) => t.status === "active");
+    wakeStudyPrep({ sessionId, learnerId: owner, trigger: "topic_started", facts: { topic: active?.label } });
+    outreachOnTopicStart({ learnerId: owner, topic: active?.label, conceptId: active?.conceptId || active?.concept_id || null, subject: view?.subject || null });
+  }
   return { wakeId, ended: step?.ended || null, terminal: step?.terminal || null, moved, ...(heldForCoins ? { held: true, budget } : {}) };
 }
 
@@ -663,7 +669,20 @@ export function sessionSummaryLine(done) {
 export function afterLearnerAction({ sessionId, learnerId, action, conversationId = null, facts = {} }) {
   const trigger = { confirm: "plan_confirmed", adjust: "plan_adjusted", teach_back: "teach_back", advance: "topic_started" }[action];
   if (!trigger) return false;
+  if (trigger === "topic_started" && facts?.topic) outreachOnTopicStart({ learnerId, topic: facts.topic, conceptId: facts.conceptId || null, subject: facts.subject || null });
   return wakeStudyPrep({ sessionId, learnerId, trigger, facts, conversationId });
+}
+
+/**
+ * Phase 21 part 2: a topic starting — the agent asks a FRIEND's agent who has
+ * mastered it how they were taught it (never a stranger, never a card).
+ * Fire-and-forget; the outreach rules decide (Online, quiet hours, daily cap).
+ */
+export function outreachOnTopicStart({ learnerId, topic, conceptId = null, subject = null, force = false }) {
+  if (!learnerId || !topic) return Promise.resolve(null);
+  return import("../../agent-network/outreach.js")
+    .then((o) => o.reachOut({ learnerId, trigger: "topic_start", purpose: "study_question", topic, conceptId, subject, friendsOnly: true, force }))
+    .catch(() => null);
 }
 
 /**

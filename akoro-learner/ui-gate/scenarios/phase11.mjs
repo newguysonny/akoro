@@ -32,7 +32,33 @@ const models = {
   ],
 };
 
+const blogReply = {
+  messages: [
+    { id: "m-user", role: "user", text: "How is transpiration different from evaporation?", created_at: "2026-11-07T10:00:00Z" },
+    { id: "m-agent", role: "agent", text: "Transpiration is water vapour leaving a plant through the stomata in its leaves, while evaporation can happen from any wet surface.", created_at: "2026-11-07T10:00:05Z",
+      meta: { materials: [
+        { kind: "blog_passage", title: "How plants lose water", href: "/blog/how-plants-lose-water", sub: "Akoro blog · Stomata and the leaf" },
+        { kind: "blog_passage", title: "Evaporation made simple", href: "/blog/evaporation-made-simple", sub: "Akoro blog · Everyday examples" },
+      ] } },
+  ],
+  hasMore: false,
+};
+
 export const scenarios = [
+  {
+    name: 'chat.blog_sources',
+    description: 'An answer that used Akoro blog posts shows them under it as chips: the post and its section, opening the post.',
+    async run(t) {
+      const { page } = t;
+      await page.route('**/api/adaptive/chat/sessions/*/messages*', (r) => r.fulfill({ json: blogReply }));
+      await page.goto(`${t.app}/app?tab=agent`, { waitUntil: 'domcontentloaded' });
+      const chip = page.locator('[data-material="blog_passage"]').first();
+      t.check('the blog source chips show under the answer', await chip.waitFor({ timeout: 45_000 }).then(() => true, () => false));
+      t.check('…with the post and its section', await chip.getByText('Akoro blog · Stomata and the leaf').isVisible().catch(() => false));
+      t.check('…two of them', (await page.locator('[data-material="blog_passage"]').count()) === 2);
+      await t.shot('blog-sources');
+    },
+  },
   {
     name: 'home.needs_you_card',
     description: 'Home shows one Needs you card: the open teaching run leads; "Needs you · 2 more" opens Tasks → Needs you with the same list.',

@@ -175,7 +175,7 @@ export function breakthroughsFrom(rows, { askerId = null, agents = new Map(), se
 }
 
 /** The approved concept a topic name means (for an agent that knows the topic, not its id). */
-async function conceptIdFor(concept, subject = null) {
+export async function conceptIdFor(concept, subject = null) {
   const title = String(concept || "").replace(/[%_,()]/g, " ").trim().slice(0, 120);
   if (title.length < 3) return null;
   let q = db.schema("edu").from("concept_catalog").select("id").eq("status", "approved").ilike("title", title);

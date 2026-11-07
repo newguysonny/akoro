@@ -67,3 +67,22 @@ test("every search embeds its question through the limit, and the vector-only se
   const schema = JSON.parse(manifest).schema;
   assert.ok(schema.indexOf("2026-search-text-fallback.sql") > Math.max(...["2026-past-questions.sql", "2026-curriculum.sql", "2026-syllabus.sql", "2026-hybrid-retrieval.sql"].map((f) => schema.indexOf(f))), "runs after the files that re-create the old functions");
 });
+
+test("one question, one embedding: the same text shares one call; a failure isn't reused", async () => {
+  const { sharedCall, searchEmbedStats } = await import("./searchEmbedding.js");
+  let made = 0;
+  const make = () => { made++; return Promise.resolve({ data: [{ embedding: [1, 2, 3] }] }); };
+  const a = sharedCall("explain photosynthesis", make);
+  const b = sharedCall("explain photosynthesis", make);
+  assert.equal(a, b, "same text, same call");
+  assert.equal(made, 1);
+  assert.ok(searchEmbedStats().shared >= 1);
+  sharedCall("another question", make);
+  assert.equal(made, 2, "different text, its own call");
+  let failMade = 0;
+  const failing = () => { failMade++; return Promise.reject(new Error("down")); };
+  await sharedCall("will fail", failing).catch(() => {});
+  await new Promise((r) => setTimeout(r, 0));
+  await sharedCall("will fail", failing).catch(() => {});
+  assert.equal(failMade, 2, "a failed call is tried again, never reused");
+});

@@ -121,7 +121,7 @@ export function stampThoughtType({ eventType, tool = null, action = null }) {
   if (eventType === "agent_tool_call" || eventType === "agent_action") {
     if (action) return "action";
     if (tool && tool.startsWith("syllabus.") || tool === "learner.get_state" || tool === "learner.get_history"
-      || tool === "concept.get_prerequisites" || tool === "content.search" || tool === "learner.get_relevant_memory") return "research";
+      || tool === "concept.get_prerequisites" || tool === "topic.related_covered" || tool === "content.search" || tool === "learner.get_relevant_memory") return "research";
     return "action";
   }
   return null;

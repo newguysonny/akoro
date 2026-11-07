@@ -4,7 +4,10 @@
 // OpenAI client's embeddings endpoint and match_syllabus is a stubbed rpc.
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import test from "node:test";
+import test, { beforeEach } from "node:test";
+import { resetSharedEmbeddings } from "../../lib/searchEmbedding.js";
+// These seams count embedding calls: no shared embedding carried from one test to the next.
+beforeEach(() => resetSharedEmbeddings());
 
 process.env.SUPABASE_URL ||= "http://localhost:1";
 process.env.SUPABASE_SERVICE_KEY ||= "test";

@@ -156,6 +156,8 @@ export async function messageAgent(fromId, input = {}, { deps } = {}) {
   }
   const { data: row, error } = await edu().from("agent_messages").insert({
     from_user: fromId, to_user: target.id, kind, subject, topic, body: screened.question,
+    // Phase 21 part 2: the agent started this on its own (outreach.js) — recorded with why.
+    ...(input.origin === "agent" ? { origin: "agent", trigger: input.trigger ? String(input.trigger).slice(0, 40) : null, purpose: input.purpose ? String(input.purpose).slice(0, 40) : null } : {}),
     ...(answered?.answer ? { answer: answered.answer, answer_source: answered.fromTaught ? "taught" : "not_taught", status: "answered", answered_at: new Date().toISOString() } : {}),
   }).select("id, status").single();
   if (error) throw new Error(error.message);
