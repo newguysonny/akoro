@@ -220,6 +220,7 @@ function AgentChatTab({
   const [thinkMode,    setThinkMode]    = useState(false);
   // The model menu: the API's modes + model catalogue (GET /chat/models).
   const [serverModels, setServerModels] = useState(null);
+  const [modelNotice, setModelNotice] = useState("");
   const [chatModelId, setChatModelId] = useState(() => { try { return localStorage.getItem('ak_chat_model') || null; } catch { return null; } });
   useEffect(() => {
     let alive = true;
@@ -991,7 +992,11 @@ function AgentChatTab({
         onTrace: appendTrace,
         onDelta: appendDelta,
         onThinking: appendThinking,
-        onStatus: (s)=>{ if(!started) setStatusLabel(t(statusKey[s?.step]||"") || s?.label || ""); },
+        onStatus: (s)=>{
+          // A pick outside the plan (§7.11.5a): the default answered; say why and drop the pick.
+          if(s?.step==="model"&&s?.label){ setModelNotice(s.label); setChatModelId(null); try{ localStorage.removeItem('ak_chat_model'); }catch{ /* private mode */ } return; }
+          if(!started) setStatusLabel(t(statusKey[s?.step]||"") || s?.label || "");
+        },
         // The confirm / permission card shows as soon as the tool made it — not after the whole reply.
         onCard: (c)=>{ if(!c?.confirm?.confirmationId) return; ensureBubble(); setMessages(prev=>prev.map(m=>m.id===replyId?{...m,confirm:c.confirm}:m)); },
         // The chips arrive on the same stream (no second request).
@@ -1172,6 +1177,7 @@ function AgentChatTab({
     setThinkMode(next.mode === "think");
     setResearchMode(next.mode === "research");
     setChatModelId(next.modelId);
+    setModelNotice("");
     try { if (next.modelId) localStorage.setItem('ak_chat_model', next.modelId); else localStorage.removeItem('ak_chat_model'); } catch { /* private mode */ }
   };
 
@@ -1515,8 +1521,15 @@ function AgentChatTab({
             {/* The model switch — the LLM behind the next message. */}
             <div style={{ display:"flex",alignItems:"center",gap:6,marginTop:8 }}>
               <ModelSwitch modelId={picker.selectedId} modelLabel={picker.label} modelOptions={picker.options}
-                onModelChange={choosePick} disabled={running} icon="ti-cpu"/>
+                onModelChange={choosePick} disabled={running} icon="ti-cpu" tier={picker.tier}/>
             </div>
+            {modelNotice&&(
+              <div data-model-notice="" role="status" style={{ display:"flex",alignItems:"flex-start",gap:6,marginTop:6,padding:"7px 10px",borderRadius:10,background:"#F59E0B14",color:"#B45309",fontSize:11.5,fontWeight:700,lineHeight:1.4,fontFamily:"'Nunito',sans-serif" }}>
+                <Icon name="ti-info-circle" size={14} color="#B45309" style={{ marginTop:1 }}/>
+                <span style={{ flex:1 }}>{modelNotice}</span>
+                <button type="button" aria-label="Dismiss" onClick={()=>setModelNotice("")} style={{ border:0,background:"transparent",color:"inherit",cursor:"pointer",padding:0,display:"flex" }}><Icon name="ti-x" size={13} color="#B45309"/></button>
+              </div>
+            )}
             <input ref={fileInputRef} type="file" multiple accept="image/*,application/pdf,.txt,.md,.csv" style={{ display:"none" }} onChange={e=>{addAttachments(e.target.files); e.target.value="";}}/>
           </div>
         </>

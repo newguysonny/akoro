@@ -51,10 +51,14 @@ export function chatPicker(server, { mode = 'default', modelId = null } = {}) {
     ...models.map((m, i) => ({
       id: `model:${m.id}`, section: i === 0 ? 'Models' : undefined,
       label: m.label || modelDisplayName(m.id),
-      meta: m.available ? (m.default ? 'Default' : '') : 'Coming soon',
-      // The badge says "Coming soon"; the line says what the model is.
-      description: m.description || (m.available ? '' : (m.note || '')),
+      // Locked to a plan (§7.11.5a) reads "Plan"; not set up here reads "Coming soon".
+      meta: m.locked === 'plan' ? 'Plan' : m.available ? (m.default ? 'Default' : '') : 'Coming soon',
+      // The line says what the model is; the cost hint says what it costs against the default.
+      description: [m.description || (m.available ? '' : (m.note || '')), m.available && !m.default ? m.costHint : null].filter(Boolean).join(' · '),
       ...(m.available ? {} : { note: m.note || 'Coming soon.' }),
+      ...(m.locked === 'plan' ? { locked: true } : {}),
+      // A dearer model asks once before it is used (1.5× the default or more).
+      ...(m.available && !m.default && Number(m.costMultiple) >= 1.5 ? { confirm: `${m.costHint || 'More coins per message'}. Use it?` } : {}),
       disabled: !m.available,
     })),
     ...modes.filter((m) => m.id === 'think' || m.id === 'research').map((m, i) => ({
@@ -68,7 +72,9 @@ export function chatPicker(server, { mode = 'default', modelId = null } = {}) {
   const label = mode === 'think' || mode === 'research'
     ? `${selected?.label || mode} · ${selected?.meta || ''}`.replace(/ · $/, '')
     : (selected?.label || 'GPT-4o mini');
-  return { options, selectedId, label };
+  // The payer's plan, when the server's picker is on (§7.11.5a).
+  const tier = server?.picker?.enabled && server.picker.tier ? server.picker.tier : null;
+  return { options, selectedId, label, tier };
 }
 
 /** A menu pick → the chat's next { mode, modelId }. Unavailable models change nothing. */
