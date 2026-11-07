@@ -37,6 +37,13 @@ export const TOOL_HEADLINES = Object.freeze({
   defer_topic: ["Setting a topic aside", "To come back to later"],
   conclude_session: ["Wrapping up", "Ending the session"],
   "topic.get_notes": ["Reviewing what you taught me", "Your notes on this topic"],
+  // §7.12 / §8.8 tool names.
+  "practice.run_agent_check": ["Preparing an Agent Check", "Questions your agent answers from your notes"],
+  "agent.get_knowledge_coverage": ["Reviewing what you taught me", "Your notes on this topic"],
+  "materials.list": ["Looking at your files", "What you uploaded"],
+  "materials.search": ["Searching your files", "Passages from what you uploaded"],
+  "syllabus.from_documents": ["Building an outline from your files", "Topics from what you uploaded"],
+  "learner.request_materials": ["Asking for your materials", "A syllabus or past questions"],
   wait_for_learner: ["Waiting for you", "Your turn"],
   offer_strategy: ["Suggesting a way to learn it", "A strategy for this topic"],
 });
@@ -50,7 +57,7 @@ export const NODE_HEADLINES = Object.freeze({
   topic_advanced: "Topic settled", topic_deferred: "Topic set aside", topic_flagged: "Gap flagged",
   session_concluded: "Session complete", session_paused: "Session paused", syllabus_generated: "Outline drafted",
   syllabus_resolved: "Syllabus found", agent_check_started: "Agent Check started", agent_check_skipped: "Agent Check skipped",
-  agent_check_scored: "Agent Check marked",
+  agent_check_scored: "Agent Check marked", materials_requested: "Asked for your materials",
 });
 
 const T = (headline, description = "", result = "") => ({ headline, description, result });

@@ -119,6 +119,7 @@ export function studyPrepResultLine(tool, observation) {
     case "learner.get_relevant_memory": return list(r.memories).length ? `${many(list(r.memories).length, "note")} from earlier sessions` : "Nothing noted on this subject yet";
     case "concept.get_prerequisites": return list(r.edges).length ? `${many(list(r.edges).length, "prerequisite link")} to respect` : "No prerequisite links recorded";
     case "plan.validate": return r.ok === false ? null : r.estimate?.totalCoins != null ? `The plan passes the checks · ${r.estimate.totalCoins} coins` : "The plan passes the checks";
+    case "agent.get_knowledge_coverage":
     case "topic.get_notes": return r.notes == null ? null : r.notes ? many(r.notes, "note") : "No notes on it yet";
     case "session.get_state": {
       const active = list(r.topics).find((t) => t.status === "active");
@@ -126,6 +127,11 @@ export function studyPrepResultLine(tool, observation) {
       const done = list(r.topics).filter((t) => t.status === "understood").length;
       return list(r.topics).length ? `${done} of ${list(r.topics).length} topics understood` : null;
     }
+    case "materials.list": return list(r.items).length ? `${many(list(r.items).length, "upload")} found` : "No uploads yet";
+    case "materials.search": return list(r.passages).length ? `${many(list(r.passages).length, "passage")} in your files` : "Nothing on that in your files";
+    case "syllabus.from_documents": return list(r.topics).length ? `An outline of ${many(list(r.topics).length, "topic")} from your files` : null;
+    case "learner.request_materials": return r.asked ? "Asked for your syllabus or past questions" : null;
+    case "practice.run_agent_check":
     case "practice.generate": return r.check ? "Agent Check started" : r.skipped ? "Nothing to check yet — teach it first" : null;
     case "advance_topic": return r.topic?.label ? `Now on: ${r.topic.label}` : null;
     case "defer_topic": return r.topic?.label ? `${r.topic.label} set aside for later` : null;

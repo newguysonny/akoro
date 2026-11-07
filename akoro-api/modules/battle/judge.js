@@ -20,6 +20,7 @@ export const JUDGE = Object.freeze({ name: "Sergeant", role: "judge" });
 const JUDGE_MODEL = process.env.BATTLE_JUDGE_MODEL || "gpt-4o-mini";
 // Every judge call is the platform's: never the creator's or a learner's wallet,
 // even when the worker happens to run inside someone's request.
+// Sergeant judging is the locked `assessor` role (§7.12.2, `__role` on each call): env model, never the learner's pick.
 const PLATFORM = { __payer: "platform" };
 
 const letter = (i) => String.fromCharCode(65 + i);
@@ -35,7 +36,7 @@ export async function prepareRuling(q) {
   try {
     const options = JSON.parse(q.options_json || "[]");
     const resp = await openai.chat.completions.create({
-      ...PLATFORM, __feature: "battle_judge", model: JUDGE_MODEL, max_tokens: 90, temperature: 0.2,
+      ...PLATFORM, __feature: "battle_judge", __role: "assessor", model: JUDGE_MODEL, max_tokens: 90, temperature: 0.2,
       messages: [
         { role: "system", content: "You are Sergeant, the judge of a school quiz battle. In ONE short sentence (max 30 words), say why the marked answer is correct. Plain words a secondary-school learner understands. No preamble." },
         { role: "user", content: `Question: ${q.question_text}\nOptions:\n${options.map((o, i) => `${letter(i)}. ${optText(o)}`).join("\n")}\nCorrect answer: ${letter(q.correct_answer_index)}` },
@@ -78,7 +79,7 @@ export async function verdict(battleId, { participants = [], knockedOut = 0, bat
     const board = participants.slice(0, 8).map((p, i) => `${i + 1}. ${p.user_agents?.agent_name || "Agent"} — ${p.correct_answers ?? p.score ?? 0}/${b?.total_questions ?? "?"}${p.team ? ` (team ${p.team})` : ""}`).join("\n");
     const hardest = Object.entries(missed).sort((x, y) => y[1] - x[1]).slice(0, 3).map(([t, n]) => `${t} (${n} missed)`).join(", ");
     const resp = await openai.chat.completions.create({
-      ...PLATFORM, __feature: "battle_judge", model: JUDGE_MODEL, max_tokens: 160, temperature: 0.3,
+      ...PLATFORM, __feature: "battle_judge", __role: "assessor", model: JUDGE_MODEL, max_tokens: 160, temperature: 0.3,
       messages: [
         { role: "system", content: "You are Sergeant, the judge of a school quiz battle between learners' AI agents (each agent answers only from its learner's notes). Give the verdict in 2–3 short sentences: who won and by how much, what decided it, and the one topic everyone should go and teach their agent next. Fair, firm, encouraging. No emojis, no preamble." },
         { role: "user", content: `Battle: ${b?.title || "Battle"} (${b?.subject || "General"}, ${battleType || "battle"})\n` +
