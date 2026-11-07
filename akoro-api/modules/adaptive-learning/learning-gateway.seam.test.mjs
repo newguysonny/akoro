@@ -81,3 +81,12 @@ test("Study Prep offer → outcome: the next attempt on the topic judges the acc
   const again = await recordLearningEvent({ ...attempt, kind: "assessment_result", quality: 0.9 });
   assert.equal(again.strategyOutcomes, undefined, "judged once");
 });
+
+test("the gateway route stays behind its credential; only the post-auth recording path is shared", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const src = await readFile(new URL("../agent-tools/concept-state-routes.js", import.meta.url), "utf8");
+  assert.match(src, /router\.post\("\/observations", requireAgentToolsCredential,/);
+  assert.match(src, /export async function recordGatewayObservations\(principalId, request\)/);
+  const cap = await readFile(new URL("../agent-tools/capability.js", import.meta.url), "utf8");
+  assert.doesNotMatch(cap, /AKORO_AGENT_TOOLS_(CAPABILITY_)?SECRET \|\| "[^"]+"/, "no built-in default secret");
+});

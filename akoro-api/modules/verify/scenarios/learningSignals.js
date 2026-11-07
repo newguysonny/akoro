@@ -79,7 +79,9 @@ export const gatewayStruggle = {
   params: { learner: { default: "@tester34" } },
   async run(ctx, p) {
     const me = await ctx.as(p.learner);
-    if (!process.env.AKORO_AGENT_TOOLS_SECRET || !process.env.AKORO_AGENT_TOOLS_CAPABILITY_SECRET) ctx.expect.blocked("the agent tools gateway secrets are not configured here");
+    // With the gateway secrets set, the real signed request; without them, the gateway's own
+    // recording path in-process (the secrets are never defaulted — the route stays closed).
+    const viaHttp = !!(process.env.AKORO_AGENT_TOOLS_SECRET && process.env.AKORO_AGENT_TOOLS_CAPABILITY_SECRET);
     const { default: db } = await import("../../../db.js");
     const E = () => db.schema("edu");
     await needTables(ctx, db, ["learning_struggles"]);
@@ -88,17 +90,27 @@ export const gatewayStruggle = {
       await E().from("learning_struggles").delete().eq("learner_id", me.id).eq("concept_id", concept.id);
       await E().from("concept_catalog").delete().eq("id", concept.id);   // cascades its evidence + state
     });
-    const { issueAgentToolsCapability } = await import("../../agent-tools/capability.js");
     const sessionId = `gate-${randomUUID()}`;
-    const toolContext = issueAgentToolsCapability({ user: { id: me.id, role: "student" }, sessionId, learningScope: { curriculumKey: "verify-gate", subject: "Biology", topicKey: key } });
-    const res = await ctx.http({
-      method: "POST", path: "/api/internal/agent-tools/v1/concept-state/observations",
-      headers: { "X-Akoro-Tools-Secret": process.env.AKORO_AGENT_TOOLS_SECRET },
-      body: { sessionId, toolContext, turnId: "turn-1", observations: [{ conceptId: concept.id, kind: "misconception_detected", claimStatus: "contradicted", responseQuality: 0.2, claimValidity: 0.3, modelConfidence: 0.85, evidenceSummary: "Thinks evaporation only happens at boiling point." }] },
-    });
-    ctx.note(`gateway: ${res.status} ${JSON.stringify(res.body).slice(0, 300)}`);
-    ctx.expect.eq("the gateway accepts the observation", res.status, 200);
-    ctx.expect.ok("…and returns the learner's state with the misconception on", res.body?.states?.[0]?.misconceptionActive === true, res.body);
+    const observations = [{ conceptId: concept.id, kind: "misconception_detected", claimStatus: "contradicted", responseQuality: 0.2, claimValidity: 0.3, modelConfidence: 0.85, evidenceSummary: "Thinks evaporation only happens at boiling point." }];
+    let states;
+    if (viaHttp) {
+      const { issueAgentToolsCapability } = await import("../../agent-tools/capability.js");
+      const toolContext = issueAgentToolsCapability({ user: { id: me.id, role: "student" }, sessionId, learningScope: { curriculumKey: "verify-gate", subject: "Biology", topicKey: key } });
+      const res = await ctx.http({
+        method: "POST", path: "/api/internal/agent-tools/v1/concept-state/observations",
+        headers: { "X-Akoro-Tools-Secret": process.env.AKORO_AGENT_TOOLS_SECRET },
+        body: { sessionId, toolContext, turnId: "turn-1", observations },
+      });
+      ctx.note(`gateway (http): ${res.status} ${JSON.stringify(res.body).slice(0, 300)}`);
+      ctx.expect.eq("the gateway accepts the observation", res.status, 200);
+      states = res.body?.states;
+    } else {
+      ctx.note("gateway secrets not set here: checking the gateway's recording path in-process (the HTTP route stays closed without them)");
+      const { recordGatewayObservations } = await import("../../agent-tools/concept-state-routes.js");
+      const { conceptObservationsRequest } = await import("../../agent-tools/concept-state-validation.js");
+      states = await recordGatewayObservations(me.id, conceptObservationsRequest({ sessionId, toolContext: "in-process", turnId: "turn-1", observations }));
+    }
+    ctx.expect.ok("…and returns the learner's state with the misconception on", states?.[0]?.misconceptionActive === true, states);
     const [ev] = await ctx.db.rows("edu.learner_concept_evidence", { learner_id: me.id, concept_id: concept.id }, { columns: "observation_kind, claim_status, claim_validity, model_confidence, provenance" });
     ctx.expect.ok("the evidence carries the guardian's claim as given, through the recorder", ev?.claim_status === "contradicted" && Number(ev.claim_validity) === 0.3 && Number(ev.model_confidence) === 0.85 && ev.provenance?.source === "python_agent", ev);
     const [s] = await ctx.db.rows("edu.learning_struggles", { learner_id: me.id, concept_id: concept.id }, { columns: "struggle_type, status, detected_by, source_workflow" });
