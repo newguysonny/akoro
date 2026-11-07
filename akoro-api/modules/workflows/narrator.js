@@ -54,7 +54,7 @@ const toolRow = (p) => TOOL_HEADLINES[p.tool] || TOOL_HEADLINES[p.action] || nul
 export const NODE_HEADLINES = Object.freeze({
   harness_rejection: "Not allowed", plan_validated: "Plan checked", plan_confirmed: "You approved the plan",
   plan_adjusted: "Plan adjusted", coins_approved: "You approved more coins", topic_started: "Starting a topic", practice_generated: "Practice ready",
-  practice_scored: "Practice marked", strategy_offered: "A strategy to try", teach_back_confirmed: "Teach-back confirmed",
+  practice_scored: "Practice marked", strategy_offered: "A strategy to try", strategy_declined: "Strategy not used", teach_back_confirmed: "Teach-back confirmed",
   topic_advanced: "Topic settled", topic_deferred: "Topic set aside", topic_flagged: "Gap flagged",
   session_concluded: "Session complete", session_paused: "Session paused", syllabus_generated: "Outline drafted",
   syllabus_resolved: "Syllabus found", agent_check_started: "Agent Check started", agent_check_skipped: "Agent Check skipped",

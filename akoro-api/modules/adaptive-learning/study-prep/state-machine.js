@@ -208,7 +208,7 @@ export const DECISION_NODES = Object.freeze([
   "practice_generated", "practice_scored", "strategy_offered", "teach_back_confirmed",
   "topic_advanced", "topic_deferred", "topic_flagged", "session_concluded", "session_paused",
   "syllabus_generated", "syllabus_resolved", "agent_check_started", "agent_check_skipped", "agent_check_scored",
-  "coins_approved", "teaching_requested", "teaching_completed",
+  "coins_approved", "teaching_requested", "teaching_completed", "strategy_declined",
 ]);
 
 /** Hard plan validation (Master Plan §4.4 step 7): the ONLY plan constraints. */
