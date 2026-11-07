@@ -231,3 +231,20 @@ test("…and in an agent loop it is a model_refusal record and observation, not 
   assert.equal(done.ended, "terminal", "the fallback's decision carried the step");
   assert.deepEqual(recs.map((e) => e.kind).slice(0, 2), ["model_refusal", "decision"]);
 });
+
+test("a streamed refusal: before any text the fallback's stream takes over; mid-reply it ends with the marker", async () => {
+  const { withStreamRefusal } = await import("./aiModel.js");
+  const entry = { id: "claude-sonnet" };
+  const refused = async function* (pre = []) { for (const t of pre) yield { choices: [{ index: 0, delta: { content: t } }] }; yield { choices: [{ index: 0, delta: { refusal: "No." }, finish_reason: "content_filter" }] }; };
+  const fb = async function* () { yield { choices: [{ index: 0, delta: { content: "Fallback " } }] }; yield { choices: [{ index: 0, delta: { content: "answer." }, finish_reason: "stop" }] }; };
+  const collect = async (g) => { const out = []; for await (const c of g) out.push(c); return out; };
+
+  const early = await collect(withStreamRefusal(refused(), { entry, target: () => ({ id: "gpt-4o-mini" }), second: async () => fb() }));
+  assert.deepEqual(early[0].model_refusal, { model: "claude-sonnet", reason: "No.", fallbackModel: "gpt-4o-mini", streamed: true });
+  assert.equal(early.slice(1).map((c) => c.choices[0]?.delta?.content || "").join(""), "Fallback answer.");
+
+  const late = await collect(withStreamRefusal(refused(["Part of a reply"]), { entry, target: () => ({ id: "gpt-4o-mini" }), second: async () => { throw new Error("must not run"); } }));
+  assert.equal(late[1].model_refusal.partial, true);
+  assert.equal(late[1].model_refusal.fallbackModel, null, "text already shown: no second answer stitched on");
+  assert.equal(late.at(-1).choices[0].finish_reason, "content_filter");
+});

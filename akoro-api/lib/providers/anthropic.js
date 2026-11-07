@@ -120,6 +120,7 @@ export function toChatCompletion(res) {
 export async function* toChatChunks(events) {
   let usage = {};
   let stop = null;
+  let refusalText = null;
   const toolIndex = new Map();   // content block index → tool call index
   for await (const ev of events) {
     if (ev.type === "message_start") { usage = { ...(ev.message?.usage || {}) }; continue; }
@@ -138,10 +139,12 @@ export async function* toChatChunks(events) {
     }
     if (ev.type === "message_delta") {
       stop = ev.delta?.stop_reason || stop;
+      if (ev.delta?.stop_details?.explanation) refusalText = String(ev.delta.stop_details.explanation);
       usage = { ...usage, ...(ev.usage || {}) };
     }
   }
-  yield { choices: [{ index: 0, delta: {}, finish_reason: FINISH[stop] || "stop" }] };
+  // A streamed refusal carries its reason like a non-streamed one (message.refusal).
+  yield { choices: [{ index: 0, delta: stop === "refusal" ? { refusal: refusalText || "The model declined this request." } : {}, finish_reason: FINISH[stop] || "stop" }] };
   yield { choices: [], usage: toChatUsage(usage) };
 }
 

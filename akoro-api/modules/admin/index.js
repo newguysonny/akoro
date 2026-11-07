@@ -18,6 +18,7 @@ import messagesRouter from "./messages.js";
 import reportsRouter from "./reports.js";
 import verifyRealUserRouter from "./verify-real-user.js";
 import proactiveKindsRouter from "./proactiveKinds.js";
+import confusionPairsRouter from "./confusionPairs.js";
 import agentRatingsRouter from "./agent-ratings.js";
 import agentPromptsRouter from "./agent-prompts.js";
 
@@ -41,6 +42,7 @@ router.use("/", messagesRouter);
 router.use("/", reportsRouter);
 router.use("/", verifyRealUserRouter);
 router.use("/", proactiveKindsRouter);
+router.use("/", confusionPairsRouter);
 router.use("/", agentRatingsRouter);
 router.use("/", agentPromptsRouter);
 
