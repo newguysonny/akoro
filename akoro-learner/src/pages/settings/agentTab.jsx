@@ -15,6 +15,7 @@ import AgentNetworkSection from './networkSection.jsx';
 import MyToolsSection from './myToolsSection.jsx';
 import MemorySection from './memorySection.jsx';
 import AutonomySection from './autonomySection.jsx';
+import HelpOthersSection from './helpOthersSection.jsx';
 import { useInFlight } from '../../hooks/useInFlight.js';
 import { confirmDialog } from '../../components/common/ConfirmHost.jsx';
 
@@ -234,6 +235,7 @@ function AgentTab({ agent, setAgent, onSaveAgent }) {
       )}
       <AgentNetworkSection/>
       <AutonomySection/>
+      <HelpOthersSection/>
       <MemorySection/>
       <MyToolsSection/>
       {subjectSheet&&(

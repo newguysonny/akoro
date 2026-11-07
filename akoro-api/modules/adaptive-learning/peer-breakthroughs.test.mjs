@@ -46,3 +46,11 @@ test("a sensitive type never produces stories; expired records don't count", () 
   const gone = breakthroughsFrom([row("A", { expires_at: "2020-01-01T00:00:00Z" })], { agents: agents(["A"]) });
   assert.deepEqual(gone.stories, []);
 });
+
+test("help others is ON by default: a learner who never chose helps; a recorded choice stands", async () => {
+  const { helpsOthers } = await import("./peerConsult.js");
+  assert.equal(helpsOthers({}), true, "never chose → on");
+  assert.equal(helpsOthers({ help_others_opt_in: false }), true, "the column default alone is not a choice");
+  assert.equal(helpsOthers({ help_others_opt_in: false, help_others_chosen_at: "2026-11-07T10:00:00Z" }), false, "turned off → off");
+  assert.equal(helpsOthers({ help_others_opt_in: true, help_others_chosen_at: "2026-11-07T10:00:00Z" }), true);
+});

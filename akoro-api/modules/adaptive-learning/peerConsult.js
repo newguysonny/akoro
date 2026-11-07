@@ -205,19 +205,33 @@ export async function consultBreakthroughs({ userId, struggleType: type, concept
   const agents = new Map();
   if (ids.length && !def.sensitive) {
     // Fails closed: if the opt-in can't be read, nobody's story is shown.
-    const { data: people, error: agentError } = await db.from("user_agents").select("user_id, agent_name, agent_emoji, help_others_opt_in").in("user_id", ids);
-    if (!agentError) for (const a of people || []) agents.set(a.user_id, { name: a.agent_name, emoji: a.agent_emoji, optedIn: a.help_others_opt_in === true });
+    const { data: people, error: agentError } = await db.from("user_agents").select("user_id, agent_name, agent_emoji, help_others_opt_in, help_others_chosen_at").in("user_id", ids);
+    if (!agentError) for (const a of people || []) agents.set(a.user_id, { name: a.agent_name, emoji: a.agent_emoji, optedIn: helpsOthers(a) });
   }
   const { stories, pattern } = breakthroughsFrom(rows || [], { askerId: userId, agents, sensitiveType: def.sensitive, classLevel });
   return { struggleType: def.id, consulted: new Set((rows || []).map((r) => r.learner_id)).size, stories, pattern };
 }
 
 /**
- * Turning "Let my agent help other learners" on or off (§7.13.1a): the
- * learner's non-sensitive records become shareable as stories, or stop being.
+ * "Let my agent help other learners" — ON by default (2026-11-07). A learner
+ * who never chose helps others; once they choose (help_others_chosen_at), their
+ * choice stands. PURE.
+ */
+export const helpsOthers = (row) => (row?.help_others_chosen_at ? row.help_others_opt_in === true : true);
+
+/** The learner's own setting, as Settings shows it (on until they turn it off). */
+export async function readHelpOthersOptIn(userId) {
+  const { data, error } = await db.from("user_agents").select("help_others_opt_in, help_others_chosen_at").eq("user_id", userId).maybeSingle();
+  return error ? true : helpsOthers(data);
+}
+
+/**
+ * Turning "Let my agent help other learners" on or off (§7.13.1a): the choice
+ * is recorded with its time, and the learner's non-sensitive records become
+ * shareable as stories, or stop being.
  */
 export async function setHelpOthersOptIn(userId, on) {
-  const { error } = await db.from("user_agents").update({ help_others_opt_in: on === true }).eq("user_id", userId);
+  const { error } = await db.from("user_agents").update({ help_others_opt_in: on === true, help_others_chosen_at: new Date().toISOString() }).eq("user_id", userId);
   if (error) throw new Error(error.message);
   await db.schema("edu").from("learning_struggles").update({ shareable: on === true }).eq("learner_id", userId).eq("sensitive", false);
   return { helpOthersOptIn: on === true };
