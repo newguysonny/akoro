@@ -15,7 +15,25 @@
  */
 export const SEARCH_EMBED_TIMEOUT_MS = Math.max(250, Number(process.env.SEARCH_EMBED_TIMEOUT_MS) || 3000);
 
-const stats = { asked: 0, late: 0, failed: 0 };
+const stats = { asked: 0, late: 0, failed: 0, shared: 0 };
+
+// One question, one embedding (realtime, 2026-11-07): a chat turn searches the
+// syllabus, past questions, the protégé's knowledge and the learner's memories
+// with the SAME words — four embedding calls, 1–3.7 s each on the sandbox. The
+// same text now shares one call (in flight or finished in the last minute).
+const SHARE_MS = 60_000;
+const SHARE_MAX = 200;
+const shared = new Map();   // input → { call, at }
+export const sharedCall = (input, make) => {
+  const now = Date.now();
+  const hit = shared.get(input);
+  if (hit && now - hit.at < SHARE_MS) { stats.shared++; return hit.call; }
+  const call = make();
+  shared.set(input, { call, at: now });
+  call.catch(() => shared.delete(input));   // a failure is never reused
+  if (shared.size > SHARE_MAX) shared.delete(shared.keys().next().value);
+  return call;
+};
 /** How often searches went without their vector since boot (admin/health). */
 export const searchEmbedStats = () => ({ ...stats, timeoutMs: SEARCH_EMBED_TIMEOUT_MS });
 
@@ -28,11 +46,13 @@ export async function embedForSearch(text, { userId = null, feature = "search_em
   if (!input) return null;
   stats.asked++;
   const embed = create || (async (p) => (await import("./aiModel.js")).openai.embeddings.create(p));
-  const call = Promise.resolve().then(() => embed({
+  const make = () => Promise.resolve().then(() => embed({
     model: "text-embedding-3-small", input,
     __feature: feature,
     ...(payer === "platform" ? { __payer: "platform" } : userId ? { __userId: userId } : {}),
   }));
+  // A test's own `create` is never shared; the platform's embedding is.
+  const call = create ? make() : sharedCall(input, make);
   let timer;
   const late = new Promise((resolve) => { timer = setTimeout(() => resolve("late"), timeoutMs); });
   try {
