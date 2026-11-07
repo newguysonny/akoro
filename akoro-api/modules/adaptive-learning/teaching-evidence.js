@@ -308,6 +308,31 @@ export function serialiseTeachingEvidence(state) {
   };
 }
 
+/**
+ * Phase 10 — the learner model is the source of truth for misconceptions.
+ * `unresolvedMisconception` stays in this session state because the LIVE
+ * turn needs it synchronously (the mastery rule, the repair dialogue move and
+ * "was it just repaired?" are decided per turn, in memory), and because a
+ * must-know part with no approved catalogue concept has no central record at
+ * all — the recorder skips it. But when a session is RESUMED, the stored copy
+ * is not trusted over the central state: `flags[i]` (true / false from
+ * learner_concept_state.misconception_active, null = no central record)
+ * replaces the stored flag, and the concept's status and next move are
+ * recomputed. Pure; returns the same state object, updated.
+ */
+export function applyCentralMisconceptions(state, flags) {
+  if (!state || !Array.isArray(state.concepts) || !Array.isArray(flags)) return state;
+  const pace = state.pace && PACE_SET.has(state.pace.mode) ? state.pace : resolveLearnerPace();
+  state.concepts.forEach((concept, index) => {
+    const central = flags[index];
+    if (typeof central !== "boolean" || concept.unresolvedMisconception === central) return;
+    concept.unresolvedMisconception = central;
+    applyScores(concept);
+    concept.lastDialogueMove = chooseDialogueMove(concept, pace);
+  });
+  return state;
+}
+
 /** Prevent the protege's generated reply from being treated as independent proof. */
 export function capProtegeAnalysis(agentAnalysis = {}, evidenceCurrent = {}) {
   const readiness = clamp(evidenceCurrent.protegeUnderstanding);

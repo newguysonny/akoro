@@ -10,6 +10,7 @@
  *                                        + the "needs you" list (Phase 11, Phase 18 item 2)
  *   GET /api/workflows/dashboard/:id     one run's descriptor (owner only) — what ?workflow= opens
  *   GET /api/workflows/needs-you         the "needs you" list (an instructor gets theirs)
+ *   GET|PUT /api/workflows/:id/model     the run's model pick (Scenario K; Study Prep and Teaching only)
  * Live events also reach the learner's Socket.IO room as `workflow_event`.
  */
 import { Router } from "express";
@@ -86,6 +87,32 @@ router.get("/:id/events", authenticateToken, async (req, res, next) => {
     const last = events.length ? events[events.length - 1].sequence : afterOf(req.query.after);
     return res.json({ success: true, workflow: { id: instance.id, type: instance.workflow_type, state: instance.state, status: instance.status }, events, last });
   } catch (e) { return next(e); }
+});
+
+// GET /:id/model — the run's saved model pick; PUT /:id/model { modelId } —
+// the Teaching / Study Prep composer's pick (null = the default): saved on the
+// run, applies from its next decision, a model.changed event when it changes.
+router.get("/:id/model", authenticateToken, async (req, res, next) => {
+  try {
+    const instance = await owned(req, res);
+    if (!instance) return null;
+    return res.json({ success: true, modelSelection: instance.model_selection || {} });
+  } catch (e) { return next(e); }
+});
+
+router.put("/:id/model", authenticateToken, async (req, res, next) => {
+  try {
+    const instance = await owned(req, res);
+    if (!instance) return null;
+    const { modelPicks, PICKED_WORKFLOWS } = await import("./modelPicks.js");
+    if (!PICKED_WORKFLOWS.includes(instance.workflow_type)) return res.status(409).json({ success: false, code: "model_locked", error: "This workflow's models are fixed" });
+    const result = await (await modelPicks()).saveWorkflowPick({ learnerId: req.user.id, workflowId: instance, modelId: req.body?.modelId ?? null });
+    if (!result) return res.status(409).json({ success: false, code: "workflow_moved", error: "That workflow changed meanwhile — try again" });
+    return res.json({ success: true, ...result });
+  } catch (e) {
+    if (e?.code && e.status) return res.status(e.status).json({ success: false, code: e.code, error: e.message });
+    return next(e);
+  }
 });
 
 router.get("/:id/stream", authenticateToken, async (req, res, next) => {

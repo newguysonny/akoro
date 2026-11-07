@@ -453,6 +453,8 @@ export function setupWebSocket(io) {
           sessionType:    result.sessionType,
           workflow:       result.workflow || null,
           teachingMode:   result.teachingMode || "teach_agent",
+          // teaching.request_assessment's card (each question as marked, the score) — only on a check turn.
+          ...(result.assessment ? { assessment: result.assessment } : {}),
         });
 
         // Persist the turn and compact server-owned evidence before another
@@ -610,6 +612,12 @@ export function setupWebSocket(io) {
         const formatted = fmtSessionEnd(endResult);
         await ensureSessionRecord(orchestrator);
         await completeSessionRecord(orchestrator);   // mark the session row complete
+        // Phase 4a: how the session's strategy turned out (fire-and-forget, never fails the end).
+        void import("./teaching-workflow/tools.js").then(({ currentTeachingStrategy, recordTeachingStrategyOutcome, teachingSessionOutcome }) => {
+          const outcome = teachingSessionOutcome({ endedBy, totalTurns: endResult?.totalTurns, teachingEvidence: orchestrator.teachingEvidence });
+          const strategy = currentTeachingStrategy(orchestrator);
+          return outcome && strategy ? recordTeachingStrategyOutcome(orchestrator, { strategy, outcome, turnRef: "session_end", details: { endedBy, ...(bounded ? { bounded } : {}) } }) : null;
+        }).catch((e) => console.warn("[strategy outcome] session end:", e.message));
         // Phase 6: a handed-over session's outcome goes back to Study Prep (its retest unlocks).
         if (orchestrator.teachingWorkflowId) {
           await import("./study-prep/wiring.js")

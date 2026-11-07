@@ -80,7 +80,7 @@ export async function proposeWrite({ learnerId, conversationId = null, tool, wri
   if (error || !data) throw new Error("couldn't prepare the change for confirmation");
   return {
     status: "needs_confirmation", confirmation: publicConfirmation(data),
-    note: `NOTHING HAS CHANGED YET. The learner sees a card listing exactly what would change (${preview.items.length}${preview.more ? `+${preview.more}` : ""} item(s)) and must tap Confirm themselves. Tell them what will change and to confirm on the card. Never say it's done, and never confirm for them.`,
+    note: `NOTHING HAS CHANGED YET. The learner sees a card listing exactly what would change (${preview.items.length}${preview.more ? `+${preview.more}` : ""} item(s)) and must tap Allow themselves. Tell them what will change and to tap Allow on the card. Never say it's done, and never confirm for them.`,
   };
 }
 
@@ -119,8 +119,8 @@ export async function proposePermission({ learnerId, conversationId = null, capa
   return {
     status: "needs_permission", confirmation: publicConfirmation(data),
     note: toolId
-      ? `The tool "${proposed.label}" is drafted but OFF, and nothing has changed. The learner sees a card asking them to allow it (${cap.description}), listing what it would change right now (${preview.items.length}${preview.more ? `+${preview.more}` : ""} item(s)). Only their Approve turns it on — for them alone — and even then each change waits for their Confirm. In your own words: you've drafted it, here's what it would do, approve on the card if they want it. Never say it's on or that anything changed, and never approve for them.`
-      : `NOTHING IS BUILT YET. You don't have this ability yet, but you can build a tool for it: the learner sees a card asking them to allow it (${cap.description}) and only their tap on Approve turns it on — for them alone — and builds "${proposed.label}". Even then, every change it makes waits for their Confirm. Tell them that in plain words and to approve on the card. Never say it's built or done, and never approve for them.`,
+      ? `The tool "${proposed.label}" is drafted but OFF, and nothing has changed. The learner sees a card asking them to allow it (${cap.description}), listing what it would change right now (${preview.items.length}${preview.more ? `+${preview.more}` : ""} item(s)). Only their Allow turns it on — for them alone — and even then each change waits for their Confirm. In your own words: you've drafted it, here's what it would do, tap Allow on the card if they want it. Never say it's on or that anything changed, and never approve for them.`
+      : `NOTHING IS BUILT YET. You don't have this ability yet, but you can build a tool for it: the learner sees a card asking them to allow it (${cap.description}) and only their tap on Allow turns it on — for them alone — and builds "${proposed.label}". Even then, every change it makes waits for their Confirm. Tell them that in plain words and to tap Allow on the card. Never say it's built or done, and never approve for them.`,
   };
 }
 

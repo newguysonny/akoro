@@ -27,7 +27,10 @@ export const CODE_LIMITS = Object.freeze({
   longLiteral: 400,
 });
 
-export const codeEnabled = () => String(process.env.AKORO_SELF_TOOLING_CODE_ENABLED || "").trim().toLowerCase() === "true";
+// ON by default (2026-11-03): stage 3 is how new tools — and Phase 20 plugin
+// blocks — get logic a recipe can't express. Set the variable to
+// false / 0 / off to turn sandboxed code off on a server.
+export const codeEnabled = () => !/^(false|0|off|no)$/.test(String(process.env.AKORO_SELF_TOOLING_CODE_ENABLED ?? "").trim().toLowerCase());
 
 // Names that have no business in a data tool. The sandbox has none of the
 // host's objects anyway; these keep generated code plain and reviewable.

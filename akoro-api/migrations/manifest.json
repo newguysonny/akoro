@@ -231,7 +231,19 @@
     "2026-outbox.sql",
     "2026-agent-reply-ratings.sql",
     "2026-agent-prompt-overrides.sql",
-    "2026-syllabus-imports.sql"
+    "2026-syllabus-imports.sql",
+    "2026-repeating-chat-follow-ups.sql",
+    "2026-agent-conversations.sql",
+    "2026-concept-evidence-ambiguity-fix.sql",
+    "2026-learning-struggles.sql",
+    "2026-strategy-outcomes.sql",
+    "2026-tier-allowed-models.sql",
+    "2026-chat-model-selection.sql",
+    "2026-study-prep-materials-goal-type.sql",
+    "2026-peer-help-opt-in.sql",
+    "2026-blog-chunks.sql",
+    "2026-learning-question-signals.sql",
+    "2026-study-prep-topic-states.sql"
   ],
   "demo": [
     "2026-seed-school-passwords.sql",

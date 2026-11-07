@@ -51,7 +51,7 @@ test("a catalogue model is billed at its own price, never the gpt-4o-mini fallba
 });
 
 test("resolution: locked role → learner's choice (only when allowed) → role env → default", () => {
-  const off = reg();
+  const off = reg({ AI_MODEL_PICKER_ENABLED: "false" });
   assert.equal(off.resolveModel({ role: "chat", learnerChoice: "claude-sonnet" }).id, "gpt-4o-mini", "picker off: the choice is ignored");
   assert.match(off.resolve({ role: "chat", learnerChoice: "claude-sonnet" }).notice, /model choice is off/);
 

@@ -7,18 +7,20 @@
  */
 
 import {
-  examPrepPolicyFor, publicAttempt, publicRun, startExamPrepRetest, startExamPrepRun, submitExamPrepAttempt,
+  examPrepPolicyFor, publicAttempt, publicRun, startExamPrepRetest, startExamPrepRun, submitStudyPrepAttempt,
 } from "../exam-prep-service.js";
 import { InsufficientBalanceError, createHarness } from "./harness.js";
 import { STUDY_PREP_COST } from "./education-engine.js";
 import { supabaseStore as store } from "./store.js";
 import { prerequisiteEdges, resolveTopics, resolveSyllabusChain, topicsForSource } from "./syllabus-resolver.js";
 import { generateOutline, generatedTopics } from "./syllabus-generator.js";
-import { materialQuestions, materialTopics } from "../../materials/studySource.js";
+import { materialQuestions } from "../../materials/studySource.js";
+import { documentTopics, studyPrepMaterials } from "./materials-source.js";
+import { goalTypeHint } from "./goal-type.js";
 import * as readToolsModule from "./read-tools.js";
 import { makeLlmAgent } from "./llm-agent.js";
 import { buildRegistry } from "../tools/registry.js";
-import { buildAgentContext } from "./context-manager.js";
+import { buildAgentContext, contextSetFor } from "./context-manager.js";
 import { runAgentStep } from "./agent-loop.js";
 import { pauseCopy } from "./narration.js";
 import { planReadyMessage } from "./planReady.js";
@@ -32,6 +34,7 @@ import { publishLiveDeveloper } from "../../workflows/bus.js";
 import { keepFactual } from "../../agent-runtime/factFilter.js";
 import { aiContext } from "../../../lib/aiContext.js";
 import { makeWorkflowMirror, studyPrepWorkflow, workflowEngineEnabled } from "./workflow.js";
+import { TOPIC_STARTABLE_STATES } from "./state-machine.js";
 import { registerWorkflow } from "../../workflows/registry.js";
 import { makeTeachingHandoff } from "./teaching-handoff.js";
 import { makeAgentCheckRun } from "./agent-check-run.js";
@@ -48,14 +51,16 @@ const topicWorkflow = {
   // prepaid: the harness charged the flat practice price first (and refunds it
   // if generation fails), so generation tokens are not billed again.
   startRun: async ({ learnerId, studyPrepTopicId, request }) => startExamPrepRun({ learnerId, request, studyPrepTopicId, prepaid: true }),
-  submit: async ({ learnerId, runId, answers }) => submitExamPrepAttempt({ learnerId, runId, answers }),
+  // One transaction (edu.study_prep_submit_attempt): score + run record + topic outcome, once.
+  submitAttempt: async ({ learnerId, sessionId, topicId, runId, answers }) => submitStudyPrepAttempt({ learnerId, sessionId, topicId, runId, answers }),
   retest: async ({ learnerId, runId, learnerConfirmedReady }) => startExamPrepRetest({ learnerId, runId, learnerConfirmedReady, prepaid: true }),
   publicRun, publicAttempt,
 };
 
 // generateOutline / generatedTopics: the AI-drafted outline fallback (§8.7).
 // materialTopics / materialQuestions: a learner's own materials folder as the syllabus (§7.17.3).
-const syllabus = { resolveTopics, prerequisiteEdges, generateOutline, generatedTopics, resolveSyllabusChain, topicsForSource, materialTopics, materialQuestions };
+// materials (§8.8): the learner's files as agent tools; a documents session's topics fall back to its drawn outline.
+const syllabus = { resolveTopics, prerequisiteEdges, generateOutline, generatedTopics, resolveSyllabusChain, topicsForSource, materialTopics: documentTopics, materialQuestions, materials: studyPrepMaterials };
 
 /**
  * D45: practice as an Agent Check battle — ON by default, no env needed.
@@ -157,7 +162,9 @@ export const teachingHandoff = () => (_handoff ||= makeTeachingHandoff({
   },
   studyPrep: {
     openWake: openRunMessage,
-    confirmTeachBack: ({ sessionId, learnerId, topicId }) => getHarness().confirmTeachBack({ sessionId, learnerId, topicId }),
+    // TEACHING_COMPLETED: awaiting_teaching → retest_ready (§8.3); abandoned: the topic waits or needs a new intervention.
+    teachingCompleted: ({ sessionId, learnerId, topicId, workflowId, objectiveMet }) => getHarness().completeTeaching({ sessionId, learnerId, topicId, workflowId, objectiveMet }),
+    teachingAbandoned: ({ sessionId, learnerId, topicId, reofferedWorkflowId }) => getHarness().teachingAbandoned({ sessionId, learnerId, topicId, reofferedWorkflowId }),
     // start_teaching_session's row: an ordinary teaching session in the dashboard's list, with one
     // opening note (so the list offers it to continue, and the modal opens it by id).
     async createSessionRow({ learnerId, workflowId, topic, subject, focus }) {
@@ -181,6 +188,21 @@ export const teachingHandoff = () => (_handoff ||= makeTeachingHandoff({
 }));
 // The engine hands a finished teaching session's outcome to Study Prep through this.
 registerWorkflow(studyPrepWorkflow, { onChildOutcome: (parent, args) => teachingHandoff().controller.onChildOutcome(parent, args) });
+
+/**
+ * D15: the harness's way to Teaching — request_teaching makes the teaching
+ * session (a child of the Study Prep workflow) through the handoff. Only with
+ * the workflow engine; without it the harness has no `teaching` and the
+ * inline strategy path is the fallback.
+ */
+const teachingPort = {
+  request: async ({ session, topic, strategy, gaps, peerExplanations }) => {
+    const row = session?.workflow_id ? session : await store.getSession(session.id).catch(() => null);
+    if (!row?.workflow_id) return null;
+    return teachingHandoff().propose({ session: row, topic, outcome: "retest_offered", gaps, strategy, peerExplanations });
+  },
+};
+const teachingFor = (on) => (on ? { teaching: teachingPort } : {});
 
 /** A code-written run's own message in the chat the plan lives in (like a wake's); extraMeta rides along (a check's card). */
 async function openRunMessage({ sessionId, learnerId, wakeId, trigger, label, extraMeta = null, createThread = null }) {
@@ -238,7 +260,9 @@ export async function stopAgentCheck({ learnerId, restart = false }) {
   const refundFailed = charge?.length ? await store.refundCoins({ charge: { applied: charge }, feature: "study_prep_practice", ref: `study_prep:${row.id}` }).catch(() => 1) : 0;
   const coins = charge?.length && !refundFailed ? Number(check?.metadata?.coins) || STUDY_PREP_COST.COINS_PER_PRACTICE : 0;
   const wasRetest = topic.checkMode === "retest";
-  await store.updateTopicConditional(topic.id, "active", {
+  // §8.3: a stopped check goes back to ready (diagnostic → diagnostic_ready, retest → retest_ready).
+  await store.updateTopicConditional(topic.id, topic.state, {
+    status: wasRetest ? "retest_ready" : "diagnostic_ready",
     check_battle_id: null, check_mode: "stopped", check_scored_at: null, check_result: null,
     attempts_used: Math.max(0, Number(topic.attemptsUsed || 0) - 1),
     // A stopped retest keeps the teach-back it used, so it can start again.
@@ -324,7 +348,7 @@ export async function backfillStudyPrepWorkflows({ limit = 200 } = {}) {
 export function getHarness() {
   return createHarness({ store, topicWorkflow, syllabus, steps,
     ...(agentCheckEnabled() ? { agentCheck, protege, checkRun: checkRunOrNull() } : {}),
-    ...(workflowEngineEnabled() ? { workflowMirror: workflowMirror() } : {}) });
+    ...(workflowEngineEnabled() ? { workflowMirror: workflowMirror(), ...teachingFor(true) } : {}) });
 }
 
 /**
@@ -332,7 +356,7 @@ export function getHarness() {
  * gate's scenario (a test learner), never for a learner's request.
  */
 export function getWorkflowHarness() {
-  return createHarness({ store, topicWorkflow, syllabus, steps, ...(agentCheckEnabled() ? { agentCheck, protege, checkRun: agentCheckRun() } : {}), workflowMirror: workflowMirror() });
+  return createHarness({ store, topicWorkflow, syllabus, steps, ...(agentCheckEnabled() ? { agentCheck, protege, checkRun: agentCheckRun() } : {}), workflowMirror: workflowMirror(), ...teachingFor(true) });
 }
 
 /**
@@ -342,26 +366,30 @@ export function getWorkflowHarness() {
  */
 export function getAgentCheckHarness({ questions, secondsPerQuestion } = {}) {
   return createHarness({ store, topicWorkflow, syllabus, steps, agentCheck: makeAgentCheck({ questions, secondsPerQuestion }), protege,
-    checkRun: agentCheckRun(), workflowMirror: workflowMirror() });
+    checkRun: agentCheckRun(), workflowMirror: workflowMirror(), ...teachingFor(true) });
 }
 
 /**
  * The human-answered practice regardless of the switch (what
  * AKORO_STUDY_PREP_AGENT_CHECK=false gives) — for the gate's scenario.
  */
-export function getPracticeHarness() {
-  return createHarness({ store, topicWorkflow, syllabus });
+export function getPracticeHarness({ teaching = false } = {}) {
+  // teaching: with the workflow engine and Teaching (D15) — the human-answered practice on the full topic machine (gate only).
+  return createHarness({ store, topicWorkflow, syllabus, ...(teaching ? { workflowMirror: workflowMirror(), ...teachingFor(true) } : {}) });
 }
 
 /** The battle worker's hook when an Agent Check ends. Scores even if the switch was turned off meanwhile. */
 export async function completeAgentCheckBattle(battleId) {
-  const done = await createHarness({ store, topicWorkflow, syllabus, agentCheck, protege, checkRun: checkRunOrNull(),
-    ...(workflowEngineEnabled() ? { workflowMirror: workflowMirror() } : {}) }).completeAgentCheck({ battleId, teachingHandoff: workflowEngineEnabled() });
-  // Below the mark with tries left: a teaching session on what it missed is offered first (Phase 6),
-  // so the wake can talk about it.
+  const harness = createHarness({ store, topicWorkflow, syllabus, agentCheck, protege, checkRun: checkRunOrNull(),
+    ...(workflowEngineEnabled() ? { workflowMirror: workflowMirror(), ...teachingFor(true) } : {}) });
+  const done = await harness.completeAgentCheck({ battleId, teachingHandoff: workflowEngineEnabled() });
+  // Below the mark with tries left (intervention_required): D15 — the intervention is a teaching
+  // session on what it missed, offered at once (teach_back until the agent picks another strategy
+  // with request_teaching), so the wake can talk about it. Teaching off: the inline path.
   if (done?.outcome === "retest_offered" && workflowEngineEnabled()) {
     const row = await store.getSession(done.session.id).catch(() => null);
-    if (row) done.teaching = await teachingHandoff().propose({ session: row, topic: done.topic, outcome: done.outcome, gaps: done.result?.gaps || [] }).catch(() => null);
+    const asked = row ? await harness.requestTeaching({ sessionId: row.id, learnerId: row.learner_id, topicId: done.topic.id, strategy: "teach_back", focusGaps: done.result?.gaps || [], origin: "harness" }).catch(() => null) : null;
+    if (asked) { done.teaching = asked.teaching; done.topic = asked.topic; }
   }
   // The agent wakes on the result: explains it, and moves on, sets the topic aside or points to the teaching session.
   if (done?.session?.id) wakeStudyPrep({ sessionId: done.session.id, learnerId: done.session.learnerId || null, trigger: "check_scored", facts: { topic: done.topic?.label } });
@@ -386,24 +414,35 @@ export async function runStudyPrepPlanningStep({ sessionId, learnerId }) {
   const harness = getHarness();
   const view = await harness.getSessionView({ sessionId, learnerId, eventLimit: 10 });
   if (!["planning", "replanning"].includes(view.session.status)) return view;
-  const context = await buildAgentContext({
-    setName: "planning",
-    goal: view.session.goal,
+  // Operation → set (§7.4): the session's state names the operation; the
+  // mapping (agent-context/operations.mjs) names the set. A context that
+  // can't be built ends the step with context_unavailable, state unchanged.
+  const operation = view.session.status;
+  const setName = contextSetFor("study_prep", operation);
+  let context;
+  try {
+    context = await buildAgentContext({
+      setName,
+      goal: view.session.goal,
     session: view.session,
-    dynamic: { hint: "Research before you plan: the syllabus, the learner's state, their practice history, what earlier sessions showed (memory) and the prerequisites. Then validate and propose one plan, ordered weakest-first within the prerequisites." },
-  });
+      dynamic: { hint: `Research before you plan: the syllabus, the learner's state, their practice history, what earlier sessions showed (memory) and the prerequisites. Then validate and propose one plan, ordered weakest-first within the prerequisites. ${goalTypeHint(view.session.goalType)}` },
+    });
+  } catch (error) {
+    console.warn(`[study-prep] context_unavailable for ${sessionId} (${operation}): ${error?.message || error}`);
+    return { ...view, loop: { ended: "context_unavailable", iterations: 0, terminal: null } };
+  }
   const sessionReadTools = {
     ...readTools,
     getSessionState: readToolsModule.makeSessionStateReader(harness).bind(null),
   };
   const registry = buildRegistry({ readTools: sessionReadTools, harness, learnerId, sessionId });
-  const agent = makeLlmAgent({ system: context.system, learnerId });
+  const agent = makeLlmAgent({ system: context.system, learnerId, workflowId: view.session.workflowId || null });
   // Through the harness's guarded store, so every step reaches the workflow
   // stream (the card) — the raw store skipped the mirror. Deep research: the
   // planner reads the syllabus, the learner's state, history, memory and the
   // prerequisites before it may propose (on its last decision it always may).
   const step = await runAgentStep({
-    sessionId, goal: view.session.goal, agent, registry, store: harness.store || store, harness, contextSetName: "planning",
+    sessionId, goal: view.session.goal, agent, registry, store: harness.store || store, harness, contextSetName: setName,
     requireReads: PLANNING_READS,
     // Developer view: the planner's notes per decision, pushed live to its workflow stream, never stored.
     onThought: view.session.workflowId ? (t) => publishLiveDeveloper(view.session.workflowId, t) : null,
@@ -422,9 +461,9 @@ export async function runStudyPrepPlanningStep({ sessionId, learnerId }) {
  * background: the step runs after this returns (the chat tool) — the card
  * streams it live, and the plan-ready message lands in `conversationId`.
  */
-export async function startStudyPrepSession({ learnerId, goal, subject, classLevel, examBoard, materials = null, background = false, conversationId = null }) {
+export async function startStudyPrepSession({ learnerId, goal, subject, classLevel, examBoard, materials = null, background = false, conversationId = null, goalType = null }) {
   const harness = getHarness();
-  const session = await harness.createSession({ learnerId, goal, subject, classLevel, examBoard, materials });
+  const session = await harness.createSession({ learnerId, goal, subject, classLevel, examBoard, materials, goalType });
   if (background) {
     planInBackground({ sessionId: session.id, learnerId, conversationId });
     return harness.getSessionView({ sessionId: session.id, learnerId, eventLimit: 10 });
@@ -550,16 +589,16 @@ export async function runStudyPrepWake({ sessionId, learnerId = null, trigger, f
   } else try {
     const context = await buildAgentContext({
       // The wake doctrine (reasoning/WAKES.md): its rules, what runs by itself, what to do after a check.
-      setName: "wake", goal: view.session.goal, session: view.session,
+      setName: contextSetFor("study_prep", "wake"), goal: view.session.goal, session: view.session,
       dynamic: { hint: wakeGoal(trigger, facts) },
     });
     const registry = buildRegistry({ readTools: { ...readTools, getSessionState: readToolsModule.makeSessionStateReader(harness).bind(null) }, harness, learnerId: owner, sessionId });
     // Billed to the learner, like planning: a wake is part of their session (study_prep_wake).
     // ref: its charges count against the session's approved coins (with its checks).
-    const agent = makeLlmAgent({ system: context.system, learnerId: owner, feature: "study_prep_wake", maxTokens: 1200, ref: `study_prep:${sessionId}`,
+    const agent = makeLlmAgent({ system: context.system, learnerId: owner, feature: "study_prep_wake", maxTokens: 1200, ref: `study_prep:${sessionId}`, workflowId: view.session.workflowId || null,
       finishHint: "This is your last decision: end the turn — wait_for_learner, or move the session on if that is what the result calls for." });
     step = await runAgentStep({
-      sessionId, goal: wakeGoal(trigger, facts), agent, registry, store: harness.store || store, harness, contextSetName: "wake",
+      sessionId, goal: wakeGoal(trigger, facts), agent, registry, store: harness.store || store, harness, contextSetName: contextSetFor("study_prep", "wake"),
       maxIterations: decisions, terminalActions: [...TERMINAL_ACTIONS, "wait_for_learner"], finalActions: WAKE_FINAL_ACTIONS, pauseOnCap: false,
       // Developer view: its notes per decision, tagged with the wake (iterations restart at 1 each wake).
       onThought: view.session.workflowId ? (t) => publishLiveDeveloper(view.session.workflowId, { ...t, wakeId }) : null,
@@ -640,7 +679,7 @@ export async function autoStartDueChecks({ nowMs = Date.now(), sessionId = null 
   const cutoff = new Date(nowMs - AUTO_START_MS).toISOString();
   // sessionId: one session only (the gate's, run with a later clock).
   let query = db.schema("edu").from("study_prep_topics").select("id, session_id")
-    .eq("status", "active").lte("updated_at", cutoff);
+    .in("status", TOPIC_STARTABLE_STATES).lte("updated_at", cutoff);
   if (sessionId) query = query.eq("session_id", sessionId);
   const { data: rows, error } = await query.order("updated_at", { ascending: true }).limit(25);
   if (error) throw error;

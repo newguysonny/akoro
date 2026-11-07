@@ -47,3 +47,26 @@ test('picking: a model switches to the standard mode; coming-soon models change 
   assert.equal(applyPick('model:claude-sonnet', cur, server), cur);
   assert.deepEqual(applyPick('mode:research', { mode: 'default', modelId: 'gpt-4.1' }, server), { mode: 'research', modelId: 'gpt-4.1' });
 });
+
+test('picker with tier lists: plan badge, locked models, cost hints, a confirm on dearer models', async () => {
+  const { chatPicker } = await import('./chatModels.js');
+  const server = {
+    picker: { enabled: true, tier: 'Freemium' },
+    models: [
+      { id: 'mini', label: 'Mini', default: true, available: true, costMultiple: 1, costHint: null },
+      { id: 'deep', label: 'DeepSeek', available: true, costMultiple: 0.5, costHint: 'Fewer coins per message' },
+      { id: 'big', label: 'Big', available: true, costMultiple: 3, costHint: '≈ 3× coins per message' },
+      { id: 'pro', label: 'Pro', available: false, locked: 'plan', note: 'Not in your plan.', costMultiple: 8, costHint: '≈ 8× coins per message' },
+    ],
+  };
+  const p = chatPicker(server, {});
+  assert.equal(p.tier, 'Freemium');
+  const by = Object.fromEntries(p.options.map((o) => [o.id, o]));
+  assert.equal(by['model:pro'].meta, 'Plan');
+  assert.equal(by['model:pro'].locked, true);
+  assert.equal(by['model:pro'].disabled, true);
+  assert.match(by['model:deep'].description, /Fewer coins/);
+  assert.equal(by['model:deep'].confirm, undefined, 'a cheaper model needs no confirm');
+  assert.equal(by['model:big'].confirm, 'Costs more than the default.');
+  assert.equal(chatPicker({ ...server, picker: { enabled: false, tier: 'Freemium' } }, {}).tier, null, 'no badge with the picker off');
+});

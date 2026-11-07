@@ -9,8 +9,10 @@ import { WorkflowHead, WorkflowSteps } from './WorkflowSteps.jsx';
 import {
   adjustStudyPrepPlan, advanceStudyPrepTopic, approveMoreStudyPrepCoins, approveStudyPrepTeaching, confirmStudyPrepPlan, confirmStudyPrepTeachBack,
   concludeStudyPrepSession, deferStudyPrepTopic, fetchStudyPrepSession, generateStudyPrepPractice,
-  resumeStudyPrepSession, retryStudyPrepDeferred, submitStudyPrepPractice,
+  resumeStudyPrepSession, retryStudyPrepDeferred, submitStudyPrepPractice, cancelStudyPrepSession,
 } from '../../../services/studyPrepApi.js';
+import ApprovalButtons from '../agentChat/ApprovalButtons.jsx';
+import { DevLine, ScoreRing } from '../agentChat/StreamCards.jsx';
 
 /**
  * StudyPrepChatCard — the study-prep session rendered INSIDE the Agent Chat
@@ -256,6 +258,9 @@ export default function StudyPrepChatCard({ sessionId, onEvents, onRunning, pinn
     setAdjusting(false);
   });
 
+  // Reject on the plan card ends this Study Prep before anything is spent (Allow / Reject / Later, 2026-11-06).
+  const rejectPlan = () => void run(() => cancelStudyPrepSession(session.id), () => refresh());
+
   const planIds = (session.plan || []).map((topic) => topic.syllabusTopicId);
   const shownOrder = order || planIds;
   const move = (id, by) => {
@@ -324,6 +329,11 @@ export default function StudyPrepChatCard({ sessionId, onEvents, onRunning, pinn
         <Icon name={teaching.state === 'proposed' ? 'ti-clock' : 'ti-school'} size={15} color={BRAND}/>
         <span>{teachingLine}</span>
       </div>
+      {teaching.progress?.of > 0 && (
+        <div data-teaching-progress="" aria-hidden="true" style={{ height: 6, borderRadius: 6, background: 'var(--ak-border2)', overflow: 'hidden' }}>
+          <i style={{ display: 'block', height: '100%', width: `${Math.round(100 * Math.min(1, (teaching.progress.done || 0) / teaching.progress.of))}%`, background: BRAND }}/>
+        </div>
+      )}
       {teaching.state === 'proposed' && (
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
           <button type="button" disabled={busy} onClick={approveTeaching} style={primary}>Confirm teaching session</button>
@@ -388,11 +398,12 @@ export default function StudyPrepChatCard({ sessionId, onEvents, onRunning, pinn
       )}
       {wfEvents && <WorkflowSteps steps={steps} limit={pinned ? 4 : 8}/>}
       {error && <div role="alert" style={errorBox}>{error}</div>}
+      {developer && <DevLine parts={['study_prep', session.status, workflowId ? `wf ${String(workflowId).slice(0, 8)}` : null, wfEvents?.length ? `seq ${wfEvents[wfEvents.length - 1]?.sequence ?? wfEvents.length}` : null, activeTopic?.label || null, coins ? `coins ${coins.spent}/${coins.approved}` : null]}/>}
 
       {/* Pinned (running): the head and the latest steps only — the full card is back at its message once it settles. */}
       {pinned ? (checkLive ? (wfEvents ? checkRunningLine : <button type="button" onClick={watch} style={primary}>Watch the Agent Check</button>) : (counting ? checkStarter(null) : (teachingTrack || coinsAsk))) : <>
 
-      {/* ── the plan card: Approve & Start / Adjust (the only spend gate) ── */}
+      {/* ── the plan card: Allow / Reject / Later (the only spend gate); "Change the plan first" adjusts ── */}
       {/* With a workflow, an empty plan isn't shown while it plans — the steps above are the progress. */}
       {(session.status === 'awaiting_confirmation' || (session.status === 'planning' && (!workflowId || session.plan?.length > 0))) && (
         <div style={{ display: 'grid', gap: 8 }}>
@@ -413,9 +424,9 @@ export default function StudyPrepChatCard({ sessionId, onEvents, onRunning, pinn
                 {(session.plan || []).map((topic) => <li key={topic.syllabusTopicId} style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--ak-text-sub)' }}>{topic.label}</li>)}
               </ol>
               {session.status === 'awaiting_confirmation' && (
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  <button type="button" disabled={busy} onClick={confirmPlan} style={primary}>Approve & Start</button>
-                  <button type="button" disabled={busy} onClick={() => setAdjusting(true)} style={secondary}>Adjust</button>
+                <div data-plan-decision="" style={{ display: 'grid', gap: 2 }}>
+                  <ApprovalButtons onAllow={confirmPlan} onReject={rejectPlan} busy={busy} busyLabel="Starting…" />
+                  <button type="button" disabled={busy} onClick={() => setAdjusting(true)} style={{ justifySelf: 'start', border: 0, background: 'transparent', color: BRAND, fontWeight: 800, fontSize: 11.5, cursor: 'pointer', padding: '4px 0', display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon name="ti-adjustments" size={13} color={BRAND}/>Change the plan first</button>
                 </div>
               )}
               {session.status === 'planning' && !workflowId && <div style={caption}>The agent is still planning…</div>}
@@ -533,8 +544,8 @@ export default function StudyPrepChatCard({ sessionId, onEvents, onRunning, pinn
 
               {shownResult && !checkLive && (
                 <div style={{ display: 'grid', gap: 8 }}>
-                  <div style={{ display: 'flex', gap: 10, alignItems: 'baseline' }}>
-                    <span style={{ fontSize: 22, fontWeight: 900, color: shownResult.passed ? GREEN : RED }}>{Math.round((shownResult.score || 0) * 100)}%</span>
+                  <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                    <ScoreRing score={shownResult.score} correct={shownResult.correct} total={shownResult.total} passed={shownResult.passed} />
                     <span style={{ fontSize: 12, fontWeight: 800, color: 'var(--ak-text)' }}>{agentMode ? `Your agent answered ${shownResult.correct} of ${shownResult.total} from your notes` : `${shownResult.correct} of ${shownResult.total} correct`}</span>
                   </div>
                   <div style={caption}>

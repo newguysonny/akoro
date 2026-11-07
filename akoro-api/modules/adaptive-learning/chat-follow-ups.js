@@ -14,7 +14,7 @@ import { addLater, cancelLater } from "../../lib/deferredJobs.js";
 import db from "../../db.js";
 import { notifyUser } from "../notify.js";
 import { workerJob } from "../../lib/workerLog.js";
-import { validateFollowUpId, validateFollowUpInput } from "./chat-follow-up-validation.js";
+import { validateFollowUpId, validateFollowUpInput, nextOccurrence } from "./chat-follow-up-validation.js";
 import { assertQueueCapacity } from "../../lib/queueGuard.js";
 
 const STALE_DELIVERY_MS = 5 * 60 * 1000;
@@ -50,36 +50,95 @@ export async function scheduleChatFollowUp({ userId, input, defaultTimezone, tar
     timezone: validated.timezone,
     scheduled_at: validated.scheduledAt,
     status: "scheduled",
+    // Only when used: a plain one-off never depends on the repeating columns.
+    ...(validated.repeat ? { repeat: validated.repeat, repeat_until: validated.repeatUntil, series_id: id } : {}),
+    ...(validated.runTool ? { run_tool: validated.runTool } : {}),
   };
-  const { error: insertError } = await db.schema("edu").from("scheduled_chat_follow_ups").insert(row);
-  if (insertError) throw new Error("Could not save the scheduled chat follow-up");
-
-  try {
-    await assertQueueCapacity(chatFollowUpQueue(), { name: "followups" });
-    await addLater(chatFollowUpQueue(), "deliver-chat-follow-up", { followUpId: id }, {
-      jobId: `chat-follow-up-${id}`,
-      delay: validated.delayMs,
-    });
-  } catch (error) {
-    // There is no valid schedule without a durable queue job. Deleting the row
-    // avoids silently promising a message that no worker can deliver.
-    await db.schema("edu").from("scheduled_chat_follow_ups").delete().eq("id", id).eq("status", "scheduled");
-    throw new Error("Could not schedule the follow-up delivery");
-  }
-
+  await insertAndQueue(row, validated.delayMs);
   return {
     followUpId: id,
     scheduledAt: validated.scheduledAt,
     timezone: validated.timezone,
     title: validated.title,
+    ...(validated.repeat ? { repeat: validated.repeat, repeatUntil: validated.repeatUntil } : {}),
+    ...(validated.runTool ? { runTool: validated.runTool } : {}),
   };
+}
+
+/** Save the schedule, then its durable queue job — or neither. */
+async function insertAndQueue(row, delayMs) {
+  const { error: insertError } = await db.schema("edu").from("scheduled_chat_follow_ups").insert(row);
+  if (insertError) throw new Error("Could not save the scheduled chat follow-up");
+  try {
+    await assertQueueCapacity(chatFollowUpQueue(), { name: "followups" });
+    await addLater(chatFollowUpQueue(), "deliver-chat-follow-up", { followUpId: row.id }, {
+      jobId: `chat-follow-up-${row.id}`,
+      delay: Math.max(0, delayMs),
+    });
+  } catch (error) {
+    // There is no valid schedule without a durable queue job. Deleting the row
+    // avoids silently promising a message that no worker can deliver.
+    await db.schema("edu").from("scheduled_chat_follow_ups").delete().eq("id", row.id).eq("status", "scheduled");
+    throw new Error("Could not schedule the follow-up delivery");
+  }
+}
+
+/** PURE: a tool's rows as a short plain list for a chat message. */
+export function formatToolRows(out, { max = 12 } = {}) {
+  const rows = Array.isArray(out?.rows) ? out.rows : [];
+  if (!rows.length) return "Nothing to list today.";
+  const line = (r) => {
+    if (r == null || typeof r !== "object") return `- ${String(r)}`;
+    const vals = Object.values(r).filter((v) => v != null && v !== "").map((v) => (typeof v === "object" ? JSON.stringify(v) : String(v)));
+    return `- ${vals.join(" · ").slice(0, 160)}`;
+  };
+  const shown = rows.slice(0, max).map(line);
+  const more = (out.total || rows.length) - shown.length;
+  return [...shown, ...(more > 0 ? [`…and ${more} more.`] : [])].join("\n");
+}
+
+/** Run the learner's own read tool for a check-in; null text when it can't run (the message still goes). */
+async function freshToolText(followUp) {
+  if (!followUp.run_tool) return null;
+  try {
+    const { runLearnerTool } = await import("../self-tooling/pipeline.js");
+    const { selfToolDeps } = await import("./chat.js");
+    const out = await runLearnerTool(followUp.run_tool, {}, followUp.user_id, {
+      callCapability: selfToolDeps(followUp.user_id).callCapability, conversationId: followUp.chat_session_id, dry: true,
+    });
+    if (!out || out.error) return `(I couldn't refresh "${followUp.run_tool}" today${out?.error ? `: ${out.error}` : ""}.)`;
+    if (out.status || out.action) return null;   // a change tool never runs from a schedule
+    return `**${out.tool || "Today"}**\n${formatToolRows(out)}`;
+  } catch (e) {
+    return `(I couldn't refresh today's list: ${String(e?.message || e).slice(0, 120)}.)`;
+  }
+}
+
+/** A repeating check-in: schedule the next one in the same chat (idempotent per occurrence). */
+async function scheduleNextInSeries(followUp) {
+  if (!followUp.repeat) return null;
+  const next = nextOccurrence({ scheduledAt: followUp.scheduled_at, repeat: followUp.repeat, repeatUntil: followUp.repeat_until, timezone: followUp.timezone });
+  if (!next) return null;
+  const seriesId = followUp.series_id || followUp.id;
+  // One pending occurrence per series: a retried delivery must not chain twice.
+  const { data: pending } = await db.schema("edu").from("scheduled_chat_follow_ups").select("id")
+    .eq("series_id", seriesId).eq("status", "scheduled").limit(1);
+  if (pending?.length) return pending[0].id;
+  const row = {
+    id: randomUUID(), user_id: followUp.user_id, chat_session_id: followUp.chat_session_id, chat_message_id: randomUUID(),
+    title: followUp.title, message: followUp.message, timezone: followUp.timezone, scheduled_at: next, status: "scheduled",
+    repeat: followUp.repeat, repeat_until: followUp.repeat_until, series_id: seriesId,
+    ...(followUp.run_tool ? { run_tool: followUp.run_tool } : {}),
+  };
+  await insertAndQueue(row, new Date(next).getTime() - Date.now());
+  return row.id;
 }
 
 /** Read only future deliveries for the signed-in learner (never another user). */
 export async function listChatFollowUps({ userId }) {
   if (!userId) throw new Error("An authenticated learner is required");
   const { data, error } = await db.schema("edu").from("scheduled_chat_follow_ups")
-    .select("id, title, message, timezone, scheduled_at, status, created_at")
+    .select("*")
     .eq("user_id", userId)
     .in("status", ["scheduled", "delivering"])
     .order("scheduled_at", { ascending: true })
@@ -94,6 +153,8 @@ export async function listChatFollowUps({ userId }) {
       scheduledAt: row.scheduled_at,
       status: row.status,
       createdAt: row.created_at,
+      ...(row.repeat ? { repeat: row.repeat, repeatUntil: row.repeat_until, note: "Repeating: cancelling this one ends the series." } : {}),
+      ...(row.run_tool ? { runTool: row.run_tool } : {}),
     })),
   };
 }
@@ -141,7 +202,7 @@ export async function cancelChatFollowUp({ userId, followUpId }) {
 
 async function loadScheduledFollowUp(followUpId) {
   const { data, error } = await db.schema("edu").from("scheduled_chat_follow_ups")
-    .select("id, user_id, chat_session_id, chat_message_id, title, message, scheduled_at, status, updated_at")
+    .select("*")
     .eq("id", followUpId)
     .maybeSingle();
   if (error) throw new Error("Could not load the scheduled chat follow-up");
@@ -197,12 +258,15 @@ export async function deliverChatFollowUp(followUpId) {
   }, { onConflict: "id", ignoreDuplicates: true });
   if (sessionError) throw new Error("Could not create the follow-up chat session");
 
+  // A check-in with a tool carries today's answer, not a stale copy.
+  const fresh = await freshToolText(followUp);
+  const text = fresh ? `${followUp.message}\n\n${fresh}` : followUp.message;
   const { error: messageError } = await db.from("chat_messages").upsert({
     id: followUp.chat_message_id,
     session_id: followUp.chat_session_id,
     user_id: followUp.user_id,
     role: "agent",
-    text: followUp.message,
+    text,
     created_at: now,
   }, { onConflict: "id", ignoreDuplicates: true });
   if (messageError) throw new Error("Could not create the follow-up chat message");
@@ -218,6 +282,11 @@ export async function deliverChatFollowUp(followUpId) {
     .maybeSingle();
   if (statusError) throw new Error("Could not complete the scheduled chat follow-up");
   if (!delivered) return { skipped: true };
+
+  // Repeating: the next one is scheduled now. A failure here is logged, never undoes this delivery.
+  let nextId = null;
+  try { nextId = await scheduleNextInSeries(followUp); }
+  catch (e) { console.warn("[chat-follow-ups] next in series not scheduled:", e?.message || e); }
 
   const link = `/app?tab=agent&sessionId=${encodeURIComponent(followUp.chat_session_id)}`;
   await notifyUser({
@@ -235,7 +304,7 @@ export async function deliverChatFollowUp(followUpId) {
       title: followUp.title,
     });
   } catch { /* notification already provides the durable delivery path */ }
-  return { delivered: true, sessionId: followUp.chat_session_id };
+  return { delivered: true, sessionId: followUp.chat_session_id, ...(nextId ? { nextFollowUpId: nextId } : {}) };
 }
 
 let worker;

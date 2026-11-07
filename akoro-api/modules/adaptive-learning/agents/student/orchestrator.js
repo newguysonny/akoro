@@ -18,7 +18,7 @@ import {
 import { decayEngine } from "./decayEngine.js";
 import { outcomeForEvidence } from "./retention.js";
 import { getStudentState } from "../../student-state.js";
-import { createTeachingEvidenceState, publicTeachingEvidence } from "../../teaching-evidence.js";
+import { createTeachingEvidenceState, publicTeachingEvidence, applyCentralMisconceptions } from "../../teaching-evidence.js";
 import { createPublicLearningState } from "../../public-learning-state.js";
 import { executeTeachingTurnWorkflow } from "../../teaching-workflow/runner.js";
 import { executeAgentTeachingTurn } from "../../teaching-session/controller.js";
@@ -157,6 +157,7 @@ export class StudentSessionOrchestrator extends BaseOrchestrator {
       agentRecord,
       subject:     this.subject,   // scope expressed intelligence to this subject
       referenceMaterial: this.referenceMaterial,
+      learnerNotes: this.learnerNotes || [],   // set by prepareTeachingSession before initialize()
     });
 
     // Load initial state
@@ -223,6 +224,18 @@ export class StudentSessionOrchestrator extends BaseOrchestrator {
       persisted: this.resumeTeachingEvidence,
       conceptCount: mustKnow.length || 1,
     });
+    // Phase 10: a resumed session's misconception flags come from the learner
+    // model (learner_concept_state), not from the stored session copy — a
+    // misconception repaired (or found) elsewhere since is honoured here.
+    if (this.resumeTeachingEvidence) {
+      try {
+        const { centralMisconceptionFlags } = await import("../../learner-model.js");
+        const flags = await centralMisconceptionFlags({ learnerId: this.studentId, subject: this.subject, topic, parts: mustKnow });
+        applyCentralMisconceptions(this.teachingEvidence, flags);
+      } catch (error) {
+        console.warn("[teaching-evidence] central misconception state unavailable:", error?.message || error);
+      }
+    }
     this.session.teachingEvidence = this.teachingEvidence;
 
     // Topic boundary
@@ -378,6 +391,8 @@ export class StudentSessionOrchestrator extends BaseOrchestrator {
       pauseRequested: workflow.pauseRequested || null,
       decisions: workflow.decisions || [],
       fallback: workflow.fallback || null,
+      // teaching.request_assessment's result card (concepts, each question as marked, the score).
+      assessment: workflow.assessment || null,
       // The guide's ideas for the human's next message (shown as pills, not a message).
       guideSuggestions: Array.isArray(guideResult.suggestions) ? guideResult.suggestions : null,
       guideNextAction: guideResult.nextAction || null,

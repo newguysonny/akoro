@@ -14,7 +14,8 @@
  */
 
 import {
-  POLICY, attemptCapGate, canTransitionSession, canTransitionTopic, teachBackGate, validatePlan,
+  POLICY, TOPIC_CHECKING_STATES, TOPIC_IN_PROGRESS_STATES, attemptCapGate, canTransitionSession, canTransitionTopic,
+  isTopicInProgress, practiceStart, publicTopicStatus, topicStateAfterScore, validatePlan,
 } from "./state-machine.js";
 import { makeEvent, stampThoughtType } from "./events.js";
 import { HarnessRejection, createChecker, createRejector, stateIs } from "../../agent-runtime/harness.js";
@@ -24,6 +25,8 @@ import { autoStartFor, checkBudget, spentOnChecks } from "./wake.js";
 import {
   STRATEGY_LIBRARY, STUDY_PREP_COST, applyThreshold, estimateSessionCost, isPermittedStrategy, masteryWriteBack,
 } from "./education-engine.js";
+import { classifyGoal } from "./goal-type.js";
+import { generateGate, isNonCurricular, makeMaterialsOps } from "./materials-ops.js";
 
 /** Thrown/mapped when the wallet cannot cover a charge → session pauses. */
 export class InsufficientBalanceError extends Error {
@@ -38,20 +41,28 @@ const HTTP_FOR_CODE = {
   study_prep_disabled: 409, session_not_found: 404, tool_not_permitted: 403, tool_schema_invalid: 422,
   invalid_state_transition: 409, attempt_cap_exceeded: 409, strategy_not_permitted: 422,
   prerequisite_violation: 422, topic_not_in_syllabus: 422, plan_too_large: 422, duplicate_topic: 422,
-  deferred_retry_used: 409, insufficient_balance: 402, over_estimate: 409, teach_back_gate: 409, agent_loop_cap: 409,
+  deferred_retry_used: 409, insufficient_balance: 402, over_estimate: 409, teach_back_gate: 409, teaching_unavailable: 409, agent_loop_cap: 409,
   session_tool_call_cap: 409, unknown_action: 400, syllabus_exists: 409, outline_invalid: 502,
+  // §8.8 files and non-curricular goals.
+  no_materials: 422, materials_already_requested: 409, materials_not_requested: 409,
 };
 
 /** Study Prep's check plug-in: the state each action needs (copy and codes unchanged). */
 export const STUDY_PREP_CHECKS = Object.freeze({
   generate_syllabus: [stateIs(["planning", "replanning"], "An outline can only be drafted while planning")],
+  syllabus_from_documents: [stateIs(["planning", "replanning"], "An outline can only be drawn from the files while planning")],
+  request_materials: [stateIs(["planning", "replanning"], "Materials can only be asked for while planning")],
   propose_plan: [stateIs(["planning", "replanning"], "A plan can only be proposed while planning")],
   confirm_plan: [stateIs("awaiting_confirmation", "There is no plan waiting for confirmation")],
   adjust_plan: [stateIs("awaiting_confirmation", "The plan can only be adjusted before it is confirmed")],
   start_practice: [
     stateIs("topic_active", "Practice can only start while a topic is active"),
-    stateIs("active", "That topic is not the active topic", { key: "topic" }),
+    stateIs(TOPIC_IN_PROGRESS_STATES, "That topic is not the active topic", { key: "topic" }),
   ],
+  // Submit-status guard (Phase 5): a stopped or paused session takes no answers.
+  submit_practice: [stateIs("topic_active", "Answers can only be submitted while the session is running")],
+  // D15: a missed topic is handed to a teaching session, only while the session runs.
+  request_teaching: [stateIs("topic_active", "A teaching session can only be requested while the plan is running")],
   advance_topic: [stateIs("topic_active", "No topic is active")],
   resume_session: [stateIs("paused", "The session is not paused")],
 });
@@ -71,7 +82,36 @@ export const GENERATED_OUTLINE_LABEL = "AI-drafted outline — not your school's
 /** Without a journal: an outside step just runs (the behaviour before Phase 18 item 5). */
 const runDirectly = { once: async ({ act }) => ({ result: await act() }), undo: async () => {} };
 
-export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentCheck = null, protege = null, workflowMirror = null, checkRun = null, steps = runDirectly, now = () => new Date().toISOString() }) {
+/**
+ * teaching (D15) — when given, every intervention is a Teaching Workflow:
+ *   request({ session, topic, strategy, gaps, peerExplanations }) → view { workflowId, state, … } | null
+ * Without it (Teaching off) the inline path stays: offer_strategy, the
+ * learner's teach-back, the retest.
+ *
+ * topicWorkflow.submitAttempt({ learnerId, sessionId, topicId, runId, answers })
+ * is the single-transaction submit (edu.study_prep_submit_attempt): score,
+ * run record and topic outcome in one write, idempotent —
+ *   → { ok, applied, duplicate?, code?, score, correct, total, passed, capped, topic }
+ */
+
+/**
+ * The Strategy Library's offer/accept step (strategies/executors.js, Phase
+ * 4a): per-topic limit, ranked candidates, and on acceptance the harness
+ * executor + a pending outcome. Loaded lazily; with no database configured it
+ * does nothing (the offer stands as before).
+ */
+async function defaultStrategyRun(args) {
+  if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_KEY) return {};
+  try {
+    const { runStrategyOffer, defaultExecutorDeps } = await import("../strategies/executors.js");
+    return await runStrategyOffer({ ...args, deps: defaultExecutorDeps(args) });
+  } catch (e) {
+    console.warn("[study-prep] strategy run:", e?.message || e);
+    return {};
+  }
+}
+
+export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentCheck = null, protege = null, workflowMirror = null, checkRun = null, teaching = null, steps = runDirectly, strategyRun = defaultStrategyRun, now = () => new Date().toISOString() }) {
   // Every session and topic status write is checked against the workflow
   // definition (F7) and, with a mirror, dual-written to the engine (Phase 1).
   const store = guardStudyPrepStore(rawStore, { mirror: workflowMirror });
@@ -96,7 +136,9 @@ export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentC
 
   const publicTopic = (row) => ({
     id: row.id, syllabusTopicId: row.syllabus_topic_id, position: Number(row.position), label: row.label,
-    status: row.status, attemptsUsed: Number(row.attempts_used || 0), deferredRetryUsed: Boolean(row.deferred_retry_used),
+    // status: coarse (every in-progress state is "active" — the card reads it); state: the §8.3 state.
+    status: publicTopicStatus(row.status), state: row.status, teachingWorkflowId: row.teaching_workflow_id || null,
+    attemptsUsed: Number(row.attempts_used || 0), deferredRetryUsed: Boolean(row.deferred_retry_used),
     flaggedReason: row.flagged_reason || null, examPrepRunId: row.exam_prep_run_id || null,
     learnerConfirmedReady: Boolean(row.learner_confirmed_ready),
     checkBattleId: row.check_battle_id || null, checkMode: row.check_mode || null,
@@ -111,6 +153,8 @@ export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentC
     toolCallsUsed: Number(row.tool_calls_used || 0), createdAt: row.created_at, updatedAt: row.updated_at,
     completedAt: row.completed_at || null, topics: topics ? topics.map(publicTopic) : undefined,
     syllabusSource: row.syllabus_source || "platform",
+    // §8.8: a school exam, or a scholarship / competition / professional exam / own topic.
+    goalType: row.goal_type || "curricular", materialsRequested: Boolean(row.materials_requested_at),
     syllabusLabel: row.syllabus_source === "generated" ? GENERATED_OUTLINE_LABEL : null,
     workflowId: row.workflow_id || null,
   });
@@ -132,7 +176,8 @@ export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentC
   };
 
   /** The real syllabus for a session, most specific first (class → school → platform). */
-  const realSyllabus = async (session) => (syllabus.resolveSyllabusChain
+  // A non-curricular goal (§8.8) never plans from a class or school syllabus: only Akoro's platform one counts.
+  const realSyllabus = async (session) => (syllabus.resolveSyllabusChain && !isNonCurricular(session)
     ? syllabus.resolveSyllabusChain({ learnerId: session.learner_id, subject: session.subject, classLevel: session.class_level, exam: session.exam_board })
     : { source: "platform", ref: null, topics: await syllabus.resolveTopics({ subject: session.subject, classLevel: session.class_level, exam: session.exam_board }) });
 
@@ -162,6 +207,11 @@ export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentC
       return { ...base, found: true, source: "generated", label: GENERATED_OUTLINE_LABEL, topics: topics.map((t) => ({ id: t.id, label: t.label })) };
     }
     const real = await realSyllabus(session);
+    if (!real.topics.length && isNonCurricular(session)) {
+      return { ...base, topics: [], found: false, goalType: "non_curricular", next: session.materials_requested_at
+        ? "No syllabus on Akoro for this goal, and you already asked the learner for materials. If they uploaded files, call syllabus.from_documents; if they said to draft one, call syllabus.generate."
+        : "No syllabus on Akoro for this goal (it isn't a school exam). Check materials.list: if they uploaded files, call syllabus.from_documents; otherwise ask once with learner.request_materials and wait." };
+    }
     if (!real.topics.length) {
       return { ...base, topics: [], found: false, next: "No syllabus exists for this subject and class — not the learner's class or school, not on Akoro. Call syllabus.generate to draft an outline, then propose a plan from its topics." };
     }
@@ -196,6 +246,9 @@ export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentC
     if (!syllabus.generateOutline) return reject(session, "tool_not_permitted", "Outline drafting is not available");
     // Planned from the learner's own materials: those are the syllabus.
     if (session.syllabus_source === "documents") return reject(session, "syllabus_exists", "This plan comes from the learner's own materials — plan from syllabus.resolve");
+    // A non-curricular goal asks the learner for materials (once) before an outline is drafted (§8.8).
+    const gate = generateGate(session);
+    if (gate) return reject(session, gate.code, gate.message);
     // Only after the class, school and platform syllabi all came back empty.
     const real = await realSyllabus(session);
     if (real.topics.length) {
@@ -231,16 +284,19 @@ export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentC
 
   // ── Session lifecycle ────────────────────────────────────────────────────
 
-  async function createSession({ learnerId, goal, subject, classLevel = "JSS1", examBoard = "WAEC", entryMode = "syllabus", materials = null }) {
+  async function createSession({ learnerId, goal, subject, classLevel = "JSS1", examBoard = "WAEC", entryMode = "syllabus", materials = null, goalType = null }) {
     const active = await store.findActiveSession(learnerId);
     if (active) throw new HarnessRejection("invalid_state_transition", "You already have an active study-prep session — finish or cancel it first", 409);
     // From a materials folder (§7.17.3): the folder is the syllabus from the start.
     const fromMaterials = materials?.folderId ? { entry_mode: "material", syllabus_source: "documents", syllabus_ref: materials.folderId } : { entry_mode: entryMode };
+    // §8.8: the goal type decides the syllabus order. The column defaults to curricular, so only the other is written.
+    const kind = classifyGoal(goal, { goalType });
     const session = await store.createSession({
       learner_id: learnerId, goal, subject, class_level: classLevel, ...fromMaterials,
       exam_board: examBoard, status: "planning", policy_version: "study-prep-v1",
+      ...(kind === "non_curricular" ? { goal_type: kind } : {}),
     });
-    await log(session.id, null, { eventType: "observation", origin: "harness", facts: { goal, subject, classLevel, entryMode: fromMaterials.entry_mode, ...(materials?.folderId ? { materials: materials.name || "folder" } : {}) } });
+    await log(session.id, null, { eventType: "observation", origin: "harness", facts: { goal, subject, classLevel, entryMode: fromMaterials.entry_mode, goalType: kind, ...(materials?.folderId ? { materials: materials.name || "folder" } : {}) } });
     if (materials?.folderId) {
       await log(session.id, null, {
         eventType: "harness_decision", origin: "harness", decisionNode: "syllabus_resolved",
@@ -341,7 +397,11 @@ export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentC
 
   // ── Topic workflow: the harness drives the existing exam-prep service ────
 
-  function activeTopic(topics) { return topics.find((topic) => topic.status === "active") || null; }
+  /** The topic being worked on: any in-progress §8.3 state. */
+  function activeTopic(topics) { return topics.find((topic) => isTopicInProgress(topic.status)) || null; }
+
+  /** One topic move, conditional on the state it was read in (the guarded store checks the edge). */
+  const moveTopic = (topic, to, patch = {}) => store.updateTopicConditional(topic.id, topic.status, { status: to, ...patch, updated_at: now() });
 
   async function pause(session, reason, extraFacts = {}) {
     // Only from a state that can pause: a plan already waiting on the learner
@@ -379,8 +439,10 @@ export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentC
       // The agent OBSERVES this and may offer a strategy or defer (S2 §10-11).
       return reject(session, cap.code, cap.message, { topic: topic.label, attemptsUsed: topic.attempts_used });
     }
-    const gate = teachBackGate({ mode, learnerConfirmedReady: topic.learner_confirmed_ready });
-    if (!gate.ok) return reject(session, gate.code, gate.message, { topic: topic.label });
+    // The topic's state says what may start (§8.3): a retest only once taught (retest_ready).
+    const start = practiceStart({ state: topic.status, attemptsUsed: topic.attempts_used }, mode);
+    if (!start.ok) return reject(session, start.code, start.message, { topic: topic.label, state: topic.status });
+    mode = start.mode;
     // The agent and the auto-start stay inside the coins the learner approved;
     // past it, only the learner's own tap goes on (they were asked).
     if (withinEstimateOnly && session.estimate) {
@@ -388,7 +450,11 @@ export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentC
       if (!budget.withinEstimate) return reject(session, "over_estimate", `The next check needs ${budget.next} coins and ${budget.left} are left of the approved estimate — ask the learner first`, { left: budget.left });
     }
 
-    if (agentCheck) return startAgentCheck({ session, topic, learnerId, mode, auto: withinEstimateOnly === true });
+    if (agentCheck) return startAgentCheck({ session, topic, learnerId, mode, start, auto: withinEstimateOnly === true });
+
+    // Ready first (diagnostic_ready / retest_ready): a failed charge leaves the topic ready, nothing else.
+    const ready = topic.status === start.ready ? topic : await moveTopic(topic, start.ready);
+    if (!ready) return reject(session, "invalid_state_transition", "The topic moved on — refresh and try again");
 
     // Charge first (§4.11). Never generate on credit.
     const coins = STUDY_PREP_COST.COINS_PER_PRACTICE;
@@ -410,9 +476,10 @@ export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentC
           learnerId, studyPrepTopicId: topic.id,
           request: { topic: topic.label, subject: session.subject, examBoard: session.exam_board, questionCount: 5 },
         });
-      const updatedTopic = await store.updateTopicConditional(topic.id, "active", {
+      // The attempt is out: diagnostic / retest until it is scored. A retest spends the teach-back.
+      const updatedTopic = await moveTopic(ready, start.running, {
         attempts_used: Number(topic.attempts_used) + 1,
-        exam_prep_run_id: result.run.id, updated_at: now(),
+        exam_prep_run_id: result.run.id, learner_confirmed_ready: false,
       });
       await log(session.id, topic.id, {
         eventType: "harness_decision", origin: "harness", decisionNode: "practice_generated",
@@ -437,8 +504,8 @@ export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentC
    * charged, go and teach. Otherwise: charge once (§7.12.2), create the
    * battle, and the protégé says so in chat with the battle to watch.
    */
-  async function startAgentCheck({ session, topic, learnerId, mode, auto = false }) {
-    if (topic.check_battle_id && !topic.check_scored_at) {
+  async function startAgentCheck({ session, topic, learnerId, mode, start, auto = false }) {
+    if (TOPIC_CHECKING_STATES.includes(topic.status) || (topic.check_battle_id && !topic.check_scored_at)) {
       return reject(session, "invalid_state_transition", "An Agent Check on this topic is still running — watch it finish first");
     }
     const coverage = await agentCheck.coverage({ learnerId, topic: topic.label, subject: session.subject });
@@ -450,10 +517,16 @@ export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentC
         facts: { topic: topic.label, notes: 0 },
         narrative: deliberate("agent_check_skipped", { topicLabel: topic.label })?.narrative,
       });
-      // Nothing to check yet: no auto-start until they teach it and say so.
-      await store.updateTopicConditional(topic.id, "active", { check_mode: "skipped", updated_at: now() }).catch(() => null);
-      return { session: publicSession(session), topic: publicTopic(topic), skipped: { reason: "no_notes", next: "teach" } };
+      // Nothing to check yet (§8.3: no notes → intervention_required): no auto-start until they teach it.
+      const toIntervene = ["active", "diagnostic_ready"].includes(topic.status);
+      const waiting = await (toIntervene ? moveTopic(topic, "intervention_required", { check_mode: "skipped" })
+        : store.updateTopicConditional(topic.id, topic.status, { check_mode: "skipped", updated_at: now() })).catch(() => null);
+      return { session: publicSession(session), topic: publicTopic(waiting || topic), skipped: { reason: "no_notes", next: "teach" } };
     }
+    // Notes to check: ready (diagnostic_ready / retest_ready) before the charge.
+    const ready = topic.status === start.ready ? topic : await moveTopic(topic, start.ready);
+    if (!ready) return reject(session, "invalid_state_transition", "The topic moved on — refresh and try again");
+    topic = ready;
 
     const coins = STUDY_PREP_COST.COINS_PER_PRACTICE;
     // Store first (Phase 18 item 5): this attempt's charge and battle are journaled steps, so a
@@ -490,12 +563,12 @@ export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentC
       await steps.undo(`${stepKey}:charge`).catch(() => {});
       throw error;
     }
-    const updatedTopic = await store.updateTopicConditional(topic.id, "active", {
+    // The check is out: diagnostic / retest until it is marked.
+    const updatedTopic = await moveTopic(topic, start.running, {
       attempts_used: Number(topic.attempts_used) + 1,
       check_battle_id: check.battleId, check_mode: mode, check_scored_at: null, check_result: null,
       // A retest spends the learner's teach-back; the next one needs a new one.
       ...(mode === "retest" ? { learner_confirmed_ready: false } : {}),
-      updated_at: now(),
     });
     await log(session.id, topic.id, {
       eventType: "harness_decision", origin: "harness", decisionNode: "agent_check_started",
@@ -568,10 +641,15 @@ export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentC
       learnerId: session.learner_id, sessionRef: `study_prep:${session.id}`, topicLabel: topic.label, subject: session.subject,
       passed: threshold.passed, score: result.score, mastery, source: "agent_recall",
     });
+    // The topic machine follows the score (§8.3): understood | capped_out | intervention_required.
+    // A check that was out (diagnostic / retest) moves; a row from before the topic states
+    // (still "active" with its check out) walks the legal path to it.
     let updatedTopic = claimed;
-    if (outcome !== "retest_offered") {
-      updatedTopic = (await store.updateTopicConditional(topic.id, "active", { status: outcome, updated_at: now() })) || claimed;
-    }
+    const settledState = topicStateAfterScore(threshold);
+    let from = claimed;
+    if (from.status === "active") from = (await moveTopic(from, "diagnostic_ready")) || from;
+    if (from.status === "diagnostic_ready") from = (await moveTopic(from, "diagnostic")) || from;
+    if (TOPIC_CHECKING_STATES.includes(from.status)) updatedTopic = (await moveTopic(from, settledState)) || from;
 
     const next = outcome === "understood" ? "That's above the pass mark — this topic is understood."
       : outcome === "capped_out" ? "That was the last attempt on this topic, so we'll move on and come back to it."
@@ -602,18 +680,39 @@ export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentC
   async function submitPractice({ sessionId, learnerId, topicId, answers, intent = null }) {
     const session = await ownedSession(sessionId, learnerId);
     if (!session) throw new HarnessRejection("session_not_found", "Study-prep session was not found", 404);
+    await check("submit_practice", { session });
     const topics = await store.getTopics(session.id);
     const topic = topics.find((row) => row.id === topicId);
-    if (!topic || topic.status !== "active" || !topic.exam_prep_run_id) {
+    if (!topic || !TOPIC_CHECKING_STATES.includes(topic.status) || !topic.exam_prep_run_id) {
       return reject(session, "invalid_state_transition", "That topic has no open practice");
     }
-    const result = await topicWorkflow.submit({ learnerId, runId: topic.exam_prep_run_id, answers });
+    // One transaction (edu.study_prep_submit_attempt): the attempt's score, the
+    // run record and the topic's §8.3 outcome are written together or not at
+    // all, and only once — a second submit (or a race loser) changes nothing
+    // and is a recorded rejection, never a 500 or a second score.
+    let result;
+    try {
+      result = await topicWorkflow.submitAttempt({ learnerId, sessionId: session.id, topicId: topic.id, runId: topic.exam_prep_run_id, answers });
+    } catch (error) {
+      if (error?.code === "invalid_answers" || /invalid_answers|too_many_answers/.test(String(error?.message))) {
+        return reject(session, "tool_schema_invalid", "Those answers are not valid for this practice", { topic: topic.label });
+      }
+      throw error;
+    }
+    if (!result || result.notFound) return reject(session, "invalid_state_transition", "That topic's practice was not found", { topic: topic.label });
+    if (!result.ok || !result.applied) {
+      return reject(session, "invalid_state_transition", "This practice was already submitted", { topic: topic.label, cause: result.code || (result.duplicate ? "attempt_already_submitted" : "not_applied") });
+    }
     const policy = await topicWorkflow.policyFor({ examBoard: session.exam_board, subject: session.subject });
     const threshold = applyThreshold({
       score: result.score, passThreshold: policy.pass_threshold,
       attemptsUsed: Number(topic.attempts_used), maxAttempts: policy.max_attempts,
     });
-    const outcome = threshold.passed ? "understood" : threshold.capped ? "capped_out" : "retest_offered";
+    // The outcome is what the transaction wrote (its own threshold read, in the same write).
+    const settledState = result.topic?.status || topicStateAfterScore(result);
+    const outcome = settledState === "understood" ? "understood" : settledState === "capped_out" ? "capped_out" : "retest_offered";
+    threshold.passed = outcome === "understood";
+    const settled = result.topic || null;
     const percentage = result.total ? Math.round((result.score || 0) * 100) : 0;
     await log(session.id, topic.id, {
       eventType: "engine_result", origin: "engine",
@@ -635,26 +734,25 @@ export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentC
       learnerId, sessionRef: `study_prep:${session.id}`, topicLabel: topic.label, subject: session.subject,
       passed: threshold.passed, score: result.score, mastery,
     });
-    if (outcome === "retest_offered") {
-      // The topic stays active; the retest is gated on the teach-back confirm.
-      return { session: publicSession(session), topic: publicTopic(topic), result, outcome, mastery };
-    }
-    const updatedTopic = await store.updateTopicConditional(topic.id, "active", {
-      status: outcome, updated_at: now(),
-    });
-    return { session: publicSession(session), topic: publicTopic(updatedTopic || topic), result, outcome, mastery };
+    // retest_offered: intervention_required — Teaching (D15) or the inline teach-back unlocks the retest.
+    return { session: publicSession(session), topic: publicTopic(settled || topic), result, outcome, mastery };
   }
 
-  /** The human gate: only the learner's own confirmation unlocks a retest. */
+  /**
+   * The inline human gate (the fallback when Teaching is off, or taught
+   * elsewhere): only the learner's own confirmation unlocks a retest —
+   * intervention_required | awaiting_teaching → retest_ready.
+   */
   async function confirmTeachBack({ sessionId, learnerId, topicId }) {
     const session = await ownedSession(sessionId, learnerId);
     if (!session) throw new HarnessRejection("session_not_found", "Study-prep session was not found", 404);
     const topics = await store.getTopics(session.id);
     const topic = topics.find((row) => row.id === topicId);
-    if (!topic || topic.status !== "active") return reject(session, "invalid_state_transition", "That topic is not active");
-    const updated = await store.updateTopicConditional(topic.id, "active", {
-      learner_confirmed_ready: true, updated_at: now(),
-    });
+    if (topic?.status === "retest_ready") return reject(session, "invalid_state_transition", "The teach-back was already confirmed");
+    if (!topic || !["intervention_required", "awaiting_teaching"].includes(topic.status)) {
+      return reject(session, "invalid_state_transition", "That topic is not waiting for a teach-back");
+    }
+    const updated = await moveTopic(topic, "retest_ready", { learner_confirmed_ready: true });
     if (!updated) return reject(session, "invalid_state_transition", "The teach-back was already confirmed");
     await log(session.id, topic.id, {
       eventType: "human_gate", origin: "harness", decisionNode: "teach_back_confirmed",
@@ -664,8 +762,101 @@ export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentC
     return { session: publicSession(session), topic: publicTopic(updated) };
   }
 
-  /** offer_strategy — propose level, curated library only (Decision 3). */
-  async function offerStrategy({ sessionId, learnerId, topicId, strategy, intent = null }) {
+  /**
+   * request_teaching (D15, §8.4 strategy_selection) — every intervention is a
+   * Teaching Workflow: the agent picks the strategy (and the gaps to focus on),
+   * the harness checks the state, the strategy and idempotency, creates the
+   * teaching session (child of the Study Prep workflow) and moves the topic
+   * intervention_required → awaiting_teaching. Asking again while it waits is
+   * idempotent (the same session; a new strategy is recorded on it).
+   * Teaching off → teaching_unavailable: the agent falls back to offer_strategy.
+   */
+  async function requestTeaching({ sessionId, learnerId, topicId = null, strategy = "teach_back", focusGaps = null, peerExplanations = null, intent = null, origin = "agent" }) {
+    const session = await ownedSession(sessionId, learnerId);
+    if (!session) throw new HarnessRejection("session_not_found", "Study-prep session was not found", 404);
+    await check("request_teaching", { session });
+    if (!isPermittedStrategy(strategy)) {
+      return reject(session, "strategy_not_permitted", `“${strategy}” is not in the approved strategy list`, { strategy });
+    }
+    const topics = await store.getTopics(session.id);
+    const topic = topics.find((row) => row.id === topicId) || activeTopic(topics);
+    if (!topic || !["intervention_required", "awaiting_teaching"].includes(topic.status)) {
+      return reject(session, "invalid_state_transition", "Only a topic that needs an intervention can be handed to a teaching session", { state: topic?.status || null });
+    }
+    if (!teaching?.request) return reject(session, "teaching_unavailable", "Teaching sessions are not available — offer an inline strategy instead", { topic: topic.label });
+    if (intent != null) {
+      await log(session.id, topic.id, {
+        eventType: "agent_action", origin: "agent_stated_intent", action: "request_teaching", agentIntent: intent, facts: { strategy },
+      });
+    }
+    const gaps = (Array.isArray(focusGaps) && focusGaps.length ? focusGaps : topic.check_result?.gaps || [])
+      .map((g) => String(g || "").trim().slice(0, 120)).filter(Boolean).slice(0, 4);
+    const peers = Array.isArray(peerExplanations) ? peerExplanations.map((p) => String(p || "").trim().slice(0, 240)).filter(Boolean).slice(0, 3) : [];
+    const view = await teaching.request({
+      session, strategy, gaps, peerExplanations: peers,
+      topic: { id: topic.id, label: topic.label, attemptsUsed: Number(topic.attempts_used || 0) },
+    }).catch(() => null);
+    if (!view?.workflowId) return reject(session, "teaching_unavailable", "The teaching session couldn't be set up — offer an inline strategy instead", { topic: topic.label });
+    const reused = topic.status === "awaiting_teaching";
+    const updated = reused
+      ? (topic.teaching_workflow_id === view.workflowId ? topic : await store.updateTopicConditional(topic.id, "awaiting_teaching", { teaching_workflow_id: view.workflowId, updated_at: now() }))
+      : await moveTopic(topic, "awaiting_teaching", { teaching_workflow_id: view.workflowId, learner_confirmed_ready: false });
+    if (!updated) return reject(session, "invalid_state_transition", "The topic moved on — refresh and try again");
+    await log(session.id, topic.id, {
+      eventType: "harness_decision", origin: "harness", decisionNode: "teaching_requested",
+      facts: { topic: topic.label, strategy, focus: gaps.length, teachingWorkflowId: view.workflowId, reused, requestedBy: origin },
+      narrative: deliberate("teaching_requested", { topicLabel: topic.label, strategy })?.narrative,
+    });
+    return { session: publicSession(session), topic: publicTopic(updated), teaching: view, strategy, reused };
+  }
+
+  /**
+   * TEACHING_COMPLETED (the handoff's outcome hook): awaiting_teaching →
+   * retest_ready, and the retest unlocks (it starts by itself a minute later).
+   * A topic handed over before the topic states (still active /
+   * intervention_required) walks the legal path. Idempotent.
+   */
+  async function completeTeaching({ sessionId, learnerId, topicId, workflowId = null, objectiveMet = null }) {
+    const session = await ownedSession(sessionId, learnerId);
+    if (!session) throw new HarnessRejection("session_not_found", "Study-prep session was not found", 404);
+    const topics = await store.getTopics(session.id);
+    let topic = topics.find((row) => row.id === topicId);
+    if (!topic) return reject(session, "invalid_state_transition", "That topic is not part of this session");
+    if (topic.status === "retest_ready") return { session: publicSession(session), topic: publicTopic(topic), already: true };
+    if (topic.status === "active") topic = (await moveTopic(topic, "intervention_required")) || topic;
+    if (topic.status === "intervention_required") topic = (await moveTopic(topic, "awaiting_teaching", workflowId ? { teaching_workflow_id: workflowId } : {})) || topic;
+    if (topic.status !== "awaiting_teaching") {
+      return reject(session, "invalid_state_transition", `A ${String(topic.status).replace(/_/g, " ")} topic is not waiting for teaching`);
+    }
+    const updated = await moveTopic(topic, "retest_ready", { learner_confirmed_ready: true });
+    if (!updated) return reject(session, "invalid_state_transition", "The topic moved on — refresh and try again");
+    await log(session.id, topic.id, {
+      eventType: "harness_decision", origin: "harness", decisionNode: "teaching_completed",
+      facts: { topic: topic.label, teachingWorkflowId: workflowId || topic.teaching_workflow_id || null, objectiveMet },
+      narrative: deliberate("teaching_completed", { topicLabel: topic.label })?.narrative,
+    });
+    return { session: publicSession(session), topic: publicTopic(updated) };
+  }
+
+  /** The teaching session ended with nothing taught: offered again → the topic keeps waiting; else it needs a new intervention. */
+  async function teachingAbandoned({ sessionId, learnerId, topicId, reofferedWorkflowId = null }) {
+    const session = await ownedSession(sessionId, learnerId);
+    if (!session) throw new HarnessRejection("session_not_found", "Study-prep session was not found", 404);
+    const topics = await store.getTopics(session.id);
+    const topic = topics.find((row) => row.id === topicId);
+    if (!topic || topic.status !== "awaiting_teaching") return { session: publicSession(session), topic: topic ? publicTopic(topic) : null };
+    const updated = reofferedWorkflowId
+      ? await store.updateTopicConditional(topic.id, "awaiting_teaching", { teaching_workflow_id: reofferedWorkflowId, updated_at: now() })
+      : await moveTopic(topic, "intervention_required");
+    return { session: publicSession(session), topic: publicTopic(updated || topic) };
+  }
+
+  /**
+   * offer_strategy — propose level, curated library only (Decision 3). The
+   * learner's acceptance (`accepted`, from the route) runs the harness
+   * strategy (replan / schedule / offline export) and starts its outcome.
+   */
+  async function offerStrategy({ sessionId, learnerId, topicId, strategy, intent = null, accepted = false }) {
     const session = await ownedSession(sessionId, learnerId);
     if (!session) throw new HarnessRejection("session_not_found", "Study-prep session was not found", 404);
     if (!isPermittedStrategy(strategy)) {
@@ -673,6 +864,9 @@ export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentC
     }
     const topics = await store.getTopics(session.id);
     const topic = topics.find((row) => row.id === topicId) || activeTopic(topics);
+    // Strategy Library (Phase 4a): limits.maxUsesPerTopic, ranked candidates, execution on acceptance.
+    const run = (await strategyRun({ strategy, accepted, learnerId, session, topic, topics, store, now })) || {};
+    if (run.refusal) return reject(session, "strategy_not_permitted", run.message || `“${strategy}” cannot be used here now`, { strategy, reason: run.refusal });
     if (intent != null) {
       await log(session.id, topic?.id || null, {
         eventType: "agent_action", origin: "agent_stated_intent", action: "offer_strategy",
@@ -681,10 +875,14 @@ export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentC
     }
     await log(session.id, topic?.id || null, {
       eventType: "harness_decision", origin: "harness", decisionNode: "strategy_offered",
-      facts: { strategy, topic: topic?.label || null },
+      facts: { strategy, topic: topic?.label || null, ...(run.accepted ? { accepted: true, executed: !!run.execution?.executed, operation: run.execution?.operation || null, executionReason: run.execution?.reason || null } : {}) },
       narrative: deliberate("strategy_offered", { strategy, topicLabel: topic?.label })?.narrative,
     });
-    return { strategy, topic: topic ? publicTopic(topic) : null, library: STRATEGY_LIBRARY };
+    return {
+      strategy, topic: topic ? publicTopic(topic) : null, library: STRATEGY_LIBRARY,
+      ...(run.recommended ? { recommended: run.recommended } : {}),
+      ...(run.accepted ? { accepted: true, execution: run.execution || null } : {}),
+    };
   }
 
   /** advance_topic — terminal action; the next queued topic becomes active. */
@@ -836,7 +1034,7 @@ export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentC
     // A paused session resumes into topic_active when a topic exists,
     // planning when the plan never completed (agent_loop_cap during planning).
     const topics = await store.getTopics(session.id);
-    const to = topics.some((row) => row.status === "active" || row.status === "queued") ? "topic_active" : "planning";
+    const to = topics.some((row) => isTopicInProgress(row.status) || row.status === "queued") ? "topic_active" : "planning";
     const updated = await store.updateSessionConditional(session.id, "paused", { status: to, paused_reason: null, updated_at: now() });
     if (!updated) return reject(session, "invalid_state_transition", "The session moved on — refresh and try again");
     return { session: publicSession(updated, topics) };
@@ -944,18 +1142,25 @@ export function createHarness({ store: rawStore, topicWorkflow, syllabus, agentC
       if (session.status === "completed" || session.status === "cancelled" || session.status === "abandoned") return "ended";
       if (!current) return "advance_or_conclude";
       if (current.checkBattleId && !current.checkScoredAt) return "agent_check_running";
+      if (current.state === "awaiting_teaching") return "awaiting_teaching";
+      if (current.state === "retest_ready") return "retest_ready";
       if (!current.examPrepRunId && !current.checkBattleId) return "start_practice";
       const run = current.learnerConfirmedReady ? "retest_ready" : "awaiting_submission_or_teach_back";
       return run;
     })();
-    return { session, topics, step, activeTopic: current ? publicTopic(current) : null };
+    return { session, topics, step, activeTopic: current || null };
   }
+
+  // §8.8 files: materials.list / materials.search / syllabus.from_documents / learner.request_materials.
+  const materialsOps = makeMaterialsOps({ store, materials: syllabus?.materials || null, log, reject, check, ownedSession, now });
 
   return {
     // The guarded store (definition checks + workflow mirror): the agent loop writes through it too.
     store,
+    ...materialsOps,
     createSession, proposePlan, confirmPlan, adjustPlan,
     startTopicPractice, submitPractice, completeAgentCheck, confirmTeachBack, offerStrategy,
+    requestTeaching, completeTeaching, teachingAbandoned,
     advanceTopic, deferTopic, retryDeferredTopic, flagTopic,
     concludeSession, pauseSession, resumeSession, cancelSession,
     validateProposedPlan, getSessionView, sessionNext, generateSyllabus, resolveSyllabus,

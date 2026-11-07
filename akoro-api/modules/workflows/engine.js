@@ -11,7 +11,7 @@
  *   engine.transition(id, { from, to, reason })
  *   engine.pause(id, reason) · complete(id, outcome) · abandon(id, reason) · cancel(id, reason)
  *   engine.emitOutcome(id, outcome) · engine.listForLearner(learnerId, { active })
- *   engine.appendEvent(id, event) · engine.events(id)
+ *   engine.appendEvent(id, event) · engine.events(id) · engine.selectModel(id, selection)
  */
 import { publishWorkflowEvent } from "./bus.js";
 import { assertTransition, isTerminalStatus, statusFor, TransitionError, WORKFLOW_TYPES } from "./definition.js";
@@ -130,6 +130,13 @@ export function createWorkflowEngine({ store, definitionOf = workflowDefinition,
     return store.updateInstanceConditional(id, instance.state, { metadata: { ...(instance.metadata || {}), ...metadata }, updated_at: now() });
   }
 
+  /** Save the learner's model pick on the run (§7.11.5), without moving it (CAS on its current state). */
+  async function selectModel(id, selection = {}) {
+    const instance = await store.getInstance(id);
+    if (!instance) throw new WorkflowError("workflow_not_found", "That workflow was not found", 404);
+    return store.updateInstanceConditional(id, instance.state, { model_selection: selection || {}, updated_at: now() });
+  }
+
   async function appendEvent(id, event) {
     const instance = await store.getInstance(id);
     if (!instance) throw new WorkflowError("workflow_not_found", "That workflow was not found", 404);
@@ -141,5 +148,5 @@ export function createWorkflowEngine({ store, definitionOf = workflowDefinition,
 
   const events = (id, opts) => store.listEvents(id, opts);
 
-  return { create, get, resume, transition, pause, complete, abandon, cancel, emitOutcome, listForLearner, annotate, appendEvent, events };
+  return { create, get, resume, transition, pause, complete, abandon, cancel, emitOutcome, listForLearner, annotate, selectModel, appendEvent, events };
 }

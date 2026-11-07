@@ -92,6 +92,8 @@ test("the view: linked learners only, sensitive hidden behind the flag, class to
   assert.deepEqual({ linked: jss1.linked, unlinked: jss1.unlinked, open: jss1.open, resolved: jss1.resolved, struggling: jss1.learnersStruggling, flag: jss1.mayNeedSupport },
     { linked: 2, unlinked: 1, open: 2, resolved: 1, struggling: 1, flag: 1 });
   assert.deepEqual(jss1.topTypes.map((t) => [t.type, t.learners]), [["misconception", 1], ["decay", 1]]);
+  assert.equal(jss1.sensitiveOpen, 2, "sensitive struggles are counted for the class — never described");
+  assert.equal(view.classes.find((c) => c.classId === "jss2").sensitiveOpen, 0);
   assert.ok(!jss1.topTypes.some((t) => SENSITIVE_TYPES.includes(t.type)), "sensitive types never in totals");
   assert.deepEqual(view.learners.map((l) => l.studentId), ["s1", "s2"], "s3 (unlinked) and s4 (nothing) take no space");
   const ada = view.learners[0];

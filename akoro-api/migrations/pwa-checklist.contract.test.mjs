@@ -128,7 +128,7 @@ test("wake lock: the screen stays on for every kind of session", () => {
 test("offline: the Workbox SW precaches the shell and serves reads offline", () => {
   assert.ok(viteConfig.includes("VitePWA("), "vite-plugin-pwa generates the service worker");
   assert.ok(viteConfig.includes("globPatterns:"), "the app shell is precached — opens with no connection");
-  assert.ok(viteConfig.includes("importScripts: ['/push-sw.js']"), "push handlers ride inside the Workbox SW");
+  assert.match(viteConfig, /importScripts: \[[^\]]*'\/push-sw\.js'/, "push handlers ride inside the Workbox SW");
   assert.ok(viteConfig.includes("runtimeCaching:"), "reads are runtime-cached");
   assert.ok(viteConfig.includes("handler: 'NetworkFirst'") && viteConfig.includes("handler: 'StaleWhileRevalidate'"),
     "documents prefer the network, catalogs serve instantly");
@@ -136,6 +136,22 @@ test("offline: the Workbox SW precaches the shell and serves reads offline", () 
     "the SW claims clients on first install and cleans the old precache on activation");
   assert.ok(updatePrompt.includes("registerSW") && updatePrompt.includes("onNeedRefresh"),
     "the app registers the SW and prompts on new versions");
+});
+
+test("no clear-data: a deploy can't leave the shell pointing at a missing or poisoned entry", async () => {
+  const [vercel, swRepair, chunkRetry] = await Promise.all([
+    read(dir + "vercel.json"), read(dir + "public/sw-repair.js"), read(dir + "src/utils/chunkRetry.js"),
+  ]);
+  // The entry (index-*.js, >400 KB) must be precached WITH the shell; the size
+  // filter used to drop it → blank screen after a deploy.
+  assert.ok(viteConfig.includes("isEntry(e.url) ||"), "the size filter never drops the app entry");
+  // vite-plugin-pwa adds navigateFallback when omitted — set it on purpose, with the denylist.
+  assert.ok(viteConfig.includes("navigateFallback: 'index.html'") && viteConfig.includes("navigateFallbackDenylist"), "explicit app-shell fallback with a denylist");
+  assert.ok(viteConfig.includes("'/sw-repair.js'") && swRepair.includes("addEventListener('activate'"), "poisoned runtime entries are removed on activation");
+  assert.ok(viteConfig.includes("cacheWillUpdate"), "the asset cache stores only real JS/CSS");
+  assert.ok(vercel.includes("(?!assets/)"), "a missing /assets file is a real 404, never index.html");
+  assert.ok(html.includes("__akoroBooted") && html.includes("Repair app"), "the boot watchdog repairs a shell that never starts");
+  assert.ok(chunkRetry.includes("waitForNewController"), "recovery waits for the new worker before reloading");
 });
 
 test("updates: the banner owns the version swap — the new SW waits, the old page never breaks", () => {

@@ -19,7 +19,20 @@ const T = "edu.study_prep_topics";
 const E = "edu.study_prep_events";
 
 /** Install the fake for one test and restore it afterwards. */
+/** edu.record_learner_concept_evidence, as the SQL does it: insert, ON CONFLICT DO NOTHING (Phase 4a recorder). */
+const evidenceRpc = {
+  record_learner_concept_evidence: (a, s) => {
+    const rows = s.table("edu.learner_concept_evidence");
+    const dup = rows.find((r) => r.learner_id === a.p_learner_id && r.source_session_id === a.p_source_session_id && r.source_turn_id === a.p_source_turn_id && r.concept_id === a.p_concept_id);
+    if (!dup) rows.push({ learner_id: a.p_learner_id, concept_id: a.p_concept_id, source_session_id: a.p_source_session_id, source_turn_id: a.p_source_turn_id,
+      observation_kind: a.p_observation_kind, response_quality: a.p_response_quality, claim_validity: a.p_claim_validity, model_confidence: a.p_model_confidence,
+      claim_status: a.p_claim_status, evidence_summary: a.p_evidence_summary, provenance: a.p_provenance });
+    return { data: [] };
+  },
+};
+
 function fakeFor(t, seed = {}, options = {}) {
+  options = { ...options, rpc: { ...evidenceRpc, ...(options.rpc || {}) } };
   const fake = installFakeDb(db, seed, options);
   t.after(() => fake.restore());
   return fake;
@@ -302,9 +315,10 @@ test("recordMasteryEvidence upserts one learner_concept_evidence row when an app
     {
       id: undefined, created_at: undefined,
       learner_id: L, concept_id: "c-som", source_session_id: "sess-1:topic-1", source_turn_id: "sess-1:topic-1:attempt",
-      observation_kind: "assessment_result", response_quality: 0.8, claim_validity: 1, model_confidence: 1,
+      // Through the one recorder (Phase 4a): Study Prep's word weighs 0.7; still ledger-only (not_checked).
+      observation_kind: "assessment_result", response_quality: 0.8, claim_validity: 1, model_confidence: 0.7,
       claim_status: "not_checked", evidence_summary: "Study-prep passed: score 80% (mastery → 0.6)",
-      provenance: { source: "study_prep", mastery: { previous: 0.2, next: 0.6 } },
+      provenance: { source: "study_prep", subject: "Basic Science", topic: "States of Matter", mastery: { previous: 0.2, next: 0.6 } },
     },
   );
 });
@@ -344,7 +358,10 @@ test("recordMasteryEvidence is best-effort: a catalog error returns null, an ups
   t.after(() => { console.error = original; });
   fake.failNext("edu.concept_catalog", "select", { message: "catalog down" });
   assert.equal(await store.recordMasteryEvidence(args), null);
-  fake.failNext("edu.learner_concept_evidence", "upsert", { message: "upsert failed" });
+  // The evidence write itself fails (the SQL function errors): the matched concept is still returned, the error logged.
+  const fakeFail = fakeFor(t, { "edu.concept_catalog": [{ id: "c1", status: "approved", subject: "Basic Science", topic_key: "living-things", title: "Living Things" }] },
+    { rpc: { record_learner_concept_evidence: () => ({ error: { message: "upsert failed" } }) } });
+  withIlikeOr(fakeFail);
   assert.equal(await store.recordMasteryEvidence(args), "c1");
   assert.ok(errors.some((e) => e.includes("upsert failed")));
 });

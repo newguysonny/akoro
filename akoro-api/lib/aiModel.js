@@ -9,6 +9,7 @@
  */
 import { embeddingsProvider, isSelfHostedModel, runpodEmbeddings } from "./embeddingProvider.js";
 import OpenAI from "openai";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { coinsAvailable, chargeForAI, InsufficientCoins } from "./coins.js";
 import { makeAiBreaker } from "./circuitBreaker.js";
 import { aiContext } from "./aiContext.js";
@@ -25,6 +26,37 @@ export const OPENAI_MODEL = modelRegistry.defaultId;
 // Providers other than OpenAI, behind the same call path (§7.11.4).
 const adapters = { openai_compatible: makeOpenAICompatibleAdapter(), anthropic: makeAnthropicAdapter() };
 export { InsufficientCoins };
+
+// Stand-in providers for the code that runs inside runWithProviders only (a
+// Verification Gate check forcing a refusal, contract tests). Every other call
+// — the rest of the server's traffic — keeps the real providers.
+const providerOverrides = new AsyncLocalStorage();
+/** Run fn with { openai?, anthropic?, openai_compatible? } adapters ({ create(params, reqOpts, entry) }) in place of the real ones. */
+export function runWithProviders(overrides, fn) {
+  return providerOverrides.run(overrides || {}, fn);
+}
+
+/** A refused reply (Claude stop_reason "refusal", an OpenAI refusal): { reason, category } | null. */
+export function refusalOf(res) {
+  const choice = res?.choices?.[0];
+  const msg = choice?.message || {};
+  if (msg.refusal) return { reason: String(msg.refusal).slice(0, 300), category: msg.refusal_category ?? null };
+  if (choice?.finish_reason === "content_filter" && !msg.tool_calls?.length && !msg.content) return { reason: "The model declined this request.", category: null };
+  return null;
+}
+
+/**
+ * Where a refused call goes next: the entry's fallbackModel, else the default —
+ * never itself — and, like every call, AI_FORCE_MODEL applies (a sandbox with
+ * OpenAI off retries on the forced model). noForce: a check's stand-ins.
+ */
+export function refusalFallbackFor(entry, { registry = modelRegistry, env = process.env, noForce = false } = {}) {
+  const base = (entry?.fallbackModel && registry.get(entry.fallbackModel)) || registry.get(registry.defaultId);
+  const target = base && entry && base.id !== entry.id && base.enabled ? base : null;
+  if (!target || noForce) return target;
+  const forced = forcedModelFor(target, target.apiModel, { registry, env });
+  return forced && forced.id !== entry.id ? forced : target;
+}
 
 // One breaker per endpoint family. Every model call in the app — chat,
 // streaming chat, embeddings, voice, tasks, training — funnels through these
@@ -73,16 +105,27 @@ async function meteredCreate(params = {}) {
   delete clean.__role; delete clean.__learnerChoice; delete clean.__allowedModels;
   // Which model (§7.11.3): the caller's own `model`, else resolved from the
   // role and the learner's choice. Either way the catalogue says who serves it.
-  let entry = clean.model
+  // A call site's own model is its default: a learner's pick that resolves
+  // for the call's role (never a locked one) still wins (Scenario K).
+  const picked = clean.model && params.__learnerChoice
+    ? modelRegistry.resolve({ role: params.__role || "chat", learnerChoice: params.__learnerChoice, allowedModels: params.__allowedModels || null })
+    : null;
+  let entry = picked?.source === "learner" ? picked.model : clean.model
     ? (modelRegistry.get(clean.model) || modelRegistry.catalogue.find((e) => e.apiModel === clean.model) || null)
     : modelRegistry.resolveModel({ role: params.__role || "chat", learnerChoice: params.__learnerChoice || null, allowedModels: params.__allowedModels || null });
   // AI_FORCE_MODEL (a test sandbox switch, e.g. OpenAI out of credit): every
   // chat call that would go to OpenAI is served by this catalogue model instead.
-  const forced = forcedModelFor(entry, clean.model);
+  // A check's stand-in providers can ask to see the unforced choice (`noForce`).
+  const overrides = providerOverrides.getStore() || null;
+  const forced = overrides?.noForce ? null : forcedModelFor(entry, clean.model);
   if (forced) entry = forced;
   if (entry) clean.model = entry.apiModel;
-  const adapter = entry && entry.provider !== "openai" ? adapters[entry.provider] : null;
-  const fire = (body, opts) => (adapter ? adapter.create(body, opts, entry) : chatBreaker.fire(body, opts));
+  const serve = (e, body, opts) => {
+    const provider = e?.provider || "openai";
+    if (overrides?.[provider]) return overrides[provider].create(body, opts, e);
+    return provider !== "openai" && adapters[provider] ? adapters[provider].create(body, opts, e) : chatBreaker.fire(body, opts);
+  };
+  const fire = (body, opts) => serve(entry, body, opts);
   // Per-call SDK bounds (`__timeoutMs` / `__maxRetries`). The SDK's defaults
   // are a 10-MINUTE timeout with 2 retries — a single stalled provider call
   // once hung a chat turn for minutes while the browser had long given up.
@@ -108,21 +151,21 @@ async function meteredCreate(params = {}) {
 
   // Billed and recorded under the catalogue id, priced at its own rate.
   const model = entry?.id || clean.model || OPENAI_MODEL;
-  const charge = (usage) => chargeForAI({ userId, feature, model, usage, ref, billTo })
+  const charge = (usage, m = model) => chargeForAI({ userId, feature, model: m, usage, ref, billTo })
     .catch((e) => { if (!(e instanceof InsufficientCoins)) console.warn("[coins] charge failed:", e.message); });
 
   // Every call is TIMED, whether or not it is billed. Cost and tokens used to
   // be recorded only by the wallet debit, so a system or cron call — no payer,
   // no debit — left no trace at all, and latency was recorded nowhere.
   const started = Date.now();
-  const report = (usage, { ttfbMs = null, streamed = false, ok = true, errorKind = null } = {}) => {
+  const report = (usage, { ttfbMs = null, streamed = false, ok = true, errorKind = null, as = model } = {}) => {
     const tokensIn  = usage?.prompt_tokens ?? 0;
     const tokensOut = usage?.completion_tokens ?? 0;
     const cachedIn  = usage ? cachedTokensOf(usage) : 0;
     recordAiCall({
-      feature, model, ms: Date.now() - started, ttfbMs,
+      feature, model: as, ms: Date.now() - started, ttfbMs,
       tokensIn, tokensOut, cachedIn,
-      costUsd: usage ? usdCost(model, tokensIn, tokensOut, cachedIn) : null,
+      costUsd: usage ? usdCost(as, tokensIn, tokensOut, cachedIn) : null,
       userId, ref, streamed, ok, errorKind,
     });
   };
@@ -155,6 +198,28 @@ async function meteredCreate(params = {}) {
 
   report(res?.usage ?? null);
   if (bills && res?.usage) charge(res.usage);
+
+  // A refusal is not a crash (§7.11.4): the refused call is billed as it ran,
+  // then the same request goes once to the fallback model (the entry's
+  // fallbackModel, else the default). The answer carries `model_refusal` so
+  // an agent loop records a model_refusal observation, never a malformed one.
+  const refused = entry ? refusalOf(res) : null;
+  if (refused) {
+    const target = refusalFallbackFor(entry, { noForce: !!overrides?.noForce });
+    const note = { model: entry.id, reason: refused.reason, category: refused.category, fallbackModel: target?.id || null };
+    console.warn(`[ai] model_refusal on ${entry.id} (${feature})${target ? ` — retrying on ${target.id}` : ""}`);
+    if (!target) return Object.assign(res, { model_refusal: note });
+    let second;
+    try {
+      second = await serve(target, { ...clean, model: target.apiModel }, reqOpts);
+    } catch (e) {
+      report(null, { ok: false, errorKind: errorKindOf(e), as: target.id });
+      return Object.assign(res, { model_refusal: { ...note, fallbackError: String(e?.message || e).slice(0, 200) } });
+    }
+    report(second?.usage ?? null, { as: target.id });
+    if (bills && second?.usage) charge(second.usage, target.id);
+    return Object.assign(second || {}, { model_refusal: note });
+  }
   return res;
 }
 

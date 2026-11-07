@@ -90,6 +90,11 @@ export async function buildDefinition({ stage, goal, params, slice, feedback = n
   ];
   // A resume: these capabilities were approved FOR this goal (by an admin, or the learner) — they are what answers it.
   // `approved`: one line per capability, saying how to use it (pipeline.howToUse).
+  // The shared rules tell recipe/spec builds to answer "needs scheduling logic" —
+  // that answer means "use CODE". At the code stage it is wrong: writing that
+  // logic is this stage's whole job (a DeepSeek builder obeyed the shared rule
+  // here in 2 of 3 gate repeats, 2026-11-03).
+  if (stage === "code") messages.push({ role: "user", content: "You are writing CODE now. Plans over dates, spreading items across days, N per day, skipping days and rules that depend on earlier choices are exactly what this stage is for — write run() for them. Answer notExpressible only if the DATA needed isn't in `available` (e.g. other learners' rows)." });
   if (approved.length) messages.push({ role: "user", content: `This was approved for exactly this goal — build it with what was approved: ${approved.join("; ")}. Don't answer notExpressible.` });
   if (feedback) messages.push({ role: "user", content: `Your previous attempt failed: ${feedback}\nFix it and answer again with ONE JSON object.` });
   const resp = await openai.chat.completions.create({
@@ -99,7 +104,24 @@ export async function buildDefinition({ stage, goal, params, slice, feedback = n
     __feature: "self_tooling", ...(platformPays ? { __payer: "platform" } : { __userId: learnerId }),
   });
   const raw = resp.choices?.[0]?.message?.content || "";
-  let parsed = null;
-  try { parsed = JSON.parse(raw); } catch { return { raw, notExpressible: null, error: `the builder didn't answer with JSON (${raw.length} chars: ${raw.slice(0, 60).replace(/\s+/g, " ")}…${raw.slice(-40).replace(/\s+/g, " ")})` }; }
+  const parsed = parseBuilderJson(raw);
+  if (!parsed) { return { raw, notExpressible: null, error: `the builder didn't answer with JSON (${raw.length} chars: ${raw.slice(0, 60).replace(/\s+/g, " ")}…${raw.slice(-40).replace(/\s+/g, " ")})` }; }
   return { raw, definition: parsed.definition || null, samples: Array.isArray(parsed.samples) ? parsed.samples.slice(0, 3) : [], notExpressible: parsed.notExpressible || null };
+}
+
+/**
+ * The builder's JSON, or null. `samples` comes LAST and is optional, and a
+ * model sometimes mangles it (DeepSeek, 2026-11-03: a correct definition
+ * followed by `"samples":[{},{"}]}`) — then keep everything before it rather
+ * than throwing away a good build. The definition is still fully validated
+ * and verified after this, so nothing unchecked gets through.
+ */
+export function parseBuilderJson(raw) {
+  const text = String(raw || "").trim();
+  try { return JSON.parse(text); } catch { /* try the salvage below */ }
+  const cut = text.lastIndexOf(',"samples"');
+  if (cut > 0) {
+    try { return JSON.parse(text.slice(0, cut) + "}"); } catch { /* not salvageable */ }
+  }
+  return null;
 }

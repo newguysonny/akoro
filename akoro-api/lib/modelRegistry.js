@@ -35,6 +35,9 @@
  */
 import { DEFAULT_MODEL_PRICES, registerModelPrice } from "./aiPricing.js";
 
+/** AI_MODEL_PICKER_ENABLED — on by default (2026-11-07); "false" / "0" / "off" / "no" turns it off. */
+export const pickerFlag = (env = process.env) => !["false", "0", "off", "no"].includes(String(env.AI_MODEL_PICKER_ENABLED ?? "true").trim().toLowerCase());
+
 export const PROVIDERS = Object.freeze(["openai", "openai_compatible", "anthropic"]);
 
 /** Older AI_MODELS spelling: Grok / DeepSeek as their own providers → openai_compatible. */
@@ -66,6 +69,11 @@ export const ROLES = Object.freeze({
   persona: { caps: [] },                    // protégé, NaNa
   assessor: { caps: [], locked: true },     // Sargeant: grading stays consistent across learners
   evidence: { caps: [], locked: true },     // evidence analysis
+  // Agent Check (§7.12.2, D23): the learner's agent answering from its notes, and NaNa's
+  // questions. A stronger model would answer from general knowledge, and question
+  // difficulty must not change with the learner's plan — scores stay comparable.
+  agent_recall: { caps: [], locked: true },
+  question_generator: { caps: [], locked: true },
   background: { caps: [] },                 // schedulers, prewarm, tasks — no learner chose them
 });
 
@@ -152,7 +160,7 @@ export function createModelRegistry(env = process.env) {
     ...Object.entries(ROLES).filter(([, r]) => r.locked).map(([name]) => name),
     ...String(env.AI_MODEL_LOCKED_ROLES || "").split(",").map((s) => s.trim()).filter(Boolean),
   ]);
-  const pickerOn = String(env.AI_MODEL_PICKER_ENABLED || "false").toLowerCase() === "true";
+  const pickerOn = pickerFlag(env);
   const roleEnv = (role) => env[`AI_MODEL_ROLE_${String(role).toUpperCase()}`] || null;
   const hasCaps = (entry, role) => (ROLES[role]?.caps || []).every((c) => entry.caps[c]);
 

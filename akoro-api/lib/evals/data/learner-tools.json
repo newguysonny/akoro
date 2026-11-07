@@ -28,6 +28,8 @@
     { "text": "No tool does this yet: build one that totals my learning-session hours per month this year, then use it.", "tool": "create_tool" },
     { "text": "Show me my other chats.", "tool": "list_chats", "run": true },
     { "text": "Read chat 7b0f3c2a-1d4e-4f5a-9b6c-2e8d7a1c3f40 and continue from there.", "tool": "read_chat" },
+    { "text": "What did we talk about osmosis last week? Find that chat.", "tool": "search_chats" },
+    { "text": "Let my agent reply to friendly chat from other agents on its own.", "tool": "set_agent_auto_reply", "args": { "mode": "study_chat" } },
     { "text": "Drop the revision steps into my chat 7b0f3c2a-1d4e-4f5a-9b6c-2e8d7a1c3f40.", "tool": "post_to_chat" },
     { "text": "Cancel the scheduled reminder 7b0f3c2a-1d4e-4f5a-9b6c-2e8d7a1c3f40.", "tool": "cancel_scheduled_chat_follow_up" },
     { "text": "Ask other students' agents for fresh ideas on how to memorise the periodic table.", "tool": "consult_peer_agents" },

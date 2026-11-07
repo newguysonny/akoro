@@ -21,6 +21,13 @@ import { gradingScenarios } from "./grading.js";
 import { authoringVersionsParts, authoringDiagramsEdits } from "./authoring.js";
 import { inboxOneList } from "./inbox.js";
 import { quietLearningPass } from "./quietLearning.js";
+import { MEMORY_RECALL } from "./memoryRecall.js";
+import { CHAT_CONTINUITY } from "./chatContinuity.js";
+import { NETWORK_AUTO } from "./networkAuto.js";
+import { imageExtraction } from "./imageExtraction.js";
+import { LEARNING_EVENTS } from "./learningEvents.js";
+import { LEARNER_MODEL } from "./learnerModel.js";
+import { STUDY_PREP_EXIT } from "./studyPrepExit.js";
 import { plannerRichGather } from "./richGather.js";
 import { proactiveInChat } from "./proactiveChat.js";
 import { kindObserveThenLive, outboxDelivery } from "./proactiveModes.js";
@@ -47,12 +54,16 @@ import { ratingSavedNotInPrompt, promptOverrideFlagged } from "./ratingsPrompts.
 import { teacherSchoolReads, paymentsSingleMount, courseInviteJoin, sharedSecretsFailClosed, noFallbackSecrets, ownershipReads } from "./security.js";
 import { loopGuardTimeLimits, actionBasis } from "./agentHygiene.js";
 import { schoolStrugglesScope, modelPickerResolution } from "./schoolStruggles.js";
+import { PHASE11_UI } from "./phase11Ui.js";
+import { pickPersisted, pickReachesWorkflows, noForcedToolChoiceClaude, refusalFallback } from "./modelPicks.js";
+import { runToMastery, teachingChain } from "./teachingChain.js";
+import { PHASE5_TOOLS } from "./phase5Tools.js";
 
 const ALL = [healthBuild, toolsCatalogue, sessionTokensOnly, r2Live, embeddingsLive, embeddingsCompare, searchTextFallback, scheduleMessageHere, toolErrorHonesty, pastQuestionsTruth, historyTools, readToolsRun, dryRunNoWrites, protegeIdentity,
   privacyEdges, rateLimitCountedOnce, battleEntryGates, followUpDeliverIntoChat, taskDueInMinutes, noResidue,
   viewsMatchSchema, schemaLookupSafe, agentUsesSchemaLookup, createSpecMatchesDb, createRejectsForbidden, registerReuseDisable, agentBuildsTool, escalateAndResume, agentEscalates, promotionCheck, promotePlatform, sandboxContained, codeToolBuilt, writeConfirm, instructorToolMatchesDb, instructorScope, instructorAgentBuilds, realUserRun, syllabusCoverage, planCompletes, practiceChargedOnce, generatedOutline, bridgePersists, conceptCurve, suggestionsAnswer, suggestionsSurviveRefresh, studyToolRouting, untaughtFlashcards, tailoredChips, chatUploadFiled, pastPaperStructured, sortOwnFolders, materialsMultiFileDiag, readyProposal, goalWork, ideasFlow, consentsQuietBudget, instructorProactive, voiceSpeak, voiceLive, sweepStale, agentCheckBattle, agentCheckStop, classSyllabusFirst, historyPages, workflowMirror, agentWakes, replaceAndCancel, teachingHandoff, eventStream, paperStructured, ...chatToSubmissionScenarios, ...gradingScenarios, authoringVersionsParts, authoringDiagramsEdits, inboxOneList, quietLearningPass, plannerRichGather, proactiveInChat, readerBackend, socketSession, guideIdeasSession, courseOneRecord,
   teachingToolRouting, teachingToolRuns, activityToolRouting, draftLifecycle, routineLifecycle,
-  battleFromChat, battleReviewFromChat, selfStudyFull, assignmentPreviewAssign, journeyBattleStage, ...teachingToolScenarios, teachingToolVersions, teachingToolTry, toolsAllOpen, deferredRelease, sessionReminders, guideReviewRuns, battleSeriesRuns, ...battleChatScenarios, activityReviewRuns, activityReviewPlay, ...activityChatScenarios, permissionRequestIsReal, toolJourney, deleteTasks, ...SELFTOOL_CHANGES, evalsRun, evalsResult, teacherSchoolReads, paymentsSingleMount, courseInviteJoin, agentTurns, teachingOutcomes, sharedSecretsFailClosed, noFallbackSecrets, ownershipReads, decayReviewFlow, practiceProctoredFlow, practiceIntegrityFlagged, dashboardDescriptors, needsYouCategories, loopGuardTimeLimits, actionBasis, schoolStrugglesScope, modelPickerResolution, kindObserveThenLive, outboxDelivery, ratingSavedNotInPrompt, promptOverrideFlagged, syllabusImportExample, syllabusImportCost, syllabusImportBatch, syllabusImportSplit, curriculumImportExample];
+  battleFromChat, battleReviewFromChat, selfStudyFull, assignmentPreviewAssign, journeyBattleStage, ...teachingToolScenarios, teachingToolVersions, teachingToolTry, toolsAllOpen, deferredRelease, sessionReminders, guideReviewRuns, battleSeriesRuns, ...battleChatScenarios, activityReviewRuns, activityReviewPlay, ...activityChatScenarios, permissionRequestIsReal, toolJourney, deleteTasks, ...SELFTOOL_CHANGES, evalsRun, evalsResult, teacherSchoolReads, paymentsSingleMount, courseInviteJoin, agentTurns, teachingOutcomes, sharedSecretsFailClosed, noFallbackSecrets, ownershipReads, decayReviewFlow, practiceProctoredFlow, practiceIntegrityFlagged, dashboardDescriptors, needsYouCategories, loopGuardTimeLimits, actionBasis, schoolStrugglesScope, modelPickerResolution, kindObserveThenLive, outboxDelivery, ratingSavedNotInPrompt, promptOverrideFlagged, syllabusImportExample, syllabusImportCost, syllabusImportBatch, syllabusImportSplit, curriculumImportExample, ...MEMORY_RECALL, ...CHAT_CONTINUITY, ...NETWORK_AUTO, imageExtraction, ...LEARNING_EVENTS, ...LEARNER_MODEL, ...STUDY_PREP_EXIT, ...PHASE11_UI, pickPersisted, pickReachesWorkflows, noForcedToolChoiceClaude, refusalFallback, runToMastery, teachingChain, ...PHASE5_TOOLS];
 
 export const SCENARIOS = Object.fromEntries(ALL.map((s) => [s.name, s]));
 
@@ -106,14 +117,25 @@ export const SUITES = {
   sweep: ["writes.sweep_stale", "writes.no_residue"],
   materials: ["materials.chat_upload_filed", "materials.past_paper_structured", "materials.sort_own_folders", "writes.no_residue"],
   "study-prep": ["studyprep.plan_completes", "studyprep.practice_charged_once", "studyprep.generated_outline", "studyprep.class_syllabus_first", "studyprep.workflow_mirror", "studyprep.agent_wakes", "studyprep.replace_and_cancel", "studyprep.teaching_handoff", "workflow.event_stream", "writes.no_residue"],
+  // Grand Plan Phase 4 + 5 exit: the operation → context set mapping, and Study Prep end to end without Teaching.
+  "study-prep-exit": ["context.sets_per_operation", "studyprep.inline_full", "studyprep.plan_rejection", "studyprep.budget_ceiling", "studyprep.cap_out", "studyprep.topic_states", "studyprep.submit_atomic", "writes.no_residue"],
   "agent-check": ["studyprep.agent_check_battle", "studyprep.agent_check_stop", "writes.no_residue"],
   "agent-network": ["network.privacy_edges"],
   // Phase 18 items 3 and 6: the loop guard, tool time limits, asked or inferred;
   // items 4 and 7: ratings on agent replies, admin-editable prompts.
   "agent-hygiene": ["agent.loop_guard_time_limits", "agent.action_basis", "ratings.saved_not_in_prompt", "prompts.override_flagged", "writes.no_residue"],
   battles: ["battles.entry_gates"],
+  // Phase 5 tools: §8.8 files + goal type, §7.14 blog passages, §7.13 peer breakthroughs, §7.12 tool names.
+  "phase5-tools": ["materials.syllabus_from_documents", "blog.passage_search", "peer.breakthrough_help", "studyprep.agent_check_tools", "writes.no_residue"],
   // Phase 11 UI backends: the school's struggles view (D39) and the chat's model picker (§7.11.5).
-  "phase11-ui": ["school.struggles_scope", "models.picker_resolution"],
+  // Scenario K (model switching) and the Phase 6/7 follow-ups (slow: real teaching turns).
+  "scenario-k": ["models.pick_persisted", "models.pick_reaches_workflows", "models.no_forced_tool_choice_claude", "models.refusal_fallback", "writes.no_residue"],
+  // Wave 2 close-out (2026-11-07): every new check from Phase 5 core + tools, Phase 4a, Scenario K and Phase 6/7, in one run.
+  "phase-closeout-2": ["studyprep.topic_states", "studyprep.submit_atomic", "studyprep.inline_full", "studyprep.plan_rejection", "studyprep.budget_ceiling", "studyprep.cap_out", "materials.syllabus_from_documents", "blog.passage_search", "peer.breakthrough_help", "studyprep.agent_check_tools", "learning.strategy_recommend", "learning.gateway_struggle", "learning.question_timings", "learning.strategy_outcome", "learning.struggle_breakthrough", "learner_model.next_action", "models.pick_persisted", "models.pick_reaches_workflows", "models.no_forced_tool_choice_claude", "models.refusal_fallback", "models.tier_lists", "teaching.run_to_mastery", "studyprep.teaching_chain", "writes.no_residue"],
+  "phase67-followups": ["teaching.run_to_mastery", "studyprep.teaching_chain", "writes.no_residue"],
+  "phase11-ui": ["school.struggles_scope", "models.picker_resolution", "models.tier_lists", "teaching.direct_workflow", "school.struggles_recorded"],
+  // Phases 4, 4a, 5, 10, 11 close-out (2026-11-06): every new and affected check in one run.
+  "phase-closeout": ["learning.recorder_misconception", "learning.struggle_breakthrough", "learning.strategy_outcome", "learning.backfill_idempotent", "learner_model.next_action", "context.sets_per_operation", "studyprep.inline_full", "studyprep.plan_rejection", "studyprep.budget_ceiling", "studyprep.cap_out", "school.struggles_scope", "models.picker_resolution", "models.tier_lists", "teaching.direct_workflow", "school.struggles_recorded", "workflow.dashboard_descriptors", "writes.no_residue"],
   "self-tooling": ["selftool.views_match_schema", "selftool.schema_lookup_safe", "selftool.create_spec_matches_db", "selftool.create_rejects_forbidden",
     "selftool.agent_builds_tool", "selftool.agent_uses_schema_lookup", "selftool.agent_escalates", "selftool.sandbox_contained", "selftool.code_tool",
     "selftool.instructor_scope", "selftool.instructor_tool_matches_db", "selftool.instructor_agent_builds"],

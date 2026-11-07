@@ -7,6 +7,7 @@
  * The progression gate (state-machine.js applyTeachingProgress) stays the only
  * thing that moves a session forward.
  */
+import { isPermittedStrategy, normaliseStrategyId, strategiesFor } from "../strategies/library.js";
 
 /** §9.5 — the session's bounds. */
 export const TEACHING_POLICY = Object.freeze({
@@ -15,6 +16,7 @@ export const TEACHING_POLICY = Object.freeze({
   MAX_STRATEGY_CHANGES: 2,        // per session; then a bounded end
   MAX_TURNS: 60,                  // per session; then a bounded end
   MAX_ASSESSMENTS: 2,             // per session
+  ASSESSMENT_MIN_TAUGHT: 2,       // learner messages taught before a check may run
   SESSION_TOOL_CALL_CAP: 120,
 });
 
@@ -43,8 +45,19 @@ export const GUIDE_MOVES = Object.freeze({
   summarise: "sum up what they now know in 2-3 short lines and say what comes next",
 });
 
-/** Strategies the agent may switch to (§7.7; the full library is Phase 4a). */
-export const TEACHING_STRATEGIES = Object.freeze(["teach_back", "different_analogy", "worked_example", "socratic", "chunking", "retrieval_practice"]);
+/**
+ * Strategies the agent may switch to inside a session: the ONE library's
+ * entries allowed in Teaching that a Teaching session runs itself (§7.7.2 v3).
+ * Harness strategies (replan, schedule, export, escalate, peer stories) are
+ * chosen by the workflow that owns them, never mid-session.
+ */
+export const TEACHING_STRATEGIES = Object.freeze(strategiesFor("teaching", { executor: "teaching", includeDisabled: true }));
+
+/** PURE: the library id for a strategy_select argument (legacy names map), or null when not allowed now. */
+export function teachingStrategy(strategy) {
+  const id = normaliseStrategyId(strategy);
+  return TEACHING_STRATEGIES.includes(id) && isPermittedStrategy(id, "teaching") ? id : null;
+}
 
 /** The evidence's dialogue move → the protégé's default move (the fallback). */
 export const PROTEGE_MOVE_FOR_DIALOGUE = Object.freeze({
@@ -78,20 +91,22 @@ export function fallbackReply(mode, dialogueMove) {
 /** The agent's tools per mode: read · propose · the one terminal reply. */
 const COMMON = ["teaching_get_state", "strategy_select", "teaching_propose_complete", "teaching_propose_pause"];
 export const TOOLS_BY_MODE = Object.freeze({
-  teach_agent: Object.freeze([...COMMON, "guide_coach", "protege_respond"]),
+  // request_assessment: a short Agent Check on the parts just taught (§7.12) — teach_agent only.
+  teach_agent: Object.freeze([...COMMON, "guide_coach", "protege_respond", "teaching_request_assessment"]),
   learn_with_guide: Object.freeze([...COMMON, "guide_teach"]),
 });
 /** A tool whose result IS the learner's reply this turn (§9.3 ⟂). */
-export const TERMINAL_TOOLS = Object.freeze(["protege_respond", "guide_teach", "teaching_propose_complete", "teaching_propose_pause"]);
+export const TERMINAL_TOOLS = Object.freeze(["protege_respond", "guide_teach", "teaching_propose_complete", "teaching_propose_pause", "teaching_request_assessment"]);
 /** The plan's names for the events (§9.4). */
 export const PLAN_NAME = Object.freeze({
   teaching_get_state: "teaching.get_state", strategy_select: "strategy.select", guide_coach: "guide.coach",
   protege_respond: "protege.respond", guide_teach: "guide.teach",
   teaching_propose_complete: "teaching.propose_complete", teaching_propose_pause: "teaching.propose_pause",
+  teaching_request_assessment: "teaching.request_assessment",
 });
 
 /** PURE: is this decision allowed? → { ok } | { ok:false, error } (tool_not_permitted, invalid_arguments, …). */
-export function validateDecision(mode, decision, { strategyChanges = 0 } = {}) {
+export function validateDecision(mode, decision, { strategyChanges = 0, assessments = 0, taughtTurns = TEACHING_POLICY.ASSESSMENT_MIN_TAUGHT } = {}) {
   const m = normaliseMode(mode);
   const tool = decision?.tool;
   const args = decision?.args && typeof decision.args === "object" ? decision.args : {};
@@ -99,8 +114,14 @@ export function validateDecision(mode, decision, { strategyChanges = 0 } = {}) {
   if (tool === "protege_respond" && !Object.hasOwn(PROTEGE_MOVES, args.move)) return { ok: false, error: "invalid_arguments" };
   if (tool === "guide_teach" && !Object.hasOwn(GUIDE_MOVES, args.move)) return { ok: false, error: "invalid_arguments" };
   if (tool === "strategy_select") {
-    if (!TEACHING_STRATEGIES.includes(args.strategy)) return { ok: false, error: "invalid_arguments" };
+    if (!TEACHING_STRATEGIES.includes(normaliseStrategyId(args.strategy))) return { ok: false, error: "invalid_arguments" };
+    if (!teachingStrategy(args.strategy)) return { ok: false, error: "strategy_not_permitted" };
     if (strategyChanges >= TEACHING_POLICY.MAX_STRATEGY_CHANGES) return { ok: false, error: "strategy_cap_reached" };
+  }
+  if (tool === "teaching_request_assessment") {
+    if (args.conceptIds != null && !Array.isArray(args.conceptIds)) return { ok: false, error: "invalid_arguments" };
+    if (assessments >= TEACHING_POLICY.MAX_ASSESSMENTS) return { ok: false, error: "assessment_cap_reached" };
+    if (taughtTurns < TEACHING_POLICY.ASSESSMENT_MIN_TAUGHT) return { ok: false, error: "nothing_taught_yet" };
   }
   return { ok: true };
 }

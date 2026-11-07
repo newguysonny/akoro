@@ -10,6 +10,7 @@
  *                                    update-time diffing + pricing governance
  *   validatePilotApplication(body) → { errors, values }   public /apply form rules
  */
+import { validateAllowedModels } from "./modelTiers.js";
 
 export const TIER_PLATFORMS    = ["learner", "school"];
 export const TIER_ACCESS       = ["free", "paid"];
@@ -85,6 +86,13 @@ export function validateTierInput(body = {}) {
     else values.gated_features = gated;
   }
 
+  // §7.11.5a: the models this tier may switch to. Left out → NULL (the plan's starting list for the name).
+  if (body.allowed_models !== undefined) {
+    const { value, error } = validateAllowedModels(body.allowed_models);
+    if (error) errors.allowed_models = error;
+    else values.allowed_models = value;
+  }
+
   return { errors, values };
 }
 
@@ -147,6 +155,15 @@ export function buildTierPatch(current, body = {}) {
         const cur = current.gated_features ?? [];
         if (gated.length !== cur.length || gated.some((f) => !cur.includes(f))) patch.gated_features = gated;
       }
+    }
+  }
+  if (body.allowed_models !== undefined) {
+    const { value, error } = validateAllowedModels(body.allowed_models);
+    if (error) errors.allowed_models = error;
+    else {
+      const cur = current.allowed_models ?? null;
+      const same = value === null ? cur === null : Array.isArray(cur) && cur.length === value.length && value.every((m) => cur.includes(m));
+      if (!same) patch.allowed_models = value;
     }
   }
   if (body.sort_order !== undefined) {

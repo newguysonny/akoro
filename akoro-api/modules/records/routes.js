@@ -82,6 +82,7 @@ import {
 import { coinsAvailable, debitCoins } from "../../lib/coins.js";
 import { coinsForTtsChars } from "../../lib/aiPricing.js";
 import { getAiBillTo } from "../../lib/aiContext.js";
+import { parseRefusalCode, parseRefusalMessage } from "./parseRefusal.js";
 
 const router = Router();
 
@@ -609,6 +610,7 @@ async function resolveAiContent(req) {
   return resolveContentAccess({ userId: req.user.id, recordId: req.body?.recordId, contentKey: req.body?.contentKey });
 }
 
+
 /* A page's real size from the reader ({ width, height, unit: "pt"|"px" }),
    or null when absent / implausible. */
 function pageSizeOf(p) {
@@ -674,7 +676,10 @@ router.post("/extract", authenticateToken, asyncHandler(async (req, res) => {
   }
   if (!jobs.length) {
     await finishContentJob(contentKey, "parse", "failed", { error: submitError?.error || "Submit failed" });
-    return res.status(502).json({ success: false, error: submitError?.error || "The parse worker did not accept the pages — try again." });
+    // 424, not 502: behind Cloudflare a 502 from the API is replaced by its own
+    // error page WITHOUT CORS headers, so the learner only ever saw "Failed to
+    // fetch" (and the app retried it as a dropped connection). 2026-11-06.
+    return res.status(424).json({ success: false, code: parseRefusalCode(submitError?.error), error: parseRefusalMessage(submitError?.error) });
   }
   await updateContentJob(contentKey, "parse", { mode: "async", submittedAt, jobs });
   res.status(202).json({
@@ -1025,12 +1030,12 @@ router.post("/tools/:tool", authenticateToken, asyncHandler(async (req, res) => 
     try { json = JSON.parse(completion.choices?.[0]?.message?.content || "{}"); } catch { json = {}; }
     const result = shapeToolResult(tool, json, passages, values);
     const items = result.summaryPoints || result.quizQuestions || result.cardSet || [];
-    if (!items.length) return res.status(502).json({ success: false, message: "Couldn't build that from this material — try a different page or focus." });
+    if (!items.length) return res.status(422).json({ success: false, message: "Couldn't build that from this material — try a different page or focus." });
     return res.json({ success: true, data: { tool, scope, ...result, passages: passages.length } });
   } catch (err) {
     if (err?.name === "InsufficientCoins") return res.status(402).json({ success: false, message: "You're out of AI credit — top up to keep generating." });
     console.warn("[records-tools] failed:", String(err?.message || err).slice(0, 200));
-    return res.status(502).json({ success: false, message: "Couldn't generate that right now — try again in a moment." });
+    return res.status(424).json({ success: false, message: "Couldn't generate that right now — try again in a moment." });
   }
 }));
 

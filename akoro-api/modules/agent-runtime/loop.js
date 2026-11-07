@@ -67,7 +67,8 @@ export function boundedResult(result) {
  * finalActions    what the last iteration may offer (defaults to terminalActions)
  * stopCodes       rejection codes that end the step (the agent still sees them)
  * operation       which operation this step serves (passed to the agent)
- * record(entry)   { kind: "agent_error"|"malformed"|"decision"|"observation"|"timeout", iteration, ... }
+ * record(entry)   { kind: "agent_error"|"malformed"|"model_refusal"|"decision"|"observation"|"timeout", iteration, ... }
+ *                 model_refusal: the model declined (its fallback answered, or nothing did) — never a crash
  * onToolCallCap / onLoopCap   the workflow's cap policy (e.g. pause honestly)
  * fallback(info)  when a decision times out: the workflow's deterministic next step
  */
@@ -101,9 +102,14 @@ export async function runAgentLoop({
       throw error;
     }
 
+    // A refusal (§7.11.4) is its own observation: recorded, and the agent sees it.
+    if (step?.refusal) {
+      await record({ kind: "model_refusal", iteration, model: step.refusal.model, fallbackModel: step.refusal.fallbackModel || null, category: step.refusal.category ?? null });
+      observations.push({ ok: false, code: "model_refusal", model: step.refusal.model, fallbackModel: step.refusal.fallbackModel || null });
+    }
     const requested = step?.tool || step?.action;
     if (!requested) {
-      await record({ kind: "malformed", iteration, reason: "no tool or action in agent response" });
+      if (!step?.refusal) await record({ kind: "malformed", iteration, reason: "no tool or action in agent response" });
       continue;
     }
 

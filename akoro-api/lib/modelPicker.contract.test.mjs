@@ -11,11 +11,13 @@ import { createModelRegistry } from "./modelRegistry.js";
 const KEYS = { OPENAI_API_KEY: "k", ANTHROPIC_API_KEY: "k" };
 const ON = { ...KEYS, AI_MODEL_PICKER_ENABLED: "true" };
 
-test("the flag: off unless set to true; /models says so", () => {
-  assert.equal(pickerEnabled({}), false);
+test("the flag: on by default, off only when set off; /models says so", () => {
+  assert.equal(pickerEnabled({}), true, "on by default");
+  assert.equal(pickerEnabled({ AI_MODEL_PICKER_ENABLED: "false" }), false);
+  assert.equal(pickerEnabled({ AI_MODEL_PICKER_ENABLED: "off" }), false);
   assert.equal(pickerEnabled({ AI_MODEL_PICKER_ENABLED: "TRUE" }), true);
   assert.deepEqual(pickerInfo(ON), { enabled: true, defaultId: "gpt-4o-mini" });
-  assert.deepEqual(pickerInfo({}), { enabled: false, defaultId: "gpt-4o-mini" });
+  assert.deepEqual(pickerInfo({ AI_MODEL_PICKER_ENABLED: "false" }), { enabled: false, defaultId: "gpt-4o-mini" });
 });
 
 test("cost hints against the default: the default has none; Opus reads about 30x", () => {

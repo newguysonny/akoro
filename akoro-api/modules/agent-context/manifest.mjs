@@ -23,45 +23,100 @@
  * pins this list EXACTLY so additions are conscious. Must be empty by P7.
  */
 
+import { GUIDE_FILES } from "../adaptive-learning/strategies/library.js";
+
 export const MANIFEST_VERSION = 1;
 
 export const SETS = Object.freeze({
-  // ── study-prep agent loop (joined — shipped, byte-pinned by study-prep tests)
+  // ── study-prep agent loop (joined — shipped, byte-pinned by study-prep tests).
+  //    Phase 4 (§7.4): AGENT.md is workflow-neutral; workflows/STUDY_PREP.md
+  //    gives the role, right after it. Which operation loads which set is
+  //    data in ./operations.mjs (OPERATION_SETS).
   planning: Object.freeze({
     mode: "joined",
     consumer: "study-prep agent-loop — planning step",
-    files: Object.freeze(["AGENT.md", "learning/LEARNING.md", "reasoning/PLANNING.md", "policies/EDUCATION_RULES.md"]),
+    files: Object.freeze(["AGENT.md", "workflows/STUDY_PREP.md", "learning/LEARNING.md", "reasoning/PLANNING.md", "policies/EDUCATION_RULES.md"]),
   }),
   research: Object.freeze({
     mode: "joined",
     consumer: "study-prep agent-loop — research step",
-    files: Object.freeze(["AGENT.md", "reasoning/RESEARCH.md", "reasoning/INSPECTION.md", "policies/EDUCATION_RULES.md"]),
+    files: Object.freeze(["AGENT.md", "workflows/STUDY_PREP.md", "reasoning/RESEARCH.md", "reasoning/INSPECTION.md", "policies/EDUCATION_RULES.md"]),
   }),
   teaching: Object.freeze({
     mode: "joined",
     consumer: "study-prep agent-loop — teaching step",
-    files: Object.freeze(["AGENT.md", "learning/LEARNING.md", "learning/TEACHING.md", "learning/MASTERY.md"]),
+    files: Object.freeze(["AGENT.md", "workflows/STUDY_PREP.md", "learning/LEARNING.md", "learning/TEACHING.md", "learning/MASTERY.md"]),
   }),
   // After the plan is approved: the agent's short turns (wakes, 2026-10-19).
   wake: Object.freeze({
     mode: "joined",
     consumer: "study-prep wake runner — the agent's turns after the plan is approved",
-    files: Object.freeze(["AGENT.md", "reasoning/WAKES.md", "learning/TEACHING.md", "learning/ASSESSMENT.md", "policies/EDUCATION_RULES.md"]),
+    files: Object.freeze(["AGENT.md", "workflows/STUDY_PREP.md", "reasoning/WAKES.md", "learning/TEACHING.md", "learning/ASSESSMENT.md", "policies/EDUCATION_RULES.md"]),
   }),
   reflection: Object.freeze({
     mode: "joined",
     consumer: "study-prep agent-loop — reflection step",
-    files: Object.freeze(["AGENT.md", "learning/ASSESSMENT.md", "learning/MASTERY.md", "reasoning/REASONING.md"]),
+    files: Object.freeze(["AGENT.md", "workflows/STUDY_PREP.md", "learning/ASSESSMENT.md", "learning/MASTERY.md", "reasoning/REASONING.md"]),
   }),
   strategies: Object.freeze({
     mode: "joined",
     consumer: "study-prep agent-loop — strategy selection",
-    files: Object.freeze(["AGENT.md", "strategies/STRATEGIES.md", "policies/TOOL_RULES.md"]),
+    files: Object.freeze(["AGENT.md", "workflows/STUDY_PREP.md", "strategies/STRATEGIES.md", "policies/TOOL_RULES.md"]),
+  }),
+  // ── Strategy Library v3 guides (§7.7.1): one file per strategy, listed by
+  //    strategies/library.js (adding a strategy adds its guide here). Only the
+  //    chosen strategy's guide is loaded (loadDoctrine), into the context of
+  //    whatever runs it.
+  strategy_guides_teaching: Object.freeze({
+    mode: "verbatim",
+    consumer: "Teaching session — the chosen strategy's guide in NaNa's context (teaching-session/guideTeacher.js)",
+    files: GUIDE_FILES.teaching,
+  }),
+  strategy_guides_harness: Object.freeze({
+    mode: "verbatim",
+    consumer: "workflow harness strategies (replan, schedule, export, recall rounds) — the guide for the agent offering them",
+    files: GUIDE_FILES.harness,
   }),
   safety: Object.freeze({
     mode: "joined",
     consumer: "study-prep agent-loop — safety-critical steps",
-    files: Object.freeze(["AGENT.md", "policies/SAFETY.md"]),
+    files: Object.freeze(["AGENT.md", "workflows/STUDY_PREP.md", "policies/SAFETY.md"]),
+  }),
+
+  // ── Phase 4 (§7.4): the other workflows' controller sets. Joined, each
+  //    within the assembled budget. Their operations are mapped in
+  //    ./operations.mjs; until the workflow's agent loop ships (Teaching:
+  //    Phase 6, Decay: Phase 8, Practice: Phase 9) the operation is dormant
+  //    (five-part rule, §7.4) — the set is preflighted at boot regardless.
+  teaching_controller: Object.freeze({
+    mode: "joined",
+    consumer: "teaching workflow (teach_agent) — every teaching-turn operation (Phase 6 controller)",
+    files: Object.freeze(["AGENT.md", "workflows/TEACHING.md", "learning/LEARNING.md", "learning/TEACHING.md", "learning/MASTERY.md", "policies/EDUCATION_RULES.md"]),
+  }),
+  guide_controller: Object.freeze({
+    mode: "joined",
+    consumer: "teaching workflow (learn_with_guide) — every teaching-turn operation (Phase 6 controller)",
+    files: Object.freeze(["AGENT.md", "workflows/TEACHING.md", "workflows/GUIDE_MODE.md", "learning/LEARNING.md", "learning/ASSESSMENT.md", "learning/MASTERY.md", "policies/EDUCATION_RULES.md"]),
+  }),
+  teaching_strategy: Object.freeze({
+    mode: "joined",
+    consumer: "teaching workflow — select_teaching_strategy, adapt_strategy (Phase 6 controller)",
+    files: Object.freeze(["AGENT.md", "workflows/TEACHING.md", "strategies/STRATEGIES.md", "policies/TOOL_RULES.md"]),
+  }),
+  decay_inspection: Object.freeze({
+    mode: "joined",
+    consumer: "decay review workflow — inspect_decay, inspect_history, inspect_concept, evaluate_retention (Phase 8 controller)",
+    files: Object.freeze(["AGENT.md", "workflows/DECAY_REVIEW.md", "learning/RETENTION.md", "reasoning/INSPECTION.md", "learning/MASTERY.md"]),
+  }),
+  decay_review: Object.freeze({
+    mode: "joined",
+    consumer: "decay review workflow — intervene, select_strategy (Phase 8 controller)",
+    files: Object.freeze(["AGENT.md", "workflows/DECAY_REVIEW.md", "learning/RETENTION.md", "learning/TEACHING.md", "strategies/STRATEGIES.md"]),
+  }),
+  practice: Object.freeze({
+    mode: "joined",
+    consumer: "practice workflow (proctored) — prepare, generate, evaluate (Phase 9 controller)",
+    files: Object.freeze(["AGENT.md", "workflows/PRACTICE.md", "learning/ASSESSMENT.md", "learning/MASTERY.md", "policies/EDUCATION_RULES.md"]),
   }),
 
   // ── agent chat + voice (verbatim — P1, byte-identical to the pre-migration

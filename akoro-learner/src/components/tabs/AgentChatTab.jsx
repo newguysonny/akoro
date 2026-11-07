@@ -31,7 +31,7 @@ import AgentCheckCard from './agentChat/AgentCheckCard.jsx';
 import TraceBlocks from './agentChat/TraceBlocks.jsx';
 import { applyTraceEvent, blocksFromSavedTrace, ingestRunBlocks, promoteActivity, settleRunning, splitWakes, studyPrepEventBlocks, workflowRunBlocks } from '../../lib/agentChatTrace.js';
 import { CHAT_STARTERS, cleanIdeas, cleanMaterials, protegeMoves } from '../../lib/chatIdeas.js';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import NeedsYouList, { useNeedsYou } from './agentChat/NeedsYouList.jsx';
 import ReplyRating, { ratableId, useReplyRatings } from './agentChat/ReplyRating.jsx';
 import AgentCards from '../network/AgentCards.jsx';
@@ -39,6 +39,7 @@ import ChallengeRequestCards from '../network/ChallengeRequestCards.jsx';
 import ConfirmChangeCard from './agentChat/ConfirmChangeCard.jsx';
 import IngestCard from './agentChat/IngestCard.jsx';
 import ChatFilesStrip from './agentChat/ChatFilesStrip.jsx';
+import ApprovalButtons from './agentChat/ApprovalButtons.jsx';
 import ProposalPreview from './agentChat/ProposalPreview.jsx';
 import { addSimilar, chatFiles, chooseFolder, chooseSubject, dismissSimilar, fileIngest, filesOf, getIngest, isLibraryFile, restoreIngest, similarFor, startIngest, structureIngest, undoIngest } from '../../lib/chatUploads.js';
 import SimilarPicker from './agentChat/SimilarPicker.jsx';
@@ -219,10 +220,20 @@ function AgentChatTab({
   const [thinkMode,    setThinkMode]    = useState(false);
   // The model menu: the API's modes + model catalogue (GET /chat/models).
   const [serverModels, setServerModels] = useState(null);
+  const [modelNotice, setModelNotice] = useState("");
   const [chatModelId, setChatModelId] = useState(() => { try { return localStorage.getItem('ak_chat_model') || null; } catch { return null; } });
   useEffect(() => {
     let alive = true;
-    apiGet('/api/adaptive/chat/models').then(d => { if (alive && (Array.isArray(d?.modes) || Array.isArray(d?.models))) setServerModels(d); }).catch(() => {});
+    apiGet('/api/adaptive/chat/models').then(d => {
+      if (!alive || !(Array.isArray(d?.modes) || Array.isArray(d?.models))) return;
+      setServerModels(d);
+      // The pick saved on the server (any device) wins over this browser's copy.
+      const saved = d?.picker?.saved;
+      if (saved && 'modelId' in saved) {
+        setChatModelId(saved.modelId || null);
+        try { if (saved.modelId) localStorage.setItem('ak_chat_model', saved.modelId); else localStorage.removeItem('ak_chat_model'); } catch { /* private mode */ }
+      }
+    }).catch(() => {});
     return () => { alive = false; };
   }, []);
   const [researchMode, setResearchMode] = useState(false);
@@ -441,8 +452,10 @@ function AgentChatTab({
         loadSessions().catch(() => {});
         if (!data?.sessionId || data.sessionId !== sessionIdRef.current) return;
         try {
-          // The new message is among the newest: one page is enough.
-          const d = await apiGet(`${CHAT_BASE}/sessions/${data.sessionId}/messages?limit=${HISTORY_PAGE}`);
+          // The ping carries the message itself (agent messages, proactive cards): shown at
+          // once. Otherwise the new message is among the newest: one page is enough.
+          const d = data.message?.id ? { messages: [data.message] }
+            : await apiGet(`${CHAT_BASE}/sessions/${data.sessionId}/messages?limit=${HISTORY_PAGE}`);
           if (data.sessionId !== sessionIdRef.current) return;
           setMessages((prev) => {
             const ids = new Set(prev.map((m) => m.id));
@@ -602,6 +615,14 @@ function AgentChatTab({
   const needsYou=useNeedsYou();
   // Ratings on replies (Phase 18 item 4): the learner's own, never shown to the agent.
   const [replyRatings,setReplyRating]=useReplyRatings(messages);
+  // ?tasks=needs|suggestions (Home's Needs you card): open that Tasks list.
+  const location=useLocation();
+  useEffect(()=>{
+    const want=new URLSearchParams(location.search).get('tasks');
+    if(want!=='needs'&&want!=='suggestions') return;
+    setInnerTab('tasks'); setTaskFilter(want);
+    if(want==='needs') needsYou.reload();
+  },[location.search]); // eslint-disable-line react-hooks/exhaustive-deps
   const openNeed=(it)=>{
     const href=it?.action?.href||'';
     if(href.includes('inbox=')){ setTaskFilter('suggestions'); return; }
@@ -920,9 +941,10 @@ function AgentChatTab({
     // durable turn contract to repair a partial write without duplicate rows.
     const turnId = createAgentChatTurnId();
     turnIdRef.current = turnId;
-    // The picked model rides the standard mode only (the server checks it).
-    const modelPick = mode === "default" && chatModelId ? { model: chatModelId } : {};
-    const payload = { message: text, history: history.slice(-24), agentName, mode, ...modelPick,
+    // The picked model rides the standard mode only (the server checks it and
+    // remembers it on this chat; null = the default model).
+    const modelPick = mode === "default" ? { model: chatModelId || null } : {};
+    const payload = { message: text, inlineSuggestions: true, history: history.slice(-24), agentName, mode, ...modelPick,
       conversationId: sid, turnId,
       ...(ingest ? { ingestId: ingest.id, ingestIds } : {}),
       ...(devView ? { developer: true } : {}),
@@ -965,6 +987,7 @@ function AgentChatTab({
     let finalReply="";
     let turnTools=[];   // what ran this turn — the chips follow it (a not-taught reply gets "ask your teaching guide")
     let gotDone=false;
+    let inlineIdeas=false;   // the stream already carried this reply's chips
     // A turn that started but never got its "done" (the stream errored or the
     // connection closed mid-way): stop the spinners, say what happened, and
     // keep what already arrived. It used to stay "thinking" for ever.
@@ -979,7 +1002,15 @@ function AgentChatTab({
         onTrace: appendTrace,
         onDelta: appendDelta,
         onThinking: appendThinking,
-        onStatus: (s)=>{ if(!started) setStatusLabel(t(statusKey[s?.step]||"") || s?.label || ""); },
+        onStatus: (s)=>{
+          // A pick outside the plan (§7.11.5a): the default answered; say why and drop the pick.
+          if(s?.step==="model"&&s?.label){ setModelNotice(s.label); setChatModelId(null); try{ localStorage.removeItem('ak_chat_model'); }catch{ /* private mode */ } return; }
+          if(!started) setStatusLabel(t(statusKey[s?.step]||"") || s?.label || "");
+        },
+        // The confirm / permission card shows as soon as the tool made it — not after the whole reply.
+        onCard: (c)=>{ if(!c?.confirm?.confirmationId) return; ensureBubble(); setMessages(prev=>prev.map(m=>m.id===replyId?{...m,confirm:c.confirm}:m)); },
+        // The chips arrive on the same stream (no second request).
+        onSuggestions: (list)=>{ inlineIdeas=true; const ideas=cleanIdeas(list); if(ideas.length) setMessages(prev=>prev.map(m=>m.id===replyId?{...m,ideas}:m)); },
         onDone: ({ reply, syllabus, pastQuestions, thinking, toolExecutions, trace, stopped, messageId })=>{
           gotDone=true;
           ensureBubble(); setStatusLabel("");
@@ -1045,7 +1076,7 @@ function AgentChatTab({
     if((spokenTurn||readAloud) && finalReply && !controller?.signal.aborted) tts.speak(replyId, finalReply);
     // Suggestions for every reply: three follow-ups, asked for AFTER the
     // reply has arrived (it never waits on them); a failure is just no chips.
-    if(finalReply && !controller?.signal.aborted){
+    if(finalReply && !controller?.signal.aborted && !inlineIdeas){
       apiPost('/api/adaptive/chat/suggestions', { ask: text, reply: finalReply, role: 'student',
         tools: turnTools.map((x)=>({ tool: x?.tool, topic: x?.teach?.topic || x?.guide?.teach?.topic || null })),
         conversationId: sid,   // the chips are saved with the reply, so a refresh keeps them
@@ -1156,6 +1187,7 @@ function AgentChatTab({
     setThinkMode(next.mode === "think");
     setResearchMode(next.mode === "research");
     setChatModelId(next.modelId);
+    setModelNotice("");
     try { if (next.modelId) localStorage.setItem('ak_chat_model', next.modelId); else localStorage.removeItem('ak_chat_model'); } catch { /* private mode */ }
   };
 
@@ -1326,16 +1358,8 @@ function AgentChatTab({
                     : <StudyPrepChatCard sessionId={msg.studyPrepSessionId} onEvents={onStudyPrepEvents} onRunning={onStudyPrepRunning} developer={devView} onNotes={onStudyPrepNotes} conversationId={sessionId}/>)}
                   {!isMe&&msg.proposal?.status==="proposed"&&msg.proposal.preview&&<ProposalPreview preview={msg.proposal.preview}/>}
                   {!isMe&&msg.proposal&&(msg.proposal.status==="proposed"?(
-                    <div style={{ display:"flex",flexWrap:"wrap",gap:7,marginTop:9 }}>
-                      <button type="button" onClick={()=>decidePosted(msg,"accept")} disabled={!!inboxBusyRef}
-                        style={{ display:"flex",alignItems:"center",gap:6,padding:"8px 14px",borderRadius:20,border:"none",background:inboxBusyRef?"var(--ak-border)":`linear-gradient(135deg,${BRAND},#4C1DCC)`,color:"#fff",fontSize:12.5,fontWeight:800,cursor:inboxBusyRef?"wait":"pointer",fontFamily:"'Nunito',sans-serif" }}>
-                        {inboxBusyRef===`p:${msg.proposal.id}`?<Spinner size={11} color="#fff"/>:<Icon name="ti-check" size={13}/>}{msg.proposal.yes||t('agent.posted_yes')}{msg.proposal.cost==="free"&&<span style={{ fontSize:10.5,fontWeight:800,opacity:.85 }}>· free</span>}
-                      </button>
-                      <button type="button" onClick={()=>decidePosted(msg,"wrong_time")} disabled={!!inboxBusyRef}
-                        style={{ padding:"8px 14px",borderRadius:20,border:"1.5px solid var(--ak-border2)",background:"var(--ak-surface)",color:"var(--ak-text)",fontSize:12.5,fontWeight:700,cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>{t('agent.posted_later')}</button>
-                      <button type="button" onClick={()=>decidePosted(msg,"not_useful")} disabled={!!inboxBusyRef}
-                        style={{ padding:"8px 14px",borderRadius:20,border:"none",background:"none",color:"var(--ak-text-muted)",fontSize:12.5,fontWeight:700,cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>{t('agent.posted_no')}</button>
-                    </div>
+                    /* The one approval row (Allow / Reject / Later) — Later keeps it pending in Needs you. */
+                    <ApprovalButtons busy={inboxBusyRef===`p:${msg.proposal.id}`} onAllow={()=>decidePosted(msg,"accept")} onReject={()=>decidePosted(msg,"not_useful")}/>
                   ):(
                     <div style={{ display:"inline-flex",alignItems:"center",gap:5,marginTop:8,fontSize:11.5,fontWeight:800,color:msg.proposal.status==="executed"?GREEN:"var(--ak-text-muted)" }}>
                       <Icon name={msg.proposal.status==="executed"?"ti-circle-check":"ti-circle-x"} size={13}/>
@@ -1507,8 +1531,15 @@ function AgentChatTab({
             {/* The model switch — the LLM behind the next message. */}
             <div style={{ display:"flex",alignItems:"center",gap:6,marginTop:8 }}>
               <ModelSwitch modelId={picker.selectedId} modelLabel={picker.label} modelOptions={picker.options}
-                onModelChange={choosePick} disabled={running} icon="ti-cpu"/>
+                onModelChange={choosePick} disabled={running} icon="ti-cpu" tier={picker.tier}/>
             </div>
+            {modelNotice&&(
+              <div data-model-notice="" role="status" style={{ display:"flex",alignItems:"flex-start",gap:6,marginTop:6,padding:"7px 10px",borderRadius:10,background:"#F59E0B14",color:"#B45309",fontSize:11.5,fontWeight:700,lineHeight:1.4,fontFamily:"'Nunito',sans-serif" }}>
+                <Icon name="ti-info-circle" size={14} color="#B45309" style={{ marginTop:1 }}/>
+                <span style={{ flex:1 }}>{modelNotice}</span>
+                <button type="button" aria-label="Dismiss" onClick={()=>setModelNotice("")} style={{ border:0,background:"transparent",color:"inherit",cursor:"pointer",padding:0,display:"flex" }}><Icon name="ti-x" size={13} color="#B45309"/></button>
+              </div>
+            )}
             <input ref={fileInputRef} type="file" multiple accept="image/*,application/pdf,.txt,.md,.csv" style={{ display:"none" }} onChange={e=>{addAttachments(e.target.files); e.target.value="";}}/>
           </div>
         </>

@@ -6,7 +6,13 @@
  * model never gets to freestyle state.
  *
  *   makeLlmAgent({ system, catalogue, feature, learnerId, learnerChoice,
- *                  intentMaxChars, maxTokens, timeoutMs, finishHint, think })
+ *                  allowedModels, pick, intentMaxChars, maxTokens, timeoutMs,
+ *                  finishHint, think })
+ *
+ * pick: async () → { __learnerChoice, __allowedModels } — the learner's model
+ * pick, asked before each decision so a switch applies from the next one
+ * (workflows/modelPicks.js). A refused reply (`model_refusal`, answered by the
+ * fallback model in lib/aiModel.js) rides on the step as `refusal`.
  *
  * think: before each decision the agent writes its reasoning (what it knows,
  * what is missing, what this step should establish). Model-agnostic: it is a
@@ -36,7 +42,7 @@ export function providerToolName(name) {
 }
 
 export function makeLlmAgent({
-  system, catalogue, feature, learnerId = null, learnerChoice = null, intentMaxChars = 240,
+  system, catalogue, feature, learnerId = null, learnerChoice = null, allowedModels = null, pick = null, model = null, intentMaxChars = 240,
   maxTokens = 700, timeoutMs = 45_000, maxRetries = 1,
   finishHint = "This is your last step: finish now with the best you can make from what you found.",
   think = false, thinkMaxChars = 900, talk = false, talkMaxChars = 400,
@@ -93,27 +99,32 @@ export function makeLlmAgent({
           ].join("\n\n"),
         },
       ];
+      const picked = pick ? await Promise.resolve(pick()).catch(() => ({})) : {};
       const response = await openai.chat.completions.create({
-        __role: "controller", ...(learnerChoice ? { __learnerChoice: learnerChoice } : {}),
+        // model: a fixed catalogue model (checks and tests); otherwise the role's, or the learner's pick.
+        ...(model ? { model } : {}), __role: "controller", ...(learnerChoice ? { __learnerChoice: learnerChoice } : {}),
+        ...(Array.isArray(allowedModels) ? { __allowedModels: allowedModels } : {}), ...(picked || {}),
         max_tokens: maxTokens, messages, tools: offered.length ? offered : tools, tool_choice: "required",
         __feature: feature, __timeoutMs: timeoutMs, __maxRetries: maxRetries,
         ...(learnerId ? { __userId: learnerId } : {}), ...(payer === "platform" ? { __payer: "platform" } : {}), ...(ref ? { __ref: ref } : {}),
       });
+      const refusal = response?.model_refusal ? { model: response.model_refusal.model, fallbackModel: response.model_refusal.fallbackModel || null, category: response.model_refusal.category ?? null } : null;
+      const withRefusal = (step) => (refusal ? { ...step, refusal } : step);
       const call = response.choices?.[0]?.message?.tool_calls?.[0];
-      if (!call?.function?.name) return { tool: null, action: null, args: {}, intent: null };
+      if (!call?.function?.name) return withRefusal({ tool: null, action: null, args: {}, intent: null });
       // An unknown name stays as sent: the registry rejects it as an observation.
       const name = toRegistry.get(call.function.name) || call.function.name;
       try {
         const parsed = JSON.parse(call.function.arguments || "{}");
         const args = parsed?.args && typeof parsed.args === "object" ? parsed.args : parsed || {};
         // Propose actions ARE tool names in these registries.
-        return {
+        return withRefusal({
           tool: name, action: name, args, intent: typeof parsed?.intent === "string" ? parsed.intent.slice(0, intentMaxChars) : null,
           ...(think && typeof parsed?.thinking === "string" ? { thinking: parsed.thinking.slice(0, thinkMaxChars) } : {}),
           ...(talk && typeof parsed?.message === "string" ? { message: parsed.message.slice(0, talkMaxChars) } : {}),
-        };
+        });
       } catch {
-        return { tool: name, action: name, args: {}, intent: null };
+        return withRefusal({ tool: name, action: name, args: {}, intent: null });
       }
     },
   };

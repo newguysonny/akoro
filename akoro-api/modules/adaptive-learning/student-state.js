@@ -46,12 +46,6 @@ function defaultState(agentId) {
   };
 }
 
-const SPACING = {
-  low:  10 * 60 * 1000,
-  mid:  24 * 60 * 60 * 1000,
-  high: 3  * 24 * 60 * 60 * 1000,
-};
-
 const CACHE_KEY = (id) => `adaptive_state:${id}`;
 const CACHE_TTL = 60 * 60 * 24;   // 24 hours in seconds
 
@@ -114,15 +108,13 @@ export async function updateStudentState(agentId, topic, analysis, delta = {}) {
   state.cognitive.confusion     = _norm(analysis.confusion     ?? state.cognitive.confusion     * 100);
   state.cognitive.engagement    = _norm(analysis.engagement    ?? state.cognitive.engagement    * 100);
 
-  const prev = state.knowledge[topic] || {
-    level: state.cognitive.understanding, lastReviewed: null,
-    mistakes: [], strengths: [],
-  };
+  // Phase 10: the per-agent `mistakes` / `strengths` arrays are retired.
+  // Misconceptions live in the learner model (learner_concept_state via
+  // learning-events.js); only the level and review time stay here. Old
+  // states lose the arrays on their next write.
   state.knowledge[topic] = {
     level:        state.cognitive.understanding,
     lastReviewed: Date.now(),
-    mistakes:     _merge(prev.mistakes,  analysis.mistakes  || []),
-    strengths:    _merge(prev.strengths, analysis.strengths || []),
   };
 
   if (delta.phase         !== undefined) state.session.phase         = delta.phase;
@@ -143,27 +135,9 @@ export async function updateStudentState(agentId, topic, analysis, delta = {}) {
   return state;
 }
 
-// ── DECISION ENGINE ───────────────────────────────────────────────────────────
-export function decideNextAction(state, topic, hasMisconception = false) {
-  const k = state.knowledge[topic];
-  const u = state.cognitive.understanding;
-  const c = state.cognitive.confusion;
-
-  if (hasMisconception)        return "CLEAR_MISTAKE";
-  if (!k || u < 0.35)          return "DIG_DEEPER";
-  if (c > 0.55)                return "USE_ANALOGY";
-  if (k.mistakes?.length > 0)  return "CLEAR_MISTAKE";
-  if (u < 0.55)                return "ONE_MORE_PUSH";
-  if (u < 0.72)                return "NEXT_SUBTOPIC";
-  if (u < 0.82)                return "NAME_IT";
-  if (u > 0.88) {
-    const elapsed  = Date.now() - (k.lastReviewed || 0);
-    const interval = u > 0.92 ? SPACING.high : SPACING.mid;
-    if (elapsed > interval)    return "SPACED_REVIEW";
-    return u > 0.94            ? "TRIGGER_RECALL" : "GAP_CLOSED";
-  }
-  return "NEXT_SUBTOPIC";
-}
+// ── DECISION ──────────────────────────────────────────────────────────────────
+// decideNextAction moved into the Adaptive Learning Engine (adaptive-engine.js,
+// recommendNextAction) — this module stores state; it no longer decides.
 
 // ── CLEAR ─────────────────────────────────────────────────────────────────────
 export async function clearStateCache(agentId) {
@@ -265,7 +239,4 @@ export async function addPurchasedAgent(userId, agentId) {
 function _norm(val) {
   if (val > 1) return Math.min(1, val / 100);
   return Math.min(1, Math.max(0, val));
-}
-function _merge(a, b) {
-  return [...new Set([...a, ...b])].slice(-10);
 }

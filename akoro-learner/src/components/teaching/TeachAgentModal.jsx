@@ -359,21 +359,30 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
 
       // The server derives the learner from the authenticated socket. Do not
       // send a browser-controlled user or student identifier with a lesson.
-      const startSession = () => ws.emit("start_adaptive_session", {
-        topic,          subject,
-        mode,
-        sessionId:      prevSessId,
-        teacherAgentId: config?.teacherAgentId || session?.teacherAgentId || AGENT_CONFIG.teacherAgentId,
-        // Higher-ed reference text is capped by the upload endpoint; only this
-        // short-lived session receives it, never a local record or later session.
-        reference:      config?.reference || null,
-        // { recordId } | { contentKey } — the server checks access, then
-        // grounds every turn in the passages most relevant to it.
-        document:       config?.document || null,
-        // Opened from a dashboard descriptor (§13.1): the teaching workflow this
-        // session belongs to. The server checks it is this learner's and open.
-        ...((config?.workflowId || session?.workflowId) ? { workflowId: config?.workflowId || session?.workflowId } : {}),
-      });
+      // A direct session (§13.1): the dashboard asked POST /api/teaching/workflows
+      // as the modal opened; its id joins the start when it arrives (never
+      // more than a few seconds — without it the lesson still starts).
+      const workflowIdNow = async () => config?.workflowId || session?.workflowId
+        || (config?.workflowReady ? await Promise.race([config.workflowReady.catch(() => null), new Promise((r) => setTimeout(() => r(null), 4000))]) : null);
+      const startSession = async () => {
+        const workflowId = await workflowIdNow();
+        ws.emit("start_adaptive_session", {
+          topic,          subject,
+          mode,
+          sessionId:      prevSessId,
+          teacherAgentId: config?.teacherAgentId || session?.teacherAgentId || AGENT_CONFIG.teacherAgentId,
+          // Higher-ed reference text is capped by the upload endpoint; only this
+          // short-lived session receives it, never a local record or later session.
+          reference:      config?.reference || null,
+          // { recordId } | { contentKey } — the server checks access, then
+          // grounds every turn in the passages most relevant to it.
+          document:       config?.document || null,
+          // Opened from a dashboard descriptor (§13.1), or created for this direct
+          // session: the teaching workflow it belongs to. The server checks it is
+          // this learner's and open.
+          ...(workflowId ? { workflowId } : {}),
+        });
+      };
 
       ws.on("connect", () => {
         setConnState("connected");

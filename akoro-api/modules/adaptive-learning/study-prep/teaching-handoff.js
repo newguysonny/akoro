@@ -64,14 +64,18 @@ export function makeTeachingHandoff({ engine, findOpen, listDueProposals, listSt
   }
 
   /** 1. Offer a teaching session on what the check missed. → view | null */
-  async function propose({ session, topic, outcome, gaps = [] }) {
+  async function propose({ session, topic, outcome, gaps = [], strategy = null, peerExplanations = [] }) {
     const handoff = handoffFromCheck({ outcome, topic, gaps });
     const parentId = session?.workflowId || session?.workflow_id || null;
     const learnerId = session?.learnerId || session?.learner_id || null;
     if (!handoff || !parentId || !learnerId) return null;
     // One open session per topic: a second miss keeps the one already offered or waiting.
+    // request_teaching again with another strategy (D15): the strategy is recorded on it for NaNa's coaching.
     const open = await findOpen(parentId, topic.id).catch(() => null);
-    if (open) return teachingView(open);
+    if (open) {
+      if (strategy && open.metadata?.strategy !== strategy) return teachingView((await engine.annotate(open.id, { strategy }).catch(quiet("strategy"))) || open);
+      return teachingView(open);
+    }
     const proposedAt = now();
     const made = await engine.create({
       workflowType: "teaching", learnerId, entryMode: "study_prep_handoff", state: "proposed",
@@ -81,6 +85,8 @@ export function makeTeachingHandoff({ engine, findOpen, listDueProposals, listSt
         topic: handoff.topic, subject: session.subject || null, focus: handoff.focus,
         studyPrepSessionId: session.id, topicId: topic.id, fromLabel: `Study Prep · ${session.subject || "your plan"}`,
         proposedAt, autoApproveAt: autoApproveAt(proposedAt),
+        // The strategy the agent chose (D15) shapes the coaching; peers' explanations ride along (§7.13).
+        ...(strategy ? { strategy } : {}), ...(peerExplanations?.length ? { peerExplanations: peerExplanations.slice(0, 3) } : {}),
       },
     }).catch(quiet("propose"));
     const child = made?.instance;
@@ -261,7 +267,7 @@ export function makeTeachingHandoff({ engine, findOpen, listDueProposals, listSt
     const outcome = {
       ...base, objectiveMet: met, endedBy, ...(bounded ? { boundedEnd: bounded } : {}),
       objectiveEvidence: focus.map((f, i) => ({ concept: f, status: met || i < (base.partsDone || 0) ? "demonstrated" : "not_yet" })),
-      teachingMode: normaliseMode(mode || child.metadata?.teachingMode), strategyUsed: strategy || "teach_back",
+      teachingMode: normaliseMode(mode || child.metadata?.teachingMode), strategyUsed: strategy || child.metadata?.strategy || "teach_back",
       recommendedNextAction: recommendedNextAction({ met, bounded }),
     };
     const assessing = await engine.transition(child.id, { from: child.state, to: "assessment" });
@@ -325,10 +331,12 @@ export function makeTeachingHandoff({ engine, findOpen, listDueProposals, listSt
           payload: { teachingWorkflowId: child.id, topicId: m.topicId, topic: m.topic, outcome, abandoned: true, reoffered: !!again,
             narrative: `The teaching session on ${m.topic} ended before any teaching` },
         });
+        await Promise.resolve(studyPrep.teachingAbandoned?.({ sessionId, learnerId: parent.learner_id, topicId: m.topicId, reofferedWorkflowId: again?.id || null })).catch(quiet("teaching abandoned"));
         studyPrep.wake?.({ sessionId, learnerId: parent.learner_id, trigger: "teaching_abandoned", facts: { topic: m.topic, reoffered: !!again } });
         return;
       }
-      await studyPrep.confirmTeachBack({ sessionId, learnerId: parent.learner_id, topicId: m.topicId }).catch(quiet("teach-back"));
+      // TEACHING_COMPLETED (§8.3): awaiting_teaching → retest_ready; the retest unlocks.
+      await studyPrep.teachingCompleted({ sessionId, learnerId: parent.learner_id, topicId: m.topicId, workflowId: child.id, objectiveMet: outcome.objectiveMet ?? null }).catch(quiet("teaching completed"));
       const parts = outcome.parts ? ` · ${outcome.partsDone ?? 0} of ${outcome.parts} parts` : "";
       await toParent(parent.id, {
         event_type: "workflow.handoff_completed", category: "teaching", actor: "learner",

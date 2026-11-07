@@ -96,9 +96,9 @@ test("oversized answers and promises are refused; rows are normalised", async ()
 test("code tools: validated (flag, reads, static checks) and run through the interpreter", async () => {
   const { validateDefinition, runDefinition } = await import("../interpreters.js");
   const def = { kind: "code", steps: [], source: "function run(input, data, akoro) { var out = []; for (var i = 1; i <= input.n; i++) out.push({ day: i, date: akoro.today, label: '$' + i }); return out; }" };
-  delete process.env.AKORO_SELF_TOOLING_CODE_ENABLED;
+  process.env.AKORO_SELF_TOOLING_CODE_ENABLED = "false";
   assert.ok((await validateDefinition(structuredClone(def), { n: { type: "integer" } })).errors.some((e) => /turned off/.test(e)));
-  process.env.AKORO_SELF_TOOLING_CODE_ENABLED = "true";
+  delete process.env.AKORO_SELF_TOOLING_CODE_ENABLED;   // unset = on (the default)
   try {
     const v = await validateDefinition(structuredClone(def), { n: { type: "integer" } });
     assert.deepEqual(v.errors, [], "a '$' inside code isn't a param slot");

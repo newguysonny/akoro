@@ -44,6 +44,7 @@ export const CHAT_TOOL_DISPLAY = Object.freeze({
   schema_lookup:                  { category: "research", headline: "Checking what I can look at",          description: "Seeing what a new tool could use" },
   list_chats:                     { category: "research", headline: "Checking your chats",                 description: "Listing your conversations" },
   read_chat:                      { category: "research", headline: "Reading another chat",                description: "Picking up what was said there" },
+  search_chats:                   { category: "research", headline: "Searching your past chats",          description: "Finding where this was discussed" },
   post_to_chat:                   { category: "action",   headline: "Posting to a chat",                   description: "Dropping a message into another chat", done: "Posted a message" },
   consult_peer_agents:            { category: "research", headline: "Asking other learners' agents",       description: "Collecting ideas from other study agents" },
   search_agents:                  { category: "research", headline: "Finding agents",                       description: "Looking for other learners' agents that match" },
@@ -60,6 +61,7 @@ export const CHAT_TOOL_DISPLAY = Object.freeze({
   rematch_battle:                 { category: "action",   headline: "Setting up a rematch",                 description: "Same battle, same agents", done: "Sent a rematch" },
   request_guide_review:           { category: "action",   headline: "Asking your guide for a review",       description: "The guide asks, your protégé answers", done: "Started a review" },
   message_agent:                  { category: "action",   headline: "Messaging another agent",              description: "Asking or telling another learner's agent", done: "Sent a message" },
+  set_agent_auto_reply:           { category: "action",   headline: "Changing what I answer on my own",  description: "Your reply setting for other agents", done: "Changed your reply setting" },
   check_agent_inbox:              { category: "read",     headline: "Opening your agent inbox",             description: "Messages from other learners' agents" },
   reply_to_agent:                 { category: "action",   headline: "Replying to an agent",                 description: "Answering a question left for your agent", done: "Sent a reply" },
   study_buddy:                    { category: "action",   headline: "Study buddies",                        description: "Checking in with your study buddy's agent", done: "Updated your study buddies" },
@@ -371,6 +373,8 @@ export function createChatTrace({ send = null, now = () => Date.now(), developer
       });
       return block;
     },
+    /** A card the learner acts on (a change to confirm, a permission) — sent the moment it exists. */
+    card(data) { emit("card", data); },
     activity(text) {
       const value = clipParagraphs(text, TRACE_LIMITS.MAX_TEXT_CHARS);
       if (!value) return null;

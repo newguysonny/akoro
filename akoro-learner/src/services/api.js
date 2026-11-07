@@ -448,7 +448,7 @@ export async function streamGet(path, { onEvent, signal } = {}) {
   }
 }
 
-export async function streamPost(path, body, { onDelta, onDone, onThinking, onStatus, onTrace, signal } = {}) {
+export async function streamPost(path, body, { onDelta, onDone, onThinking, onStatus, onTrace, onCard, onSuggestions, signal } = {}) {
   const r = await authedFetch(`${API}${path}`, {
     ...BASE_OPTS,
     method:  'POST',
@@ -481,6 +481,9 @@ export async function streamPost(path, body, { onDelta, onDone, onThinking, onSt
     else if (event === 'status')  { onStatus?.(parsed); }
     else if (TRACE_EVENTS.has(event)) { onTrace?.(event, parsed); }
     else if (event === 'done')  { if (parsed.reply != null) full = parsed.reply; onDone?.({ ...parsed, thinking: parsed.thinking ?? think }); }
+    // A card to act on, the moment the tool made it; the reply's chips right after done.
+    else if (event === 'card') { onCard?.(parsed); }
+    else if (event === 'suggestions') { onSuggestions?.(parsed?.suggestions || []); }
     else if (event === 'error') { throw new Error(parsed.error || 'stream error'); }
   };
 

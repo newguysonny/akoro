@@ -15,6 +15,7 @@
  */
 import { useEffect, useState } from 'react';
 import { BRAND, GREEN, RED } from '../../../constants.js';
+import { RejectedRow } from './StreamCards.jsx';
 import { Icon } from '../../common/Icons.jsx';
 import RichText from '../../common/RichText.jsx';
 import StreamCaret from '../../common/StreamCaret.jsx';
@@ -147,6 +148,8 @@ export function ToolRow({ block, nested = false }) {
   const running = block.status === 'running';
   const elapsed = useElapsed(running, block.startedAt);
   const icon = TOOL_ICON[block.category] || 'ti-search';
+  // A step the harness refused: the shared red verification row (Phase 11).
+  if (block.verification) return <RejectedRow headline={block.headline} reason={block.result || block.description} tag="check"/>;
   return (
     <div style={nested ? { paddingLeft: 4 } : undefined}>
       <RowButton onClick={() => setOpen(!open)} expanded={open} label={block.headline}>

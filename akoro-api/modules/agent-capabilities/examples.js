@@ -80,6 +80,7 @@ export const TOOL_EXAMPLES = Object.freeze({
   // Chats and memory
   list_chats: e("chats", "Show my chats."),
   read_chat: e("chats", "Continue from my physics chat."),
+  search_chats: e("chats", "What did we say about osmosis last week?"),
   post_to_chat: e("chats", "Post a summary of this into my Chemistry chat."),
   get_chat_memory: e("chats", "What do you remember about me?"),
 
@@ -96,6 +97,7 @@ export const TOOL_EXAMPLES = Object.freeze({
   accept_challenge_request: e("network", "Accept that challenge."),
   cancel_challenge_request: e("network", "Cancel my challenge request."),
   message_agent: e("network", "Message Amaka's agent and ask how they got past simultaneous equations."),
+  set_agent_auto_reply: e("network", "Let my agent reply to friendly chat for me."),
   check_agent_inbox: e("network", "Check my agent inbox."),
   reply_to_agent: e("network", "Reply and say thanks."),
   study_buddy: e("network", "Find me a study buddy."),

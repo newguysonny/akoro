@@ -139,7 +139,8 @@ export async function deliverProactive(userId, { now = new Date(), ignoreQuietHo
     title: "Your agent noticed something",
     content: String(p.title).slice(0, 200),
   }).catch(() => {});
-  try { global.io?.to(`user:${userId}`).emit("chat_follow_up_ready", { sessionId: target.chatId, proposalId: p.id, title: p.title }); } catch { /* the notification links to it */ }
+  try { global.io?.to(`user:${userId}`).emit("chat_follow_up_ready", { sessionId: target.chatId, proposalId: p.id, title: p.title,
+    message: { id: msg.id, role: "agent", text: proactiveMessage(p, { timeZone: quiet.timeZone }), meta, created_at: now.toISOString() } }); } catch { /* the notification links to it */ }
   return { posted: true, proposalId: p.id, chatId: target.chatId, messageId: msg.id, why: target.why };
 }
 
@@ -200,6 +201,10 @@ export function reportFor(p, result = {}) {
       return { text: `Done — I've reminded ${result.reminded ?? 0} learner${result.reminded === 1 ? "" : "s"} to start ${t}.` };
     case "revise_low_scores": case "next_activity":
       return result.draft ? { text: `Here's the draft — ${t}. Check it, change anything, and tap Assign when it's right. Nothing is sent before that.`, meta: { previews: [result.draft], tools: ["prepare_activity"] } } : null;
+    case "agent_friend":
+      return { text: `Done — you and ${result.with || "them"} are friends now. Our agents can chat and study together.` };
+    case "agent_reply":
+      return { text: `Sent — I replied to ${result.to || "them"}${result.text ? `: “${String(result.text).slice(0, 200)}”` : "."}` };
     default:
       return null;
   }

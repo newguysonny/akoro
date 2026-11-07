@@ -37,6 +37,9 @@ const TEMPLATES = {
   practice_scored: (f) => `Scored ${f.score} of ${f.total} (${f.percentage}%). ${f.passed ? "Above the pass mark — topic understood." : `Below the ${f.thresholdPercentage}% pass mark.`}`,
   strategy_offered: (f) => `Offered the ${String(f.strategy || "").replace(/_/g, " ")} strategy for ${label(f)} — you choose whether to use it.`,
   teach_back_confirmed: (f) => `You confirmed the teach-back for ${label(f)}. A fresh retest is unlocked — same standard, new questions.`,
+  // D15: every intervention is a teaching session; the retest unlocks when it is finished.
+  teaching_requested: (f) => `A teaching session on ${label(f)}${f.strategy ? ` (${String(f.strategy).replace(/_/g, " ")})` : ""}: teach your agent what it missed, and the retest unlocks when you finish.`,
+  teaching_completed: (f) => `You finished teaching ${label(f)}. A fresh retest is unlocked — same standard, new questions.`,
   topic_advanced: (f) => `${label(f)} settled. Moving on${f.nextTopicLabel ? ` to ${f.nextTopicLabel}` : ""}.`,
   topic_deferred: (f) => `${label(f)} deferred${f.reason ? ` (${f.reason})` : ""}. It can be retried once this session with attempts reset.`,
   topic_flagged: (f) => `${label(f)} flagged as a knowledge gap${f.reason ? ` — ${f.reason}` : ""}.`,
@@ -72,6 +75,7 @@ const REJECTION_COPY = {
   topic_not_in_syllabus: "That topic is not in the approved syllabus for this subject.",
   duplicate_topic: "That topic is already in the plan once.",
   teach_back_gate: "A retest unlocks only after you confirm the teach-back — no guessing.",
+  teaching_unavailable: "A teaching session can't be set up right now — teach it here instead, then confirm the teach-back.",
   agent_loop_cap: "Too many steps without a decision — the session pauses safely.",
   session_tool_call_cap: "The session tool budget is exhausted — pausing safely.",
   deferred_retry_used: "The one deferred retry for this session is already used.",

@@ -4,8 +4,20 @@
  *
  *   Session: planning → awaiting_confirmation → topic_active ⇄ replanning
  *                                            ⇄ paused → completed|abandoned|cancelled
- *   Topic:   queued → active → understood | flagged_gap | capped_out | deferred
+ *   Topic (Grand Plan §8.3, D15/D16):
+ *     queued → active ─ notes ─→ diagnostic_ready → diagnostic (the check)
+ *                     └ none ──→ intervention_required
+ *     diagnostic | retest → understood | intervention_required | capped_out
+ *     intervention_required → awaiting_teaching   (request_teaching, D15)
+ *                           → retest_ready        (inline teach-back: the fallback when Teaching is off)
+ *     awaiting_teaching → retest_ready (TEACHING_COMPLETED) → retest
+ *     capped_out → deferred | flagged_gap;   deferred | flagged_gap → queued
+ *
+ *   The exam-prep run is the ATTEMPT RECORD (questions, answers, score,
+ *   attempt number). Its status (RUN_*) is kept for the record and the
+ *   standalone exam-prep route; it never drives a topic — the topic machine does.
  */
+import { strategiesFor } from "../strategies/library.js";
 
 export const SESSION_STATES = Object.freeze([
   "planning", "awaiting_confirmation", "topic_active", "replanning", "paused", "completed", "abandoned", "cancelled",
@@ -15,7 +27,93 @@ export const ACTIVE_SESSION_STATES = Object.freeze(
   SESSION_STATES.filter((state) => !["completed", "abandoned", "cancelled"].includes(state)),
 );
 
-export const TOPIC_STATES = Object.freeze(["queued", "active", "understood", "flagged_gap", "capped_out", "deferred"]);
+export const TOPIC_STATES = Object.freeze([
+  "queued", "active", "diagnostic_ready", "diagnostic", "intervention_required", "awaiting_teaching",
+  "retest_ready", "retest", "understood", "flagged_gap", "capped_out", "deferred",
+]);
+
+/** The states of the topic being worked on (at most one per session). */
+export const TOPIC_IN_PROGRESS_STATES = Object.freeze([
+  "active", "diagnostic_ready", "diagnostic", "intervention_required", "awaiting_teaching", "retest_ready", "retest",
+]);
+/** A check (or a practice) is out on the topic, waiting to be scored. */
+export const TOPIC_CHECKING_STATES = Object.freeze(["diagnostic", "retest"]);
+/** Where the auto-start may begin a check by itself. */
+export const TOPIC_STARTABLE_STATES = Object.freeze(["active", "diagnostic_ready", "retest_ready"]);
+
+export const isTopicInProgress = (state) => TOPIC_IN_PROGRESS_STATES.includes(state);
+
+/**
+ * The topic's coarse status for the learner surfaces (the Study Prep card,
+ * session.get_state's `status`): every in-progress state reads "active", so
+ * the card is unchanged; `state` carries the §8.3 state itself.
+ */
+export const publicTopicStatus = (state) => (isTopicInProgress(state) ? "active" : state);
+
+/** Where a scored attempt leaves the topic (§8.3). */
+export function topicStateAfterScore({ passed, capped }) {
+  if (passed) return "understood";
+  if (capped) return "capped_out";
+  return "intervention_required";
+}
+
+/**
+ * Where a practice / Agent Check starts from, by the topic's state (§8.3).
+ *   → { ok: true, mode, ready, running }   ready: the state before the charge,
+ *                                          running: the state once it runs
+ *   → { ok: false, code, message }
+ * A retest only from retest_ready (teaching completed, or the inline
+ * teach-back), and a retest_ready topic always runs a retest. A first check
+ * from active / diagnostic_ready, or from intervention_required while no
+ * attempt was ever scored (the first check found no notes; now taught).
+ */
+export function practiceStart({ state, attemptsUsed = 0 }, mode = "diagnostic") {
+  if (state === "retest_ready") return { ok: true, mode: "retest", ready: "retest_ready", running: "retest" };
+  const gate = { ok: false, code: "teach_back_gate", message: "The learner must confirm the teach-back before a retest" };
+  if (mode === "retest") {
+    return ["intervention_required", "awaiting_teaching"].includes(state) ? gate
+      : { ok: false, code: "invalid_state_transition", message: "That topic has no retest waiting" };
+  }
+  const first = { ok: true, mode: "diagnostic", ready: "diagnostic_ready", running: "diagnostic" };
+  if (state === "active" || state === "diagnostic_ready") return first;
+  if (state === "intervention_required" && Number(attemptsUsed) === 0) return first;
+  if (["intervention_required", "awaiting_teaching"].includes(state)) return gate;
+  return { ok: false, code: "invalid_state_transition", message: "That topic is not ready for a check" };
+}
+
+/**
+ * The exam-prep run as an attempt record (§8.3): its own small machine, kept
+ * for the record and the standalone exam-prep route (`/exam-prep/confidence-runs`).
+ * One table — the exam-prep run definition (workflow.js) is built from it.
+ */
+export const RUN_STATES = Object.freeze([
+  "researching", "planned", "diagnostic_ready", "teach_back_required", "retest_ready", "passed", "change_approach", "cancelled",
+]);
+export const RUN_TRANSITIONS = Object.freeze({
+  researching: ["planned", "cancelled"],
+  planned: ["diagnostic_ready", "cancelled"],
+  diagnostic_ready: ["teach_back_required", "passed", "change_approach", "cancelled"],
+  teach_back_required: ["retest_ready", "cancelled"],
+  retest_ready: ["teach_back_required", "passed", "change_approach", "cancelled"],
+  passed: [], change_approach: [], cancelled: [],
+});
+/** Learner-safe labels for each run state (the run's step rows). */
+export const RUN_STATE_LABELS = Object.freeze({
+  researching: "Preparing approved study context",
+  planned: "Practice plan ready",
+  diagnostic_ready: "Generated practice ready",
+  teach_back_required: "Teach-back available before a fresh retest",
+  retest_ready: "Fresh generated retest ready",
+  passed: "Assessment result recorded",
+  change_approach: "Attempt cap reached; choose a different approach",
+  cancelled: "Workflow cancelled",
+});
+
+/** The run record's status after a scored attempt (pass / cap / teach-back). */
+export function runStatusAfterScore({ passed, currentAttempt, maxAttempts }) {
+  if (passed) return "passed";
+  return Number(currentAttempt) >= Number(maxAttempts) ? "change_approach" : "teach_back_required";
+}
 
 export const SESSION_TRANSITIONS = Object.freeze({
   // paused: the planning agent hit its step cap — resumable back into planning.
@@ -31,10 +129,21 @@ export const SESSION_TRANSITIONS = Object.freeze({
 
 export const TOPIC_TRANSITIONS = Object.freeze({
   queued: ["active", "deferred"],
-  active: ["understood", "flagged_gap", "capped_out", "deferred", "queued"],
+  active: ["diagnostic_ready", "intervention_required", "deferred", "flagged_gap", "queued"],
+  // No notes after all (a stopped check, restarted) → intervention_required.
+  diagnostic_ready: ["diagnostic", "intervention_required", "deferred", "flagged_gap"],
+  // A stopped check goes back to ready.
+  diagnostic: ["understood", "intervention_required", "capped_out", "diagnostic_ready"],
+  // → awaiting_teaching: request_teaching (D15). → retest_ready: the inline teach-back.
+  // → diagnostic_ready: the first check, once taught (no attempt was scored yet).
+  intervention_required: ["awaiting_teaching", "retest_ready", "diagnostic_ready", "deferred", "flagged_gap"],
+  // TEACHING_COMPLETED (or taught elsewhere) → retest_ready; abandoned with no re-offer → intervention_required.
+  awaiting_teaching: ["retest_ready", "intervention_required", "deferred", "flagged_gap"],
+  retest_ready: ["retest", "deferred", "flagged_gap"],
+  retest: ["understood", "intervention_required", "capped_out", "retest_ready"],
   understood: [],
   flagged_gap: ["queued"],
-  capped_out: ["deferred", "queued"],
+  capped_out: ["deferred", "flagged_gap", "queued"],
   deferred: ["queued"],
 });
 
@@ -60,7 +169,8 @@ export const POLICY = Object.freeze({
   DEFERRED_RETRIES_PER_SESSION: 1,// Decision 5
   INTENT_MAX_CHARS: 240,          // S5 still-open, adopted
   FAN_OUT_CONCURRENCY: 4,         // S4: generation fan-out ≤ 3–4
-  STRATEGY_LIBRARY: Object.freeze(["teach_back", "different_analogy", "interleave", "space_out", "escalate_human"]),
+  // The ONE library's Study Prep strategies (strategies/library.js, §7.7.2 v3).
+  STRATEGY_LIBRARY: Object.freeze(strategiesFor("study_prep", { includeDisabled: true })),
 });
 
 /**
@@ -83,6 +193,7 @@ export const REJECTION_CODES = Object.freeze([
   "deferred_retry_used",
   "insufficient_balance",
   "teach_back_gate",
+  "teaching_unavailable",
   "agent_loop_cap",
   "session_tool_call_cap",
   "unknown_action",
@@ -97,7 +208,7 @@ export const DECISION_NODES = Object.freeze([
   "practice_generated", "practice_scored", "strategy_offered", "teach_back_confirmed",
   "topic_advanced", "topic_deferred", "topic_flagged", "session_concluded", "session_paused",
   "syllabus_generated", "syllabus_resolved", "agent_check_started", "agent_check_skipped", "agent_check_scored",
-  "coins_approved",
+  "coins_approved", "teaching_requested", "teaching_completed",
 ]);
 
 /** Hard plan validation (Master Plan §4.4 step 7): the ONLY plan constraints. */

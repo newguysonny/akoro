@@ -44,8 +44,10 @@ function ComposerTool({ icon, label, onClick, disabled = false, active = false, 
  * can't be picked. The host maps the id to its request. `up` opens the
  * menu above the chip (composer rails sit at the bottom of the screen).
  */
-export function ModelSwitch({ modelId, modelLabel, modelOptions = [], onModelChange, disabled = false, dark = false, up = true, unavailableTitle = '', icon = 'ti-sparkles' }) {
+export function ModelSwitch({ modelId, modelLabel, modelOptions = [], onModelChange, disabled = false, dark = false, up = true, unavailableTitle = '', icon = 'ti-sparkles', tier = null }) {
   const [open, setOpen] = useState(false);
+  // A dearer model (option.confirm) asks once in the menu before it is picked.
+  const [arming, setArming] = useState(null);
   const ref = useRef(null);
   useEffect(() => {
     const closeOnOutsideClick = (event) => { if (!ref.current?.contains(event.target)) setOpen(false); };
@@ -86,6 +88,11 @@ export function ModelSwitch({ modelId, modelLabel, modelOptions = [], onModelCha
           color: dark ? '#E5EAFB' : 'var(--ak-text)', background: dark ? '#171827' : 'var(--ak-surface, #fff)',
           boxShadow: '0 13px 34px rgba(22,28,45,.24)',
         }}>
+          {tier && (
+            <div data-model-tier="" style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 9px 4px', fontSize: 11, fontWeight: 800, color: dark ? '#C9D2E6' : 'var(--ak-text-sub)', fontFamily: "'Nunito',sans-serif" }}>
+              <Icon name="ti-crown" size={13} color={BRAND}/>Your plan: <span style={{ color: BRAND }}>{tier}</span>
+            </div>
+          )}
           {modelOptions.map((option) => {
             const selected = option.id === modelId;
             const off = !!option.disabled;
@@ -96,7 +103,7 @@ export function ModelSwitch({ modelId, modelLabel, modelOptions = [], onModelCha
               )}
               <button type="button" role="menuitemradio" aria-checked={selected} aria-disabled={off}
                 title={off ? (option.note || 'Coming soon') : undefined}
-                onClick={() => { if (off) return; onModelChange?.(option.id); setOpen(false); }} style={{
+                onClick={() => { if (off) return; if (option.confirm && arming !== option.id && !selected) { setArming(option.id); return; } setArming(null); onModelChange?.(option.id); setOpen(false); }} style={{
                   width: '100%', padding: '8px 9px', border: 'none', borderRadius: 9,
                   display: 'flex', alignItems: 'flex-start', gap: 7, textAlign: 'left', cursor: off ? 'not-allowed' : 'pointer',
                   color: selected ? BRAND : 'inherit', background: selected ? `${BRAND}14` : 'transparent',
@@ -111,8 +118,9 @@ export function ModelSwitch({ modelId, modelLabel, modelOptions = [], onModelCha
                       : <span style={{ fontSize: 9.5, fontWeight: 800, color: dark ? '#9BA8C1' : '#8791A3', textTransform: 'uppercase', letterSpacing: '.04em' }}>{option.meta}</span>)}
                   </span>
                   {option.description && <span style={{ display: 'block', marginTop: 1, color: dark ? '#9BA8C1' : '#8791A3', fontSize: 10, fontWeight: 500, lineHeight: 1.35 }}>{option.description}</span>}
+                  {arming === option.id && <span data-model-confirm="" style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 4, color: '#B45309', fontSize: 10.5, fontWeight: 800 }}><Icon name="ti-coin" size={12} color="#B45309"/>{option.confirm} Tap again to use it.</span>}
                 </span>
-                {selected && <Icon name="ti-check" size={14} color={BRAND}/>}
+                {option.locked ? <Icon name="ti-lock" size={13} color={dark ? '#7F8BA3' : '#98A1B2'}/> : selected && <Icon name="ti-check" size={14} color={BRAND}/>}
               </button>
               </div>
             );

@@ -73,6 +73,7 @@ const NAV_SECTIONS = [
       { label: 'Student Categories', to: '/mgmt/student-categories' },
       { label: 'Disabled Students', to: '/mgmt/disabled-students' },
       { label: 'Health Records', to: '/mgmt/health-records' },
+      { label: 'Learner Struggles', to: '/mgmt/learner-struggles' },
     ] },
     { label: 'Academics', icon: GraduationCap, children: [
       { label: 'Academic Dashboard', to: '/mgmt/academic-dashboard' },

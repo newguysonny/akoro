@@ -55,7 +55,9 @@ router.post("/sessions", async (req, res) => {
     const classLevel = text(req.body?.classLevel || "JSS1", 40);
     const examBoard = text(req.body?.examBoard || "WAEC", 80).toUpperCase();
     if (goal.length < 3 || subject.length < 2) return fail(res, 422, "tool_schema_invalid", "A goal (3+ chars) and subject are required");
-    const view = await startStudyPrepSession({ learnerId: req.user.id, goal, subject, classLevel, examBoard });
+    // §8.8: optional — otherwise the goal's words decide (classifyGoal).
+    const goalType = ["curricular", "non_curricular"].includes(req.body?.goalType) ? req.body.goalType : null;
+    const view = await startStudyPrepSession({ learnerId: req.user.id, goal, subject, classLevel, examBoard, goalType });
     return res.status(201).json(shapeView(view));
   } catch (error) { return rejection(res, error); }
 });
@@ -192,6 +194,22 @@ router.post("/sessions/:id/topics/:topicId/teach-back-done", async (req, res) =>
   } catch (error) { return rejection(res, error); }
 });
 
+// POST /study-prep/sessions/:id/topics/:topicId/strategy — the learner accepts
+// a strategy their agent offered (Phase 4a): the harness runs it (replan,
+// schedule, offline pack) and its outcome is judged by the next attempt.
+router.post("/sessions/:id/topics/:topicId/strategy", async (req, res) => {
+  if (!guard(res)) return;
+  const id = paramId(res, req.params.id, "session id");
+  const topicId = paramId(res, req.params.topicId, "topic id");
+  if (!id || !topicId) return;
+  const strategy = text(req.body?.strategy, 60);
+  if (!strategy) return fail(res, 422, "tool_schema_invalid", "strategy is required");
+  try {
+    const result = await getHarness().offerStrategy({ sessionId: id, learnerId: req.user.id, topicId, strategy, accepted: true });
+    return res.json({ success: true, strategy: result.strategy, topic: result.topic, execution: result.execution || null });
+  } catch (error) { return rejection(res, error); }
+});
+
 // POST /study-prep/sessions/:id/topics/:topicId/teaching/approve — the learner
 // confirms the teaching session offered after a missed check (Phase 6); without
 // a tap it approves itself after a minute. It then waits on the dashboard.
@@ -226,17 +244,20 @@ router.post("/sessions/:id/topics/:topicId/teaching/simulate-miss", async (req, 
       .map((g) => String(g || "").trim().slice(0, 120)).filter(Boolean).slice(0, 4);
     const harness = getHarness();
     const view = await harness.getSessionView({ sessionId: id, learnerId: req.user.id, eventLimit: 1 });
-    const topic = view.topics.find((t) => t.id === topicId && t.status === "active");
+    // A topic not yet checked: its check is recorded as missed (§8.3 → intervention_required).
+    const topic = view.topics.find((t) => t.id === topicId && ["active", "diagnostic_ready"].includes(t.state));
     if (!topic) return fail(res, 409, "invalid_state_transition", "That topic is not active");
     const at = new Date().toISOString();
-    const scored = await supabaseStore.updateTopicConditional(topic.id, "active", {
+    const scored = await supabaseStore.updateTopicConditional(topic.id, topic.state, {
+      status: "intervention_required",
       check_battle_id: randomUUID(), check_mode: "diagnostic", check_scored_at: at, attempts_used: Number(topic.attemptsUsed || 0) + 1,
       check_result: { correct: 2, guessed: 0, wrong: 3, unknown: 0, total: 5, score: 0.4, perQuestion: [], gaps, simulated: true },
       learner_confirmed_ready: false, updated_at: at,
     });
     if (!scored) return fail(res, 409, "invalid_state_transition", "The topic moved meanwhile");
-    const [row] = (await db.schema("edu").from("study_prep_sessions").select("*").eq("id", id).limit(1)).data || [];
-    const teaching = await teachingHandoff().propose({ session: row, topic: { id: topic.id, label: topic.label, attemptsUsed: Number(topic.attemptsUsed || 0) + 1 }, outcome: "retest_offered", gaps });
+    // D15: the intervention is a teaching session (the real request_teaching path).
+    const asked = await harness.requestTeaching({ sessionId: id, learnerId: req.user.id, topicId: topic.id, strategy: "teach_back", focusGaps: gaps, origin: "harness" }).catch(() => null);
+    const teaching = asked?.teaching || null;
     wakeStudyPrep({ sessionId: id, learnerId: req.user.id, trigger: "check_scored", facts: { topic: topic.label }, conversationId: chatOf(req) });
     return res.json({ success: true, simulated: true, teaching });
   } catch (error) { return rejection(res, error); }

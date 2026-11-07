@@ -12,6 +12,7 @@ import { BRAND } from '../../../constants.js';
 import { Icon } from '../../common/Icons.jsx';
 import { apiGet } from '../../../services/api.js';
 import { useLang } from '../../../contexts/LanguageContext.jsx';
+import { WorkflowStateBadge } from './StreamCards.jsx';
 
 const NUNITO = "'Nunito',sans-serif";
 export const NEEDS_CATEGORIES = [
@@ -75,6 +76,7 @@ export default function NeedsYouList({ state, onOpen }) {
               <p style={{ fontSize: 11.5, color: 'var(--ak-text-sub)', margin: '2px 0 0', lineHeight: 1.4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {[it.waitsFor?.label, it.progress?.label].filter(Boolean).join(' · ')}
               </p>
+              {it.badge && <WorkflowStateBadge badge={it.badge} style={{ marginTop: 4 }}/>}
             </div>
             {it.action && (
               <button type="button" onClick={() => onOpen(it)}

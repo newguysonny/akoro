@@ -77,6 +77,8 @@ export async function syncPublishedBlogMirror(blog, author) {
     const { error } = await contentDb.from("blog_posts").insert(row);
     if (error) throw new Error(error.message);
   }
+  // §7.14: its passages are re-indexed for the agent's blog search (never fails the mirror).
+  import("../adaptive-learning/blogResearch.js").then((m) => m.indexBlogPost({ slug })).catch(() => {});
 
   if (blog.public_slug !== slug) {
     await db.schema("edu").from("blogs").update({ public_slug: slug }).eq("id", blog.id);

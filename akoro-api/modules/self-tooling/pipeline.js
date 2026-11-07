@@ -1,7 +1,7 @@
 /**
  * modules/self-tooling/pipeline.js — create_tool and the learner-tool runtime
  * (plan §7.4, §7.9, §7.10). Stages 1 (recipe), 2 (spec), 3 (sandboxed code,
- * sandbox/ — flag AKORO_SELF_TOOLING_CODE_ENABLED) and 4 (escalate to an
+ * sandbox/ — on by default; AKORO_SELF_TOOLING_CODE_ENABLED=false turns it off) and 4 (escalate to an
  * admin, escalation.js).
  *
  *   createTool  → { status: created|escalated|rejected, … }   one call in, one status out
@@ -282,6 +282,8 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
         lastProblem = built.notExpressible; inexpressible = true; tried.push(`${stage}#${attempt}: not expressible: ${lastProblem}`);
         // What was approved for this goal answers it: one repair before giving up.
         if (mustUse.length && attempt === 1) { feedback = `"${built.notExpressible}" — but ${mustUse.join(", ")} was approved for this goal: use it`; continue; }
+        // At the code stage "needs scheduling/logic" is not a reason — code IS the logic. One repair.
+        if (stage === "code" && attempt === 1 && /schedul|logic|per day|spread|skip/i.test(String(built.notExpressible))) { feedback = `"${built.notExpressible}" — you are writing code: write run() that does exactly that`; continue; }
         break;
       }
       if (!built.definition) { feedback = built.error || "no definition"; lastProblem = feedback; tried.push(`${stage}#${attempt}: ${feedback}`); continue; }
@@ -310,7 +312,7 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
   // Never offer a DIFFERENT change than the one asked for (a rename must not become a delete card).
   const fallback = locked.find((c) => !asksForChange(goal) || CAPABILITIES[c]?.kind !== "write" || c === ownChangeAsked(goal));
   if (fallback && !resumed && !draftCap && inexpressible) return toEscalate(fallback, lastProblem);
-  return finish("rejected", reject(`Couldn't build it safely: ${String(lastProblem || "no stage could express it").slice(0, 240)}`, resumed ? { tried: tried.map((t) => t.slice(0, 300)) } : {}));
+  return finish("rejected", reject(`Couldn't build it safely: ${String(lastProblem || "no stage could express it").slice(0, 240)}`, (resumed || dry) ? { tried: tried.map((t) => t.slice(0, 300)) } : {}));
 
   /** Save the built tool switched OFF and ask the learner on a card, showing what it would change right now. */
   async function draftAndAsk({ def, runNow }) {

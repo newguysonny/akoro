@@ -21,6 +21,7 @@ import { resolveLadder } from "../lessonLadder.js";
 import { NaNaEsumai } from "../agents/nana-esumai/guide.js";
 import { resolveSessionDocument } from "../documentGrounding.js";
 import { loadContinuationContext, loadDecayPriorLesson } from "./context.js";
+import { loadLearnerNotes } from "./learnerNotes.js";
 
 export const TEACHING_MODES = Object.freeze(["fresh", "continuation", "decay"]);
 
@@ -36,6 +37,9 @@ export async function prepareTeachingSession({
   focus = null,
 }) {
   if (!TEACHING_MODES.includes(mode)) throw Object.assign(new Error("mode is invalid"), { status: 422 });
+  // What the learner told their agent before (memory notes) — loaded in
+  // parallel with the rest of the setup, capped at 3.5 s, never fatal.
+  const notesPromise = loadLearnerNotes({ studentId, topic, subject });
   let historyBlocks = [];
   let decayPayload = null;
   let sessionType = "free_teaching";
@@ -86,6 +90,9 @@ export async function prepareTeachingSession({
   }
   // initialize() starts where the last session stopped, not at step one.
   orchestrator.resumeFrom = resumeFrom;
+  // Guidance for HOW to teach this learner (D50: never evidence). initialize()
+  // hands it to the protégé; NaNa's teach prompt reads it from here.
+  orchestrator.learnerNotes = await notesPromise;
   // Whole-document grounding, resolved against the AUTHENTICATED learner. A
   // promise, so the opening never waits on it; the first turn does.
   orchestrator.documentTargetPromise = document ? resolveSessionDocument({ userId: caller, document }) : null;
@@ -112,5 +119,5 @@ export async function prepareTeachingSession({
   const init = await orchestrator.initialize(studentId, topic);
   // Identity for persistence: lifecycle.js saves the session from this.
   orchestrator.sessionMeta = { studentId, topic, subject };
-  return { orchestrator, init, mode, sessionType, decayPayload, historyBlocks, priorBlocks, ladder };
+  return { orchestrator, init, mode, sessionType, decayPayload, historyBlocks, priorBlocks, ladder, learnerNotes: orchestrator.learnerNotes || [] };
 }

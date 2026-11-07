@@ -16,13 +16,15 @@
  * The learner always gets exactly one reply per turn. `decide` is injectable
  * (tests); production asks the controller model with function tools.
  */
-import { createTeachingTurnTools } from "../teaching-workflow/tools.js";
+import { createTeachingTurnTools, currentTeachingStrategy, recordTeachingStrategyOutcome } from "../teaching-workflow/tools.js";
 import { TEACHING_TURN_TOOL_CATALOG } from "../teaching-workflow/catalog.js";
 import {
   TEACHING_POLICY, PROTEGE_MOVES, GUIDE_MOVES, TEACHING_STRATEGIES, TOOLS_BY_MODE, TERMINAL_TOOLS, PLAN_NAME,
-  normaliseMode, fallbackReply, validateDecision, objectiveMet, boundedEnd,
+  normaliseMode, fallbackReply, validateDecision, objectiveMet, boundedEnd, teachingStrategy,
 } from "./policy.js";
 import { guideTeach } from "./guideTeacher.js";
+import { assessmentConcepts, protegeLine, runTeachingAssessment } from "./assessment.js";
+import { recommendNextAction } from "../adaptive-engine.js";
 
 export const AGENT_TURN_POLICY_VERSION = "adaptive-teaching-agent-v1";
 const LABELS = Object.fromEntries(TEACHING_TURN_TOOL_CATALOG.map((t) => [t.name, t.label]));
@@ -34,6 +36,7 @@ const AGENT_LABELS = {
   guide_teach: "Preparing the guide's reply",
   teaching_propose_complete: "Checking whether the session is complete",
   teaching_propose_pause: "Pausing the session",
+  teaching_request_assessment: "Checking what your protégé learned",
   assess_learner_response: "Checking your answer",
 };
 
@@ -47,6 +50,7 @@ export function controllerTools(mode) {
     guide_teach: { description: "END THE TURN with NaNa's teaching reply to the learner, in one move.", parameters: { type: "object", properties: { move: { type: "string", enum: Object.keys(GUIDE_MOVES), description: Object.entries(GUIDE_MOVES).map(([k, v]) => `${k}: ${v}`).join("; ") }, focusConcept: { type: "string" } }, required: ["move"] } },
     teaching_propose_complete: { description: "END THE TURN by proposing the session is complete. Accepted only when every part is verified (the gate decides); otherwise you get objective_not_met and must reply instead.", parameters: { type: "object", properties: {} } },
     teaching_propose_pause: { description: "END THE TURN by pausing the session (the learner wants to stop for now, or is too frustrated to go on).", parameters: { type: "object", properties: { reason: { type: "string" } }, required: ["reason"] } },
+    teaching_request_assessment: { description: `END THE TURN with a short check of the protégé on the parts just taught (NaNa asks, the protégé answers only from what it was taught, Sergeant judges; at most ${TEACHING_POLICY.MAX_ASSESSMENTS} per session). Use when the learner has taught a part and wants to see whether it landed.`, parameters: { type: "object", properties: { conceptIds: { type: "array", items: { type: "string" }, description: "The parts to check (by name); default: the parts taught so far." } } } },
   };
   return TOOLS_BY_MODE[normaliseMode(mode)].map((name) => ({ type: "function", function: { name, ...defs[name] } }));
 }
@@ -68,7 +72,7 @@ export function decisionState(context) {
 }
 
 /** The production decision: the controller model picks one function tool. → { tool, args } | null */
-async function modelDecide({ context, observations }) {
+export async function modelDecide({ context, observations }) {
   const { openai } = await import("../../../lib/aiModel.js");
   const system = [
     `You run one turn of a teaching session. Mode: ${context.mode === "learn_with_guide" ? "the guide (NaNa) teaches the learner directly" : "the learner teaches their protégé (a student agent); NaNa coaches on the side"}.`,
@@ -82,8 +86,11 @@ async function modelDecide({ context, observations }) {
   const res = await openai.chat.completions.create({
     model: "gpt-4.1-mini", temperature: 0, messages: [{ role: "system", content: system }, { role: "user", content: user }],
     tools: controllerTools(context.mode), tool_choice: "required",
+    // The learner's model pick (Scenario K) wins over the default model here; billed at its price.
+    ...(context.modelPick || {}),
     __role: "controller", __feature: "teaching_controller", __userId: context.studentId, __timeoutMs: TEACHING_POLICY.DECISION_TIMEOUT_MS + 4_000, __maxRetries: 0,
   });
+  if (res?.model_refusal) context.refusals = [...(context.refusals || []), { model: res.model_refusal.model, fallbackModel: res.model_refusal.fallbackModel || null }];
   const call = res.choices?.[0]?.message?.tool_calls?.[0];
   if (!call?.function?.name) return null;
   let args = {};
@@ -98,7 +105,41 @@ const withTimeout = (promise, ms) => {
 };
 
 /** Run one agent-driven turn. Returns the same context shape the fixed runner did, plus the agent's record. */
-export async function executeAgentTeachingTurn({ orchestrator, humanMessage, callbacks = {}, phaseLabels, actionForDialogueMove, mode, decide = modelDecide, policy = TEACHING_POLICY, tools: harnessTools = null, teachGuide = guideTeach }) {
+/** The learner's model pick for this turn's controller decisions and persona replies (never the locked assessor). */
+async function defaultPick({ orchestrator }) {
+  const { pickFields } = await import("../../workflows/modelPicks.js");
+  return pickFields({ learnerId: orchestrator.userId || orchestrator.studentId, workflow: orchestrator.teachingWorkflowId || null, role: "persona" });
+}
+
+
+/**
+ * Strategy Library advice for a teaching turn (Phase 4a, strategies/recommend.js):
+ * the ranked candidates for teaching_get_state, and the per-topic use limit for
+ * strategy_select. Loaded lazily; fails open (no database → no advice, no limit).
+ */
+const loadRecommend = () => (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY ? import("../strategies/recommend.js") : Promise.resolve(null));
+export const teachingStrategyAdvisor = Object.freeze({
+  async recommend(context) {
+    const m = await loadRecommend();
+    if (!m) return [];
+    const r = await m.recommendStrategies({ learnerId: context.studentId, subject: context.subject, topic: context.topic, workflow: "teaching", executor: "teaching" });
+    return (r.ranked || []).slice(0, 5).map((s) => ({ id: s.id, reasons: s.reasons }));
+  },
+  async limit(context, strategyId) {
+    const m = await loadRecommend();
+    return m ? m.checkStrategyLimit({ learnerId: context.studentId, strategyId, subject: context.subject, topic: context.topic }) : { refusal: null };
+  },
+});
+
+/** Switching TO a strategy already used up on this topic is refused (staying on the current one is not a new use). */
+async function strategyLimitReached(advisor, context, orchestrator, strategy) {
+  const chosen = teachingStrategy(strategy);
+  if (!chosen || chosen === currentTeachingStrategy(orchestrator)) return false;
+  const limit = await advisor.limit(context, chosen).catch(() => null);
+  return !!limit?.refusal;
+}
+
+export async function executeAgentTeachingTurn({ orchestrator, humanMessage, callbacks = {}, phaseLabels, actionForDialogueMove, mode, decide = modelDecide, policy = TEACHING_POLICY, tools: harnessTools = null, teachGuide = guideTeach, pickFor = defaultPick, assess = runTeachingAssessment, strategyAdvisor = teachingStrategyAdvisor }) {
   const session = orchestrator?.session;
   if (!orchestrator?.studentAgent || !orchestrator?.studentAgentRecord || !session?.topic) throw new Error("Adaptive teaching workflow requires an initialized session");
   const context = {
@@ -112,6 +153,8 @@ export async function executeAgentTeachingTurn({ orchestrator, humanMessage, cal
     agentId: orchestrator.studentAgentRecord.id, studentId: orchestrator.studentId,
     completedTools: [], decisions: [], fallback: null,
   };
+  // Asked once per turn: a switch in the chat box applies from the next turn.
+  context.modelPick = await Promise.resolve(pickFor ? pickFor({ orchestrator }) : {}).catch(() => ({})) || {};
   const tools = harnessTools || createTeachingTurnTools();
   const step = (name, status) => callbacks.onWorkflowStep?.({ workflow: "adaptive_teaching_turn", policyVersion: AGENT_TURN_POLICY_VERSION, step: PLAN_NAME[name] || name, label: AGENT_LABELS[name] || LABELS[name] || "Updating teaching session", status });
   const runFixed = async (name) => {
@@ -136,16 +179,33 @@ export async function executeAgentTeachingTurn({ orchestrator, humanMessage, cal
     if (!decision && !error) error = "no_decision";
     if (error) { context.decisions.push({ iteration: i + 1, error }); break; }
     session.toolCalls += 1;
-    const valid = validateDecision(context.mode, decision, { strategyChanges: session.strategyChanges || 0 });
+    const valid = validateDecision(context.mode, decision, {
+      strategyChanges: session.strategyChanges || 0, assessments: session.assessments || 0,
+      // A check needs something taught first: the learner's earlier teaching messages.
+      taughtTurns: context.history.filter((h) => h?.role === "human_teacher").length,
+    });
     context.decisions.push({ iteration: i + 1, tool: PLAN_NAME[decision.tool] || decision.tool, args: decision.args || {}, ok: valid.ok, ...(valid.ok ? {} : { error: valid.error }) });
     if (!valid.ok) { observations.push({ tool: decision.tool, error: valid.error }); continue; }
     const args = decision.args || {};
     step(decision.tool, "started");
-    if (decision.tool === "teaching_get_state") observations.push({ tool: decision.tool, result: decisionState(context) });
-    else if (decision.tool === "strategy_select") {
-      session.strategy = args.strategy;
+    if (decision.tool === "teaching_get_state") {
+      // The Strategy Library's ranked candidates for this learner and topic (Phase 4a), once per turn.
+      context.recommendedStrategies ??= await strategyAdvisor.recommend(context).catch(() => []);
+      observations.push({ tool: decision.tool, result: { ...decisionState(context), recommendedStrategies: context.recommendedStrategies } });
+    } else if (decision.tool === "strategy_select" && await strategyLimitReached(strategyAdvisor, context, orchestrator, args.strategy)) {
+      // limits.maxUsesPerTopic: this strategy has had its turns on this topic.
+      observations.push({ tool: decision.tool, error: "strategy_limit_reached" });
+    } else if (decision.tool === "strategy_select") {
+      // The way it was being taught wasn't landing: that is its outcome (§7.7.1 step 6).
+      const previous = currentTeachingStrategy(orchestrator);
+      const chosen = teachingStrategy(args.strategy);
+      session.strategy = chosen;
       session.strategyChanges = (Number(session.strategyChanges) || 0) + 1;
-      observations.push({ tool: decision.tool, result: { strategy: args.strategy, changesUsed: session.strategyChanges } });
+      if (previous && previous !== chosen) {
+        void recordTeachingStrategyOutcome(orchestrator, { strategy: previous, outcome: "did_not_work", turnRef: `switch${session.strategyChanges}:t${session.turnCount || 0}`,
+          details: { switchedTo: chosen, reason: String(args.reason || "").slice(0, 200) || null } });
+      }
+      observations.push({ tool: decision.tool, result: { strategy: chosen, changesUsed: session.strategyChanges } });
     } else if (decision.tool === "guide_coach") {
       context.coachFocus = String(args.focus || "").slice(0, 200);
       observations.push({ tool: decision.tool, result: { ok: true } });
@@ -169,18 +229,30 @@ export async function executeAgentTeachingTurn({ orchestrator, humanMessage, cal
   // the one reply
   const part = context.mustKnowParts[context.mustKnowIndex] || context.topic;
   step(reply.tool, "started");
-  if (reply.tool === "guide_teach") {
+  if (reply.tool === "teaching_request_assessment") {
+    // A short Agent Check on what was taught: the result is the turn's card; the protégé says how it did.
+    session.assessments = (Number(session.assessments) || 0) + 1;
+    const concepts = assessmentConcepts({ requested: reply.args.conceptIds, parts: context.mustKnowParts.length ? context.mustKnowParts : [context.topic], index: context.mustKnowIndex });
+    // This turn's message is part of what was taught.
+    const taughtNow = { ...orchestrator, session: { ...session, history: [...context.history, { role: "human_teacher", content: humanMessage }] } };
+    let result;
+    try { result = await assess({ orchestrator: taughtNow, concepts, modelPick: context.modelPick }); }
+    catch (e) { result = { concepts, items: [], correct: 0, total: 0, outcome: "unavailable", error: String(e?.message || e).slice(0, 120) }; }
+    context.assessment = { ...result, number: session.assessments };
+    context.studentReply = result.outcome === "unavailable" ? "I couldn't take the check just now — keep teaching me and we'll try again." : protegeLine(result);
+    callbacks.onStudentChunk?.(context.studentReply);
+  } else if (reply.tool === "guide_teach") {
     context.guideReply = await teachGuide({
       orchestrator, humanMessage, topic: context.topic, part, move: reply.args.move, focusConcept: reply.args.focusConcept,
       phaseLabel: phaseLabels?.[session.phase], evidence: context.evidenceUpdate?.current || {}, history: context.history,
-      onChunk: callbacks.onGuideReplyChunk || null,
+      onChunk: callbacks.onGuideReplyChunk || null, modelPick: context.modelPick,
     });
     context.studentReply = "";
   } else {
     context.studentReply = await orchestrator.studentAgent.reply(
       humanMessage, context.topic, context.state.cognitive, context.history, phaseLabels?.[session.phase],
       callbacks.onStudentChunk || null,
-      { dialogue: context.evidenceUpdate.dialogue, evidence: context.evidenceUpdate.current, protegeMove: PROTEGE_MOVES[reply.args.move], focusConcept: reply.args.focusConcept || null },
+      { dialogue: context.evidenceUpdate.dialogue, evidence: context.evidenceUpdate.current, protegeMove: PROTEGE_MOVES[reply.args.move], focusConcept: reply.args.focusConcept || null, modelPick: context.modelPick },
     );
   }
   step(reply.tool, "completed");
@@ -198,7 +270,7 @@ export async function executeAgentTeachingTurn({ orchestrator, humanMessage, cal
       understanding: pct(ev.learnerMastery ?? cog.understanding),
       confusion: ev.misconceptionPresent ? Math.max(pct(cog.confusion), 40) : Math.round(pct(cog.confusion) * 0.8),
       engagement: Math.max(pct(cog.engagement), 50),
-      mistakes: ev.misconceptionPresent ? [part] : [], strengths: ev.masteryStatus === "verified" ? [part] : [],
+      strengths: ev.masteryStatus === "verified" ? [part] : [],   // the misconception itself goes to the learner model (recordTeachingEvidence)
       misconceptionDetected: ev.misconceptionPresent ? part : null,
       newConceptLearned: ev.masteryStatus === "verified" ? part : null,
     };
@@ -211,7 +283,7 @@ export async function executeAgentTeachingTurn({ orchestrator, humanMessage, cal
     if (context.evidenceUpdate.current.masteryStatus === "verified") orchestrator.stats.conceptsLearned.push(part);
     if (context.evidenceUpdate.misconceptionRepaired) orchestrator.stats.misconceptionsCleared.push(part);
     step("record_verified_learning", "completed");
-    context.guideResult = { tip: null, nextAction: actionForDialogueMove?.[context.evidenceUpdate.dialogue.move] || "DIG_DEEPER", nextPhase: null, nextMustKnowIndex: context.mustKnowIndex, isUrgent: false };
+    context.guideResult = { tip: null, nextAction: recommendNextAction({ dialogueMove: context.evidenceUpdate.dialogue.move, actionForDialogueMove }).action, nextPhase: null, nextMustKnowIndex: context.mustKnowIndex, isUrgent: false };
   } else {
     await runFixed("record_verified_learning");
     await runFixed("coach_teaching_dialogue");
@@ -225,6 +297,7 @@ export async function executeAgentTeachingTurn({ orchestrator, humanMessage, cal
   context.publicWorkflow = {
     type: "adaptive_teaching_turn", policyVersion: AGENT_TURN_POLICY_VERSION, state: "completed", mode: context.mode,
     completedTools: [...context.completedTools], reply: context.reply, fallback: context.fallback ? context.fallback.reason : null,
+    ...(context.assessment ? { assessment: { correct: context.assessment.correct, total: context.assessment.total, outcome: context.assessment.outcome, number: context.assessment.number } } : {}),
     ...(context.endRequested ? { endRequested: context.endRequested } : {}), ...(context.pauseRequested ? { pauseRequested: true } : {}),
   };
   return context;

@@ -196,6 +196,18 @@ export async function approveProposal(userId, id) {
       if (result?.needsClarification || result?.error || !result?.draftId) throw new Error(result?.question || result?.error || "The draft could not be prepared.");
       ref = result.draftId;
       detail = { draftId: result.draftId, title: result.title, draft: { id: result.draftId, title: result.title, type: result.type, audience: result.audience } };
+    } else if (kind === "agent_friend") {
+      // Phase 21: "Be friends" on a friend request from another learner's agent.
+      const { acceptFriend } = await import("../agent-network/friends.js");
+      const r = await acceptFriend(userId, payload.messageId);
+      ref = payload.messageId;
+      detail = { friends: true, with: r.with };
+    } else if (kind === "agent_reply") {
+      // Phase 21: "Yes, reply" — the drafted reply goes to the other agent.
+      const { sendApprovedReply } = await import("../agent-network/friends.js");
+      const r = await sendApprovedReply(userId, payload.messageId, payload.draft);
+      ref = payload.messageId;
+      detail = { replied: true, to: r.to, text: r.text };
     } else if (kind === "fix_it" && payload.fix === "overdue_tasks") {
       const { data: tasks } = await db.from("tasks").select("id, due_at").eq("creator_id", userId).in("id", (payload.taskIds || []).slice(0, 6)).in("status", ["pending", "queued"]);
       const moves = spreadDue(tasks || []);
@@ -234,6 +246,12 @@ export async function dismissProposal(userId, id, reason) {
   if (error) throw fail("Could not dismiss the proposal", 503);
   if (!data) throw fail("This proposal was already decided or has expired.", 404);
   await markPostedDecision(userId, id, "dismissed");
+  // Phase 21: "No" on an agent message card declines it politely (the sender's agent is told).
+  const { data: prop } = await edu().from("agent_proposals").select("kind, payload").eq("id", id).maybeSingle();
+  if (prop?.kind === "agent_friend" || prop?.kind === "agent_reply") {
+    const { declineMessage } = await import("../agent-network/friends.js");
+    await declineMessage(userId, prop.payload?.messageId).catch(() => {});
+  }
   return { dismissed: true, reason: why };
 }
 

@@ -36,6 +36,7 @@ export class SergeantProctor {
     this.index       = 0;       // current question pointer
     this.hintsUsed   = 0;
     this.struggles   = 0;       // consecutive weak answers
+    this.askedAt     = null;    // when the current question was put (time to answer, §7.15.1)
   }
 
   /* ── Build the question bank up front (mixed difficulty) ──── */
@@ -55,6 +56,7 @@ export class SergeantProctor {
     });
     const parsed = JSON.parse(res.choices[0].message.content);
     this.questions = (parsed.questions || []).slice(0, this.questionCount);
+    this.askedAt = Date.now();
     return { opening: parsed.opening || `Let's begin. Answer precisely.`, questions: this.questions };
   }
 
@@ -94,6 +96,8 @@ export class SergeantProctor {
     try { ev = JSON.parse(res.choices[0].message.content) || {}; } catch { ev = {}; }
     ev.score = Math.max(0, Math.min(100, Math.round(Number(ev.score) || 0)));
     rec.attempts++;
+    // Time to the first answer on the question (not a follow-up's), for the question signals.
+    if (!probing && rec.answerMs == null && this.askedAt) rec.answerMs = Math.max(0, Date.now() - this.askedAt);
     if (probing) { rec.probe = ev.score; rec.pendingProbe = null; }
     else rec.judged = rec.judged == null ? ev.score : Math.max(rec.judged, ev.score);
     this.answers.push({ qIndex: this.index, answer, eval: ev, hinted: rec.hints > 0, probe: probing });
@@ -133,6 +137,7 @@ export class SergeantProctor {
   /** Move to the next question in the generated order. */
   advance() {
     this.index++;
+    this.askedAt = Date.now();
     return this.currentQuestion();
   }
 

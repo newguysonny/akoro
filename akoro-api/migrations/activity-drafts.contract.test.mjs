@@ -451,7 +451,7 @@ test("the plan generator's model calls are individually bounded — no 10-minute
   assert.match(aiModel, /params\.__timeoutMs != null \|\| params\.__maxRetries != null/);
   // Through the provider dispatch: OpenAI calls still reach the chat breaker with the options.
   assert.match(aiModel, /res = await fire\(clean, reqOpts\)/);
-  assert.match(aiModel, /adapter \? adapter\.create\(body, opts, entry\) : chatBreaker\.fire\(body, opts\)/);
+  assert.match(aiModel, /adapters\[provider\]\.create\(body, opts, e\) : chatBreaker\.fire\(body, opts\)/);
   assert.match(aiModel, /rawClient\.chat\.completions\.create\(params, reqOpts\)/);
 });
 

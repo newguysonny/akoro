@@ -10,6 +10,7 @@ import { useCart } from '../contexts/CartContext.jsx';
 
 // Components
 import TeacherNudge   from '../components/TeacherNudge.jsx';
+import NeedsYouHomeCard from '../components/dashboard/NeedsYouHomeCard.jsx';
 import { onActivityEvent } from '../services/activitySocket.js';
 import InstallBanner  from '../components/common/InstallBanner.jsx';
 import SessionCard    from '../components/sessions/SessionCard.jsx';
@@ -1037,6 +1038,7 @@ export default function LearnerDashboard() {
         <div className="ak-dash-scroll" style={{ flex:1,overflowY:"auto",paddingBottom:showNowBar?136:72 }}>
           <div style={{ padding:"10px 12px 0" }}><InstallBanner/></div>
           <TeacherNudge/>
+          {tab==="sessions"&&<NeedsYouHomeCard/>}
           {tab==="sessions"&&(
             <div style={{ background:"var(--ak-surface)",display:"flex",flexDirection:"column",minHeight:"100%" }}>
               {/* ── Top session type tabs ── */}
@@ -1348,8 +1350,13 @@ export default function LearnerDashboard() {
             onStart={cfg => {
               setConfigOpen(false);
               setConfigInitial(null);
+              // A direct session is a teaching workflow first (Grand Plan §13.1,
+              // Scenario A): the modal opens at once and joins the workflow's id
+              // to its start when it arrives. A failure never blocks the lesson.
+              const workflowReady = apiPost('/api/teaching/workflows', { topic: cfg.topic, subject: cfg.subject || null })
+                .then((r) => r?.workflowId || null).catch(() => null);
               // Inject the fetched student AI agent into the config
-              setTeachSession({ ...cfg, agentName: agentProfile.name, agentEmoji: agentProfile.emoji });
+              setTeachSession({ ...cfg, workflowReady, agentName: agentProfile.name, agentEmoji: agentProfile.emoji });
             }}
             onCancel={() => { setConfigOpen(false); setConfigInitial(null); }}
           />

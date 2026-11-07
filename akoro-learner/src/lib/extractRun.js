@@ -23,6 +23,14 @@ export const EXTRACT_BATCH_DEADLINE_MS = 12 * 60_000;   // the API fails a page 
 // finish — That's a lot at once" while the GPU was still parsing the pages.
 export const EXTRACT_RATE_LIMIT_BACKOFF_MS = 15_000;
 const MAX_RATE_LIMIT_RETRIES = 8;
+// A dropped connection ("Failed to fetch" — no HTTP status at all) is the
+// mobile case, not the failure case: the batch keeps running server-side
+// and every finished page is already cached. Ride out short outages on the
+// long poll (and the big image upload) instead of failing a 10-minute run
+// on one radio blip. Sustained outages still end the run with an error.
+export const EXTRACT_NETWORK_RETRIES = 6;
+export const EXTRACT_NETWORK_BACKOFF_MS = 5_000;
+const isTransient = (e) => e && !e.status;   // fetch threw before any HTTP answer
 
 export async function runExtraction({
   submit, poll,
@@ -38,7 +46,9 @@ export async function runExtraction({
   const progress = () => onProgress?.(
     Math.min(pages.length, [...wanted].filter((n) => byPage.has(n) || failedByPage.has(n)).length), pages.length);
   const STOPPED = Symbol('stopped');
-  let limited = 0;   // 429s absorbed so far across this run
+  let limited = 0;       // 429s absorbed so far across this run
+  let flaky = 0;         // consecutive dropped polls, reset by a good one
+  let submitFlaky = 0;   // dropped submits across this run
 
   // Poll the file's running batch until it settles. Returns STOPPED, an
   // error string, or null when done.
@@ -51,10 +61,17 @@ export async function runExtraction({
       let st;
       try { st = await poll(target); }
       catch (e) {
-        if (e?.status !== 429 || ++limited > MAX_RATE_LIMIT_RETRIES) throw e;
-        await sleep(EXTRACT_RATE_LIMIT_BACKOFF_MS);
-        continue;
+        if (e?.status === 429 && ++limited <= MAX_RATE_LIMIT_RETRIES) {
+          await sleep(EXTRACT_RATE_LIMIT_BACKOFF_MS);
+          continue;
+        }
+        if (isTransient(e) && ++flaky <= EXTRACT_NETWORK_RETRIES) {
+          await sleep(EXTRACT_NETWORK_BACKOFF_MS);
+          continue;
+        }
+        throw e;
       }
+      flaky = 0;
       for (const p of st?.pages || []) { byPage.set(p.pageNumber, p); failedByPage.delete(p.pageNumber); }
       for (const f of st?.failed || []) if (!byPage.has(f.pageNumber)) failedByPage.set(f.pageNumber, f);
       progress();
@@ -81,13 +98,24 @@ export async function runExtraction({
             attempt -= 1;          // a rate limit isn't one of the two 409 tries
             continue;
           }
+          if (isTransient(e) && ++submitFlaky <= EXTRACT_NETWORK_RETRIES) {
+            await sleep(EXTRACT_NETWORK_BACKOFF_MS);
+            attempt -= 1;          // a dropped upload isn't one of the two 409 tries
+            continue;
+          }
           if (e?.status !== 409) throw e;
         }
         const r = await pollUntilDone();
         if (r === STOPPED) return { pages: [...byPage.values()], failed: [...failedByPage.values()], error: 'Stopped.' };
         if (r) { error = r; break; }
       }
-      if (!submitted && !error) error = 'This file is busy being extracted by someone else — try again shortly.';
+      // A 409 run that still collected every page it wanted (another opener's
+      // batch settled while we polled) is a success — the busy note is only
+      // an error when pages are genuinely still missing.
+      if (!submitted && !error
+          && batch.some((p) => !byPage.has(p.pageNumber) && !failedByPage.has(p.pageNumber))) {
+        error = 'This file is busy being extracted by someone else — try again shortly.';
+      }
     } catch (e) {
       error = e?.message || 'Extraction failed — try again in a moment.';
     }

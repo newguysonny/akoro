@@ -9,7 +9,7 @@
  * straight back into the white screen. Before reloading we therefore force the
  * SW to give up the stale shell (activate a waiting worker, or unregister and
  * drop the app-shell/asset caches) so the reload fetches the fresh index.html
- * from the network. A sessionStorage guard prevents an infinite loop, and it's
+ * from the network. A 60-second localStorage guard prevents a reload loop, and it is
  * cleared on any successful load so the next deploy can retry again.
  */
 const KEY = 'akoro_chunk_reloaded';
@@ -32,42 +32,68 @@ export function isChunkError(err) {
     || /before initialization|has already been declared|does not provide an export named/i.test(msg);
 }
 
-// Escape the stale SW-cached shell (once, guarded) then reload — shared by
-// lazyWithRetry, the ErrorBoundary, and the global vite:preloadError net.
+// Escape the stale SW-cached shell then reload — shared by lazyWithRetry, the
+// ErrorBoundary, and the global vite:preloadError net. Guarded by a TIME
+// window, not "once per session": an installed PWA keeps one session alive for
+// days, so a once-per-session guard meant the second broken deploy in the same
+// session could never self-repair and the learner had to clear site data.
+const RETRY_WINDOW_MS = 60 * 1000;
+
+function recentlyRetried() {
+  try {
+    const at = Number(window.localStorage?.getItem(KEY) || 0);
+    return at && Date.now() - at < RETRY_WINDOW_MS;
+  } catch { return false; }
+}
+
 export async function recoverFromStaleChunk() {
-  let retried = false;
-  try { retried = window.sessionStorage?.getItem(KEY) === '1'; } catch { /* ignore */ }
-  if (retried) return false;   // already tried this session — let the error surface
-  try { window.sessionStorage?.setItem(KEY, '1'); } catch { /* ignore */ }
+  if (recentlyRetried()) return false;   // just tried — let the error surface
+  try { window.localStorage?.setItem(KEY, String(Date.now())); } catch { /* ignore */ }
   await escapeStaleShell();
   window.location.reload();
   return true;
+}
+
+// Resolve once the page is controlled by a different service worker (or after
+// `ms`). Reloading BEFORE the waiting worker takes over hands the reload back
+// to the old worker — the same broken shell again.
+function waitForNewController(ms) {
+  return new Promise((resolve) => {
+    const done = () => { clearTimeout(t); resolve(); };
+    const t = setTimeout(done, ms);
+    try { navigator.serviceWorker.addEventListener('controllerchange', done, { once: true }); }
+    catch { done(); }
+  });
 }
 
 // Force the browser off the stale, service-worker-cached app shell so the
 // next navigation loads the freshly-deployed index.html (and its new chunks).
 export async function escapeStaleShell() {
   try {
+    // Lazy chunks and runtime HTML are always safe to drop (they refetch), and
+    // they are where a bad response could have been stored.
+    if (window.caches) {
+      const keys = await caches.keys();
+      await Promise.all(keys.filter((k) => /akoro-assets|akoro-html/i.test(k)).map((k) => caches.delete(k).catch(() => {})));
+    }
     if (!('serviceWorker' in navigator)) return;
     const regs = await navigator.serviceWorker.getRegistrations();
 
-    // Fast path: a new SW is already downloaded and waiting — tell it to take
-    // over immediately (the generated SW listens for SKIP_WAITING).
-    let activated = false;
-    for (const r of regs) {
-      if (r.waiting) { r.waiting.postMessage({ type: 'SKIP_WAITING' }); activated = true; }
+    // Fast path: a new SW is already downloaded and waiting — let it take over
+    // and wait for it, so the reload is served by the NEW worker.
+    const waiting = regs.filter((r) => r.waiting);
+    if (waiting.length) {
+      waiting.forEach((r) => r.waiting.postMessage({ type: 'SKIP_WAITING' }));
+      await waitForNewController(4000);
+      return;
     }
-    if (activated) return;
 
-    // Otherwise unregister every SW and drop the precache + lazy-asset caches so
-    // the reload can't be served the old shell from cache. Data caches
-    // (akoro-catalog / akoro-api) are left intact.
+    // Otherwise unregister every SW and drop the precache so the reload can't
+    // be served the old shell. Data caches (akoro-catalog / akoro-api) stay.
     await Promise.all(regs.map((r) => r.unregister().catch(() => {})));
     if (window.caches) {
       const keys = await caches.keys();
-      await Promise.all(
-        keys.filter((k) => /precache|workbox|akoro-assets/i.test(k)).map((k) => caches.delete(k).catch(() => {}))
-      );
+      await Promise.all(keys.filter((k) => /precache|workbox/i.test(k)).map((k) => caches.delete(k).catch(() => {})));
     }
   } catch { /* best-effort — reload anyway */ }
 }
@@ -75,10 +101,10 @@ export async function escapeStaleShell() {
 export async function retryImport(factory) {
   try {
     const mod = await factory();
-    try { window.sessionStorage?.removeItem(KEY); } catch { /* private mode */ }
+    try { window.localStorage?.removeItem(KEY); } catch { /* private mode */ }
     return mod;
   } catch (err) {
-    // Escape the stale SW-cached shell + reload (guarded once per session).
+    // Escape the stale SW-cached shell + reload (guarded by a 60 s window).
     // Hold the render until the reload takes effect so React never surfaces the
     // error to the user.
     if (await recoverFromStaleChunk()) return new Promise(() => {});

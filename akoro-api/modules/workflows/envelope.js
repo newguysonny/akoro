@@ -28,7 +28,7 @@ export const EVENT_TYPES = Object.freeze([
   "assessment.started", "assessment.completed",
   "strategy.selected", "evidence.recorded",
   "topic.state_changed", "teaching.phase_changed",
-  "wallet.updated",
+  "wallet.updated", "model.changed",
 ]);
 
 /** Streamed only (§7.9.7): the closing event is what is stored. */
@@ -134,6 +134,7 @@ const CHAT_TYPES = {
   activity: "activity", activity_start: "activity.start", activity_delta: "activity.delta", activity_end: "activity",
   activity_promote: "activity.promote", activity_drop: "activity.drop",
   delta: "reply.delta", done: "reply", status: "operation.started", thinking: "agent.narration.delta",
+  model_changed: "model.changed",
 };
 export function chatEnvelope(event, data, { turnId = null, sequence = 0 } = {}) {
   let type = CHAT_TYPES[event];

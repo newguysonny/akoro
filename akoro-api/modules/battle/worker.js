@@ -841,6 +841,8 @@ async function endBattle(battleId) {
       const { decayReview } = await import("../adaptive-learning/decay-review/wiring.js");
       await decayReview().onCheckEnded(battleId);
     } catch (e) { console.warn("[battle-worker] decay review check:", e.message); }
+    // Question tags, timings and confusion pairs (§7.15.1) — never fails the battle's end.
+    await import("./agentCheck.js").then((m) => m.recordCheckQuestionSignals(battleId)).catch((e) => console.warn("[battle-worker] question signals:", e?.message || e));
   }
 
   // Revisions, once, now that the whole battle can be seen.

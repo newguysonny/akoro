@@ -16,6 +16,7 @@
 import * as pdfjsLib from 'pdfjs-dist';
 import { extractRecordPages, getExtractionStatus, getRecordExtraction } from '../../services/recordsApi.js';
 import { runExtraction } from '../../lib/extractRun.js';
+import { fetchFileWithRetry } from '../../lib/fetchFile.js';
 import { looksScanned } from '../../lib/textLayer.js';
 
 export const MAX_RECORD_PAGES = 60;   // matches the API's cap
@@ -71,7 +72,7 @@ export async function rasterizePdfPages(pdf, { maxPages = MAX_RECORD_PAGES, onPr
 
 /** One image record — fetched, downscaled to the pixel cap, base64 JPEG. */
 export async function rasterizeImageFile(url) {
-  const res = await fetch(url);
+  const res = await fetchFileWithRetry(url);
   if (!res.ok) throw new Error(`Could not load the image (${res.status}).`);
   const blob = await res.blob();
   const bmp = await createImageBitmap(blob);

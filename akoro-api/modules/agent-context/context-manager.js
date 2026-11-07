@@ -27,6 +27,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { MANIFEST_VERSION, PENDING_ADOPTION, SETS } from "./manifest.mjs";
 import { overrideFor } from "./overrides.js";
+import { ContextUnavailableError } from "./operations.mjs";
 
 const WORKSPACE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../akoro-agent");
 
@@ -45,6 +46,8 @@ export const CONTEXT_SET_NAMES = Object.freeze(Object.keys(CONTEXT_SETS));
 export const CONTEXT_BUDGET = Object.freeze({ MAX_FILE_BYTES: 8192, MAX_CONTEXT_BYTES: 24_576 });
 
 export { MANIFEST_VERSION, PENDING_ADOPTION, SETS as CONTEXT_MANIFEST };
+// Operation → set (Phase 4, §7.4): controllers ask which set an operation loads.
+export { OPERATION_SETS, LIVE_OPERATIONS, ContextUnavailableError, contextSetFor, operationRows, teachingTurnOperation } from "./operations.mjs";
 
 const cache = new Map();
 
@@ -90,7 +93,9 @@ export function clearContextCache() { cache.clear(); }
  * files are required; `extra` files stay optional (dynamic additions).
  */
 export async function loadContext(setName, { extra = [] } = {}) {
-  const files = CONTEXT_SETS[setName] || [];
+  // An unknown set is a context failure (§7.4), never an empty prompt.
+  const files = CONTEXT_SETS[setName];
+  if (!files) throw new ContextUnavailableError(`Unknown context set "${setName}"`);
   const requested = files.map((relative) => [relative, true]).concat(extra.map((relative) => [relative, false]));
   const loaded = [];
   let bytes = 0;

@@ -1583,6 +1583,23 @@ agent watches, thinks and brings things; the person decides what gets built.**
 - ✅ **Approve = replay through the real tool:** `POST /api/agent/proposals/:id/approve` runs `executeChatTool` (task, follow-up) or inserts a goal (`source='agent'`). In chat, `suggest_help` writes `public.agent_suggestions`. Both show in the agent tab's Suggestions list (the inbox, `learner-full-autonomy-plan.md` §9.6).
 - ✅ **Delivery:** scheduled messages into an existing chat (`chat-follow-ups.js`), `notifyUser` (in-app + web push + email, respecting preferences), socket `agent:activity`.
 - ✅ **Memory storage + retrieval:** `learner_agent_conversation_summaries`, `learner_agent_memories` (vector), scratchpads, `match_learner_agent_memory`, `relevantMemories` in every chat turn, `/api/agent-memory/v1` list/forget.
+- ✅ **Smarter memory — agents don't start from scratch (2026-11-03):**
+  - *Teaching reads the notes.* `teaching-session/learnerNotes.js`: every teaching
+    session (fresh, continuation, decay review) starts with the learner's study
+    preferences plus the notes most relevant to the topic. They are loaded once in
+    `prepareTeachingSession`, in parallel with setup, capped at 3.5 s and never
+    fatal. The protégé and NaNa's teach prompt both get them as guidance only
+    (D50: never evidence, never instructions). With no notes, the prompts are
+    byte-identical. Proctored practice deliberately reads none (a test is the same
+    test for everyone). Gate `teaching.memory_notes`.
+  - *Search past chats by content.* Chat tool `search_chats`: by meaning (chat
+    summaries, the hybrid memory search) and by the exact words in messages,
+    learner-scoped; a chat found both ways ranks first. `read_chat` takes
+    `around=matchedAt` to land on the match deep in a long chat. Gate
+    `memory.search_chats`.
+  - *Still open:* the Python agent's separate JSON memory (goes with Phase 20
+    Part B step 6, one agent core); notes feeding session-plugin proposals
+    (Phase 20 step 5).
 - ✅ **Goals:** `edu.learner_goals` (`source`, `progress_note`), `/api/goals`, chat tools, `goalsCtx`.
 - ✅ **Instructor routines:** `draft_routines` prepare drafts on a schedule and nudge the teacher; assigning stays human.
 - 🟡 **The planner can't see conversations** — it reads the last 5 chat *titles* only.
@@ -3033,6 +3050,14 @@ planning loop's tool names, the double practice charge, empty syllabus data).
 - **Exit:** context tests prove planning loads `planning`, strategy selection
   loads `strategies`, teaching turns load `teaching_controller`, etc.; all
   sets within budget; boot preflight green.
+- **Status (2026-11-06):** ✅ exit met. `agent-context/operations.mjs` holds the
+  §7.4 operation → set table (Study Prep, Teaching, Decay, Practice);
+  `contextSetFor()` and `loadContext()` raise `context_unavailable` for an unknown
+  operation/set. Study Prep `wiring.js` has no set literals. `AGENT.md` is
+  workflow-neutral; `workflows/STUDY_PREP.md` carries the role; new
+  `TEACHING.md`, `GUIDE_MODE.md`, `DECAY_REVIEW.md`, `PRACTICE.md`,
+  `learning/RETENTION.md` and six sets (dormant until Phases 6/8/9 wire their
+  controllers). Tests `operations.contract.test.mjs`; gate `context.sets_per_operation`.
 
 ### Phase 4a — Learning evidence everywhere (D37)
 - `recordLearningEvent` in the Education Engine; `source` on every event.
@@ -3049,6 +3074,59 @@ planning loop's tool names, the double practice charge, empty syllabus data).
 - **Exit:** a misconception detected and repaired in a live teaching session
   appears in `learner_concept_evidence` and produces a breakthrough row;
   backfill is idempotent; existing tests green.
+- **Status (2026-11-06):** built in four slices, each gated on the sandbox.
+  - ✅ **Slice 1 — the recorder.** `recordLearningEvent`
+    (`adaptive-learning/learning-events.js`): every event carries a required,
+    weighted `source`; approved catalogue concepts only; idempotent per session +
+    turn + concept; never throws; listeners for slice 2. Teaching now records
+    `misconception_detected` / `misconception_cleared` (they lived only in the
+    session JSON); Study Prep and proctored Practice write through it (same
+    ledger-only rows); Decay Review records per-concept `recall_success` /
+    `recall_gap`. **Found and fixed:** `edu.record_learner_concept_evidence` had
+    failed on every call since it was written ("column reference learner_id is
+    ambiguous") — no evidence, the agent gateway's included, was ever recorded
+    through it (`2026-concept-evidence-ambiguity-fix.sql`). Gate
+    `learning.recorder_misconception` PASS: misconception_active on, then off.
+  - ✅ Slice 2 (2026-11-06) — `edu.learning_struggles` (`2026-learning-struggles.sql`,
+    one open row per learner + type + concept), the 41-type taxonomy with who may
+    detect each (`DETECTED_BY`; health_energy only from the learner), `struggles.js`
+    (`recordStruggle`, `resolveStruggles`, rule detectors). The recorder runs them
+    after every write: misconception found → open, repaired → resolved (a
+    breakthrough with `resolved_at`, `days_to_overcome`); recall gap/success in
+    decay review → decay. Sensitive types keep type + date only. Gate
+    `learning.struggle_breakthrough` PASS on the sandbox.
+  - ✅ Slice 3 (2026-11-06) — Strategy Library v3: one `strategies/library.js`
+    (22 entries: targets, workflows, executor Teaching | harness, guide, limits;
+    kill switch `AKORO_STRATEGIES_DISABLED`) + 22 guides
+    `akoro-agent/strategies/<id>.md` (two manifest sets). The duplicated lists
+    (education-engine, state-machine POLICY, teaching policy, offer_strategy
+    schema) read from it; NaNa gets the chosen strategy's guide.
+    `recordStrategyOutcome` (`edu.learning_strategy_outcomes`,
+    `2026-strategy-outcomes.sql`): versioned, idempotent, refuses off-library /
+    not-permitted; recorded on a teaching repair (worked), a strategy switch
+    (did_not_work), session end and decay review; a resolved struggle's
+    `what_worked_strategy` is that strategy. Gate `learning.strategy_outcome`.
+  - ✅ Slice 4 (2026-11-06) — one-off backfill (`learning-backfill.js`,
+    `scripts/backfill-learning-evidence.mjs`): teaching_evidence misconceptions
+    and exam-prep attempts → the recorder, source `backfill`, refs derived from
+    the source rows (a re-run adds nothing; rows after live recording began are
+    left to it). Gate `learning.backfill_idempotent`.
+  - ✅ Open items closed (2026-11-07): harness execution of the non-Teaching
+    strategies (`strategies/executors.js`: replan, schedule → chat follow-ups,
+    offline_pack → Records; the learner accepts via
+    `POST /study-prep/sessions/:id/topics/:topicId/strategy`); Study Prep offer →
+    outcome (judged by the next attempt); `recommendStrategies` (own outcomes, then
+    population ≥ 5 learners, minus exhausted) with `maxUsesPerTopic` enforced in
+    offer_strategy and Teaching; the Python gateway through `recordLearningEvent({ claim })`
+    (its misconceptions open struggles; allowlist entry removed); §7.15.1
+    `edu.learning_question_signals` + `learning_confusion_pairs` from Agent Checks and
+    proctored practice. Gates `learning.strategy_recommend`, `learning.question_timings`
+    PASS; `learning.gateway_struggle` BLOCKED on the sandbox (needs
+    `AKORO_AGENT_TOOLS_SECRET` / `AKORO_AGENT_TOOLS_CAPABILITY_SECRET` there).
+  - ⏳ Still open: executors for escalate_human / peer_help / goal_clarify; tags set by
+    the question source (today derived from text); confusion-pair admin review; the
+    learner's strategy-accept button (needs a preview); outcomes for topics with no
+    approved concept are not judged.
 
 ### Phase 5 — Study Prep completion
 - Topic state machine §8.3; exam-prep run reduced to attempt record.
@@ -3066,6 +3144,33 @@ planning loop's tool names, the double practice charge, empty syllabus data).
   `syllabus_exists` precondition, plan-card labelling.
 - **Exit:** full Study Prep scenario passes without Teaching (inline strategy
   path), plus plan-rejection, budget-ceiling and cap-out scenarios.
+- **Status (2026-11-06):** exit scenarios built (suite `study-prep-exit`:
+  `studyprep.inline_full`, `plan_rejection`, `budget_ceiling`, `cap_out`); the
+  submit-status guard (double submit / scored run → 409 invalid_state_transition)
+  and topic outcome written right after scoring. Built earlier: syllabus chain
+  §8.7, wakes, Teaching handoff, Agent Check as battles, materials-folder sessions.
+  Open: topic state machine §8.3 + absorbing `workflow-state.js` /
+  `adaptive-workflows.js`; `request_teaching` for every intervention (D15);
+  Agent Check tool names + locked models; §8.8 agent tools and goal type; blog
+  passage search; peer help §7.13; a single-transaction submit
+  (`edu.study_prep_submit_attempt`).
+- **Status (2026-11-07):** ✅ exit met and the open bullets built, all PASS on the
+  sandbox (suite `phase-closeout-2`). Topic state machine §8.3 (12 states, enforced;
+  the card keeps a coarse status); exam-prep run = attempt record
+  (`workflow-state.js` / `adaptive-workflows.js` folded in); D15 `request_teaching`
+  (missed → intervention_required → awaiting_teaching → retest_ready; inline
+  offer_strategy only when Teaching is off); single-transaction submit
+  `edu.study_prep_submit_attempt` (`2026-study-prep-topic-states.sql`). §8.8
+  `materials.list/search`, `syllabus.from_documents`, `learner.request_materials`,
+  goal type curricular / non_curricular; §7.14 blog passage search
+  (`content.blog_chunks`); §7.13 peer help from breakthroughs (opt-in
+  `help_others_opt_in`; its Settings toggle previewed, not built); §7.12 tool names
+  `practice.run_agent_check` / `agent.get_knowledge_coverage`, recall / question /
+  assessor roles locked. Gates `studyprep.topic_states`, `studyprep.submit_atomic`,
+  `materials.syllabus_from_documents`, `blog.passage_search`, `peer.breakthrough_help`,
+  `studyprep.agent_check_tools` + the four exit scenarios. Open: chat uploads →
+  Records for Study Prep; Agent Check questions from the learner's materials; blog
+  source chips; plan-card documents label (needs a preview).
 
 ### Phase 6 — Teaching Workflow (agent-driven)
 - `teaching/controller.js`, `teaching/tools.js` (agent catalogue + fixed steps), `TEACHING_POLICY`.
@@ -3080,7 +3185,7 @@ planning loop's tool names, the double practice charge, empty syllabus data).
   fallback on timeout/malformed, loop stops on reply, cap enforced,
   `propose_complete` rejected until objective met, phases unchanged vs
   today's gate tests (`state-machine.test.mjs`, `runner.test.mjs` equivalents).
-- **Status (2026-11-01): ✅ built — `teaching.agent_turns` green on the sandbox.** Open (circle back): a run to full mastery, the full Scenario B chain.
+- **Status (2026-11-01): ✅ built — `teaching.agent_turns` green on the sandbox.** Open (circle back): a run to full mastery, the full Scenario B chain. — **Done 2026-11-07:** `teaching.run_to_mastery` PASS on the sandbox (scripted explanations over the real socket reach MASTERY).
   Each turn is agent-driven (`teaching-session/controller.js`, policy in
   `policy.js`): the fixed pre-steps (load state, observe evidence), then the
   teaching agent — ≤3 decisions, 8 s each — reads the state, picks a strategy
@@ -3113,6 +3218,11 @@ planning loop's tool names, the double practice charge, empty syllabus data).
 - Outcome delivery → `StudyPrepController.onChildOutcome` → `retest_ready`.
 - Abandon/unmet handling.
 - **Exit:** Scenario B (critical end-to-end) passes, including app close and later resume.
+- **Status (2026-11-07):** `studyprep.teaching_chain` PASS on the sandbox (missed topic →
+  hand-off → taught to mastery → Study Prep callback → retest unlocked → teaching_done
+  wake). `teaching.request_assessment` built (NaNa asks, the protégé answers from what
+  it was taught, Sergeant judges, a guess never counts; ≤ 2 per session); its result
+  card is not drawn in the lesson window yet.
 - **Status (2026-11-01): ✅ built — `studyprep.teaching_outcomes` green on the sandbox.** Open (circle back): the mid-session assessment tool (`teaching.request_assessment`).
   Ended before any teaching → `abandoned` (reason learner_ended), no
   teach-back, offered once more on the card (a fresh proposal; once), wake
@@ -3177,6 +3287,15 @@ planning loop's tool names, the double practice charge, empty syllabus data).
   `teaching_evidence` misconception fields) now that Phase 4a records them centrally.
 - All workflows write through Education Engine; scale guards (0–1 vs 0–100).
 - **Exit:** no direct writes to concept state outside the Education Engine (grep-enforced contract test).
+- **Status (2026-11-06):** ✅ exit met in tests. One next-action path
+  (`adaptive-engine.js` `recommendNextAction`; `decideNextAction` removed);
+  student-state `mistakes`/`strengths` retired; a resumed lesson and
+  `learner.get_state` read misconceptions from `learner_concept_state`
+  (`learner-model.js`); `teaching_evidence.unresolvedMisconception` stays only as
+  the live turn's working copy. Scale guards `toUnitScore` (a 0–100 value given as
+  0–1 is refused). `learner-model-writes.contract.test.mjs` scans the repo (client
+  writes, raw SQL, SQL writer functions) — no violations. Gate
+  `learner_model.next_action`. Open: the Python gateway via the recorder.
 
 ### Phase 11 — UI
 - Agent Chat tab per §13.4 (can start right after Phase 3: it only needs the event
@@ -3196,6 +3315,39 @@ planning loop's tool names, the double practice charge, empty syllabus data).
   builds it), the model-picker flag and cost hints (`models.picker_resolution`), and
   a shared `streamReducer`. Visible UI waits for preview approval. Open: tier lists
   for the picker, `POST /api/teaching/workflows`.
+- **Status (2026-11-06):** backends complete. Picker tier lists
+  (`tiers.allowed_models`, `2026-tier-allowed-models.sql`; payer: school →
+  subscription → pilot school → Freemium; locked models + refusal notice);
+  `POST /api/teaching/workflows` (+ `GET /:id`, `/:id/resume`), used by the
+  teaching modal; school struggles view reads `edu.learning_struggles` with a
+  `sensitiveOpen` count. Gates `models.tier_lists`, `teaching.direct_workflow`,
+  `school.struggles_recorded`. Previews waiting for approval: school-portal
+  struggles page, picker with cost hints/locks, shared stream cards (ScoreCard,
+  PlanCard, TeachingHandoffCard, GateButton, WorkflowStateBadge), Home
+  WorkflowCard/WorkflowResumeCard. Open for Scenario K: saving the pick on the
+  thread/workflow + `model.changed`, the pick reaching controller/persona calls,
+  refusal / tool_choice checks; developer-mode audience (Q9).
+- **Status (2026-11-07):** visible UI built (previews approved). Home: ONE Needs
+  you card — the resume card and Tasks → Needs you are the same list (lead = the
+  open workflow most worth continuing, "Needs you · N more" opens the list);
+  no separate WorkflowCard list. Shared `StreamCards.jsx` (WorkflowStateBadge,
+  ScoreRing, RejectedRow, DevLine); the Study Prep plan card on Allow / Reject /
+  Later (Reject cancels before any spend); Needs you rows carry the server badge;
+  refused steps are the red row. Model picker: plan badge, cost per message,
+  plan-locked models, confirm on dearer models, refusal notice. School portal
+  "Learner Struggles" page. UI gate suite `phase11` PASS (phone). Kept as is by
+  decision: the Study Prep teaching offer's own "Confirm teaching session".
+- **Status (2026-11-07, Scenario K):** ✅ PASS on the sandbox. The model picker is on by
+  default (`AI_MODEL_PICKER_ENABLED` off only when set false). The pick is saved on
+  the chat (`chat_sessions.model_selection`) and on open Study Prep / Teaching
+  workflows (`model.changed` event), follows the learner across devices, and reaches
+  Study Prep controller decisions and Teaching controller + persona replies, billed
+  at the resolved model's price; locked roles stay locked. No forced tool_choice
+  reaches Claude; a refusal comes back as `model_refusal` answered by the fallback
+  (which obeys `AI_FORCE_MODEL`). Gates `models.pick_persisted`,
+  `models.pick_reaches_workflows`, `models.no_forced_tool_choice_claude`,
+  `models.refusal_fallback`, `models.tier_lists`. Open: streamed refusals;
+  developer-mode audience (Q9).
 
 ### Phase 12 — Hardening and rollout
 - Failure tests §19; data migration §14.3; flag-by-flag rollout; observability
@@ -3567,6 +3719,280 @@ planning loop's tool names, the double practice charge, empty syllabus data).
   `adaptive-learning/` with no loose top-level files; the four apps on one client
   core.
 - **Status (2026-11-02):** planned.
+
+### Phase 20 — Session plugins: learner-made teaching recipes (from DeepSeek Harness Creator Mode, 2026-11-03)
+- **Why.** DeepSeek Harness's Creator Mode (the `cordis` preset in
+  `deepseek-ai/deepseek-harness`) lets the agent write plugins that hot-reload into
+  the running harness: build skills (`cordis-plugin-development` + templates), a
+  `plugin_manager` tool behind per-call approval, and `dsh-hmr` to swap code
+  without a restart. The idea suits Akoro: a learner reads that past questions
+  helped another student (a blog post, a friend) and asks their protégé "make my
+  sessions like that"; the protégé builds a plugin that changes how every teaching
+  session runs. Their *method* does not suit Akoro: their plugins are code running
+  in-process outside the sandbox. For students we take the idea, not the method.
+- **The rule: recipes, not code.** A session plugin is a structured recipe
+  (JSON, schema-checked) that the protégé composes from **building blocks we write
+  and test**. The teaching engine runs the recipe; nothing the protégé or learner
+  writes executes. New blocks are added by us (or promoted, like platform tools).
+- **Hook points** (on the existing teaching session, `teaching-session/`):
+  - `concept_start` — before a must-know concept is taught;
+  - `concept_end` — after the concept, before `applyTeachingProgress` may advance;
+  - `phase_enter` — on entering a phase (e.g. Phase 3, teach it back);
+  - `wrong_answer` — after the learner misses a check;
+  - `session_start` / `session_end`.
+- **First building blocks:** ask a question (own words / MCQ / short answer);
+  past question for this concept (from the past-question bank and the syllabus
+  importer, matched to the learner's exam — WAEC / JAMB / BECE / IGCSE — and class);
+  easier similar question; recall from an earlier session (spaced recall); timed
+  mini-quiz; summary card; explain-in-language (Pidgin / Yoruba / Igbo / Hausa
+  first); relate-to-interest (football, music…); teach-it-back to a younger level.
+- **Example — "Past question per concept":** `{ hook: "concept_end", block:
+  "past_question", params: { exam: "auto", count: 1, difficulty: "match",
+  onWrong: "easier_similar" } }`. Shown to the learner as "Adds 1 past question
+  after each concept · about 2 min per concept".
+- **Safety (non-negotiable):**
+  - Plugins **only add steps**. They can never skip, shorten or pass the
+    progression gate, mark a concept verified, or change mastery evidence — the
+    gate stays in code (`applyTeachingProgress`). A plugin's answers MAY count as
+    evidence only through the existing evidence path.
+  - Limits per session: extra minutes, extra model calls and cost (USD), like the
+    agent tool limits; a plugin over its limit is skipped for the rest of the
+    session with a visible note.
+  - The learner sees which plugins are on in the session header and can switch any
+    off for this session or for good. Proctored practice (Phase 9) and battles run
+    **without** plugins.
+  - Under-13 / school accounts: a school or parent setting can allow, limit or
+    turn off learner-made plugins.
+- **Lifecycle:** the protégé proposes (a chat card with the recipe in plain words +
+  an estimated cost in time) → the learner turns it on (private) → optionally shares
+  with classmates or a study group → admin approval before it appears in the
+  marketplace (the same promote flow as platform tools) → instructors / schools
+  can attach an approved plugin to a class or course.
+- **Steps, in order:**
+  1. **UI preview first** (learner) — done 2026-11-03, awaiting approval. Where
+     plugins live and how they're used (like DeepSeek's sidebar Plugins page +
+     Creator Mode chat, adapted):
+     - **(1) Chat drawer → Plugins.** A "Plugins · N on" row under New chat opens
+       the Plugins sheet with tabs **Mine** (on/off switch, what it does, extra
+       time, where it runs; tap for Edit · Share · Delete), **From classmates**
+       and **Discover** (admin-approved only). An empty-state hint points to chat
+       ("tell your protégé: ask me a question on every concept").
+     - **(2) Chat → the plugin card.** Plugins are made by talking: the protégé
+       answers with one **New plugin** card in its own turn — name, plain-words
+       steps, where it runs, exam matched, extra time, the add-only note — and
+       **Turn on / Change / Not now**. "Make it 2 questions" → an updated card.
+       The protégé may also offer one proactively (as Suggestions / Ideas).
+     - **(3) Session start card.** The teaching start card (from Study Prep or
+       chat) lists "Plugins this session" as chips, adds their time to the
+       estimate ("About 35 min (+12 min plugins)") and has **Change for this
+       session** (session-only; saved settings unchanged).
+     - **(4) Inside the session.** A "Plugins on" strip under the header shows
+       the active plugins; tapping it opens per-session switches with usage
+       ("Used 1 of 6") and Manage plugins. Each plugin step is a normal turn
+       with a label and source ("Past question · WAEC 2019 Q14", "From your
+       plugin …"), so it's never confused with the lesson. No strip in proctored
+       practice or battles; an over-limit plugin is skipped with a note here.
+     Build after approval.
+  2. **Recipe schema + validator + block registry** (pure; contract tests: unknown
+     block / hook refused, add-only enforced, limits required).
+  3. **Runner in the teaching session:** hooks called around the concept turn;
+     blocks emit normal turn blocks on the existing event stream (Phase 3), so chat
+     and the session view render them without new transport.
+  4. **Past-question block** on the past-question bank (needs the past-question
+     importer; until then, the syllabus objectives + generated exam-style questions
+     marked "practice, not a real past question").
+  5. **Protégé tool `propose_session_plugin`** (draft only; turning on is the
+     learner's tap) + `edu.session_plugins` (owner, recipe, version, status,
+     shared_with) + per-session usage log (time, calls, cost).
+     **From memory:** when a learner's memory notes hold a lasting study
+     preference ("football examples help me", "explain in Pidgin first"), the
+     protégé may offer it as a plugin card ("Turn this into a plugin for every
+     session?"). The note itself still only guides; only the learner's tap turns
+     a plugin on.
+  6. **Sharing and marketplace:** share to classmates; admin review queue;
+     instructor/school attach.
+  7. **New blocks through the self-tooling ladder; admins promote.** When a learner
+     asks for something the existing blocks can't do, the protégé builds it with
+     the same ladder as agent tools (`modules/self-tooling/pipeline.js`), stopping
+     at the first stage that works:
+     1. *Recipe* — combine existing blocks and settings (most ideas end here);
+     2. *Spec* — a structured definition our code already runs;
+     3. *Sandboxed code* — only for logic a recipe can't express (e.g. "spread 30
+        past questions over the days to my exam, skip Sundays"): one small
+        `run(input, data, akoro)` function in a fresh QuickJS (WebAssembly) runtime
+        per run — data in, answer out; no network, files, database, timers or
+        other learners; 8 KB source, 32 MB memory, 0.5 s CPU / 2 s wall, 64 KB
+        answer; `eval` / `import` / `fetch` / `process` refused before running.
+        **On by default** since 2026-11-03 (`AKORO_SELF_TOOLING_CODE_ENABLED=false`
+        turns it off on a server);
+     4. *Escalate* — anything needing a new screen, new data or a new question
+        type goes to the admin queue as a build request, not agent code.
+     A new block starts **private** to its learner (within their limits). One that
+     proves useful (used often, good results, copied by classmates) appears in the
+     admin queue; the admin runs its gate scenarios and **promotes** it, after which
+     it is an ordinary building block every protégé can use in recipes. A block's
+     output is always one of our existing, designed shapes (question, card, list,
+     timer…) — sandboxed code returns data, never its own UI; new kinds of screen
+     only come from us.
+  8. **Gate scenarios:** `plugins.add_only` (a recipe that tries to advance is
+     refused; the gate decides), `plugins.past_question_per_concept` (each concept
+     ends with one past question; wrong → easier one), `plugins.limits` (over-budget
+     plugin skipped with a note), `plugins.off_in_practice`.
+- **Exit:** a learner can ask for "past questions on every concept", approve the
+  protégé's card, and the next teaching session runs it on every concept, with the
+  gate unchanged and all four gate scenarios green.
+- **Status (2026-11-03):** planned. UI preview (step 1) made; waiting for approval before building.
+
+#### Phase 20 · Part B — Convert Akoro to TypeScript (DeepSeek Harness's language, 2026-11-03)
+- **Why.** DeepSeek Harness is written in **TypeScript**: about 6,100 `.ts` and 830
+  `.tsx` files, plus a small Python SDK (45 `.py`). It is a pnpm monorepo on Node ≥ 24
+  with TypeScript 6, built with `tsdown` and tested with `vitest`. Its compiler
+  settings are strict (`strict`, `noUncheckedIndexedAccess`,
+  `exactOptionalPropertyTypes`). Akoro is plain **JavaScript**: Node ESM `.js`/`.mjs`
+  in the API and React `.jsx` in the four apps, about **1,650 files and 307k lines**
+  with **no** TypeScript. Types matter most where Phase 20 lives. The plugin recipe
+  format, the block registry, the self-tooling definitions, the workflow states and
+  the event-stream envelope are all data that must have one exact shape everywhere,
+  and today that is checked only at runtime and by tests.
+- **Same language, gradually.** TypeScript is JavaScript with types, so no rewrite is
+  needed: files are converted one at a time, and `.js` and `.ts` run side by side
+  throughout.
+- **Toolchain (keep it light):**
+  - **API:** Node's built-in type stripping runs `.ts` directly, with no build step.
+    Use erasable syntax only (no `enum` or `namespace`). Node is 22.22 today; move
+    Render to Node 24 LTS first, where stripping is on by default. `tsc --noEmit`
+    checks types in CI. `node --test` keeps running the tests.
+  - **The four apps:** Vite already compiles `.ts`/`.tsx`, so nothing changes in the
+    build. `tsc --noEmit` checks types in CI.
+  - **Shared settings:** one `tsconfig.base.json` with `allowJs` + `checkJs` off at
+    first; strictness is raised step by step (see order).
+- **Order:**
+  1. **Turn it on:** add `tsconfig` to the API and the learner app, add a
+     `typecheck` script, and make CI run it. Nothing is converted yet, and the
+     build is unchanged.
+  2. **Shared types first (`akoro-api/types/`, copied to the apps by
+     `design-system/sync.mjs` as in Phase 19 step 5):** the event-stream envelope,
+     workflow states, the self-tooling definition, the **session-plugin recipe and
+     block registry (this phase)**, the teaching state, and the API response shapes
+     the apps read.
+  3. **New code is `.ts`/`.tsx` from now on.** The Phase 20 plugin modules are written
+     in TypeScript from day one.
+  4. **Convert module by module along Phase 19's order.** When Phase 19 moves a
+     module, it is converted to `.ts` in the same change. Pure rules first (`policy`,
+     `workflow`, `state-machine`), then services and stores, then routes. In the
+     apps, convert by feature folder (Agent Chat, dashboard, then the large modals).
+  5. **Raise strictness** as each area finishes: `strict`, then
+     `noUncheckedIndexedAccess`, then `exactOptionalPropertyTypes` (DeepSeek's
+     level). A ratchet test lists the files still `.js`, and the list may only
+     shrink, the same rule as Phase 19's size ratchet.
+  6. **One agent core; Python as a specialist, not a second agent.**
+     - *What DeepSeek does:* its agent is the TypeScript Harness only. The Python
+       SDK (`python/sdk`) is a **remote control**: it starts the `dsh` CLI as a
+       subprocess and drives it over JSON-RPC on stdio (prompts, permissions,
+       plugin management, results), plus local Office-file helpers. Python never
+       runs its own agent loop.
+     - *Akoro today:* **two agent cores**. The production teaching agents are
+       JavaScript (`akoro-api/modules/adaptive-learning/agents`).
+       `akoro-python-agent/` (FastAPI, about 8.3k lines) has its own loop,
+       planning, tools, memory, state, permissions and teaching roles (Student
+       Agent, NaNa guide, ladder), mirroring the teaching flow; the API reaches it
+       only through `agent-tools/python-action-relay.js`
+       (`PYTHON_AGENT_SERVICE_URL`). Teaching logic can drift between the two.
+     - *Decision (agreed 2026-11-03):* keep **one** agent core, the API's, moving to TypeScript. Like
+       DeepSeek, Python never runs a second teaching loop. Unlike DeepSeek's SDK,
+       Python's job is a **specialist service the core calls** (core → Python),
+       for work Python does best: mastery / knowledge-tracing models, analytics,
+       document and image processing. It is not a remote control (Python → core).
+     - *Steps:* (a) list what the Python agent does that production doesn't;
+       move anything worth keeping into the core, in TypeScript; (b) remove its
+       teaching loop and roles, keeping a thin FastAPI service with typed
+       endpoints for the specialist jobs, called server-to-server like the relay
+       (secret header, timeouts, size limits); (c) **shared shapes**: the Part B
+       shared types are exported as JSON Schema, and the Python service generates
+       Pydantic models from them, so recipes, events and session shapes match in
+       both languages (a contract test fails on drift); (d) type-check the Python
+       code in CI (`pyright` or `mypy` in strict mode).
+- **Safety:** no behaviour change in a conversion commit; one module per commit; the
+  API suite, the four app builds, `typecheck` and the gate's regression suite stay
+  green after every step; runtime checks (recipe validators, `validateDefinition`)
+  stay, because types don't check data that arrives from the model or the network.
+- **Exit:** `typecheck` in CI on all five projects; Phase 20 modules and the shared
+  types fully `.ts` under strict settings; the `.js` ratchet list shrinking each
+  release; no `any` in the shared types.
+- **Status (2026-11-03):** planned. Step 1 can start any time. Steps 2–3 come with
+  the Phase 20 build, and step 4 with Phase 19. Step 6 is agreed; (a)
+  can start any time, and (b) follows (a).
+
+
+### Phase 21 — Agents talk on their own: autonomous agent-to-agent messages (2026-11-06)
+- **Why.** Agents can message each other (`agent-network/messaging.js`: screened, rate
+  limited, "who can message my agent", blocks), and an ONLINE agent already answers a
+  study question (consult) from what its learner taught it. Everything else waited in
+  the inbox until the learner asked: in a live chat (4 Nov) the learner had to ask "Do
+  you have a message?" to learn that Oyibo had replied, and "Tega wants to be friends"
+  had no way to reach them as a decision.
+- **Message kinds:** `consult` (study question), `suggestion` (an idea), **`chat`**
+  (friendly conversation, new) and **`friend_request`** (new); battle and study-buddy
+  invites keep their own flows.
+- **Who decides — the policy (pure, `agent-network/autoReplyCore.js`):**
+
+  | Message | The protégé on its own | Asks the learner (card in chat) |
+  |---|---|---|
+  | Study question | answers from what it was taught | — (setting Off → asks) |
+  | Friendly chat | short polite reply, only with the setting "study + chat" | anything else |
+  | Friend request | never | always: **Be friends / Later / No** |
+  | Suggestion | — | told in chat, no decision needed |
+  | Anything about the learner (progress, school, plans) | never | always |
+
+  Setting **"Let my agent reply on its own"** (`agent_network_settings.auto_reply`):
+  `off` / `study` (default) / `study_chat`. Primary and JSS learners are always asked
+  for chat (a cautious stand-in until accounts carry an age). At most **3 automatic
+  replies per pair of agents a day** — two agents can never loop; past it, the learner
+  is asked. Every automatic reply is screened like any message and records why it was
+  allowed (actionBasis: inferred, rule `agent_message:<kind>`).
+- **When the agent acts — its own lane, event-driven (not the planner heartbeat):**
+  (1) a message arrives → a background job for the recipient (`agent-inbox`, one per
+  learner at a time); (2) the recipient comes online (presence goes offline → online)
+  → its backlog is processed at once; (3) a light sweep every 5 min covers only
+  learners with unprocessed messages who are online. Offline agents act when they
+  come online. The planner keeps its slow cadence; messages never wait for it.
+- **Telling the learner — in chat, one card per turn:** a decision is an approval card
+  (the existing proposal card: `agent_proposals` kinds `agent_friend` and
+  `agent_reply`), e.g. *"Tega just sent me a message — he wants to be friends. Would you
+  like us to be friends?"* **[Be friends] [Later] [No]**; an automatic reply is one line
+  (*"Tega's agent asked about osmosis — I answered from what you taught me."*). Posted
+  into the latest chat at once; in quiet hours the push notification is held back (the
+  card still waits in chat for whenever they look).
+  Approving a friend request makes the two learners **agent friends**
+  (`edu.agent_friends`) and tells the other agent; approving a reply sends the drafted
+  reply; "No" declines politely (the sender's agent is told "not now").
+- **Chat tools:** `message_agent` takes `kind: chat | friend_request` too;
+  `set_agent_auto_reply` lets the learner change the setting by asking ("let my agent
+  chat for me").
+- **Steps:** (1) migration `2026-agent-conversations.sql` (kinds, statuses,
+  `processed_at`, `auto_reply`, `agent_friends`, proposal kinds); (2) policy core + tests;
+  (3) processor + triggers (arrival, online, sweep); (4) approve/dismiss handlers;
+  (5) tools; (6) gate scenarios `network.auto_reply_consult`, `network.friend_request_card`,
+  `network.no_loop`, `network.offline_waits`; (7) **UI preview** of the setting under
+  Settings → Agent (the cards reuse the approved proposal card — no new chat UI).
+- **One approval card (2026-11-06, owner decision):** every approval row — proposal
+  cards (incl. agent messages), change confirmations and tool permissions — is the same
+  **Allow / Reject / Later** (`agentChat/ApprovalButtons.jsx`). *Later* changes nothing on
+  the server: the item stays pending in Tasks → Needs you (it used to dismiss with
+  "wrong_time", which for a friend request would have declined it).
+- **Faster cards and chips (2026-11-06):** a confirm/permission card is sent on the stream
+  as a `card` event the moment its tool makes it (it used to wait for `done`, i.e. the
+  whole reply); the reply's chips come as a `suggestions` event on the same stream
+  (`suggestionsFor`, its two lookups in parallel) instead of a second request; a posted
+  agent/proactive message rides its socket ping, so the app shows it without a refetch.
+- **Status (2026-11-06):** steps 1–6 built (`autoReplyCore.js` policy, `autoReply.js`
+  processor + `agent-inbox` lane + 5-min sweep, `friends.js` approve/decline,
+  `set_agent_auto_reply`, migration, 4 gate scenarios, 7 unit tests); the agent acts
+  when its **Agent Online** switch is on, and waits otherwise. Step 7 built after the
+  preview was approved (Settings → Agent network → "Let my agent reply on its own").
+  **Verified on the sandbox (2026-11-06, build 40a87bf5/6ac1e0a8):** `network.friend_request_card`,
+  `network.auto_reply_consult` (handled by the background lane on arrival), `network.chat_reply_setting`,
+  `network.offline_waits` — all PASS. Still to run on production after deploy.
 
 ---
 

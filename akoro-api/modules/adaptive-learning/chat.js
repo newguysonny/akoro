@@ -44,11 +44,14 @@ export const protegeDeps = {
     return data || [];
   },
 };
-import { publicModelList, resolveChatModel, pickerInfo } from "../../lib/modelCatalogue.js";
+import { publicModelList, resolveChatChoice, pickerInfo, pickerEnabled } from "../../lib/modelCatalogue.js";
+import { allowedModelsFor } from "../../lib/modelTiers.js";
+import { modelPicks, supabaseThreads } from "../workflows/modelPicks.js";
 const { Pool } = pkg;
 import db from "../../db.js";
 import config from "../../config/index.js";
 import { consultPeerAgents, PEER_QUESTION_MIN, PEER_QUESTION_MAX } from "./peerConsult.js";
+import { consultBreakthroughs } from "./peerConsult.js";
 import { searchAgents, saveSettings as saveAgentNetworkSettings, block as blockAgent, report as reportAgent, logPastQuestions, pastQuestionSummary } from "../agent-network/network.js";
 import { challengeAgents, postChallengeRequest, searchChallengeRequests, acceptChallengeRequest, cancelChallengeRequest, rematch } from "../agent-network/challenges.js";
 import { requestGuideReview } from "../battle/guideReview.js";
@@ -120,7 +123,7 @@ import { toResponsesInput, toResponsesTools } from "./responses-input.js";
 import { hasExplicitToolRequestConsent } from "./agent-tool-request-intent.js";
 import { getLearnerProfileContext } from "./learner-profile-context.js";
 import { validateLearnerTaskInput } from "./learner-task-validation.js";
-import { listChats, readChat, postToChat, ownedChatId } from "./chat-history-tools.js";
+import { listChats, readChat, postToChat, ownedChatId, searchChats } from "./chat-history-tools.js";
 import { schemaLookup } from "../self-tooling/registry.js";
 import { createTool, runLearnerTool, learnerToolDefs, forcedSelfTool } from "../self-tooling/pipeline.js";
 import { agreesToBuild } from "../self-tooling/capabilities.js";
@@ -140,6 +143,7 @@ import {
 import { localiseInstant } from "./learner-time-context.js";
 import {
   completedLearnerAgentConversationTurn,
+  savedTurnReplyId,
   loadLearnerAgentConversationContext,
   persistLearnerAgentConversationTurn,
   retrieveLearnerAgentMemory,
@@ -377,7 +381,7 @@ export const CHAT_TOOLS = [
   },
   {
     name: "schedule_chat_follow_up",
-    description: "Schedule the agent to SEND THE LEARNER A MESSAGE later — 'message me in 10 minutes', 'remind me here at 5pm', 'check on me tomorrow at 9'. Use this (not create_task) whenever they want to receive a message. Delivery: where='here' posts it into THIS chat (use when they say 'here' / 'in this chat'), where='chat' posts into the chat given by chatId (from list_chats), where='new' (default) opens a new chat. Timing: inMinutes for relative times ('in 10 minutes' = 10, 'in 2 hours' = 120), or scheduledAt for a clock time (call get_learner_context first; ISO 8601 with offset, e.g. 2026-09-08T14:00:00+01:00). At least 1 minute ahead.",
+    description: "Schedule the agent to SEND THE LEARNER A MESSAGE later — 'message me in 10 minutes', 'remind me here at 5pm', 'check on me tomorrow at 9', 'remind me EVERY DAY at 4:30pm' (repeat='daily'). Use this (not create_task) whenever they want to receive a message. Delivery: where='here' posts it into THIS chat (use when they say 'here' / 'in this chat'), where='chat' posts into the chat given by chatId (from list_chats), where='new' (default) opens a new chat. Timing: inMinutes for relative times ('in 10 minutes' = 10, 'in 2 hours' = 120), or scheduledAt for a clock time (call get_learner_context first; ISO 8601 with offset, e.g. 2026-09-08T14:00:00+01:00). At least 1 minute ahead.",
     input_schema: {
       type: "object",
       properties: {
@@ -388,6 +392,9 @@ export const CHAT_TOOLS = [
         chatId: { type: "string", description: "With where='chat': the chatId from list_chats." },
         timezone: { type: "string", description: "Optional IANA timezone for display, for example Africa/Lagos. Defaults to the account timezone returned by get_learner_context." },
         title: { type: "string", description: "Optional title for the new chat, for example 'Biology revision check-in'." },
+        repeat: { type: "string", enum: ["daily", "weekdays"], description: "Repeat at the same clock time: 'daily' (every day) or 'weekdays' (Mon–Fri). For 'every day', 'each morning', 'remind me daily'. The first send is scheduledAt; each later one goes into the same chat." },
+        repeatDays: { type: "number", description: "With repeat: how many days the series runs (default 30, max 90)." },
+        runTool: { type: "string", description: "Optional: the name of one of the learner's OWN read tools (from Settings → Agent → My tools / their tool list) to run fresh at each send; its answer is added under the message — e.g. a 'subjects I haven't studied' tool for a daily reminder." },
       },
       required: ["message"],
     },
@@ -452,7 +459,7 @@ export const CHAT_TOOLS = [
   },
   {
     name: "list_chats",
-    description: "List the learner's Agent Chat conversations (newest first) with their chatId and title. Use when they refer to another chat ('the chat about fractions', 'my last chat'), or before read_chat / post_to_chat / schedule_chat_follow_up with where='chat'. isThisChat marks the current one.",
+    description: "List the learner's Agent Chat conversations (newest first) with their chatId and title. Use when they refer to another chat by name ('my last chat', 'the Physics chat') — to find a chat by what was DISCUSSED in it use search_chats — or before read_chat / post_to_chat / schedule_chat_follow_up with where='chat'. isThisChat marks the current one.",
     input_schema: {
       type: "object",
       properties: {
@@ -468,10 +475,23 @@ export const CHAT_TOOLS = [
     input_schema: {
       type: "object",
       properties: {
-        chatId: { type: "string", description: "The chatId from list_chats." },
-        limit: { type: "number", description: "How many latest messages (default 30, max 60)." },
+        chatId: { type: "string", description: "The chatId from list_chats or search_chats." },
+        limit: { type: "number", description: "How many messages (default 30, max 60)." },
+        around: { type: "string", description: "Optional: a matchedAt time from search_chats — read the messages around that point instead of the latest ones." },
       },
       required: ["chatId"],
+    },
+  },
+  {
+    name: "search_chats",
+    description: "Search the learner's PAST chats by what was discussed (meaning and exact words), not just titles — 'what did we say about osmosis last week?', 'find the chat where you explained photosynthesis', 'which chat had my WAEC 2019 question?'. Returns the matching chats (chatId, title, a snippet, matchedAt). Then call read_chat with around=matchedAt to read that part. Use this BEFORE saying you don't remember something the learner says was discussed before. What was said in a chat is not proof of the learner's current progress — check records for that.",
+    input_schema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "What to look for, in the learner's words (a topic, a question, a phrase)." },
+        limit: { type: "number", description: "How many chats (default 6, max 10)." },
+      },
+      required: ["query"],
     },
   },
   {
@@ -501,6 +521,9 @@ export const CHAT_TOOLS = [
       properties: {
         question: { type: "string", description: "One focused, general question to the peer agents (10-300 characters)." },
         topic: { type: "string", enum: ["study_habits", "exam_prep", "streaks", "motivation", "goals", "subjects", "general"], description: "What the question is about." },
+        struggleType: { type: "string", description: "When the student is stuck: the struggle, as a type from the struggle list (e.g. misconception, interference, procrastination, overload, streak_break). Then other learners' breakthroughs on the same struggle come back first: what worked for them." },
+        concept: { type: "string", description: "For a concept struggle (misconception, interference…): the concept's name, e.g. 'Transpiration'." },
+        subject: { type: "string", description: "The concept's subject, e.g. 'Basic Science'." },
       },
       required: ["question"],
     },
@@ -708,6 +731,7 @@ export const CHAT_TOOLS = [
     featureGate: "agent_network",
     description: "Message another learner's agent — ALWAYS find them with search_agents first. kind 'consult' asks a question: if that agent is ONLINE it answers now, " +
       "only from what its own learner taught it; if OFFLINE the question waits in its inbox and the answer comes later (check_agent_inbox). kind 'suggestion' leaves an idea. " +
+      "kind 'chat' is friendly conversation ('tell Oyibo hi', 'say we'd like to study together'); kind 'friend_request' asks to be friends ('tell Tega we'd like to be friends') — their agent asks THEIR learner, who approves or not. " +
       "Use when the learner asks you to ask / tell another agent something, or for ideas from a specific agent. No contact details, links or personal info — they're blocked. " +
       "Pass on an answer as coming from that learner's agent, by name.",
     input_schema: {
@@ -715,10 +739,20 @@ export const CHAT_TOOLS = [
       properties: {
         to: { type: "string", description: "The other learner's userId or @username (from search_agents)." },
         question: { type: "string", description: "The message, 10–400 characters." },
-        kind: { type: "string", enum: ["consult", "suggestion"] },
+        kind: { type: "string", enum: ["consult", "suggestion", "chat", "friend_request"] },
         subject: { type: "string" }, topic: { type: "string" },
       },
       required: ["to", "question"],
+    },
+  },
+  {
+    name: "set_agent_auto_reply",
+    featureGate: "agent_network",
+    description: "Change what the learner's agent may answer ON ITS OWN when other learners' agents message it: 'off' (ask the learner every time), 'study' (answer study questions from what it was taught — the default), 'study_chat' (also reply to friendly chat). Friend requests and anything about the learner always ask. Use when they say e.g. 'let my agent chat for me', 'always ask me before replying'.",
+    input_schema: {
+      type: "object",
+      properties: { mode: { type: "string", enum: ["off", "study", "study_chat"] } },
+      required: ["mode"],
     },
   },
   {
@@ -826,7 +860,8 @@ export const CHAT_TOOLS = [
     description: "Search Akoro's own blog — the platform's published articles on study methods, exam prep, and learning. " +
       "This is your internal research channel (there is no web search): use it to ground study advice, cite a real article " +
       "to the learner, or check what Akoro says about a topic before answering from general knowledge. Returns cards " +
-      "(slug, title, excerpt); follow up with read_blog_post for the full text.",
+      "(slug, title, excerpt) and, for a query, the best passages from the articles' bodies (passage, post title, " +
+      "heading) — quote a passage and name its post; follow up with read_blog_post for the full text.",
     input_schema: {
       type: "object",
       properties: {
@@ -1388,7 +1423,7 @@ async function resolveLearnerSchoolContext(studentId) {
  * flag the scratchpad, and by the agent console's DRY mode, which answers
  * these with what they WOULD do instead of doing it (lib/dryRunContext.js).
  */
-export const SIDE_EFFECT_TOOLS = ["create_task", "suggest_help", "schedule_chat_follow_up", "post_to_chat", "create_tool", "cancel_scheduled_chat_follow_up", "submit_tool_request", "prepare_activity", "revise_activity_draft",
+export const SIDE_EFFECT_TOOLS = ["set_agent_auto_reply", "create_task", "suggest_help", "schedule_chat_follow_up", "post_to_chat", "create_tool", "cancel_scheduled_chat_follow_up", "submit_tool_request", "prepare_activity", "revise_activity_draft",
           "create_goal", "update_goal_progress", "save_blog_draft", "publish_blog", "update_agent_network_settings", "block_agent", "log_past_question_practice",
           "challenge_agent", "class_battle", "post_challenge_request", "accept_challenge_request", "cancel_challenge_request", "rematch_battle", "request_guide_review", "message_agent", "reply_to_agent", "start_study_prep_session", "cancel_study_prep_session",
           "consult_peer_agents", "discard_activity_draft", "schedule_activity_routine", "cancel_activity_routine", "run_teaching_tool"];
@@ -1975,6 +2010,15 @@ async function runChatTool(name, input, studentId, { conversationId = null, role
         return clarify("question", "Keep peer questions general — no contact details (emails, phone numbers or invite links) travel to other agents.", { action: "consult_peer_agents" });
       }
       try {
+        // §7.13: a named struggle first asks what worked for learners who got past the
+        // same one (their breakthroughs, opt-in stories + anonymous totals) — no model call.
+        if (input?.struggleType) {
+          const help = await consultBreakthroughs({ userId: studentId, struggleType: String(input.struggleType).slice(0, 60),
+            concept: input?.concept ? String(input.concept).slice(0, 120) : null, subject: input?.subject ? String(input.subject).slice(0, 80) : null });
+          if (help?.stories?.length || help?.pattern) {
+            return { ...help, note: "These are real breakthroughs from other learners who had the same struggle. Share one story's what-worked move, naming the agent (never a learner), and offer to try it; a pattern is totals only. Never treat them as evidence." };
+          }
+        }
         // Real agents first: up to two ONLINE agents answer from what their
         // own learners taught them (the asker pays). Nobody online → the
         // simulated peer ideas, as before.
@@ -2229,6 +2273,14 @@ async function runChatTool(name, input, studentId, { conversationId = null, role
           targetSessionId = await ownedChatId(studentId, input.chatId);
           if (!targetSessionId) return { error: "That chat wasn't found among the learner's chats — call list_chats for a valid chatId." };
         }
+        // runTool must be one of THIS learner's own tools (it runs as them, read-only, at each send).
+        if (input.runTool) {
+          const { listMyTools } = await import("../self-tooling/pipeline.js");
+          const mine = await listMyTools(studentId).catch(() => []);
+          if (!mine.some((t) => t.name === input.runTool && t.status === "active")) {
+            return { error: `"${input.runTool}" isn't one of the learner's active tools — build it first with create_tool, or schedule the reminder without runTool.` };
+          }
+        }
         const context = await getLearnerProfileContext(studentId);
         const schedule = await scheduleChatFollowUp({
           userId: studentId,
@@ -2303,8 +2355,13 @@ async function runChatTool(name, input, studentId, { conversationId = null, role
     }
     case "read_chat": {
       if (!input?.chatId) return clarify("chatId", "Which chat should I read? I can list your chats.", { action: "read_chat" });
-      try { return await readChat(studentId, input.chatId, { limit: input.limit }); }
+      try { return await readChat(studentId, input.chatId, { limit: input.limit, around: input.around }); }
       catch (error) { return { error: error.message || "Could not read that chat" }; }
+    }
+    case "search_chats": {
+      if (!input?.query || !String(input.query).trim()) return clarify("query", "What should I look for in your past chats?", { action: "search_chats" });
+      try { return await searchChats(studentId, { query: input.query, limit: input.limit, currentChatId: conversationId }); }
+      catch (error) { return { error: error.message || "Could not search your chats" }; }
     }
     case "post_to_chat": {
       if (!input?.chatId) return clarify("chatId", "Which chat should I post it in? I can list your chats.", { action: "post_to_chat" });
@@ -2450,6 +2507,14 @@ async function runChatTool(name, input, studentId, { conversationId = null, role
         const r = await requestGuideReview({ learnerId: studentId, sessionId: input.sessionId || null, subject: input.subject || null, topic: input.topic || null });
         return { started: true, battleId: r.battleId, title: r.title, questions: r.questions, reviewsLeftToday: r.left, link: `/app?tab=battles&battle=${r.battleId}` };
       } catch (e) { return { started: false, error: e.message }; }
+    }
+    case "set_agent_auto_reply": {
+      if (!["off", "study", "study_chat"].includes(input?.mode)) return clarify("mode", "Should I ask you every time, answer study questions on my own, or also reply to friendly chat?", { action: "set_agent_auto_reply" });
+      try {
+        const { saveSettings } = await import("../agent-network/network.js");
+        const saved = await saveSettings(studentId, { auto_reply: input.mode });
+        return { saved: true, mode: saved.auto_reply, means: { off: "I'll ask you before answering any agent.", study: "I'll answer study questions on my own (from what you taught me) and ask you about everything else.", study_chat: "I'll answer study questions and reply to friendly chat on my own; friend requests and anything about you still come to you." }[saved.auto_reply] };
+      } catch (error) { return { error: error.message || "Could not save that setting" }; }
     }
     case "message_agent": {
       if (role === "instructor") return { error: "The agent network is for learners." };
@@ -2993,6 +3058,8 @@ router.patch("/autonomy", async (req, res) => {
       userId: req.user.id, enabled: req.body.enabled,
       level: typeof req.body.level === "number" ? req.body.level : undefined,
     });
+    // Phase 21: switching the agent Online lets it handle messages that waited.
+    if (req.body.enabled) import("../agent-network/autoReply.js").then((m) => m.wakeInbox(req.user.id, "switched_on")).catch(() => {});
     res.json({ success: true, ...result });
   } catch (error) {
     res.status(500).json({ error: error.message || "Could not save agent autonomy" });
@@ -3959,6 +4026,16 @@ function inspectResult(value) {
 
 /** Before an activity tool runs from the instructor's chat: what the teacher never said → a clarify result, else null. */
 /** The learner's latest message in this turn's transcript (text parts only). */
+/** The agent's last reply in the kept dialogue ("" if none). */
+function lastAgentText(messages = []) {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (m?.role !== "assistant") continue;
+    return typeof m.content === "string" ? m.content : Array.isArray(m.content) ? m.content.filter((x) => x?.type === "text").map((x) => x.text).join(" ") : "";
+  }
+  return "";
+}
+
 function latestUserText(transcript = []) {
   for (let i = transcript.length - 1; i >= 0; i--) {
     const m = transcript[i];
@@ -4236,6 +4313,9 @@ async function runAgentToolLoop({ systemContent, messages, studentId, conversati
           return {};
         })(),
       });
+      // A card the learner must act on goes out NOW, not with "done": it used to
+      // appear only after the whole reply had been written (2026-11-06).
+      if (executions.at(-1)?.confirm) trace?.card?.({ tool, confirm: executions.at(-1).confirm });
       transcript.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify(observation) });
     }
   }
@@ -4269,13 +4349,60 @@ export const chatModelMenu = () => ([
   { id: "think",    model: THINK_MODEL,    kind: "Thinking", description: "Reasons step by step before answering — best for hard problems." },
   { id: "research", model: RESEARCH_MODEL, kind: "Research", description: "A deeper pass with more syllabus and past-question references." },
 ]);
-router.get("/models", (_req, res) => {
+router.get("/models", async (req, res) => {
   res.set("Cache-Control", "private, max-age=300");
   // modes: the chat's modes and their models; models: the catalogue a
   // learner may pick for the standard mode (Grand Plan §7.11) — each says
   // whether this server can use it, or why not ("coming soon"), and its cost
-  // against the default; picker: whether the §7.11.5 picker is on here.
-  res.json({ modes: chatModelMenu(), models: publicModelList(), picker: pickerInfo() });
+  // against the default; picker: whether the §7.11.5 picker is on here and,
+  // when it is, the payer's tier (§7.11.5a) — a model outside its list is
+  // listed as locked to a plan.
+  const tier = pickerEnabled() && req.user?.id ? await allowedModelsFor(req.user.id).catch(() => null) : null;
+  // saved: the learner's latest pick on any of their chats (Scenario K) — the
+  // app opens on it on every device, so it is never cached when there is one.
+  const saved = pickerEnabled() && req.user?.id ? await savedPickFor(req.user.id) : null;
+  if (saved) res.set("Cache-Control", "private, no-cache");
+  res.json({
+    modes: chatModelMenu(),
+    models: publicModelList(process.env, { allowedModels: tier?.allowedModels ?? null }),
+    picker: { ...pickerInfo(), ...(tier ? { tier: tier.tier?.name || null, tierSource: tier.source, allowedModels: tier.allowedModels } : {}), ...(saved ? { saved } : {}) },
+  });
+});
+
+/** The learner's latest saved pick → { modelId, label, conversationId, changedAt } | null. Never throws. */
+async function savedPickFor(learnerId) {
+  try {
+    const pick = await (await modelPicks()).learnerPick(learnerId);
+    return pick?.changedAt ? { modelId: pick.modelId ?? null, label: pick.label || null, conversationId: pick.conversationId || null, changedAt: pick.changedAt } : null;
+  } catch { return null; }
+}
+
+// GET /sessions/:id/model — the pick saved on this chat ({} when never set).
+router.get("/sessions/:id/model", async (req, res) => {
+  try {
+    if (!CHAT_SESSION_ID.test(String(req.params.id))) return res.status(422).json({ error: "id is invalid" });
+    const thread = await supabaseThreads(db).get(req.params.id, req.user.id);
+    if (!thread) return res.status(404).json({ error: "Session not found" });
+    res.set("Cache-Control", "no-store");
+    res.json({ success: true, modelSelection: thread.selection || {} });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT /sessions/:id/model { modelId } — save the chat's pick (null = the
+// default). It applies from the next message and also reaches the learner's
+// open Study Prep / Teaching workflows (a model.changed event on each).
+router.put("/sessions/:id/model", async (req, res) => {
+  try {
+    if (!CHAT_SESSION_ID.test(String(req.params.id))) return res.status(422).json({ error: "id is invalid" });
+    if (!pickerEnabled()) return res.status(409).json({ code: "picker_off", error: "Model choice is off on this server" });
+    const result = await (await modelPicks()).saveThreadPick({ learnerId: req.user.id, conversationId: req.params.id, modelId: req.body?.modelId ?? null });
+    res.json({ success: true, ...result });
+  } catch (err) {
+    if (err?.code && err.status) return res.status(err.status).json({ code: err.code, error: err.message });
+    res.status(500).json({ error: err.message });
+  }
 });
 
 /**
@@ -4301,25 +4428,32 @@ export async function saveReplyIdeas({ userId, conversationId, reply, ideas }) {
   } catch { return false; }
 }
 
-router.post("/suggestions", async (req, res) => {
-  const reply = String(req.body?.reply || "").trim();
-  if (!reply) return res.json({ success: true, suggestions: [] });
+/**
+ * The three follow-up chips for a reply. Shared by POST /suggestions and the
+ * Agent Chat stream, which now sends them as a "suggestions" event right after
+ * "done" — no second round trip from the app (2026-11-06). Never throws.
+ */
+export async function suggestionsFor({ user, body }) {
+  const reply = String(body?.reply || "").trim();
+  if (!reply) return [];
   // The teacher's ideas only for a non-learner account that asks for them.
-  const role = req.body?.role === "instructor" && req.user?.role !== "student" ? "instructor" : "student";
-  const tools = Array.isArray(req.body?.tools) ? req.body.tools.slice(0, 12) : [];
+  const role = body?.role === "instructor" && user?.role !== "student" ? "instructor" : "student";
+  const tools = Array.isArray(body?.tools) ? body.tools.slice(0, 12) : [];
   const notTaught = role === "student" ? notTaughtFrom({ reply, tools }) : null;
-  const uploads = role === "student" ? uploadsFrom(req.body?.attachments) : [];
+  const uploads = role === "student" ? uploadsFrom(body?.attachments) : [];
   // Fixed chips first: the guide when it wasn't taught, the study step after an upload.
   const fixed = [guideChip(notTaught), uploadChip(uploads)].filter(Boolean);
   const isFixed = (x) => /teaching guide/i.test(x) || fixed.some((f) => f.toLowerCase() === String(x).toLowerCase());
   try {
-    // What this agent can actually do: its live capability card, plus the tools
-    // the learner's agent built for them — chips stay within reach.
     const capabilities = [];
     if (role === "student") {
-      const card = await executeChatTool("get_agent_capabilities", {}, req.user.id, { role: "student" }).catch(() => null);
+      // Both lookups at once (they used to run one after the other before the model call).
+      const [card, own] = await Promise.all([
+        executeChatTool("get_agent_capabilities", {}, user.id, { role: "student" }).catch(() => null),
+        learnerToolDefs(user.id).catch(() => []),
+      ]);
       for (const sec of card?.sections || []) if (sec.title !== "Limits") capabilities.push(...(sec.items || []));
-      for (const t of await learnerToolDefs(req.user.id).catch(() => [])) {
+      for (const t of own) {
         const d = t?.function?.description || t?.function?.name;
         if (d) capabilities.push(`Your own tool: ${String(d).slice(0, 120)}`);
       }
@@ -4328,18 +4462,22 @@ router.post("/suggestions", async (req, res) => {
       model: process.env.OPENAI_SUGGEST_MODEL || "gpt-4o-mini", temperature: 0.5, max_tokens: 160,
       __timeoutMs: 12_000, __maxRetries: 0,
       response_format: { type: "json_object" },
-      messages: buildSuggestionMessages({ role, ask: req.body?.ask, reply, context: req.body?.context, capabilities, notTaught, uploads }),
-      __userId: req.user?.id, __feature: "chat_suggestions",
+      messages: buildSuggestionMessages({ role, ask: body?.ask, reply, context: body?.context, capabilities, notTaught, uploads }),
+      __userId: user?.id, __feature: "chat_suggestions",
     });
     const ideas = shapeSuggestions(completion.choices?.[0]?.message?.content);
     const suggestions = fixed.length ? [...fixed, ...ideas.filter((x) => !isFixed(x))].slice(0, 3) : ideas;
-    res.json({ success: true, suggestions });
-    void saveReplyIdeas({ userId: req.user?.id, conversationId: req.body?.conversationId, reply, ideas: suggestions });
+    void saveReplyIdeas({ userId: user?.id, conversationId: body?.conversationId, reply, ideas: suggestions });
+    return suggestions;
   } catch (e) {
     console.warn("[chat/suggestions] none this time:", String(e?.message || e).slice(0, 120));
-    res.json({ success: true, suggestions: fixed });
-    if (fixed.length) void saveReplyIdeas({ userId: req.user?.id, conversationId: req.body?.conversationId, reply, ideas: fixed });
+    if (fixed.length) void saveReplyIdeas({ userId: user?.id, conversationId: body?.conversationId, reply, ideas: fixed });
+    return fixed;
   }
+}
+
+router.post("/suggestions", async (req, res) => {
+  res.json({ success: true, suggestions: await suggestionsFor({ user: req.user, body: req.body }) });
 });
 
 /**
@@ -4470,8 +4608,14 @@ router.post("/agent", async (req, res) => {
     const isResearch = mode === "research";
     // The learner's model pick (a catalogue id) drives the standard mode's
     // decisions and answer; Think and Research keep their own models. An
-    // unknown or unavailable pick is ignored — the default answers.
-    const chatModel = mode === "default" ? resolveChatModel(req.body?.model) : null;
+    // unknown or unavailable pick is ignored — the default answers. With the
+    // §7.11.5 picker on, the pick must also be in the payer's tier list
+    // (§7.11.5a); a refused pick says why (modelNotice) and the default answers.
+    const picked = mode === "default" && typeof req.body?.model === "string" && req.body.model ? req.body.model : null;
+    const tierModels = picked && pickerEnabled() ? await allowedModelsFor(req.user.id).catch(() => null) : null;
+    const { apiModel: chatModel, notice: modelNotice } = picked
+      ? resolveChatChoice(picked, process.env, { allowedModels: tierModels?.allowedModels ?? null })
+      : { apiModel: null, notice: null };
     const role = ["instructor", "teacher", "school", "school_admin", "admin"].includes(req.user?.role)
       ? "instructor" : "student";
     // The instructor app asked, but the session is a learner's: a request that
@@ -4491,6 +4635,15 @@ router.post("/agent", async (req, res) => {
     let dialogue = safeHistory(history);
 
     if (wantsStream) beginStream();
+    if (modelNotice && wantsStream) status("model", modelNotice);
+    // The pick is remembered on the chat (Scenario K): a send that names its
+    // model — a catalogue id, or null for the default — saves it on the thread
+    // and the learner's open workflows; a change is a model_changed event.
+    if (conversationId && mode === "default" && Object.prototype.hasOwnProperty.call(req.body || {}, "model") && pickerEnabled()) {
+      const remembered = await (await modelPicks()).saveThreadPick({ learnerId: req.user.id, conversationId, modelId: typeof req.body.model === "string" && req.body.model ? req.body.model : null })
+        .catch((e) => { if (!/not found|isn't a model/i.test(String(e?.message))) console.warn("[/chat/agent] model pick not saved:", e?.message || e); return null; });
+      if (remembered?.changed && wantsStream) send("model_changed", { modelId: remembered.selection.modelId, label: remembered.selection.label, previous: remembered.previous, workflows: remembered.workflows.length });
+    }
     if (durable) {
       // A durable-context failure (pending migration, transient DB error)
       // must never take the chat down: degrade to the plain-transcript path,
@@ -4653,7 +4806,7 @@ router.post("/agent", async (req, res) => {
     const selfToolCtx = selfToolOn && role === "instructor"
       ? "\n\n## Building tools (preview)\nWhen the instructor asks for something none of your tools gives directly — a total, average, count, ranking or breakdown over THEIR OWN classes and activities (average grade per activity, who hasn't started, completion by class, students below a mark) — call create_tool (schema_lookup first if unsure what it can use) and answer from its result; don't say you don't have the data. check_activity_outcomes is for ONE activity's summary — a question across several activities (each activity's average, who hasn't started anything) is a create_tool question. Tools only ever see this instructor's own classes and the work set in them — students by name only, never another teacher's class or a learner's private chats or notes. Only say it can't be done after create_tool is rejected, and say why."
       : selfToolOn
-      ? "\n\n## Building tools (preview)\nWhen the learner asks for something none of your tools gives directly — a total, average, count or breakdown over their own data (hours of sessions per month, tasks finished per week, accuracy by year) — don't say you don't have the data and don't piece it together from unrelated tools. Call create_tool (schema_lookup first if unsure what it can use), then answer from its result. The same goes for comparisons with other learners (how others scored in battles they played together): create_tool either builds it or, if it needs a permission, asks an admin and the answer comes back in this chat — tell the learner that plainly. Only say it can't be done after create_tool is rejected, and say why.\nWhen the learner asks you to CHANGE their own things and no tool does it (delete or complete their tasks, end a study buddy) — don't just say you can't. Call schema_lookup: if it lists that change as needs_your_ok, call create_tool with it in hint.capabilities in this same turn — don't ask 'shall I build it?' first. The tool is drafted (off) and they get a card showing what it would change; Approve on the card is their yes. Say briefly that you've drafted it and they can approve it on the card. Never file submit_tool_request for these.\nWhen their message says they approved a tool, or asks you to run one of your tools by name (after the Akoro team approved it), run that tool now — a read: explain what it found in plain words; a change: it finds what to change and shows the Confirm card — say what it would change (the app tells you when they confirm; don't ask them to tell you). When their message says they confirmed a change, look again (run the same tool, or list the items) to check it went through: say what changed and whether anything is still left. Nothing is done until you've checked."
+      ? "\n\n## Building tools (preview)\nWhen the learner asks for something none of your tools gives directly — a total, average, count or breakdown over their own data (hours of sessions per month, tasks finished per week, accuracy by year) — don't say you don't have the data and don't piece it together from unrelated tools. Call create_tool (schema_lookup first if unsure what it can use), then answer from its result. The same goes for comparisons with other learners (how others scored in battles they played together): create_tool either builds it or, if it needs a permission, asks an admin and the answer comes back in this chat — tell the learner that plainly. Only say it can't be done after create_tool is rejected, and say why.\nWhen the learner asks you to CHANGE their own things and no tool does it (delete or complete their tasks, end a study buddy) — don't just say you can't. Call schema_lookup: if it lists that change as needs_your_ok, call create_tool with it in hint.capabilities in this same turn — don't ask 'shall I build it?' first. The tool is drafted (off) and they get a card showing what it would change; Allow on the card is their yes. Say briefly that you've drafted it and they can tap Allow on the card. Never file submit_tool_request for these.\nWhen their message says they approved a tool, or asks you to run one of your tools by name (after the Akoro team approved it), run that tool now — a read: explain what it found in plain words; a change: it finds what to change and shows the Allow card — say what it would change (the app tells you when they confirm; don't ask them to tell you). When their message says they confirmed a change, look again (run the same tool, or list the items) to check it went through: say what changed and whether anything is still left. Nothing is done until you've checked."
       : "";
     // Who this learner's agent is (their protégé): its name, level and
     // sessions from edu.student_agents, and the learner's first name.
@@ -4747,7 +4900,7 @@ router.post("/agent", async (req, res) => {
       conversationId,
       status: wantsStream ? status : null,
       tools: role === "student" ? openAiChatTools({
-        allowToolRequest: hasExplicitToolRequestConsent(userMessage),
+        allowToolRequest: hasExplicitToolRequestConsent(userMessage, { previousAgentText: lastAgentText(fit.kept) }),
         selfTooling: selfToolOn,
       }).concat(selfToolOn ? await learnerToolDefs(req.user.id).catch(() => []) : []) : instructorTools,
       // Learners: capability questions are answered from the live catalogue.
@@ -4910,7 +5063,11 @@ router.post("/agent", async (req, res) => {
           // The reply already happened — never lose the transcript to a
           // durable-write hiccup. Fall back to the plain two-row append.
           console.error("[/chat/agent] durable persist failed — appending basic transcript:", persistError.message);
-          await appendBasicChatTurn({ conversationId, userId: req.user.id, userMessage, assistantMessage: reply })
+          // Never write the turn twice: if its messages were saved before the
+          // failure, keep those (a second append duplicated every turn).
+          const already = await savedTurnReplyId({ conversationId, userId: req.user.id, turnId }).catch(() => null);
+          if (already) { turnSaved = true; await saveTurn(already).catch(() => {}); }
+          else await appendBasicChatTurn({ conversationId, userId: req.user.id, userMessage, assistantMessage: reply })
             .then(async (saved) => { turnSaved = true; await saveTurn(saved?.assistantMessageId); })
             .catch((e) => console.error("[/chat/agent] basic transcript append failed:", e.message));
         }
@@ -4944,11 +5101,19 @@ router.post("/agent", async (req, res) => {
       retrieval,
       toolExecutions: prepared.toolExecutions,
       ...(durable ? { durableContext: true } : {}),
+      ...(modelNotice ? { modelNotice } : {}),
     };
     if (!wantsStream) {
       return res.json({ success: true, reply, response: reply, thinking, syllabus: syllabusRefs, pastQuestions: pastRefs, curriculum: curriculumRefs, mode, metadata, toolExecutions: prepared.toolExecutions, trace: traceBlocks, messageId: savedReplyId });
     }
     send("done", { reply, thinking, syllabus: syllabusRefs, pastQuestions: pastRefs, curriculum: curriculumRefs, mode, metadata, toolExecutions: prepared.toolExecutions, trace: traceBlocks, stopped: stopped(), messageId: savedReplyId });
+    // The chips on the same stream, straight after the reply (the app used to ask
+    // for them with a second request once the reply ended).
+    if (role === "student" && reply && !stopped() && req.body?.inlineSuggestions === true) {
+      const suggestions = await suggestionsFor({ user: req.user, body: { reply, ask: userMessage, role: "student", conversationId,
+        tools: prepared.toolExecutions.map((x) => ({ tool: x?.tool, topic: x?.teach?.topic || x?.guide?.teach?.topic || null })) } }).catch(() => []);
+      send("suggestions", { suggestions });
+    }
     return res.end();
   } catch (error) {
     console.error("[/chat/agent]", error);

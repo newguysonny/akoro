@@ -20,7 +20,7 @@
  * unchanged. Grading never follows a pick: the assessor and evidence roles
  * are locked in the registry, and only the chat's standard mode reads it.
  */
-import { availabilityOf, createModelRegistry, PROVIDERS } from "./modelRegistry.js";
+import { availabilityOf, createModelRegistry, PROVIDERS, pickerFlag } from "./modelRegistry.js";
 
 /** Providers this server can call (lib/aiModel.js adapters). */
 export const SUPPORTED_PROVIDERS = PROVIDERS;
@@ -39,7 +39,7 @@ export function modelAvailability(m, env = process.env) {
 }
 
 /** Is the §7.11.5 picker switched on here? */
-export const pickerEnabled = (env = process.env) => String(env.AI_MODEL_PICKER_ENABLED || "false").toLowerCase() === "true";
+export const pickerEnabled = (env = process.env) => pickerFlag(env);   // on by default (2026-11-07)
 
 // A typical chat message reads about three tokens for each one it writes.
 const blended = (price) => (price ? 3 * Number(price.in) + Number(price.out) : null);

@@ -48,8 +48,12 @@ After an Agent Check is marked:
   offered on the card (session.get_state shows it): they confirm it, or it
   is set up by itself after a minute, and it then waits in their sessions on
   the dashboard. The retest starts by itself a minute after they finish
-  teaching it. Then wait. (Never tell them to tap "I've taught it" — that is
-  only for teaching done outside the app.)
+  teaching it. Every intervention is a teaching session: if a strategy
+  other than teach_back fits the gaps better, call request_teaching with it
+  (the same session, coached that way). Only if request_teaching is refused
+  with teaching_unavailable, offer_strategy inline instead. Then wait.
+  (Never tell them to tap "I've taught it" — that is only for teaching done
+  outside the app, or when no teaching session can be set up.)
 - Out of tries: say so honestly. Set the topic aside with defer_topic (one
   deferred retry per session) or move on with advance_topic, and say why.
 

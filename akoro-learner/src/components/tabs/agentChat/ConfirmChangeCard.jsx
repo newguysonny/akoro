@@ -11,6 +11,7 @@
  * After a Confirm, the chat carries on too, so the agent checks what changed.
  */
 import { useEffect, useState } from 'react';
+import ApprovalButtons from './ApprovalButtons.jsx';
 import { Icon } from '../../common/Icons.jsx';
 import { BRAND } from '../../../constants.js';
 import { apiGet, apiPost } from '../../../services/api.js';
@@ -60,17 +61,8 @@ export default function ConfirmChangeCard({ confirm, onDone = null }) {
       </ul>
       {state.status === 'pending' && !expired && (
         <>
-          <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--ak-text-muted)', marginTop: 8 }}>Nothing has changed yet. Only you can confirm.</div>
-          <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-            <button type="button" disabled={busy} onClick={() => act('confirm')}
-              style={{ padding: '7px 14px', borderRadius: 999, border: 'none', background: BRAND, color: '#fff', fontSize: 12.5, fontWeight: 900, cursor: 'pointer', fontFamily: NUNITO }}>
-              {busy ? '…' : `Confirm ${items.length > 1 ? `(${items.length})` : ''}`}
-            </button>
-            <button type="button" disabled={busy} onClick={() => act('reject')}
-              style={{ padding: '7px 14px', borderRadius: 999, border: '1px solid var(--ak-border)', background: 'var(--ak-surface)', color: 'var(--ak-text)', fontSize: 12.5, fontWeight: 900, cursor: 'pointer', fontFamily: NUNITO }}>
-              Not now
-            </button>
-          </div>
+          <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--ak-text-muted)', marginTop: 8 }}>Nothing has changed yet. Only you can allow it.</div>
+          <ApprovalButtons busy={busy} onAllow={() => act('confirm')} onReject={() => act('reject')} />
         </>
       )}
       {(state.status !== 'pending' || expired) && (
@@ -111,17 +103,8 @@ function PermissionCard({ state, expired, busy, err, act }) {
       </> : pending && (state.items || [])[0] && <div style={{ marginTop: 9, fontSize: 12.5, fontWeight: 700, color: 'var(--ak-text)', lineHeight: 1.5 }}>{state.items[0]}</div>}
       {pending && (
         <>
-          <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--ak-text-muted)', marginTop: 8 }}>{state.drafted ? 'Only for you. Approve turns it on, and nothing changes until you confirm each change it proposes.' : 'Only for you. Nothing changes until you confirm each change it proposes.'}</div>
-          <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-            <button type="button" disabled={busy} onClick={() => act('confirm')}
-              style={{ padding: '7px 14px', borderRadius: 999, border: 'none', background: BRAND, color: '#fff', fontSize: 12.5, fontWeight: 900, cursor: 'pointer', fontFamily: NUNITO }}>
-              {busy ? (state.drafted ? 'Turning on…' : 'Building…') : 'Approve'}
-            </button>
-            <button type="button" disabled={busy} onClick={() => act('reject')}
-              style={{ padding: '7px 14px', borderRadius: 999, border: '1px solid var(--ak-border)', background: 'var(--ak-surface)', color: 'var(--ak-text)', fontSize: 12.5, fontWeight: 900, cursor: 'pointer', fontFamily: NUNITO }}>
-              Not now
-            </button>
-          </div>
+          <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--ak-text-muted)', marginTop: 8 }}>{state.drafted ? 'Only for you. Allow turns it on, and nothing changes until you confirm each change it proposes.' : 'Only for you. Nothing changes until you confirm each change it proposes.'}</div>
+          <ApprovalButtons busy={busy} onAllow={() => act('confirm')} onReject={() => act('reject')} />
         </>
       )}
       {!pending && (

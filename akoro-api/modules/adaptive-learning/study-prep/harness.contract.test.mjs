@@ -14,6 +14,7 @@ import { makeEvent } from "./events.js";
 import { guardStudyPrepStore, makeWorkflowMirror, studyPrepWorkflow } from "./workflow.js";
 import { createWorkflowEngine } from "../../workflows/engine.js";
 import { memoryWorkflowStore } from "../../workflows/store.js";
+import { memorySubmitAttempt } from "./submit-attempt.testkit.mjs";
 
 // ── in-memory store double ─────────────────────────────────────────────────
 
@@ -109,6 +110,7 @@ const SYLLABUS = [
 ];
 const PREREQS = [{ before: "water-cycle", after: "photosynthesis", beforeLabel: "Water Cycle", afterLabel: "Photosynthesis" }];
 
+const KEY5 = { q1: 1, q2: 0, q3: 2, q4: 1, q5: 0 };
 function makeTopicWorkflow({ passThreshold = 0.7, maxAttempts = 3 } = {}) {
   let runCounter = 0;
   const runs = new Map();
@@ -152,6 +154,8 @@ const syllabus = {
 function build({ balance = 100, workflow } = {}) {
   const store = new MemoryStore({ balance });
   const topicWorkflow = workflow || makeTopicWorkflow();
+  // The single-transaction submit (edu.study_prep_submit_attempt), in memory.
+  topicWorkflow.submitAttempt = memorySubmitAttempt({ store, runs: topicWorkflow.runs, key: KEY5 });
   const harness = createHarness({ store, topicWorkflow, syllabus, now: () => "2026-01-01T00:00:00Z" });
   return { store, topicWorkflow, harness };
 }
@@ -235,6 +239,13 @@ test("a retest without the learner's teach-back confirmation is rejected (hard g
   await harness.confirmPlan({ sessionId: session.id, learnerId: LEARNER });
   const topic = (await store.getTopics(session.id))[0];
   await harness.startTopicPractice({ sessionId: session.id, learnerId: LEARNER, topicId: topic.id, mode: "diagnostic" });
+  // While the diagnostic is out there is no retest to start at all.
+  await assert.rejects(
+    () => harness.startTopicPractice({ sessionId: session.id, learnerId: LEARNER, topicId: topic.id, mode: "retest" }),
+    (error) => error.code === "invalid_state_transition",
+  );
+  // Missed (§8.3: intervention_required) — still no retest before the teach-back.
+  await harness.submitPractice({ sessionId: session.id, learnerId: LEARNER, topicId: topic.id, answers: [{ questionId: "q1", answerIndex: 0 }] });
   await assert.rejects(
     () => harness.startTopicPractice({ sessionId: session.id, learnerId: LEARNER, topicId: topic.id, mode: "retest" }),
     (error) => error.code === "teach_back_gate",
@@ -257,7 +268,7 @@ test("a failing wallet pauses the session resumable with a 402 code — no lost 
   const paused = await store.getSession(session.id);
   assert.equal(paused.status, "paused");
   assert.equal(paused.paused_reason, "insufficient_balance");
-  assert.equal((await store.getTopics(session.id))[0].status, "active", "the topic is not lost");
+  assert.equal((await store.getTopics(session.id))[0].status, "diagnostic_ready", "the topic is not lost — ready for its check, nothing out");
   // after a top-up the session resumes into topic_active with the topic intact
   store.balance = 50;
   const resumed = await harness.resumeSession({ sessionId: session.id, learnerId: LEARNER });
@@ -425,9 +436,12 @@ test("F7: an unlisted session or topic move is refused before anything is writte
   // A finished session stays finished.
   await store.updateSessionConditional(session.id, "planning", { status: "cancelled" });
   await assert.rejects(() => store.updateSessionConditional(session.id, "cancelled", { status: "topic_active" }), (e) => e.code === "invalid_state_transition");
-  // Topics: understood is final; queued can't jump to understood.
+  // Topics: understood is final; queued can't jump to understood; an active topic is checked first (§8.3).
   const [topic] = await store.createTopics(session.id, [{ syllabusTopicId: "a", label: "A" }, { syllabusTopicId: "b", label: "B" }]);
-  await store.updateTopicConditional(topic.id, "active", { status: "understood" });
+  await assert.rejects(() => store.updateTopicConditional(topic.id, "active", { status: "understood" }), (e) => e.code === "invalid_state_transition");
+  await store.updateTopicConditional(topic.id, "active", { status: "diagnostic_ready" });
+  await store.updateTopicConditional(topic.id, "diagnostic_ready", { status: "diagnostic" });
+  await store.updateTopicConditional(topic.id, "diagnostic", { status: "understood" });
   await assert.rejects(() => store.updateTopicConditional(topic.id, "understood", { status: "active" }), (e) => e.code === "invalid_state_transition");
   await assert.rejects(() => store.updateTopicConditional("topic-sess-2", "queued", { status: "understood" }), (e) => e.code === "invalid_state_transition");
   // A patch that doesn't change status is not a transition.
@@ -502,4 +516,42 @@ test("dual-write is best effort: an engine failure never fails the learner's act
   await harness.confirmPlan({ sessionId: session.id, learnerId: LEARNER });
   assert.equal((await store.getSession(session.id)).status, "topic_active");
   assert.ok(warnings.some((w) => /workflow mirror: create failed/.test(w)));
+});
+
+// Phase 4a: an accepted harness strategy runs (here interleave → a replan
+// through the store's conditional writes) and starts its pending outcome; a
+// strategy past limits.maxUsesPerTopic is refused.
+test("offer_strategy: the learner's acceptance runs the harness strategy; past its limit it is refused", async () => {
+  const { runStrategyOffer } = await import("../strategies/executors.js");
+  const outcomes = [];
+  let uses = 0;
+  const strategyRun = (args) => runStrategyOffer({ ...args, deps: {
+    store: args.store, now: args.now, prerequisites: async () => PREREQS,
+    checkLimit: async () => (uses >= 2 ? { refusal: "strategy_limit_reached", usesOnTopic: uses, limit: 2 } : { refusal: null, usesOnTopic: uses, limit: 2 }),
+    recommend: async () => ({ ranked: [{ id: "interleave", reasons: ["targets_struggle"] }], struggleTypes: ["interference"] }),
+    recordOutcome: async (o) => { uses += 1; outcomes.push(o); return { recorded: true, id: `o${uses}` }; },
+  } });
+  const store = new MemoryStore();
+  const harness = createHarness({ store, topicWorkflow: makeTopicWorkflow(), syllabus, strategyRun, now: () => "2026-01-01T00:00:00Z" });
+  const session = await plannedSession(harness, { topicIds: ["water-cycle", "matter", "photosynthesis"] });
+  await harness.confirmPlan({ sessionId: session.id, learnerId: LEARNER });
+  const [active] = (await store.getTopics(session.id)).filter((t) => t.status === "active");
+
+  const offered = await harness.offerStrategy({ sessionId: session.id, learnerId: LEARNER, topicId: active.id, strategy: "interleave" });
+  assert.deepEqual(offered.recommended, [{ id: "interleave", reasons: ["targets_struggle"] }]);
+  assert.equal(offered.accepted, undefined, "the agent's offer runs nothing");
+  assert.deepEqual((await store.getTopics(session.id)).map((t) => t.label), ["Water Cycle", "Matter", "Photosynthesis"]);
+
+  const accepted = await harness.offerStrategy({ sessionId: session.id, learnerId: LEARNER, topicId: active.id, strategy: "interleave", accepted: true });
+  assert.equal(accepted.execution.executed, true);
+  assert.deepEqual((await store.getTopics(session.id)).map((t) => t.label), ["Water Cycle", "Photosynthesis", "Matter"], "the related topic comes next");
+  assert.equal(outcomes[0].details.pending, true);
+  const event = store.events.filter((e) => e.decision_node === "strategy_offered" || e.decisionNode === "strategy_offered").at(-1);
+  assert.ok(event, "the acceptance is logged");
+
+  await harness.offerStrategy({ sessionId: session.id, learnerId: LEARNER, topicId: active.id, strategy: "interleave", accepted: true });
+  await assert.rejects(
+    () => harness.offerStrategy({ sessionId: session.id, learnerId: LEARNER, topicId: active.id, strategy: "interleave", accepted: true }),
+    (error) => error.code === "strategy_not_permitted" && /limit 2/.test(error.message),
+  );
 });

@@ -94,11 +94,16 @@ async function ownedConversation(conversationId, userId) {
   return data;
 }
 
-function boundedConversationMessages(rows) {
+export function boundedConversationMessages(rows) {
   // Keep the most recent, role-correct dialogue inside the same explicit
   // budget the Python LLM adapter accepts. This bounds the private HTTP body as
   // well as provider context cost; the full raw history remains in Akoro.
-  const recentFirst = (rows || []).reverse().map(publicConversationMessage).filter(Boolean);
+  // `rows` arrive NEWEST FIRST (the query orders created_at descending). They
+  // used to be reversed here first, so the loop kept the OLDEST messages and
+  // the final reverse handed the model the chat backwards: the first question
+  // read as the latest one and was answered again in every reply, and replies
+  // like "Yes" or "4:30 pm" lost the turn they answered (2026-11-06).
+  const recentFirst = [...(rows || [])].map(publicConversationMessage).filter(Boolean);
   const selected = [];
   let remaining = 24_000;
   for (const message of recentFirst) {
@@ -433,8 +438,15 @@ async function persistTurn({ request, userId }) {
         updated_at: new Date().toISOString(),
       }).eq("id", request.conversationId).eq("user_id", userId),
     ]);
-    if (summaryResult.error || scratchpadResult.error || memoryResult.error || sessionResult.error) {
-      throw new ConversationGatewayError(503, "Conversation context could not be completed");
+    // Both messages are saved at this point — the turn IS in the chat. A failed
+    // summary/scratchpad/memory write must not fail it: the route's fallback
+    // used to append the same two messages AGAIN, so every turn after the first
+    // failure showed the learner's message and the reply twice (2026-11-04).
+    // Log the real error (it names the failing write) and finish the turn.
+    const contextErrors = Object.entries({ summary: summaryResult, scratchpad: scratchpadResult, memories: memoryResult, session: sessionResult })
+      .filter(([, r]) => r.error).map(([name, r]) => `${name}: ${r.error.message || r.error.code || "error"}`);
+    if (contextErrors.length) {
+      console.error(`[agent-tools/conversations] turn saved, context incomplete (${contextErrors.join("; ")})`);
     }
     // Embeddings are best-effort and never change durable-turn success. Failed
     // writes retain embedded_at=null for the central sweeper to repair.
@@ -443,13 +455,14 @@ async function persistTurn({ request, userId }) {
       conversationId: request.conversationId, userId, sessionId: request.sessionId, turnId: request.turnId,
       patch: {
         status: "completed",
-        error_code: null,
+        error_code: contextErrors.length ? "context_incomplete" : null,
         user_message_id: userMessage.id,
         agent_message_id: assistantMessage.id,
         completed_at: new Date().toISOString(),
       },
     });
-    return { saved: true, replayed: false, userMessageId: userMessage.id, assistantMessageId: assistantMessage.id };
+    return { saved: true, replayed: false, userMessageId: userMessage.id, assistantMessageId: assistantMessage.id,
+      ...(contextErrors.length ? { contextIncomplete: contextErrors } : {}) };
   } catch (error) {
     try {
       await markTurn({
@@ -479,6 +492,15 @@ export async function loadLearnerAgentConversationContext({ conversationId, user
 
 export async function retrieveLearnerAgentMemory({ query, subject = null, userId }) {
   return relevantMemory({ query: boundedText(query, 4_000), subject: boundedText(subject, 180) || null, userId });
+}
+
+/** The agent message already saved for this turn (any status), or null — the route checks before a fallback append. */
+export async function savedTurnReplyId({ conversationId, userId, turnId }) {
+  if (!CONVERSATION_ID.test(conversationId) || !TURN_ID.test(String(turnId || ""))) return null;
+  const { data } = await db.from("chat_messages").select("id")
+    .eq("session_id", conversationId).eq("user_id", userId).eq("agent_turn_id", turnId).eq("role", "agent")
+    .limit(1).maybeSingle();
+  return data?.id || null;
 }
 
 export async function completedLearnerAgentConversationTurn({ conversationId, userId, sessionId, turnId }) {

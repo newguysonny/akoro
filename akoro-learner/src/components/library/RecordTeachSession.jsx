@@ -49,6 +49,7 @@ import { Icon } from '../common/Icons.jsx';
 import { BRAND } from '../../constants.js';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 import { rasterizePdfPages, rasterizeImageFile, runRecordExtraction } from './extractPages.js';
+import { fetchFileWithRetry } from '../../lib/fetchFile.js';
 import ImagePage from './ImagePage.jsx';
 import { fetchItemCommunities } from '../../services/communityApi.js';
 
@@ -376,7 +377,7 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
             ready(docPages, null, md ? { name: record.name, text: md.slice(0, MAX_REFERENCE_CHARS) } : null);
             return;
           }
-          const res = await fetch(fileUrl);
+          const res = await fetchFileWithRetry(fileUrl);
           if (!res.ok) throw new Error(`Could not load the file (${res.status}).`);
           const raw = await res.text();
           const text = raw.length > MAX_TEXT_CHARS ? raw.slice(0, MAX_TEXT_CHARS) : raw;

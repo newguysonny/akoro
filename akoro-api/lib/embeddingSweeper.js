@@ -74,6 +74,14 @@ const STORES = [
     stamp: null,
   },
   {
+    // Blog passages (§7.14, blogResearch.js indexBlogPost): written vectorless
+    // on publish/update; a re-index replaces the rows, so "missing" is the only staleness.
+    table: "blog_chunks", schema: "content",
+    select: "id, chunk_text, created_at, embedded_at",
+    text: (r) => r.chunk_text ?? "",
+    stamp: null,
+  },
+  {
     // One compact summary per chat session, also learner-owned and clearable.
     table: "learner_agent_conversation_summaries", schema: "edu",
     key: "chat_session_id",
