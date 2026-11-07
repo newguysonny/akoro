@@ -289,7 +289,7 @@ const notMigrated = (e) => /study_prep_submit_attempt|teaching_workflow_id|study
 export const topicStates = {
   name: "studyprep.topic_states", area: "study-prep", risk: "write", timeoutMs: 300_000,
   description: "A missed topic goes intervention_required → awaiting_teaching (request_teaching makes the teaching session) → retest_ready (its end, through the handoff) → retest → understood, each state on the topic row.",
-  params: { learner: { default: "@tester45" } },
+  params: { learner: { default: "@tester50" } },
   async run(ctx, p) {
     const { getPracticeHarness, teachingHandoff } = await import("../../adaptive-learning/study-prep/wiring.js");
     const harness = getPracticeHarness({ teaching: true });
@@ -370,7 +370,7 @@ export const topicStates = {
 export const submitAtomic = {
   name: "studyprep.submit_atomic", area: "study-prep", risk: "write", timeoutMs: 180_000,
   description: "Two submits of the same practice at once score once (edu.study_prep_submit_attempt): one wins, the other is refused; attempt, run and topic agree; a repeat call reports the recorded score and changes nothing.",
-  params: { learner: { default: "@tester44" } },
+  params: { learner: { default: "@tester08" } },
   async run(ctx, p) {
     const { getPracticeHarness } = await import("../../adaptive-learning/study-prep/wiring.js");
     const { submitStudyPrepAttempt } = await import("../../adaptive-learning/exam-prep-service.js");

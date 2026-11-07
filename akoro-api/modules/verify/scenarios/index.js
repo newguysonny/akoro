@@ -130,6 +130,8 @@ export const SUITES = {
   // Phase 11 UI backends: the school's struggles view (D39) and the chat's model picker (§7.11.5).
   // Scenario K (model switching) and the Phase 6/7 follow-ups (slow: real teaching turns).
   "scenario-k": ["models.pick_persisted", "models.pick_reaches_workflows", "models.no_forced_tool_choice_claude", "models.refusal_fallback", "writes.no_residue"],
+  // Wave 2 close-out (2026-11-07): every new check from Phase 5 core + tools, Phase 4a, Scenario K and Phase 6/7, in one run.
+  "phase-closeout-2": ["studyprep.topic_states", "studyprep.submit_atomic", "studyprep.inline_full", "studyprep.plan_rejection", "studyprep.budget_ceiling", "studyprep.cap_out", "materials.syllabus_from_documents", "blog.passage_search", "peer.breakthrough_help", "studyprep.agent_check_tools", "learning.strategy_recommend", "learning.gateway_struggle", "learning.question_timings", "learning.strategy_outcome", "learning.struggle_breakthrough", "learner_model.next_action", "models.pick_persisted", "models.pick_reaches_workflows", "models.no_forced_tool_choice_claude", "models.refusal_fallback", "models.tier_lists", "teaching.run_to_mastery", "studyprep.teaching_chain", "writes.no_residue"],
   "phase67-followups": ["teaching.run_to_mastery", "studyprep.teaching_chain", "writes.no_residue"],
   "phase11-ui": ["school.struggles_scope", "models.picker_resolution", "models.tier_lists", "teaching.direct_workflow", "school.struggles_recorded"],
   // Phases 4, 4a, 5, 10, 11 close-out (2026-11-06): every new and affected check in one run.
