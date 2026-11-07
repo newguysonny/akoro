@@ -26,13 +26,13 @@ export const WAKE_DECISIONS = 4;
 export const AUTO_START_MS = 60_000;
 
 /** The actions that end a wake (the terminal actions + waiting for the learner). */
-export const WAKE_FINAL_ACTIONS = Object.freeze(["wait_for_learner", "advance_topic", "defer_topic", "conclude_session"]);
+export const WAKE_FINAL_ACTIONS = Object.freeze(["wait_for_learner", "advance_topic", "defer_topic", "conclude_session", "request_teaching"]);
 
 const GOALS = {
   plan_adjusted: "The learner adjusted the plan. Check the new plan (plan.validate on the new order) and tell them what changed and what it now costs. Then wait for them to approve it.",
   plan_confirmed: "The learner approved the plan. Look at the first topic (session.get_state, topic.get_notes) and tell them how it will start: the Agent Check starts by itself in a minute, or when they tap Start now. Then wait.",
   topic_started: "A new topic just started. Review what the learner has taught you on it (topic.get_notes) and their past practice, tell them what to expect from the Agent Check (it starts by itself in a minute), then wait.",
-  check_scored: "An Agent Check was just marked. Read the result (session.get_state). Passed: say so and advance_topic (or conclude_session when no topic is left). Below the pass mark with tries left: a teaching session on what you missed has been offered on the card (session.get_state shows it) — name what you missed, and say the session is set up by itself in a minute if they don't confirm, then waits on their dashboard; the retest starts when they finish teaching. Then wait. Out of tries: defer_topic (one deferred retry per session) or advance_topic, and say why.",
+  check_scored: "An Agent Check was just marked. Read the result (session.get_state). Passed: say so and advance_topic (or conclude_session when no topic is left). Below the pass mark with tries left: a teaching session on what you missed has been offered on the card (session.get_state shows it; every intervention is a teaching session) — name what you missed (if a strategy other than teach_back fits better, request_teaching with it), and say the session is set up by itself in a minute if they don't confirm, then waits on their dashboard; the retest starts when they finish teaching. Then wait. Out of tries: defer_topic (one deferred retry per session) or advance_topic, and say why.",
   teach_back: "The learner says they taught you what you missed. Acknowledge it in one line: the new Agent Check starts by itself in a minute, or when they tap Start now. Then wait.",
   over_estimate: "The next Agent Check would go past the coins the learner approved. Tell them how many coins are left of the estimate and that the next check needs their OK (the card has the button). Then wait.",
   coins_approved: "The learner approved more coins. Say what happens next with them (the check that was waiting starts by itself), then wait.",

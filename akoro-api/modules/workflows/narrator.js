@@ -38,6 +38,7 @@ export const TOOL_HEADLINES = Object.freeze({
   conclude_session: ["Wrapping up", "Ending the session"],
   "topic.get_notes": ["Reviewing what you taught me", "Your notes on this topic"],
   wait_for_learner: ["Waiting for you", "Your turn"],
+  request_teaching: ["Setting up a teaching session", "Teach me what I missed"],
   offer_strategy: ["Suggesting a way to learn it", "A strategy for this topic"],
 });
 const toolRow = (p) => TOOL_HEADLINES[p.tool] || TOOL_HEADLINES[p.action] || null;
@@ -50,7 +51,7 @@ export const NODE_HEADLINES = Object.freeze({
   topic_advanced: "Topic settled", topic_deferred: "Topic set aside", topic_flagged: "Gap flagged",
   session_concluded: "Session complete", session_paused: "Session paused", syllabus_generated: "Outline drafted",
   syllabus_resolved: "Syllabus found", agent_check_started: "Agent Check started", agent_check_skipped: "Agent Check skipped",
-  agent_check_scored: "Agent Check marked",
+  agent_check_scored: "Agent Check marked", teaching_requested: "Teaching session requested", teaching_completed: "Teaching finished",
 });
 
 const T = (headline, description = "", result = "") => ({ headline, description, result });

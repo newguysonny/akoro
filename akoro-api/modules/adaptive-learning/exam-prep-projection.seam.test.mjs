@@ -1,6 +1,7 @@
-// Seam tests for adaptive-workflows.js against the in-memory db fake: the
+// Seam tests for the exam-prep run projection (exam-prep-service.js; it was
+// adaptive-workflows.js before Phase 5) against the in-memory db fake: the
 // learner-owned exam-prep workflow projection, its kill switch and its
-// transition rules (workflow-state.js).
+// transition rules (the one run definition, study-prep/workflow.js).
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -13,7 +14,7 @@ const { default: db } = await import("../../db.js");
 const { installFakeDb } = await import("../../lib/testing/fakeDb.mjs");
 const {
   startExamPrepWorkflow, transitionExamPrepWorkflow, listLearnerWorkflows, publicWorkflow,
-} = await import("./adaptive-workflows.js");
+} = await import("./exam-prep-service.js");
 
 const RUNS = "edu.adaptive_workflow_runs";
 const STEPS = "edu.adaptive_workflow_steps";
@@ -95,7 +96,7 @@ test("transitionExamPrepWorkflow: starting a retest (no score supplied) retains 
     const lastScore = fake.rows(RUNS)[0].last_score;
     const stepScore = fake.rows(STEPS)[0].score;
     fake.restore();
-    assert.equal(lastScore, 0.4, "adaptive-workflows.js:39-41: a score exists only when a transition supplies one");
+    assert.equal(lastScore, 0.4, "a score exists only when a transition supplies one");
     assert.equal(stepScore ?? null, null, "the retest step event carries no score");
   });
 

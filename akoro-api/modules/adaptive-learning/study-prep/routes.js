@@ -226,17 +226,20 @@ router.post("/sessions/:id/topics/:topicId/teaching/simulate-miss", async (req, 
       .map((g) => String(g || "").trim().slice(0, 120)).filter(Boolean).slice(0, 4);
     const harness = getHarness();
     const view = await harness.getSessionView({ sessionId: id, learnerId: req.user.id, eventLimit: 1 });
-    const topic = view.topics.find((t) => t.id === topicId && t.status === "active");
+    // A topic not yet checked: its check is recorded as missed (§8.3 → intervention_required).
+    const topic = view.topics.find((t) => t.id === topicId && ["active", "diagnostic_ready"].includes(t.state));
     if (!topic) return fail(res, 409, "invalid_state_transition", "That topic is not active");
     const at = new Date().toISOString();
-    const scored = await supabaseStore.updateTopicConditional(topic.id, "active", {
+    const scored = await supabaseStore.updateTopicConditional(topic.id, topic.state, {
+      status: "intervention_required",
       check_battle_id: randomUUID(), check_mode: "diagnostic", check_scored_at: at, attempts_used: Number(topic.attemptsUsed || 0) + 1,
       check_result: { correct: 2, guessed: 0, wrong: 3, unknown: 0, total: 5, score: 0.4, perQuestion: [], gaps, simulated: true },
       learner_confirmed_ready: false, updated_at: at,
     });
     if (!scored) return fail(res, 409, "invalid_state_transition", "The topic moved meanwhile");
-    const [row] = (await db.schema("edu").from("study_prep_sessions").select("*").eq("id", id).limit(1)).data || [];
-    const teaching = await teachingHandoff().propose({ session: row, topic: { id: topic.id, label: topic.label, attemptsUsed: Number(topic.attemptsUsed || 0) + 1 }, outcome: "retest_offered", gaps });
+    // D15: the intervention is a teaching session (the real request_teaching path).
+    const asked = await harness.requestTeaching({ sessionId: id, learnerId: req.user.id, topicId: topic.id, strategy: "teach_back", focusGaps: gaps, origin: "harness" }).catch(() => null);
+    const teaching = asked?.teaching || null;
     wakeStudyPrep({ sessionId: id, learnerId: req.user.id, trigger: "check_scored", facts: { topic: topic.label }, conversationId: chatOf(req) });
     return res.json({ success: true, simulated: true, teaching });
   } catch (error) { return rejection(res, error); }

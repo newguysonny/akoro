@@ -12,9 +12,11 @@
  *                         effort — Study Prep's own tables stay the source of
  *                         truth, and a mirror failure never fails the learner.
  */
-import { assertTransition, defineWorkflow } from "../../workflows/definition.js";
+import { assertTransition, canTransition, defineWorkflow } from "../../workflows/definition.js";
 import { registerWorkflow } from "../../workflows/registry.js";
-import { SESSION_STATES, SESSION_TRANSITIONS, TOPIC_STATES, TOPIC_TRANSITIONS } from "./state-machine.js";
+import {
+  RUN_STATES, RUN_STATE_LABELS, RUN_TRANSITIONS, SESSION_STATES, SESSION_TRANSITIONS, TOPIC_STATES, TOPIC_TRANSITIONS, isTopicInProgress,
+} from "./state-machine.js";
 
 export const studyPrepWorkflow = registerWorkflow(defineWorkflow({
   type: "study_prep", version: "1",
@@ -26,6 +28,39 @@ export const studyPrepWorkflow = registerWorkflow(defineWorkflow({
   },
   machines: { topic: { states: TOPIC_STATES, transitions: TOPIC_TRANSITIONS } },
 }));
+
+/**
+ * The exam-prep run (Phase 5): an attempt record with its own small machine,
+ * checked by the engine's one transition rule. It used to be a separate
+ * projection (workflow-state.js + adaptive-workflows.js) with its own table
+ * of moves; this definition is now the only one. Not registered: no engine
+ * instance is ever made for a run — inside Study Prep the topic machine is
+ * the state, and the run is only the record of an attempt.
+ */
+export const examPrepRunWorkflow = defineWorkflow({
+  type: "exam_prep", version: "1",
+  states: RUN_STATES, initial: "diagnostic_ready", transitions: RUN_TRANSITIONS,
+  statusOf: {
+    researching: "active", planned: "active", diagnostic_ready: "waiting_learner", teach_back_required: "waiting_learner",
+    retest_ready: "waiting_learner", passed: "completed", change_approach: "completed", cancelled: "cancelled",
+  },
+});
+
+/** May a run's record move from → to? Staying put is allowed (a repeated write is not a move). */
+export function canTransitionRun(from, to) {
+  if (!RUN_STATES.includes(from) || !RUN_STATES.includes(to)) return false;
+  return from === to || canTransition(examPrepRunWorkflow, from, to);
+}
+
+/** A run's step row: learner-safe, never a model trace. score: 0–1 when one was recorded. */
+export function runStepEvent({ state, attempt = null, score = null }) {
+  if (!RUN_STATES.includes(state)) throw new Error("Unknown workflow state");
+  const cleanAttempt = Number.isInteger(Number(attempt)) && Number(attempt) > 0 ? Number(attempt) : null;
+  // No score is no score: Number(null) is 0, which used to overwrite the
+  // learner's earlier diagnostic score with 0 when a retest started.
+  const cleanScore = score != null && score !== "" && Number.isFinite(Number(score)) ? Math.max(0, Math.min(1, Number(score))) : null;
+  return { state, label: RUN_STATE_LABELS[state], ...(cleanAttempt ? { attempt: cleanAttempt } : {}), ...(cleanScore != null ? { score: cleanScore } : {}) };
+}
 
 // On by default since Phase 3: the live step stream reads the engine's events.
 // WORKFLOW_ENGINE_ENABLED=false turns the dual-write off.
@@ -56,8 +91,9 @@ export function guardStudyPrepStore(store, { mirror = null } = {}) {
     async updateTopicConditional(topicId, expectedStatus, patch) {
       if (moves(expectedStatus, patch)) assertTransition(studyPrepWorkflow, expectedStatus, patch.status, "topic");
       const updated = await call("updateTopicConditional", topicId, expectedStatus, patch);
-      // A topic leaving "active" (understood, set aside, capped out…) closes its teaching session, if any.
-      if (mirror?.topicLeft && updated && expectedStatus === "active" && moves(expectedStatus, patch)) await mirror.topicLeft(updated, store);
+      // A topic leaving work (understood, set aside, capped out…) closes its teaching session, if any —
+      // not a move within it (intervention_required → awaiting_teaching → retest_ready).
+      if (mirror?.topicLeft && updated && moves(expectedStatus, patch) && isTopicInProgress(expectedStatus) && !isTopicInProgress(patch.status)) await mirror.topicLeft(updated, store);
       return updated;
     },
     async appendEvents(sessionId, rows) {
@@ -86,7 +122,7 @@ const NODE_TYPE = {
   topic_started: "topic.state_changed", topic_advanced: "topic.state_changed", topic_deferred: "topic.state_changed", topic_flagged: "topic.state_changed",
   practice_generated: "assessment.started", agent_check_started: "assessment.started",
   practice_scored: "assessment.completed", agent_check_scored: "assessment.completed",
-  strategy_offered: "strategy.selected", session_concluded: "workflow.completed", session_paused: "workflow.paused",
+  strategy_offered: "strategy.selected", teaching_requested: "strategy.selected", teaching_completed: "topic.state_changed", session_concluded: "workflow.completed", session_paused: "workflow.paused",
   syllabus_resolved: "activity", syllabus_generated: "activity", agent_check_skipped: "activity",
 };
 /** The harness's "thought type" stamp as a controlled category (D14). */
@@ -129,6 +165,7 @@ export function studyPrepResultLine(tool, observation) {
     case "practice.generate": return r.check ? "Agent Check started" : r.skipped ? "Nothing to check yet — teach it first" : null;
     case "advance_topic": return r.topic?.label ? `Now on: ${r.topic.label}` : null;
     case "defer_topic": return r.topic?.label ? `${r.topic.label} set aside for later` : null;
+    case "request_teaching": return r.teaching ? `Teaching session on the card${r.topic?.label ? `: ${r.topic.label}` : ""}` : null;
     case "conclude_session": return r.summary ? `${r.summary.understood} of ${r.summary.topics} topics understood` : null;
     default: return null;
   }
@@ -223,7 +260,7 @@ export function makeWorkflowMirror(engine, { log = console, hooks = {} } = {}) {
       // The plan ended (done, cancelled, abandoned): its open teaching sessions close with it.
       if (["completed", "cancelled", "abandoned"].includes(to)) if (hooks.sessionEnded) await Promise.resolve(hooks.sessionEnded(id, to)).catch(quiet("close teaching"));
     },
-    /** A topic left "active": its open teaching session (if any) closes. */
+    /** A topic left work (settled, set aside, re-queued): its open teaching session (if any) closes. */
     async topicLeft(topic, store) {
       if (!hooks.topicLeft) return;
       const id = await workflowIdOf(topic.session_id, store).catch(() => null);
