@@ -402,6 +402,7 @@ const readTools = {
   getLearnerHistory: readToolsModule.getLearnerHistory,
   getRelevantMemory: readToolsModule.getRelevantMemory,
   getPrerequisites: readToolsModule.getPrerequisites,
+  getRelatedCovered: readToolsModule.getRelatedCovered,
   searchContent: async () => ({ disabled: true, reason: "content.search is not enabled in this loop" }),
   getSessionState: null, // bound per session below
 };
@@ -472,7 +473,7 @@ export async function startStudyPrepSession({ learnerId, goal, subject, classLev
 }
 
 /** What the planner reads before proposing (deep research, 2026-10-19). */
-export const PLANNING_READS = Object.freeze(["syllabus.resolve", "learner.get_state", "learner.get_history", "learner.get_relevant_memory", "concept.get_prerequisites"]);
+export const PLANNING_READS = Object.freeze(["syllabus.resolve", "learner.get_state", "learner.get_history", "learner.get_relevant_memory", "concept.get_prerequisites", "topic.related_covered"]);
 
 const planning = new Set();
 /**

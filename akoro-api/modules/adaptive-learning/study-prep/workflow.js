@@ -153,6 +153,7 @@ export function studyPrepResultLine(tool, observation) {
     }
     case "learner.get_history": return list(r.runs).length ? `${many(list(r.runs).length, "past practice run")} found` : "No past practice on this subject yet";
     case "learner.get_relevant_memory": return list(r.memories).length ? `${many(list(r.memories).length, "note")} from earlier sessions` : "Nothing noted on this subject yet";
+    case "topic.related_covered": return list(r.related).length ? `${many(list(r.related).length, "related topic")} already covered` : "Nothing related covered yet";
     case "concept.get_prerequisites": return list(r.edges).length ? `${many(list(r.edges).length, "prerequisite link")} to respect` : "No prerequisite links recorded";
     case "plan.validate": return r.ok === false ? null : r.estimate?.totalCoins != null ? `The plan passes the checks · ${r.estimate.totalCoins} coins` : "The plan passes the checks";
     case "agent.get_knowledge_coverage":
