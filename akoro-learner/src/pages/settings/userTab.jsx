@@ -16,7 +16,8 @@ import {
 import { AvatarPickerSheet, SubjectsSheet, GenericSheet, TwoFactorSheet, AlarmSoundSheet } from './sheets.jsx';
 import { getAlarmChoice, storeAlarmChoice, alarmChoiceLabel, getCustomAlarmMeta, saveCustomAlarm, clearCustomAlarm } from '../../services/alarmSound.js';
 import { isHigherEdUI, setCachedTier } from '../../utils/studyLevel.js';
-import { PLAN_OPTIONS, setPlanOverride, featureGated } from '../../utils/planOverride.js';
+import { ACCOUNT_CARDS, tr } from './groups.js';
+import { PLAN_OPTIONS, setPlanOverride } from '../../utils/planOverride.js';
 
 // A concise, recognisable list keeps the mobile selector usable. The API still
 // validates IANA identifiers, so the agent never treats a display label as a
@@ -130,7 +131,7 @@ function NotifSection({ notif, setNotif, onSaveNotif }) {
 
 
 /* ─── User tab ────────────────────────────────────────────────── */
-function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent, guides = [], guideMap = {}, onLogout, accentColor, onSetMode, onSetAccent, onSetLanguage }) {
+function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent, guides = [], guideMap = {}, onLogout, accentColor, onSetMode, onSetAccent, onSetLanguage, group = null }) {
   const { t } = useLang();
   const navigate = useNavigate();
   const { balance: coinBalance } = useWallet();
@@ -333,40 +334,28 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent,
 
   return (
     <div style={{ padding:'20px 0 0' }}>
-      {/* Quick-link cards — one design (same as the original Order history
-          card): tinted icon chip, title + sub, chevron. Order history,
-          Library and the activity card are live. Higher-ed learners get
-          Communities (study groups, each with its own Activity page)
-          instead of the flat Activities feed. */}
-      {[
-        { icon:'ti-receipt',  title:'settings.order_history', sub:'settings.order_history_sub', go:()=>navigate('/orders') },
-        isHigherEdUI(profile)
-          ? { icon:'ti-users', title:'settings.communities',  sub:'settings.communities_sub',  go:()=>navigate('/communities') }
-          // lowerEd gets BOTH its cards — flattened, or the nested array
-          // renders as one blank card (which is exactly what happened).
-          : [
-              { icon:'ti-activity', title:'settings.activities', sub:'settings.activities_sub',  go:()=>navigate('/activities') },
-              { icon:'ti-books-2',  title:'settings.gradebook',  sub:'settings.gradebook_sub',   go:()=>featureGated('Gradebook') ? navigate('/upgrade?trigger=gradebook') : navigate('/gradebook') },
-            ],
-        { icon:'ti-books',    title:'settings.library',       sub:'settings.library_sub',       go:()=>navigate('/library') },
-      ].flat().map(card => (
-        <button key={card.title} onClick={card.go}
-          style={{ display:'flex',alignItems:'center',gap:12,width:'calc(100% - 32px)',
-            margin:'0 16px 14px',borderRadius:16,padding:'14px 16px',cursor:'pointer',
-            background:'var(--ak-surface)',border:'1px solid var(--ak-border)',
-            boxShadow:'0 1px 6px rgba(0,0,0,.06)',fontFamily:"'Nunito',sans-serif",textAlign:'left' }}>
-          <span style={{ width:38,height:38,borderRadius:11,flexShrink:0,background:`${color}18`,
-            display:'flex',alignItems:'center',justifyContent:'center' }}>
-            <Icon name={card.icon} size={19} color={color}/>
-          </span>
-          <span style={{ flex:1,minWidth:0 }}>
-            <span style={{ display:'block',fontSize:14,fontWeight:800,color:'var(--ak-text)' }}>{t(card.title)}</span>
-            <span style={{ display:'block',fontSize:12,color:'var(--ak-text-muted)' }}>{t(card.sub)}</span>
-          </span>
-          <Icon name="ti-chevron-right" size={18} color="var(--ak-text-muted)"/>
-        </button>
-      ))}
+      {/* The Account tab is a list of group cards; each opens its own settings page (/settings/<group>). */}
+      {!group && ACCOUNT_CARDS.map((g) => {
+        const title = tr(t, g.titleKey, g.title);
+        const hint = { profile: profile.fullName ? `@${profile.username}` : '', learn: profile.studyLevel || '', personalization: profile.language || '' }[g.key];
+        return (
+          <button key={g.key} type="button" onClick={()=>navigate(`/settings/${g.key}`)} data-testid={`settings-card-${g.key}`}
+            style={{ display:'flex',alignItems:'center',gap:12,width:'calc(100% - 32px)',margin:'0 16px 12px',borderRadius:16,padding:'14px 16px',cursor:'pointer',
+              background:'var(--ak-surface)',border:'1px solid var(--ak-border)',boxShadow:'0 1px 6px rgba(0,0,0,.06)',fontFamily:"'Nunito',sans-serif",textAlign:'left' }}>
+            <span style={{ width:38,height:38,borderRadius:11,flexShrink:0,background:`${color}18`,display:'flex',alignItems:'center',justifyContent:'center' }}>
+              <Icon name={g.icon} size={19} color={color}/>
+            </span>
+            <span style={{ flex:1,minWidth:0 }}>
+              <span style={{ display:'block',fontSize:14,fontWeight:800,color:'var(--ak-text)' }}>{title}</span>
+              <span style={{ display:'block',fontSize:12,color:'var(--ak-text-muted)' }}>{tr(t, g.subKey, g.sub)}</span>
+            </span>
+            {hint && <span style={{ fontSize:12,fontWeight:700,color:'var(--ak-text-muted)',maxWidth:110,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' }}>{hint}</span>}
+            <Icon name="ti-chevron-right" size={18} color="var(--ak-text-muted)"/>
+          </button>
+        );
+      })}
 
+      {group==='profile' && (<>
       {/* Profile hero */}
       <div style={{ display:'flex',alignItems:'center',gap:14,background:'var(--ak-surface)',
         margin:'0 16px 20px',borderRadius:18,padding:'18px 16px',
@@ -407,6 +396,8 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent,
           onClick={()=>openSheet('timeZone','Time zone','select',TIME_ZONES)}/>
       </Section>
 
+      </>)}
+      {group==='learn' && (<>
       <Section title={t('settings.learn_study')}>
         {/* Level + school type are ONE control. Every option is
             tier-unambiguous, and picking one writes BOTH profile columns as
@@ -425,6 +416,8 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent,
           onClick={()=>setSubjectSheet(true)} color={color}/>
       </Section>
 
+      </>)}
+      {group==='security' && (<>
       <Section title={t('settings.account')}>
         <Row icon="ti-calendar-event" label={t('settings.member_since')} value={profile.memberSince}/>
         <Row icon="ti-id" label={t('settings.account_id')} sub={t('settings.tap_to_copy')} value={profile.memberId} noArrow
@@ -434,6 +427,8 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent,
           sub={profile.googleLinked?t('settings.google_connected'):undefined}/>
       </Section>
 
+      </>)}
+      {group==='plan' && (<>
       <Section title={t('settings.plan_usage')}>
         <Row icon="ti-coin" label="Credit Balance" value={`${(coinBalance||0).toLocaleString()} coins`}
           sub="Top up & view AI usage" onClick={()=>navigate('/wallet')}/>
@@ -459,6 +454,8 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent,
         </Row>
       </Section>
 
+      </>)}
+      {group==='personalization' && (<>
       <Section title={t('settings.personalization')}>
         <Row icon="ti-language" label={t('settings.language')}
           value={profile.language||localStorage.getItem(LS_LANGUAGE)||'English'}
@@ -472,6 +469,8 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent,
         </Row>
       </Section>
 
+      </>)}
+      {group==='notifications' && (<>
       <NotifSection
         notif={profile.notif||{}}
         setNotif={n=>setProfile(p=>({...p,notif:n}))}
@@ -484,6 +483,8 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent,
           onClick={()=>setAlarmSheet(true)}/>
       </Section>
 
+      </>)}
+      {group==='help' && (<>
       <Section title={t('settings.help_support')}>
         <Row icon="ti-message-circle" label={t('settings.contact_support')}  onClick={()=>showToast(t('settings.opening_support'))}/>
         <Row icon="ti-help-circle"    label={t('settings.help_centre')}      onClick={()=>showToast(t('settings.opening_help'))}/>
@@ -498,6 +499,8 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent,
         <Row icon="ti-license"     label={t('settings.licences')} onClick={()=>showToast(t('settings.opening_licences'))}/>
       </Section>
 
+      </>)}
+      {group==='security' && (<>
       <Section title={t('settings.privacy')}>
         {/* OAuth accounts may have no password on file: the row reads
             "Set password" and the sheet skips the current-password field. */}
@@ -534,6 +537,7 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent,
           sub={t('settings.delete_sub')}
           onClick={()=>openSheet('deleteAccount',t('settings.delete'),'delete-confirm')}/>
       </Section>
+      </>)}
       <div style={{ height:40 }}/>
 
       {alarmSheet&&(

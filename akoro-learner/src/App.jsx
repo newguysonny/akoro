@@ -125,7 +125,7 @@ function AppRoutes() {
       <Route path="/" element={<LandingPage />}/>
       <Route path="/onboarding" element={<OnboardingRoute><OnboardingPage /></OnboardingRoute>}/>
       <Route path="/app" element={<ProtectedRoute><LearnerDashboard /></ProtectedRoute>}/>
-      <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>}/>
+      <Route path="/settings/*" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>}/>
       <Route path="/fde-admin" element={<ProtectedRoute><FDEAdminPage /></ProtectedRoute>}/>
       <Route path="/notifications" element={<ProtectedRoute><NotificationsPage /></ProtectedRoute>}/>
       <Route path="/activities" element={<ProtectedRoute><ActivityPage /></ProtectedRoute>}/>

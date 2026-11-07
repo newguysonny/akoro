@@ -43,6 +43,7 @@ import ProgrammePage from '../components/programmes/ProgrammePage.jsx';
 import ContentsDiscoveryTab from '../components/tabs/ContentsDiscoveryTab.jsx';
 import { AppShell, SidebarToggle } from '../components/AppShell.jsx';
 import { NavIcon } from '../components/common/NavIcons.jsx';
+import ProfileDrawer from '../components/ProfileDrawer.jsx';
 import { useNowStudying } from '../utils/nowStudying.js';
 import { useHigherEd } from '../hooks/useStudyTier.js';
 import { featureGated } from '../utils/planOverride.js';
@@ -242,6 +243,9 @@ export default function LearnerDashboard() {
   const [decayAlerts,  setDecayAlerts]  = useState([]);
   const [agentSessions, setAgentSessions] = useState([]);
   const [userProfile,  setUserProfile]  = useState(null);
+  // Phones: the profile photo opens the account drawer; tablet/desktop keep going straight to Settings.
+  const [drawer, setDrawer] = useState(false);
+  const openProfile = () => { if (typeof window !== "undefined" && window.matchMedia?.("(max-width: 768px)").matches) setDrawer(true); else navigate("/settings"); };
   const [notifUnread,  setNotifUnread]  = useState(0);
 
   // ── Level-aware UI tier ──────────────────────────────────────────────────
@@ -970,7 +974,7 @@ export default function LearnerDashboard() {
           <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12 }}>
             <div style={{ display:"flex",alignItems:"center",gap:11 }}>
               <SidebarToggle/>
-              <div style={{ position:"relative",cursor:"pointer" }} onClick={()=>navigate("/settings")}>
+              <div style={{ position:"relative",cursor:"pointer" }} data-testid="header-profile" onClick={openProfile}>
                 {userProfile?.avatarUrl
                   ? <img src={userProfile.avatarUrl} alt="" style={{ width:38,height:38,borderRadius:"50%",objectFit:"cover",border:"2px solid #EDE9FE" }}/>
                   : <div style={{ width:38,height:38,borderRadius:"50%",background:`linear-gradient(135deg,${BRAND},#4C1DCC)`,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:15,fontWeight:900,border:"2px solid #EDE9FE" }}>
@@ -1468,6 +1472,7 @@ export default function LearnerDashboard() {
         {liveBattleModal   && <BattleModal    battle={liveBattleModal}    onMinimize={minimizeBattle} onClose={()=>setLiveBattleModal(null)}/>}
         {toast && <Toast msg={typeof toast==='string'?toast:toast.msg} color={typeof toast==='string'?RED:(toast.color||RED)} onDone={()=>setToast(null)}/>}
       </div>
+      <ProfileDrawer open={drawer} onClose={()=>setDrawer(false)} profile={userProfile} higherEd={higherEd} coinBalance={coinBalance}/>
       </AppShell>
     </>
   );
