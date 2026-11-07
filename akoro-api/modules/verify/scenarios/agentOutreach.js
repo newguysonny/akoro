@@ -23,8 +23,9 @@ import { BlockedError } from "../assertions.js";
 const A = "@tester01", B = "@tester02";
 const edu = () => db.schema("edu");
 
-async function setup(ctx, { friends = false, optedIn = true } = {}) {
+async function setup(ctx, { friends = false, optedIn = true, level = "SS 2" } = {}) {
   const a = await ctx.as(A), b = await ctx.as(B);
+  await setLevel(ctx, a.id, level);
   const o = await import("../../agent-network/outreach.js");
   ctx.cleanup(() => ctx.db.deleteOwned("edu.agent_messages", { ownerColumn: "from_user", ownerId: a.id, filters: { topic: { like: `${ctx.marker}%` } } }));
   ctx.cleanup(() => ctx.db.deleteOwned("edu.agent_proposals", { ownerColumn: "user_id", ownerId: a.id, filters: { kind: "agent_outreach", rationale: { like: `%${ctx.marker}%` } } }));
@@ -34,6 +35,13 @@ async function setup(ctx, { friends = false, optedIn = true } = {}) {
   await setOptIn(ctx, b.id, optedIn);
   const topic = (t) => `${ctx.marker} ${t}`;
   return { a, b, o, topic };
+}
+
+/** A's school level for this run (a primary / JSS learner's agent always asks first), restored after. */
+async function setLevel(ctx, userId, level) {
+  const { data: was } = await db.from("users").select("study_level, year_group").eq("id", userId).maybeSingle();
+  ctx.cleanup(() => db.from("users").update({ study_level: was?.study_level ?? null, year_group: was?.year_group ?? null }).eq("id", userId));
+  await db.from("users").update({ study_level: level, year_group: null }).eq("id", userId);
 }
 
 async function setFriends(ctx, x, y, on) {
@@ -254,10 +262,7 @@ export const youngerAsksFirst = {
   name: "outreach.younger_asks_first", area: "agent-network", risk: "write",
   description: "A primary / JSS learner's agent asks its learner first, even to ask a friend a study question.",
   async run(ctx) {
-    const { a, o, topic } = await setup(ctx, { friends: true });
-    const { data: was } = await db.from("users").select("study_level").eq("id", a.id).maybeSingle();
-    ctx.cleanup(() => db.from("users").update({ study_level: was?.study_level ?? null }).eq("id", a.id));
-    await db.from("users").update({ study_level: "JSS 2" }).eq("id", a.id);
+    const { a, o, topic } = await setup(ctx, { friends: true, level: "JSS 2" });
     const r = await expectCard(ctx, { a, o, topic: topic("Fractions"), purpose: "study_question", friends: true });
     ctx.expect.eq("…because the learner is younger", r.reason, "younger_learner");
   },
