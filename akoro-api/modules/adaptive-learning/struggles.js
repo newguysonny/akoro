@@ -132,6 +132,14 @@ export async function afterLearningEvent(event) {
         subject: event.subject, topic: event.details?.part || event.details?.concept || event.topic,
         observation: `${event.kind.replace(/_/g, " ")} (${event.source})`, evidenceRefs: [ref], sourceWorkflow: event.source,
         scoreBefore: event.quality })) });
+      // Phase 21 part 2: a NEW, non-sensitive struggle on a concept — the agent may
+      // ask a friend's (or an opted-in learner's) agent what worked. Fire-and-forget.
+      const opened = out[out.length - 1];
+      if (opened?.status === "opened" && event.conceptId && !struggleType(fx.type)?.sensitive) {
+        import("../agent-network/outreach.js").then((o) => o.reachOut({ learnerId: event.learnerId, trigger: "struggle", purpose: "study_question",
+          conceptId: event.conceptId, subject: event.subject || null, topic: event.details?.concept || event.topic || event.details?.part || null,
+          gaps: [event.details?.part].filter(Boolean) })).catch(() => {});
+      }
     } else {
       // What worked: the strategy the event names, else the one recorded as
       // working in this session (recordStrategyOutcome, slice 3).

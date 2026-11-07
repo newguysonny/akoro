@@ -66,7 +66,8 @@ async function chatReply({ userId, agentName, learnerFirst, fromName, body }) {
   return String(res.choices?.[0]?.message?.content || "").trim().replace(/^["“]|["”]$/g, "");
 }
 
-async function post(userId, text, meta = null) {
+/** One agent message in the learner's "From your agent" chat (shared with outreach.js). */
+export async function post(userId, text, meta = null) {
   const target = await chatFor(userId, null, "From your agent");
   if (!target) return null;
   const now = new Date().toISOString();
@@ -138,6 +139,8 @@ export async function processInbox(userId, { deps = null, force = false, now = n
         await edu().from("agent_messages").update({ answer: screened.question, answer_source: source, status: "answered", answered_at: now.toISOString(), answer_read_at: null, auto_replied: true }).eq("id", m.id);
         await notifyUser({ userId: m.from_user, type: "agent_message", title: `💬 ${first(me?.full_name, me?.username)}'s agent replied to your agent`, content: screened.question.slice(0, 140), relatedId: m.id, link: "/app?tab=agent" }).catch(() => {});
         lines.push(learnerText({ action, kind: m.kind, fromName, agentName, body: m.body, answer: screened.question }));
+        // The asker's agent started this on its own: tell its learner what came back.
+        if (m.origin === "agent") import("./outreach.js").then((o) => o.reportOutreachAnswer(m.id)).catch(() => {});
         actions.push({ messageId: m.id, kind: m.kind, action, basis: { basis: "inferred", rule: `agent_message:${m.kind}` } });
       } else if (action === "ask_learner") {
         let draft = null;

@@ -55,6 +55,7 @@ export async function sendApprovedReply(userId, messageId, draft) {
   await edu().from("agent_messages").update({ answer: s.question, answer_source: "learner", status: "answered", answered_at: now(), answer_read_at: null }).eq("id", m.id);
   const me = await nameOf(userId);
   await notifyUser({ userId: m.from_user, type: "agent_message", title: `💬 ${me}'s agent replied to your agent`, content: s.question.slice(0, 140), relatedId: m.id, link: "/app?tab=agent" }).catch(() => {});
+  if (m.origin === "agent") await import("./outreach.js").then((o) => o.reportOutreachAnswer(m.id)).catch(() => {});
   return { replied: true, to: await nameOf(m.from_user), text: s.question };
 }
 
