@@ -3364,11 +3364,110 @@ planning loop's tool names, the double practice charge, empty syllabus data).
   before any text → the fallback model's stream takes over; mid-reply → ends with a
   `model_refusal` marker. Q9 decided: developer mode stays open to anyone who turns it on.
 
-### Phase 12 — Hardening and rollout
-- Failure tests §19; data migration §14.3; flag-by-flag rollout; observability
-  (workflow_id, type, learner, operation, state, tool, latency, tokens, cost,
-  result, error — never answer keys or reasoning).
-- **Exit:** all scenarios A–K pass in staging with flags on; old paths removed only after a release with flags on.
+### Phase 12 — Hardening, production readiness and rollout (expanded 2026-11-07)
+Deployed is not the same as production ready. Phase 12 makes Akoro answer six
+questions with evidence, not intentions: how we know it runs well, what happens
+when it fails, how users' data is protected, what happens at 10x / 100x, how a
+bad release is undone, and whether learners actually get what they need. Each
+part has its own exit; the phase exits when all six (and the original rollout
+items) are met.
+
+**12.0 Rollout (the original items).** Failure tests §19; data migration §14.3;
+flag-by-flag rollout; old paths removed only after a release with flags on.
+- **Exit:** all scenarios A–K pass in staging with flags on.
+
+**12.1 Observability — how we know the system is running well.**
+- Have today: every AI call timed and costed (`aiTelemetry`, admin AI spend);
+  `/health` (Render health check); the Verification Gate as synthetic checks.
+- Build: one structured log line per request and per workflow step (request
+  id, workflow_id, type, learner, operation, state, tool, latency, tokens,
+  cost, result, error — never answer keys, reasoning, or sensitive struggles);
+  error tracking for the API and the three apps (exceptions grouped, with
+  release and route); traces across API → AI provider → database → sockets
+  for slow requests; a service dashboard (requests, error rate, p50/p95
+  latency, socket connections, queue depth, AI provider errors and spend).
+- Alerts (to a named on-call person, not just a page): API error rate or p95
+  over the SLO, `/health` failing, deferred-job queue backing up, an AI
+  provider's breaker open, AI spend at 80% of budget, database connections
+  near the limit, a scheduled Verification Gate run failing.
+- **Exit:** a deliberately broken route and a slow AI call each show up in
+  error tracking, a trace and the dashboard, and fire an alert, within 5 minutes.
+
+**12.2 Reliability — what happens when something fails, and recovery.**
+- Have today: circuit breakers and fallback models per AI provider; deferred
+  jobs in Postgres (survive restarts); idempotent steps (no double charge or
+  write); refusals fall back.
+- Build: written SLOs — API availability (e.g. 99.5% monthly), p95 latency for
+  page APIs (e.g. < 800 ms) and first chat token (e.g. < 3 s), job pickup time
+  — with an error budget and what we do when it is spent (freeze features, fix
+  reliability); a failure-mode table (database down, Redis/queue down, an AI
+  provider down or out of credit, RunPod paused, socket server restart, storage
+  unreachable) with the expected behaviour and how each recovers; tested
+  database backups with point-in-time restore; a short incident runbook (who
+  is on call, how to declare, how to communicate, the post-incident review).
+- **Exit:** SLOs written and shown on the dashboard; each failure mode in the
+  table exercised once on the sandbox with the expected result; one database
+  restore done to a scratch database and timed.
+
+**12.3 Security — protecting users' data and permissions; compromised credentials.**
+- Have today: no built-in fallback secrets (gate `security.no_fallback_secrets`);
+  shared secrets fail closed; ownership reads; sensitive struggles never shown;
+  real accounts are read/dry for the gate (V4); Phase 15 audit follow-ups.
+- Build: a secrets inventory (every key: what it unlocks, where it lives, who
+  can rotate it, how often); a compromise runbook per secret class — rotate,
+  revoke sessions (JWT signing key rotation logs everyone out), invalidate
+  capability tokens, review audit logs, tell affected users within the legal
+  window (NDPR); scheduled rotation for the long-lived keys; least-privilege
+  database roles; dependency and secret scanning in CI; an access review of
+  who can reach production and the admin app; a permissions test per role
+  (learner, instructor, school admin, admin) on the sensitive routes.
+- **Exit:** the inventory exists; one full rotation of a real secret done on the
+  sandbox following the runbook with no downtime; the per-role permission tests
+  pass in CI.
+
+**12.4 Scalability — 10x and 100x traffic, and the first bottleneck.**
+- Have today: nothing measured.
+- Build: a load test of the main journeys (sign-in, dashboard, Agent Chat turn,
+  teaching socket session, Study Prep check, uploads) at today's peak, 10x and
+  100x, against the sandbox with AI calls stubbed and, separately, a small real
+  AI run for provider limits; name the first bottleneck and the next two
+  (likely: database connections and slow queries, the single API instance,
+  AI provider rate limits, the socket server, the deferred-job worker); the plan
+  for each (connection pooling, indexes, horizontal API instances, socket
+  adapter, queue workers, per-provider limits and fallbacks); a cost-per-learner
+  estimate at each level.
+- **Exit:** the 10x run meets the SLO (or the fix for what didn't is shipped and
+  re-run); the 100x run's first bottleneck is named with its fix planned.
+
+**12.5 Deployment and recovery — a bad release; roll back or roll forward.**
+- Have today: Render deploys on commit; every change goes to the sandbox and its
+  Verification Gate first; migrations are idempotent and run on deploy.
+- Build: a written release path (branch → sandbox gate → production) with a
+  required gate pass before production; rollback (Render redeploy of the last
+  good build) and roll-forward (a fix through the same path) steps, with the rule
+  for which to use; migrations that are backward compatible for one release
+  (expand → migrate → contract) so a rollback never meets a schema it can't read;
+  feature flags as the first lever (turn the feature off, not the release);
+  a staged rollout option (a percentage or a pilot school first); a release log.
+- Measure: time from a merged fix to production, and from a reported break to
+  recovery.
+- **Exit:** one rollback and one roll-forward done on the sandbox from the
+  runbook and timed; the release path enforced (no production deploy without a
+  gate pass).
+
+**12.6 Product health — are learners getting what they need.**
+- Have today: admin analytics; struggles and breakthroughs; Study Prep results;
+  strategy outcomes.
+- Define the metrics, each with a target and an owner: weekly active learners;
+  lessons started vs finished; Agent Check / retest pass rate; time from a
+  struggle opened to its breakthrough; topics understood per Study Prep session;
+  7- and 30-day retention; chat answers rated helpful; teachers and schools
+  active; free → paid conversion and coins spent; cost per active learner.
+- Build: a weekly product-health view in admin (trends, not just totals), with
+  the agent's own outcomes beside the learners' (what worked, what didn't) and
+  no personal data beyond what each role may see.
+- **Exit:** the metrics are defined with targets, the weekly view is live, and
+  one product decision is made from it and written down.
 
 ### Phase 13 — Proactive agent (§7.16)
 - Can start now: it builds on the shipped autonomy planner, not on Phases 1–12.
