@@ -191,3 +191,39 @@ test("wiring: notifications and session notices go through the outbox, with the 
   assert.match(handoff, /if \(stalledApproval\(child, Date\.parse\(now\(\)\)\)\) return resumeApproval\(child, auto\);/);
   assert.match(spWiring, /objectives->studyPrep->>workflowId/, "the session row is looked for before it is made");
 });
+
+test("a bell row whose first write failed is retried with the same id: one row, one live update", async () => {
+  // The in_app channel writes the row by its chosen id (a duplicate is the row already there), then emits.
+  const rows = new Map();
+  const emitted = [];
+  let failures = 2;
+  let t = Date.parse("2026-11-08T10:00:00Z");
+  const timers = [];
+  const channels = new Map([["in_app", { async send(p) {
+    if (failures-- > 0) throw new Error("db unavailable");
+    if (!rows.has(p.id)) rows.set(p.id, { id: p.id, title: p.title });
+    emitted.push(p.id);
+    return { result: { id: p.id } };
+  } }]]);
+  const box = makeOutbox({ repo: memoryRepo(), channels, now: () => t, schedule: (ms, fn) => timers.push({ at: t + ms, fn }), log: { warn() {} } });
+  const p = { id: "n-1", userId: "u1", type: "agent_message", title: "Your agent replied" };
+  await (await box.enqueue({ channel: "in_app", orderKey: "in_app:u1", idemKey: idemKey("notify", "n-1", "in_app"), userId: "u1", payload: p })).done;
+  await box.enqueue({ channel: "in_app", orderKey: "in_app:u1", idemKey: idemKey("notify", "n-1", "in_app"), userId: "u1", payload: p });   // a second write of the same work
+  for (let i = 0; i < 6 && rows.size === 0; i++) {
+    t += 400_000;
+    for (const tm of timers.splice(0).sort((a, b) => a.at - b.at)) if (tm.at <= t) await tm.fn(); else timers.push(tm);
+  }
+  assert.equal(rows.size, 1, "one bell row");
+  assert.deepEqual(emitted, ["n-1"], "one live update, after the row landed");
+});
+
+test("wiring: bell rows get their id up front and fall back to the outbox; a proposal's check battle is made at most once", async () => {
+  const [notify, channels, inbox] = await Promise.all([read("../modules/notify.js"), read("./outboxChannels.js"), read("../modules/agent-proposals/inbox.js")]);
+  assert.match(notify, /const id = randomUUID\(\);[\s\S]{0,200}row = await writeInAppRow\(inApp\);/);
+  assert.match(notify, /outboxSend\("in_app", \{ orderKey: `in_app:\$\{userId\}`, idemKey: idemKey\("notify", id, "in_app"\)/);
+  assert.match(notify, /\.insert\(\{ id, user_id: userId/, "the chosen id is written");
+  assert.match(notify, /error\.code === "23505"[\s\S]{0,200}\.eq\("id", id\)/, "a retry finds the row already there");
+  assert.match(channels, /\["in_app", \{[\s\S]{0,300}writeInAppRow\(p\)[\s\S]{0,80}emitInApp\(p, row\)/);
+  assert.match(inbox, /outsideAction\(\{ kind: "proposal_check_battle", key: `proposal:\$\{claimed\.id\}:battle`/);
+  assert.match(inbox, /check: \(journal\) => madeCheckBattle\(\{ learnerId: userId, topic: payload\.topic, since: journal\.created_at \}\)/);
+});

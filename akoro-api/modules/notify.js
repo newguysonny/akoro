@@ -21,27 +21,45 @@ import { idemKey } from "../lib/outboxCore.js";
 // historically both aliases were used. Resolve whichever is set.
 const io = () => global.io || global._io || null;
 
-export async function notifyUser({ userId, type, title, content = null, relatedId = null, link = null, email = null }) {
-  if (!userId) return;
+/** Insert the bell row with its chosen id; already there (a retry) → the row as it is. Throws on failure. */
+export async function writeInAppRow({ id, userId, type, title, content = null, relatedId = null, link = null }) {
+  const { data, error } = await db.from("notifications")
+    .insert({ id, user_id: userId, type, title, content, related_id: relatedId, link })
+    .select("id, created_at").single();
+  if (!error) return data;
+  if (error.code === "23505" || /duplicate key/i.test(error.message || "")) {
+    const { data: had } = await db.from("notifications").select("id, created_at").eq("id", id).maybeSingle();
+    if (had) return had;
+  }
+  throw new Error(error.message);
+}
 
-  let row = null;
-  try {
-    const { data } = await db
-      .from("notifications")
-      .insert({ user_id: userId, type, title, content, related_id: relatedId, link })
-      .select("id, created_at")
-      .single();
-    row = data;
-  } catch (e) { console.warn("[notify] insert failed:", e.message); }
-
-  // Realtime push to the user's socket room. Payload carries everything the bell
-  // needs to render the row without a refetch, plus a bump signal for the badge.
+/** The live update for the bell: everything it needs to render the row without a refetch. Never throws. */
+export function emitInApp({ userId, type, title, content = null, relatedId = null, link = null }, row) {
   try {
     io()?.to(`user:${userId}`).emit("notification", {
       id: row?.id, type, title, content, related_id: relatedId, link,
       is_read: false, created_at: row?.created_at || new Date().toISOString(),
     });
-  } catch { /* no socket */ }
+  } catch { /* no socket: the bell shows the row when it next loads */ }
+}
+
+export async function notifyUser({ userId, type, title, content = null, relatedId = null, link = null, email = null }) {
+  if (!userId) return;
+
+  // The row's id is chosen here, so a retry can never make a second bell row.
+  const id = randomUUID();
+  const inApp = { id, userId, type, title, content, relatedId, link };
+  let row = null;
+  try {
+    row = await writeInAppRow(inApp);
+  } catch (e) {
+    // Store first, send after (Phase 18 item 5): the bell row is retried by the outbox
+    // (same id) and its live update sent once it lands — never lost, never twice.
+    console.warn("[notify] in-app row not saved now — queued:", e.message);
+    outboxSend("in_app", { orderKey: `in_app:${userId}`, idemKey: idemKey("notify", id, "in_app"), userId, payload: inApp }).catch(() => {});
+  }
+  if (row) emitInApp(inApp, row);
 
   // Web Push to the user's PWA devices (best-effort; no-op if not subscribed or
   // push is disabled). Push AND email read the one preferences row together —
@@ -58,7 +76,7 @@ export async function notifyUser({ userId, type, title, content = null, relatedI
   // Store first, send after (Phase 18 item 5): push and email are written to the
   // outbox before they are tried, retried with backoff in order per recipient,
   // and never sent twice. If the outbox can't take them, the direct send as before.
-  const key = row?.id || randomUUID();
+  const key = id;
   try {
     if (pushEnabled && isPushEnabled()) {
       const push = { title, body: content || title, link, type };
