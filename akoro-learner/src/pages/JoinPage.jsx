@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { apiGet, apiPost } from '../services/api.js';
 import AkoroLogo from '../components/common/AkoroLogo.jsx';
+import { APP_HOME } from '../config/target.js';
 
 const BRAND = '#6C3BFF';
 const RED   = '#EF4444';
@@ -49,7 +50,7 @@ export default function JoinPage() {
       <h1 style={h1}>Invite link</h1>
       <div style={{ background:'#FEF2F2', border:'1px solid #FECACA', borderRadius:10, padding:'10px 14px',
         marginBottom:16, fontSize:13, fontWeight:600, color:RED }}>{error}</div>
-      <Link to={isAuthenticated ? '/app' : '/'} style={btn}>{isAuthenticated ? 'Go to Akoro' : 'Back to Akoro'}</Link>
+      <Link to={isAuthenticated ? APP_HOME : '/'} style={btn}>{isAuthenticated ? 'Go to Akoro' : 'Back to Akoro'}</Link>
     </>);
   } else if (!invite || joining) {
     body = <p style={sub}>{joining ? 'Joining…' : 'Opening your invite…'}</p>;
@@ -60,7 +61,7 @@ export default function JoinPage() {
       <h1 style={h1}>{joined.length ? "You're in!" : 'Already joined'}</h1>
       {joined.length > 0 && <p style={sub}>You joined {list(joined)}.</p>}
       {already.length > 0 && <p style={sub}>You were already in {list(already)}.</p>}
-      <Link to="/app" style={btn}>Go to my courses</Link>
+      <Link to={APP_HOME} style={btn}>Go to my courses</Link>
     </>);
   } else {
     body = (<>

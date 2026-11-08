@@ -16,9 +16,13 @@ const cfg = siteHostConfig(import.meta.env);
 
 // The portal's code is loaded only when the portal is what's being shown — a school's visitors never download it.
 async function bootPortal() {
-  const [{ default: App }, { default: ErrorBoundary }, { default: ConfirmHost }, { default: ConnectionBanner }] = await Promise.all([
+  const [appMod, errMod, confirmMod, bannerMod] = await Promise.all([
     import('./App.jsx'), import('./components/ErrorBoundary.jsx'), import('./components/ConfirmHost.jsx'), import('./components/ConnectionBanner.jsx'),
   ]);
+  const App = appMod.default;
+  const ErrorBoundary = errMod.default;
+  const ConfirmHost = confirmMod.default;
+  const ConnectionBanner = bannerMod.default;
   ReactDOM.createRoot(document.getElementById('root')).render(
     <React.StrictMode>
       <ErrorBoundary>

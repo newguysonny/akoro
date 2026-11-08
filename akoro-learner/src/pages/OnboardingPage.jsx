@@ -22,6 +22,7 @@ import {
   STEP_IDS, STUDY_LEVELS, classesFor, subjectChoices, emptyAnswers, firstName, answerText, stepError, progressOf,
   profilePayload, agentPayload, applyPrefill, filterTeachers, filterSchools, missingRequired, subjectsDraft, subjectsLabel,
 } from '../lib/onboardingChat.js';
+import { APP_HOME } from '../config/target.js';
 import './onboarding/onboarding.css';
 
 const BRAND = '#6C3BFF';
@@ -202,7 +203,7 @@ export default function OnboardingPage() {
     // right tier with no school-UI flash (studyLevel.js cache + useStudyTier.js revalidate).
     setCachedTier(isHigherEdUI({ studyLevel: ansRef.current.level }) ? 'higher' : 'school');
     markOnboarded();
-    navigate('/app', { replace: true });
+    navigate(APP_HOME, { replace: true });
   };
 
   /* ── what the learner can do at each step ── */

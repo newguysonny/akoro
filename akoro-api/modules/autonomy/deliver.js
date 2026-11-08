@@ -21,6 +21,7 @@ import { READY } from "./readyKinds.js";
 import { collectMaterials, materialsFrom } from "../adaptive-learning/chat-materials.js";
 import { RULES, actionBasis, basisRefusal } from "../agent-runtime/actionBasis.js";
 import { modesFor } from "./kindModes.js";
+import { appLink } from "../../lib/urls.js";
 
 const edu = () => db.schema("edu");
 export const DELIVERY = Object.freeze({
@@ -135,7 +136,7 @@ export async function deliverProactive(userId, { now = new Date(), ignoreQuietHo
 
   await notifyUser({
     userId, type: "agent_proposals", relatedId: p.id,
-    link: `/app?tab=agent&sessionId=${encodeURIComponent(target.chatId)}`,
+    link: appLink(`tab=agent&sessionId=${encodeURIComponent(target.chatId)}`),
     title: "Your agent noticed something",
     content: String(p.title).slice(0, 200),
   }).catch(() => {});

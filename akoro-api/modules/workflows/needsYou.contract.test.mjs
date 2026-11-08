@@ -143,7 +143,7 @@ test("routes by type: Study Prep → chat; teaching → its modal (continuing it
 
   const dac = describeWorkflow(ac);
   assert.equal(dac.needsYou, null);
-  assert.equal(dac.action.route.href, "/app?tab=battles&battle=bt-2");
+  assert.equal(dac.action.route.href, "/?tab=battles&battle=bt-2");
   assert.equal(dac.progress.label, "2 of 5 questions answered");
 });
 

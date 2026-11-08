@@ -8,6 +8,8 @@
  *     more   how many other items wait in Tasks → Needs you
  *     working  healthy running work (one small line), when nothing waits
  */
+import { APP_HOME } from '../config/target.js';
+
 export function homeNeedsYou(data) {
   const items = Array.isArray(data?.needsYou?.items) ? data.needsYou.items : [];
   const working = (Array.isArray(data?.workflows) ? data.workflows : []).filter((w) => w && !w.needsYou && w.action);
@@ -20,7 +22,7 @@ export function homeNeedsYou(data) {
 export function homeHref(item) {
   const href = item?.action?.href || '';
   if (!href) return NEEDS_YOU_HREF;
-  if (href.includes('inbox=')) return '/app?tab=agent&tasks=suggestions';
+  if (href.includes('inbox=')) return `${APP_HOME}?tab=agent&tasks=suggestions`;
   return href;
 }
-export const NEEDS_YOU_HREF = '/app?tab=agent&tasks=needs';
+export const NEEDS_YOU_HREF = `${APP_HOME}?tab=agent&tasks=needs`;

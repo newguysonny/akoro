@@ -16,6 +16,7 @@ import { notifyUser } from "../notify.js";
 import { workerJob } from "../../lib/workerLog.js";
 import { validateFollowUpId, validateFollowUpInput, nextOccurrence } from "./chat-follow-up-validation.js";
 import { assertQueueCapacity } from "../../lib/queueGuard.js";
+import { appLink } from "../../lib/urls.js";
 
 const STALE_DELIVERY_MS = 5 * 60 * 1000;
 
@@ -288,7 +289,7 @@ export async function deliverChatFollowUp(followUpId) {
   try { nextId = await scheduleNextInSeries(followUp); }
   catch (e) { console.warn("[chat-follow-ups] next in series not scheduled:", e?.message || e); }
 
-  const link = `/app?tab=agent&sessionId=${encodeURIComponent(followUp.chat_session_id)}`;
+  const link = appLink(`tab=agent&sessionId=${encodeURIComponent(followUp.chat_session_id)}`);
   await notifyUser({
     userId: followUp.user_id,
     type: "agent_follow_up",

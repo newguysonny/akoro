@@ -11,8 +11,13 @@ test('an in-app link is a link span; its label is plain text', () => {
   ]);
 });
 
-test('anything but an /app path stays literal text (no links out of the app)', () => {
-  for (const text of ['[x](https://evil.example)', '[x](javascript:alert(1))', '[x](/apples)', '[x](//evil.example/app)']) {
+test('the app site\'s own home is a link too: "/", "/?tab=…", "/#…"', () => {
+  const s = spans('See [Battles](/?tab=battles&battle=b1) or [Home](/) now');
+  assert.deepEqual(s.filter((x) => x.href).map((x) => [x.text, x.href]), [['Battles', '/?tab=battles&battle=b1'], ['Home', '/']]);
+});
+
+test('anything but an /app path or the app home stays literal text (no links out of the app)', () => {
+  for (const text of ['[x](https://evil.example)', '[x](javascript:alert(1))', '[x](/apples)', '[x](//evil.example/app)', '[x](//evil.example)', '[x](/\\evil)', '[x](/path)']) {
     assert.ok(spans(text).every((x) => !x.href), text);
     assert.equal(spans(text).map((x) => x.text).join(''), text);
   }

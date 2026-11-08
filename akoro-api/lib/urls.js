@@ -38,3 +38,19 @@ export const EXPECTED_URL_ENV = Object.freeze([
   "FRONTEND_URL", "MAIN_SITE_URL", "INSTRUCTOR_FRONTEND_URL", "ADMIN_FRONTEND_URL", "SCHOOL_FRONTEND_URL", "API_URL", "GOOGLE_CALLBACK_URL", "SITE_BASE_DOMAIN",
 ]);
 export const missingUrlEnv = (env = process.env) => EXPECTED_URL_ENV.filter((k) => !trim(env[k]));
+
+/**
+ * Links INTO the learner app (notifications, agent links, workflow routes). The app's home is "/" on the app site
+ * (https://app.akoro.ng/); an unsplit deployment, where "/" is the marketing page, sets APP_HOME_PATH=/app.
+ * "/app?…" links already stored in the database keep working: the app forwards /app to its home.
+ */
+export const appHomePath = (env = process.env) => {
+  const v = String(env.APP_HOME_PATH ?? "/").trim() || "/";
+  return v.startsWith("/") ? v : `/${v}`;
+};
+/** appLink("tab=agent&x=1") → "/?tab=agent&x=1"; appLink() → "/". */
+export const appLink = (query = "", env = process.env) => {
+  const q = String(query ?? "").replace(/^\?/, "");
+  const base = appHomePath(env);
+  return q ? `${base}?${q}` : base;
+};

@@ -651,7 +651,7 @@ function AgentChatTab({
   const openNeed=(it)=>{
     const href=it?.action?.href||'';
     if(href.includes('inbox=')){ setTaskFilter('suggestions'); return; }
-    if(href==='/app?tab=agent'){ setInnerTab('chat'); return; }
+    if(href==='/app?tab=agent'||href==='/?tab=agent'){ setInnerTab('chat'); return; }
     if(href) navigate(href);
   };
   const [ideaBusy,setIdeaBusy]=useState(null);

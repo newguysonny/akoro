@@ -28,6 +28,7 @@ import { answerNow, screenMessage, MESSAGE_LIMITS } from "./messaging.js";
 import { getSettings } from "./network.js";
 import { inQuiet, quietOf } from "../autonomy/quietHours.js";
 import { chatFor } from "../autonomy/deliver.js";
+import { appLink } from "../../lib/urls.js";
 
 const edu = () => db.schema("edu");
 const first = (full, username) => String(full || "").trim().split(/\s+/)[0] || username || "a learner";
@@ -137,7 +138,7 @@ export async function processInbox(userId, { deps = null, force = false, now = n
         const screened = screenMessage(answer, { min: 2, max: MESSAGE_LIMITS.ANSWER_MAX_CHARS });
         if (!screened.ok) throw new Error(`reply not sent (${screened.reason})`);
         await edu().from("agent_messages").update({ answer: screened.question, answer_source: source, status: "answered", answered_at: now.toISOString(), answer_read_at: null, auto_replied: true }).eq("id", m.id);
-        await notifyUser({ userId: m.from_user, type: "agent_message", title: `💬 ${first(me?.full_name, me?.username)}'s agent replied to your agent`, content: screened.question.slice(0, 140), relatedId: m.id, link: "/app?tab=agent" }).catch(() => {});
+        await notifyUser({ userId: m.from_user, type: "agent_message", title: `💬 ${first(me?.full_name, me?.username)}'s agent replied to your agent`, content: screened.question.slice(0, 140), relatedId: m.id, link: appLink("tab=agent") }).catch(() => {});
         lines.push(learnerText({ action, kind: m.kind, fromName, agentName, body: m.body, answer: screened.question }));
         // The asker's agent started this on its own: tell its learner what came back.
         if (m.origin === "agent") import("./outreach.js").then((o) => o.reportOutreachAnswer(m.id)).catch(() => {});
@@ -158,7 +159,7 @@ export async function processInbox(userId, { deps = null, force = false, now = n
         const where = await post(userId, draft ? `${text}\n\nI'd say: “${draft.slice(0, 300)}”` : text, meta);
         await edu().from("agent_proposals").update({ posted_at: now.toISOString(), chat_session_id: where?.chatId || null, chat_message_id: where?.messageId || null }).eq("id", prop.id);
         await edu().from("agent_messages").update({ status: "awaiting_learner", proposal_id: prop.id }).eq("id", m.id);
-        if (!quiet) await notifyUser({ userId, type: "agent_message", title: m.kind === "friend_request" ? `${fromName} wants to be friends` : `${fromName}'s agent sent your agent a message`, content: String(m.body).slice(0, 140), relatedId: prop.id, link: `/app?tab=agent${where?.chatId ? `&sessionId=${where.chatId}` : ""}` }).catch(() => {});
+        if (!quiet) await notifyUser({ userId, type: "agent_message", title: m.kind === "friend_request" ? `${fromName} wants to be friends` : `${fromName}'s agent sent your agent a message`, content: String(m.body).slice(0, 140), relatedId: prop.id, link: appLink(`tab=agent${where?.chatId ? `&sessionId=${where.chatId}` : ""}`) }).catch(() => {});
         actions.push({ messageId: m.id, kind: m.kind, action, proposalId: prop.id });
       } else if (action === "tell_learner") {
         lines.push(learnerText({ action, kind: m.kind, fromName, agentName, body: m.body, answer: m.answer || null }));

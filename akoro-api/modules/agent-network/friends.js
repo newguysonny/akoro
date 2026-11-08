@@ -11,6 +11,7 @@
 import db from "../../db.js";
 import { notifyUser } from "../notify.js";
 import { screenMessage, MESSAGE_LIMITS } from "./messaging.js";
+import { appLink } from "../../lib/urls.js";
 
 const edu = () => db.schema("edu");
 const fail = (message, status = 400) => Object.assign(new Error(message), { status });
@@ -44,7 +45,7 @@ export async function acceptFriend(userId, messageId) {
   if (error) throw new Error(error.message);
   const me = await nameOf(userId);
   await edu().from("agent_messages").update({ answer: `${me} said yes — you're friends now!`, answer_source: "learner", status: "answered", answered_at: now(), answer_read_at: null }).eq("id", m.id);
-  await notifyUser({ userId: m.from_user, type: "agent_message", title: `🤝 ${me} accepted — you're friends now`, content: `${me}'s agent and yours can chat and study together.`, relatedId: m.id, link: "/app?tab=agent" }).catch(() => {});
+  await notifyUser({ userId: m.from_user, type: "agent_message", title: `🤝 ${me} accepted — you're friends now`, content: `${me}'s agent and yours can chat and study together.`, relatedId: m.id, link: appLink("tab=agent") }).catch(() => {});
   return { friends: true, with: await nameOf(m.from_user) };
 }
 
@@ -54,7 +55,7 @@ export async function sendApprovedReply(userId, messageId, draft) {
   if (!s.ok) throw fail("That reply can't be sent — say it in your own words and I'll send it.");
   await edu().from("agent_messages").update({ answer: s.question, answer_source: "learner", status: "answered", answered_at: now(), answer_read_at: null }).eq("id", m.id);
   const me = await nameOf(userId);
-  await notifyUser({ userId: m.from_user, type: "agent_message", title: `💬 ${me}'s agent replied to your agent`, content: s.question.slice(0, 140), relatedId: m.id, link: "/app?tab=agent" }).catch(() => {});
+  await notifyUser({ userId: m.from_user, type: "agent_message", title: `💬 ${me}'s agent replied to your agent`, content: s.question.slice(0, 140), relatedId: m.id, link: appLink("tab=agent") }).catch(() => {});
   if (m.origin === "agent") await import("./outreach.js").then((o) => o.reportOutreachAnswer(m.id)).catch(() => {});
   return { replied: true, to: await nameOf(m.from_user), text: s.question };
 }

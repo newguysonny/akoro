@@ -73,4 +73,27 @@ export const scenarios = [
       t.check('the settings icon opens Settings', new URL(page.url()).pathname === '/settings', { url: page.url() });
     },
   },
+  {
+    name: 'settings.home_address',
+    description: 'The learner home: on the app site (VITE_TARGET=app) it is "/" and the old "/app?…" address forwards to it keeping the query; on a full build it stays "/app". Back from Settings returns to the home.',
+    async run(t) {
+      const { page } = t;
+      await page.goto(`${t.app}/app?tab=challenges`, { waitUntil: 'domcontentloaded' });
+      t.check('the dashboard opens from the old address', await page.getByTestId('header-profile').waitFor({ timeout: 30_000 }).then(() => true, () => false));
+      const u = new URL(page.url());
+      const appSite = u.pathname === '/';
+      t.note(appSite ? 'app site: /app forwarded to /' : 'full build: the home stays /app');
+      if (appSite) {
+        t.check('the query is kept', u.searchParams.get('tab') === 'challenges', { url: page.url() });
+        await page.goto(`${t.app}/`, { waitUntil: 'domcontentloaded' });
+        t.check('"/" is the dashboard (signed in)', await page.getByTestId('header-profile').waitFor({ timeout: 25_000 }).then(() => true, () => false));
+      } else {
+        t.check('the home is /app', u.pathname === '/app', { url: page.url() });
+      }
+      await page.goto(`${t.app}/settings`, { waitUntil: 'domcontentloaded' });
+      await page.getByRole('button', { name: 'Back' }).first().click({ timeout: 25_000 });
+      await page.getByTestId('header-profile').waitFor({ timeout: 25_000 }).catch(() => {});
+      t.check('Back from Settings returns to the home', new URL(page.url()).pathname === (appSite ? '/' : '/app'), { url: page.url() });
+    },
+  },
 ];

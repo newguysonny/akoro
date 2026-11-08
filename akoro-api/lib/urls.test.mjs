@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { URL_DEFAULTS, urlFor, displayHost, missingUrlEnv, EXPECTED_URL_ENV } from "./urls.js";
+import { URL_DEFAULTS, urlFor, displayHost, missingUrlEnv, EXPECTED_URL_ENV, appHomePath, appLink } from "./urls.js";
 
 test("defaults are the CURRENT hosts: apex marketing site, app., portals, api.", () => {
   assert.equal(URL_DEFAULTS.MAIN_SITE_URL, "https://akoro.name.ng");
@@ -52,4 +52,33 @@ test("wiring: no module spells a platform domain any more; the JWT claims are de
   assert.match(cfg, /URL env vars not set/);
   const emails = await read("../modules/auth/emails.js");
   assert.match(emails, /\$\{SITE_BASE\}\/privacy/);   // legal links go to the marketing site
+});
+
+test("appLink: links into the learner app use its home — '/' on the app site, '/app' when APP_HOME_PATH says so (an unsplit deployment)", () => {
+  assert.equal(appHomePath({}), "/");
+  assert.equal(appLink("tab=agent", {}), "/?tab=agent");
+  assert.equal(appLink("?tab=battles&battle=b1", {}), "/?tab=battles&battle=b1");
+  assert.equal(appLink("", {}), "/");
+  assert.equal(appLink(undefined, {}), "/");
+  assert.equal(appLink("tab=agent", { APP_HOME_PATH: "/app" }), "/app?tab=agent");
+  assert.equal(appLink("tab=agent", { APP_HOME_PATH: "app" }), "/app?tab=agent");   // a missing leading slash is added
+  assert.equal(appHomePath({ APP_HOME_PATH: "  " }), "/");
+});
+
+test("no module spells a learner-app link as /app? any more — they go through appLink()", async () => {
+  const { readdir } = await import("node:fs/promises");
+  const path = await import("node:path");
+  const root = new URL("../modules/", import.meta.url).pathname;
+  const bad = [];
+  async function walk(dir) {
+    for (const e of await readdir(dir, { withFileTypes: true })) {
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) { if (e.name !== "verify") await walk(p); continue; }
+      if (!e.name.endsWith(".js") || /\.test\./.test(e.name)) continue;
+      const src = (await readFile(p, "utf8")).split("\n").filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join("\n");
+      if (/\/app\?/.test(src)) bad.push(path.relative(root, p));
+    }
+  }
+  await walk(root);
+  assert.deepEqual(bad, []);
 });

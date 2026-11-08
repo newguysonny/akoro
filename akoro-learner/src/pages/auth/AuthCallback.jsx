@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth, REDIRECT_KEY } from '../../contexts/AuthContext.jsx';
+import { APP_HOME } from '../../config/target.js';
 
 const BRAND = '#6C3BFF';
 
@@ -30,7 +31,7 @@ export default function AuthCallback() {
       const userObj = JSON.parse(decodeURIComponent(userRaw));
       restoreFromCallback(userObj);   // stores user in memory + localStorage (UI only)
 
-      const redirect = localStorage.getItem(REDIRECT_KEY) || '/app';
+      const redirect = localStorage.getItem(REDIRECT_KEY) || APP_HOME;
       localStorage.removeItem(REDIRECT_KEY);
 
       setStatus('Signed in! Redirecting...');

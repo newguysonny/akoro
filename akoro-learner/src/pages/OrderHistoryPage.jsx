@@ -8,6 +8,7 @@ import { ArrowLeft, Receipt, BookOpen, ShoppingCart, Bot } from 'lucide-react';
 import { getOrderHistory, requestRefund } from '../services/ordersApi.js';
 import { verifyCheckout } from '../services/cartApi.js';
 import Toast from '../components/common/Toast.jsx';
+import { APP_HOME } from '../config/target.js';
 
 const FONT = "'Nunito', sans-serif";
 const BRAND = '#6C3BFF', GREEN = '#10B981', RED = '#EF4444', GOLD = '#F59E0B';
@@ -36,7 +37,7 @@ const effectiveStatus = (o) =>
 export default function OrderHistoryPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const goBack = () => { (location.key && location.key !== 'default') ? navigate(-1) : navigate('/app'); };
+  const goBack = () => { (location.key && location.key !== 'default') ? navigate(-1) : navigate(APP_HOME); };
   const [orders, setOrders] = useState(null);   // null = loading
   const [refundOrder, setRefundOrder] = useState(null);   // order being refunded
   const [reason, setReason] = useState('');
@@ -91,7 +92,7 @@ export default function OrderHistoryPage() {
             <Receipt size={40} style={{ marginBottom: 12, opacity: 0.5 }} />
             <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--ak-text)' }}>No orders yet</div>
             <div style={{ fontSize: 13.5, marginTop: 4 }}>Your course, class and teaching-guide payments will show up here.</div>
-            <button onClick={() => navigate('/app')} style={{ marginTop: 18, padding: '11px 22px', borderRadius: 12, border: 'none', background: BRAND, color: '#fff', fontSize: 13.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>Browse courses</button>
+            <button onClick={() => navigate(APP_HOME)} style={{ marginTop: 18, padding: '11px 22px', borderRadius: 12, border: 'none', background: BRAND, color: '#fff', fontSize: 13.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>Browse courses</button>
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>

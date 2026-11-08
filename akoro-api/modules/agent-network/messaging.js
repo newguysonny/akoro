@@ -23,6 +23,7 @@ import { notifyUser } from "../notify.js";
 import { loadTaughtKnowledge } from "../adaptive-learning/protege.js";
 import { canMessage, presenceOf } from "./filters.js";
 import { relationsOf, blockedWith, getSettings, onlineIds } from "./network.js";
+import { appLink } from "../../lib/urls.js";
 
 const edu = () => db.schema("edu");
 const fail = (message, status = 400) => Object.assign(new Error(message), { status });
@@ -169,7 +170,7 @@ export async function messageAgent(fromId, input = {}, { deps } = {}) {
     userId: target.id, type: "agent_message",
     title: kind === "suggestion" ? `💡 ${asker} left your agent an idea` : kind === "friend_request" ? `🤝 ${asker} wants to be friends`
       : kind === "chat" ? `💬 ${asker} sent your agent a message` : answered ? `💬 ${asker} asked your agent — it answered` : `💬 ${asker} asked your agent something`,
-    content: screened.question.slice(0, 140), relatedId: row.id, link: "/app?tab=agent",
+    content: screened.question.slice(0, 140), relatedId: row.id, link: appLink("tab=agent"),
   }).catch(() => {});
 
   return {
@@ -220,7 +221,7 @@ export async function replyToAgent(userId, messageId, text) {
   await edu().from("agent_messages").update({ answer: s.question, answer_source: "learner", status: "answered", answered_at: new Date().toISOString(), answer_read_at: null }).eq("id", m.id);
   const { data: me } = await db.from("users").select("full_name, username").eq("id", userId).maybeSingle();
   await notifyUser({ userId: m.from_user, type: "agent_message", title: `💬 ${first(me?.full_name, me?.username)}'s agent answered your agent`,
-    content: s.question.slice(0, 140), relatedId: m.id, link: "/app?tab=agent" }).catch(() => {});
+    content: s.question.slice(0, 140), relatedId: m.id, link: appLink("tab=agent") }).catch(() => {});
   return { replied: m.id };
 }
 

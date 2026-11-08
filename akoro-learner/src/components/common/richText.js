@@ -7,14 +7,15 @@
  * Supported (the subset the agent prompts promise):
  *   ### Heading (up to ####)      **bold**   *italic* / _italic_   `code`
  *   - bullet / * bullet           1. numbered          --- horizontal rule
- *   [label](/app?…)               an in-app link (only /app paths — anything
- *                                 else stays literal text)
+ *   [label](/app?…) [label](/?…)  an in-app link (only /app paths or the app's
+ *                                 own home — anything else stays literal text)
  * Blank lines split paragraphs; a single line break continues the paragraph.
  * Anything unterminated (**ab, `ab) stays literal text.
  */
 
 // [label](/app…) — a link inside the app only; the label is plain text.
-const LINK = /^\[([^\]\n]{1,120})\]\((\/app(?:[/?#][^\s)]*)?)\)/;
+// …or the app site's own home: "/" or "/?tab=…" (never "//host").
+const LINK = /^\[([^\]\n]{1,120})\]\((\/app(?:[/?#][^\s)]*)?|\/(?:[?#][^\s)]*)?)\)/;
 
 const inline = (text) => {
   const out = [];

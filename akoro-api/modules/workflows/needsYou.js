@@ -28,6 +28,7 @@
 import { ATTENTION, NEEDS_YOU, attentionOf, describeWorkflow } from "./dashboard.js";
 import { isTerminalStatus } from "./definition.js";
 import { mergeInbox } from "../agent-proposals/inboxCore.js";
+import { appLink } from "../../lib/urls.js";
 
 export const AUDIENCES = Object.freeze(["learner", "instructor"]);
 export const SOURCES = Object.freeze(["workflow", "suggestion", "proposal", "confirmation", "draft", "upload"]);
@@ -42,8 +43,8 @@ const live = (expiresAt, now) => { const t = ms(expiresAt); return t == null || 
 
 const HREF = {
   learner: {
-    inbox: (ref) => `/app?tab=agent&inbox=${encodeURIComponent(ref)}`,
-    chat: () => "/app?tab=agent",
+    inbox: (ref) => appLink(`tab=agent&inbox=${encodeURIComponent(ref)}`),
+    chat: () => appLink("tab=agent"),
     draft: () => null,
   },
   instructor: {

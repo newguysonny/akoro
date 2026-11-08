@@ -68,3 +68,10 @@ No domain is spelled in code. **API:** `lib/urls.js` — env vars `FRONTEND_URL`
 
 Left alone on purpose: `JWT_ISSUER` / `JWT_AUDIENCE` (opaque claims inside issued tokens — changing them signs everyone out) and mailboxes
 (`noreply@`, `hello@…akoro.app`: they need real mailboxes on a verified sending domain, so they're a mail-setup decision, not a URL).
+
+## The app's home is "/" (done)
+
+On the app site (`VITE_TARGET=app`) the dashboard lives at `https://app.akoro.ng/` — there is no `/app` any more. `/app` (and `/app?tab=…`) still works: it forwards to `/`
+keeping the query, so old links, notifications, emails and the API's deep links (`/app?tab=agent&…`) keep working; the landing forwards `/app` to the app's root too.
+A signed-out visitor on `/` is sent to `/signin` and brought back after. A full/unsplit build keeps `/` = marketing home and `/app` = dashboard. Pages navigate with
+`APP_HOME` (`src/config/target.js`), never a literal `/app` (a test enforces it); the API-defined `/app?…` deep links and the markdown whitelist are the deliberate exceptions.

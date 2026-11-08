@@ -14,6 +14,7 @@ import { useCart } from '../contexts/CartContext.jsx';
 import { applyCoupon as applyCouponApi, checkoutCart, verifyCheckout } from '../services/cartApi.js';
 import { apiPost, API } from '../services/api.js';
 import Toast from '../components/common/Toast.jsx';
+import { APP_HOME } from '../config/target.js';
 
 const FONT = "'Nunito', sans-serif";
 const BRAND = '#6C3BFF', GREEN = '#10B981', RED = '#EF4444';
@@ -32,7 +33,7 @@ export default function CheckoutPage() {
   const location = useLocation();
   const st = location.state || {};
   const mode = ['course', 'topup', 'agent'].includes(st.mode) ? st.mode : 'cart';
-  const goBack = () => { (location.key && location.key !== 'default') ? navigate(-1) : navigate(mode === 'cart' ? '/cart' : '/app'); };
+  const goBack = () => { (location.key && location.key !== 'default') ? navigate(-1) : navigate(mode === 'cart' ? '/cart' : APP_HOME); };
   const [params] = useSearchParams();
   const payStatus = params.get('payment');   // cart return only
   const { cart, count: cartCount, refresh } = useCart();
@@ -104,8 +105,8 @@ export default function CheckoutPage() {
               <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6 }}><span style={{ color: 'var(--ak-text-muted)' }}>Amount paid</span><span style={{ color: 'var(--ak-text)', fontWeight: 900 }}>{ngn(paidNgn)}</span></div>
             </div>
           )}
-          <button onClick={() => navigate('/app')} style={{ marginTop: 24, width: '100%', maxWidth: 300, padding: '13px', borderRadius: 13, border: 'none', background: `linear-gradient(135deg, ${BRAND}, ${BRAND}CC)`, color: '#fff', fontSize: 14.5, fontWeight: 900, cursor: 'pointer', fontFamily: FONT }}>Go to my sessions</button>
-          <div><button onClick={() => navigate('/app')} style={{ marginTop: 10, background: 'none', border: 'none', color: BRAND, fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>Keep learning →</button></div>
+          <button onClick={() => navigate(APP_HOME)} style={{ marginTop: 24, width: '100%', maxWidth: 300, padding: '13px', borderRadius: 13, border: 'none', background: `linear-gradient(135deg, ${BRAND}, ${BRAND}CC)`, color: '#fff', fontSize: 14.5, fontWeight: 900, cursor: 'pointer', fontFamily: FONT }}>Go to my sessions</button>
+          <div><button onClick={() => navigate(APP_HOME)} style={{ marginTop: 10, background: 'none', border: 'none', color: BRAND, fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>Keep learning →</button></div>
         </div>
       </Shell>
     );
@@ -128,7 +129,7 @@ export default function CheckoutPage() {
       <Shell onBack={goBack} count={headerCount}>
         <div style={{ textAlign: 'center', padding: '64px 20px', color: 'var(--ak-text-muted)' }}>
           <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--ak-text)' }}>Nothing to check out</div>
-          <button onClick={() => navigate('/app')} style={{ marginTop: 16, padding: '11px 22px', borderRadius: 12, border: 'none', background: BRAND, color: '#fff', fontSize: 13.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>Browse courses</button>
+          <button onClick={() => navigate(APP_HOME)} style={{ marginTop: 16, padding: '11px 22px', borderRadius: 12, border: 'none', background: BRAND, color: '#fff', fontSize: 13.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>Browse courses</button>
         </div>
       </Shell>
     );
@@ -165,11 +166,11 @@ export default function CheckoutPage() {
           headers: { 'Content-Type': 'application/json', 'X-Akoro-Portal': 'student' },
           body: JSON.stringify({ course_id: st.course.id, coupon_code: coupon?.coupon_code }),
         });
-        if (r.status === 401) { localStorage.setItem('akoro_redirect', st.returnTo || '/app'); navigate('/signin'); return; }
+        if (r.status === 401) { localStorage.setItem('akoro_redirect', st.returnTo || APP_HOME); navigate('/signin'); return; }
         const d = await r.json().catch(() => ({}));
         const body = d.data || d;
         if (!r.ok) { setToast({ msg: d.message || body.message || 'Could not start payment', color: RED }); return; }
-        if (body.free) { setToast({ msg: 'Enrolled!', color: GREEN }); setTimeout(() => navigate(st.returnTo || '/app'), 900); return; }
+        if (body.free) { setToast({ msg: 'Enrolled!', color: GREEN }); setTimeout(() => navigate(st.returnTo || APP_HOME), 900); return; }
         if (body.checkout_url) { window.location.href = body.checkout_url; return; }
         setToast({ msg: 'Payment started', color: GREEN });
       } else if (mode === 'topup') {
@@ -181,7 +182,7 @@ export default function CheckoutPage() {
         const res = await apiPost('/api/adaptive/marketplace/checkout', { listingId: st.listing.id });
         const d = res?.data ?? res;
         if (d?.authorization_url) { window.location.href = d.authorization_url; return; }
-        if (d?.free || d?.success) { setToast({ msg: `${st.listing.title} unlocked!`, color: GREEN }); setTimeout(() => navigate(st.returnTo || '/app'), 900); return; }
+        if (d?.free || d?.success) { setToast({ msg: `${st.listing.title} unlocked!`, color: GREEN }); setTimeout(() => navigate(st.returnTo || APP_HOME), 900); return; }
         setToast({ msg: 'Could not start payment', color: RED });
       } else {
         if (!isFree && method === 'voucher' && !voucherCode.trim()) {
@@ -195,7 +196,7 @@ export default function CheckoutPage() {
         });
         const d = res?.data ?? res;
         if (d?.checkout_url) { window.location.href = d.checkout_url; return; }
-        if (d?.free) { setToast({ msg: d.message || 'Access granted!', color: GREEN }); await refresh(); setTimeout(() => navigate('/app'), 1200); return; }
+        if (d?.free) { setToast({ msg: d.message || 'Access granted!', color: GREEN }); await refresh(); setTimeout(() => navigate(APP_HOME), 1200); return; }
         setToast({ msg: 'Checkout started', color: GREEN }); await refresh();
       }
     } catch (e) {

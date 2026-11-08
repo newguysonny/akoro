@@ -30,7 +30,7 @@ test("when: not in quiet hours, not mid-chat, once a day — claimed once", () =
 test("how: an agent message written by code, carrying the proposal; a link to that chat", () => {
   assert.match(src, /`One thing I noticed: \$\{why\}/);
   assert.match(src, /role: "agent", text: proactiveMessage\(p, \{ timeZone: quiet\.timeZone \}\), meta/);
-  assert.match(src, /link: `\/app\?tab=agent&sessionId=\$\{encodeURIComponent\(target\.chatId\)\}`/);
+  assert.match(src, /link: appLink\(`tab=agent&sessionId=\$\{encodeURIComponent\(target\.chatId\)\}`\)/);
 });
 
 test("wired: the planner tags the source note and posts after a run; a sweep retries; decisions sync", () => {

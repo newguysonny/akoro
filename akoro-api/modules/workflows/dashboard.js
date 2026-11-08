@@ -28,6 +28,7 @@
  *             A healthy state takes no space.
  */
 import { isTerminalStatus } from "./definition.js";
+import { appLink } from "../../lib/urls.js";
 
 export const NEEDS_YOU = Object.freeze(["answer", "review", "decision", "blocked", "failed"]);
 /** Badge tones the UI styles (never a colour here). */
@@ -185,23 +186,23 @@ export function routeFor(r) {
       const params = {};
       if (r.workflow_type === "study_prep") params.studyPrepSessionId = m.studyPrepSessionId || null;
       if (r.workflow_type === "teaching") Object.assign(params, { studyPrepSessionId: m.studyPrepSessionId || null, studyPrepWorkflowId: r.parent_workflow_id || r.source_workflow_id || null, topicId: m.topicId || null });
-      return { surface: "agent_chat", workflowId: id, params, href: `/app?tab=agent&workflow=${q}` };
+      return { surface: "agent_chat", workflowId: id, params, href: appLink(`tab=agent&workflow=${q}`) };
     }
     case "teaching_modal": {
       const sid = m.adaptiveSessionId || null;
       return { surface: "teaching_modal", workflowId: id,
         params: { topic: clip(m.topic, 160) || null, subject: clip(m.subject, 80) || null, adaptiveSessionId: sid, mode: sid ? "continuation" : "fresh" },
-        href: `/app?workflow=${q}` };
+        href: appLink(`workflow=${q}`) };
     }
     case "decay_review_modal":
-      return { surface: "decay_review_modal", workflowId: id, params: { topic: clip(m.topic, 160) || null, subject: clip(m.subject, 80) || null }, href: `/app?workflow=${q}` };
+      return { surface: "decay_review_modal", workflowId: id, params: { topic: clip(m.topic, 160) || null, subject: clip(m.subject, 80) || null }, href: appLink(`workflow=${q}`) };
     case "assessment_room":
       return { surface: "assessment_room", workflowId: id,
         params: { topic: clip(m.topic, 160) || null, subject: clip(m.subject, 80) || null, assessmentId: m.assessmentId || null },
-        href: `/app?workflow=${q}` };
+        href: appLink(`workflow=${q}`) };
     case "battle": {
       const battleId = m.battleId || null;
-      return { surface: "battle", workflowId: id, params: { battleId }, href: battleId ? `/app?tab=battles&battle=${encodeURIComponent(battleId)}` : "/app?tab=battles" };
+      return { surface: "battle", workflowId: id, params: { battleId }, href: battleId ? appLink(`tab=battles&battle=${encodeURIComponent(battleId)}`) : appLink("tab=battles") };
     }
     default: return null;
   }

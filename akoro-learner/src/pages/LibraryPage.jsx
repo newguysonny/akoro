@@ -19,6 +19,7 @@ import { useHigherEd } from '../hooks/useStudyTier.js';
 import { AppShell } from '../components/AppShell.jsx';
 import { useIsMobileView } from '../components/teaching/SessionReaderModal.jsx';
 import { useNowStudying } from '../utils/nowStudying.js';
+import { APP_HOME } from '../config/target.js';
 
 /* Icon + accent per library kind (tabler icons, matches the app's icon style) */
 const TYPE_META = {
@@ -494,7 +495,7 @@ export default function LibraryPage() {
       return;
     }
     if (it.type === 'library' && it.snapshot?.path) { navigate(it.snapshot.path); return; }
-    navigate('/app');
+    navigate(APP_HOME);
   };
 
   /* A search hit names a record; open it through the normal flow. */
@@ -602,7 +603,7 @@ export default function LibraryPage() {
       <div style={{ background: 'var(--ak-surface)', backdropFilter: 'blur(14px)', borderBottom: '1px solid var(--ak-border)', padding: '14px 18px', zIndex: 100, flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <button onClick={() => navigate('/app')}
+            <button onClick={() => navigate(APP_HOME)}
               style={{ background: '#F0EBFF', border: '1px solid #DDD3FF', borderRadius: 100, width: 34, height: 34, cursor: 'pointer', color: BRAND, fontSize: 16, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               ‹
             </button>

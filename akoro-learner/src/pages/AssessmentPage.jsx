@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { BRAND, RED, SUBJECTS, getStudentId } from '../constants.js';
 import AssessmentRoom from '../components/assessment/AssessmentRoom.jsx';
 import { Icon } from '../components/common/Icons.jsx';
+import { APP_HOME } from '../config/target.js';
 
 const FONT = "'Nunito', sans-serif";
 
@@ -56,7 +57,7 @@ export default function AssessmentPage() {
           subject={session.subject}
           objectives={session.objectives}
           questionCount={session.questionCount}
-          onClose={() => { setSession(null); navigate('/app'); }}
+          onClose={() => { setSession(null); navigate(APP_HOME); }}
         />
       </div>
     );
@@ -147,7 +148,7 @@ export default function AssessmentPage() {
           <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
             <button
               type="button"
-              onClick={() => navigate('/app')}
+              onClick={() => navigate(APP_HOME)}
               style={{
                 flex: 1, padding: '12px', borderRadius: 12, fontFamily: FONT,
                 fontSize: 13, fontWeight: 700, cursor: 'pointer',

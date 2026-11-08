@@ -17,6 +17,7 @@ import { notifyUser } from "../notify.js";
 import { workerJob } from "../../lib/workerLog.js";
 import { buildAutonomyTaskMessage } from "./learner-autonomy-policy.js";
 import { assertQueueCapacity } from "../../lib/queueGuard.js";
+import { appLink } from "../../lib/urls.js";
 
 const STALE_DELIVERY_MS = 5 * 60 * 1000;
 
@@ -302,7 +303,7 @@ export async function deliverAutonomyReview({ reviewId, revision }) {
   if (deliveryError) throw new Error("Could not complete autonomous task review");
   if (!delivered) return { skipped: true };
 
-  const link = `/app?tab=agent&sessionId=${encodeURIComponent(review.chat_session_id)}`;
+  const link = appLink(`tab=agent&sessionId=${encodeURIComponent(review.chat_session_id)}`);
   await notifyUser({
     userId: review.user_id,
     type: "agent_task_due",
