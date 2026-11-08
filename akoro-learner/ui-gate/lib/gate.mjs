@@ -203,7 +203,7 @@ function toolkit({ page, context, app, api, session, state, outDir, scenario, de
  * order per device, sharing `state` (a record one uploads, the next reads);
  * `needs` names scenarios that must have passed first.
  */
-export async function runGate({ target = 'local', app = process.env.UI_GATE_APP, api = process.env.UI_GATE_API || 'https://api.akoro.name.ng',
+export async function runGate({ target = 'local', app = process.env.UI_GATE_APP, api = process.env.UI_GATE_API || 'https://api.akoro.ng',
   portal = 'student', learner = process.env.UI_GATE_LEARNER || PORTALS[portal]?.defaultAccount || 'tester17', scenarios, deviceNames = ['phone', 'desktop'], outDir, port = 4321, headed = false, video = true, build = true } = {}) {
   await rm(outDir, { recursive: true, force: true });
   await mkdir(outDir, { recursive: true });

@@ -21,7 +21,7 @@ async function instructorApi(t) {
   const ctx = await browser.newContext({ extraHTTPHeaders: EDGE_HEADER || {} });
   t.cleanup(() => ctx.close().catch(() => {}));
   const base = t.app.startsWith('http://127.0.0.1') || t.app.startsWith('http://localhost') ? t.app : null;
-  const apiBase = base || process.env.UI_GATE_API || 'https://api.akoro.name.ng';
+  const apiBase = base || process.env.UI_GATE_API || 'https://api.akoro.ng';
   const login = await ctx.request.post(`${apiBase}/api/auth/login`, {
     headers: { 'X-Akoro-Portal': 'instructor', 'Content-Type': 'application/json' },
     data: { email: 'tester51@demo.akoro.app', password: process.env.UI_GATE_PASSWORD || DEMO_PASSWORD },

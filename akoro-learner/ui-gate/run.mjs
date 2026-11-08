@@ -39,7 +39,7 @@ if (only) {
 const deviceNames = String(opt('device', 'phone,desktop')).split(',').map((s) => s.trim()).filter(Boolean);
 const outDir = path.resolve(opt('out', path.join(path.dirname(fileURLToPath(import.meta.url)), '.out')));
 
-const report = await runGate({ target, portal, app: opt('app', process.env.UI_GATE_APP), api: opt('api', process.env.UI_GATE_API || 'https://api.akoro.name.ng'),
+const report = await runGate({ target, portal, app: opt('app', process.env.UI_GATE_APP), api: opt('api', process.env.UI_GATE_API || 'https://api.akoro.ng'),
   learner: opt('learner', process.env.UI_GATE_LEARNER) || undefined, scenarios, deviceNames, outDir, headed: flag('headed'), build: !flag('no-build') });
 
 console.log(`\nFrontend gate · ${report.portal} · ${report.target} · ${report.app || '(no app)'} → ${report.api} · as ${report.learner}`);

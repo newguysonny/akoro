@@ -14,7 +14,7 @@
 # deployed app (vars.AKORO_APP_URL).
 #
 # One-time setup (Settings → Secrets and variables → Actions):
-#   secret   AKORO_GATE_URL    the API, e.g. https://api.akoro.name.ng
+#   secret   AKORO_GATE_URL    the API, e.g. https://api.akoro.ng
 #   secret   AKORO_GATE_KEY    the API's AGENT_CONSOLE_KEY
 #   variable AKORO_APP_URL     the deployed learner app, e.g. https://akoro.name.ng
 #   secret   UI_GATE_PASSWORD  optional — the test learners' password if it
