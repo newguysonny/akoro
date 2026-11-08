@@ -14,6 +14,11 @@ export { APP_URL, SITE_URL };
 const RAW = typeof import.meta !== 'undefined' ? import.meta.env || {} : {};
 export const TARGET = ['landing', 'app'].includes(RAW.VITE_TARGET) ? RAW.VITE_TARGET : 'full';
 
+/** Where the signed-in learner's home is: the app site's own root ("/"), and "/app" on a full (unsplit) build where "/" is the landing.
+ *  "/app" stays a valid address everywhere — old links, notifications and emails use it; the app forwards it to "/". */
+export const homeFor = (target) => (target === 'app' ? '/' : '/app');
+export const APP_HOME = homeFor(TARGET);
+
 /** Marketing paths — the landing's. (Learner-authored blogs, /write/blog/*, are the app's.) */
 const MARKETING = [
   /^\/$/, /^\/pricing\/?$/, /^\/about\/?$/, /^\/contact\/?$/, /^\/careers\/?$/, /^\/partners\/?$/, /^\/compare\/?$/, /^\/apply\/?$/,
@@ -42,8 +47,12 @@ export function whereTo(target, pathname, search = '', hash = '') {
   if (target === 'full') return 'here';
   const owner = ownerOf(pathname);
   if (owner === 'unknown') return 'unknown';
-  if (target === 'landing') return owner === 'site' ? 'here' : { to: `${APP_URL}${pathname}${search}${hash}` };
-  // the app: '/' stays here (entry); every other marketing path belongs to the landing
+  // the landing forwards the old "/app" address to the app's root
+  if (target === 'landing') {
+    if (/^\/app\/?$/.test(pathname)) return { to: `${APP_URL}/${search}${hash}` };
+    return owner === 'site' ? 'here' : { to: `${APP_URL}${pathname}${search}${hash}` };
+  }
+  // the app: '/' is the dashboard; '/app' is the old address of it (forwarded to '/'); every other marketing path belongs to the landing
   if (owner === 'app' || pathname === '/') return 'here';
   return { to: `${SITE_URL}${pathname}${search}${hash}` };
 }

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import PaywallScreen from '../components/paywall/PaywallScreen.jsx';
 import { API } from '../services/api.js';
+import { APP_HOME } from '../config/target.js';
 
 /**
  * UpgradePage — full-screen mount of the Premium paywall at /upgrade.
@@ -49,7 +50,7 @@ export default function UpgradePage() {
         return; // full-page redirect to Paystack
       }
       if (r.status === 401) {
-        navigate('/app'); // not signed in — the dashboard will ask
+        navigate(APP_HOME); // not signed in — the dashboard will ask
         return;
       }
       setError(j?.message || 'Could not start checkout. Please try again.');
@@ -72,7 +73,7 @@ export default function UpgradePage() {
           busy={busy}
           note={error}
           onClose={() => navigate(-1)}
-          onContinueFreemium={() => navigate('/app')}
+          onContinueFreemium={() => navigate(APP_HOME)}
           onUpgrade={startCheckout}
         />
       </div>

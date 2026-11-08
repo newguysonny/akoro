@@ -12,6 +12,7 @@ import { BRAND } from '../../constants.js';
 import { Icon } from '../common/Icons.jsx';
 import { apiGet, apiPost } from '../../services/api.js';
 import DecaySessionModal from './DecaySessionModal.jsx';
+import { APP_HOME } from '../../config/target.js';
 
 const NUNITO = "'Nunito',sans-serif";
 const WAITING = ['created', 'inspecting', 'diagnostic', 'evaluating', 'decayed', 'retained', 'retest', 'adapt_strategy'];
@@ -74,7 +75,7 @@ export default function DecayReviewModal({ alert, agentProfile, onClose, onMinim
   const check = r?.check;
   const retest = r?.retest;
   const round = r?.retrieval?.current;
-  const watch = (id) => navigate(`/app?tab=battles&battle=${encodeURIComponent(id)}`);
+  const watch = (id) => navigate(`${APP_HOME}?tab=battles&battle=${encodeURIComponent(id)}`);
   const pct = (s) => `${Math.round((Number(s) || 0) * 100)}%`;
 
   return (

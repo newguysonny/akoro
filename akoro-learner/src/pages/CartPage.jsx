@@ -7,6 +7,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, Trash2, ShoppingCart, BookOpen, Bot, ArrowRight } from 'lucide-react';
 import { useCart } from '../contexts/CartContext.jsx';
 import Toast from '../components/common/Toast.jsx';
+import { APP_HOME } from '../config/target.js';
 
 const FONT = "'Nunito', sans-serif";
 const BRAND = '#6C3BFF', GREEN = '#10B981', RED = '#EF4444';
@@ -17,7 +18,7 @@ export default function CartPage() {
   const location = useLocation();
   // Pop real history if we have it; else fall back to the dashboard (avoids the
   // cart↔checkout back-loop and dead-ends on deep links).
-  const goBack = () => { (location.key && location.key !== 'default') ? navigate(-1) : navigate('/app'); };
+  const goBack = () => { (location.key && location.key !== 'default') ? navigate(-1) : navigate(APP_HOME); };
   const { cart, count, removeCourse, removeAgent, refresh } = useCart();
   const [removing, setRemoving] = useState(null);
   const [toast, setToast] = useState(null);
@@ -45,7 +46,7 @@ export default function CartPage() {
             <ShoppingCart size={40} style={{ marginBottom: 12, opacity: 0.5 }} />
             <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--ak-text)' }}>Your cart is empty</div>
             <div style={{ fontSize: 13.5, marginTop: 4 }}>Add courses, live classes or teaching guides and check out together.</div>
-            <button onClick={() => navigate('/app')} style={{ marginTop: 18, padding: '11px 22px', borderRadius: 12, border: 'none', background: BRAND, color: '#fff', fontSize: 13.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>Browse courses</button>
+            <button onClick={() => navigate(APP_HOME)} style={{ marginTop: 18, padding: '11px 22px', borderRadius: 12, border: 'none', background: BRAND, color: '#fff', fontSize: 13.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>Browse courses</button>
           </div>
         ) : (
           <>

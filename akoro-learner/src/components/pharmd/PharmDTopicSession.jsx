@@ -32,6 +32,7 @@ import { useEffect, useState } from 'react';
 import TeachAgentModal from '../teaching/TeachAgentModal.jsx';
 import { Icon } from '../common/Icons.jsx';
 import { BRAND } from '../../constants.js';
+import { APP_HOME } from '../../config/target.js';
 
 const MAX_REFERENCE_CHARS = 12_000;   // the server's reference cap
 
@@ -115,7 +116,7 @@ export default function PharmDTopicSession({ topic, course, onClose }) {
           Sign in to teach your agent over “{topicTitle}” — your agent remembers every session.
         </p>
         <div style={{ display: 'flex', gap: 10 }}>
-          <a href="/signin?next=/app" style={{ textDecoration: 'none', background: `linear-gradient(135deg,${BRAND},#4C1DCC)`, color: '#fff', fontSize: 12.5, fontWeight: 800, padding: '11px 20px', borderRadius: 100, fontFamily: "'Nunito',sans-serif" }}>Sign in</a>
+          <a href={`/signin?next=${APP_HOME}`} style={{ textDecoration: 'none', background: `linear-gradient(135deg,${BRAND},#4C1DCC)`, color: '#fff', fontSize: 12.5, fontWeight: 800, padding: '11px 20px', borderRadius: 100, fontFamily: "'Nunito',sans-serif" }}>Sign in</a>
           <button onClick={onClose} style={{ background: 'var(--ak-tag-bg)', border: 'none', borderRadius: 100,
             padding: '10px 22px', fontSize: 12.5, fontWeight: 800, color: 'var(--ak-text-sub)', cursor: 'pointer',
             fontFamily: "'Nunito',sans-serif" }}>Close</button>

@@ -15,6 +15,7 @@ import { materialText, localLearnSuggestions, learnSuggestionInput, shapeLearnSu
 import SessionReaderModal, { buildSessionReaderPages, useIsMobileView } from './SessionReaderModal.jsx';
 import WhiteboardModal from './WhiteboardModal.jsx';
 import { useLang } from '../../contexts/LanguageContext.jsx';
+import { APP_HOME } from '../../config/target.js';
 
 function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarted, onSessionSaved, content = null }) {
   // Hold the activity lock so an auto-reload can't interrupt a teaching session.
@@ -66,7 +67,7 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
       const id = r?.data?.battleId ?? r?.battleId;
       if (!id) throw new Error(r?.error || 'Could not start the review.');
       onClose?.();
-      navigate(`/app?tab=battles&battle=${id}`);
+      navigate(`${APP_HOME}?tab=battles&battle=${id}`);
     } catch (e) {
       setReview({ busy: false, msg: e?.message || 'Could not start the review.' });
     }

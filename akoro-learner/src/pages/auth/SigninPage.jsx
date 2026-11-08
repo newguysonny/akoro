@@ -5,6 +5,7 @@ import { nextPath } from '../../utils/nextPath.js';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 import AkoroLogo from '../../components/common/AkoroLogo.jsx';
 import { SITE_URL } from '../../config/urls.js';
+import { APP_HOME } from '../../config/target.js';
 
 const BRAND = '#6C3BFF';
 const RED   = '#EF4444';
@@ -23,7 +24,7 @@ function GoogleIcon() {
 export default function SigninPage() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
-  const after = nextPath(params.toString()) || '/app';   // e.g. back to a /join/:token invite
+  const after = nextPath(params.toString()) || APP_HOME;   // e.g. back to a /join/:token invite
   const { login, verifyTwoFactor, loginWithGoogle, loading, clearError } = useAuth();
   const { t } = useLang();
   const [email,     setEmail]    = useState('');
@@ -148,7 +149,7 @@ export default function SigninPage() {
             </p>
             <p style={{ textAlign:'center', fontSize:13, color:'var(--ak-text-sub)', marginTop:20, marginBottom:0 }}>
               {t('auth.no_account')}{' '}
-              <Link to={after === '/app' ? '/signup' : `/signup?next=${encodeURIComponent(after)}`} style={{ color:BRAND, fontWeight:800, textDecoration:'none' }}>{t('auth.signup')}</Link>
+              <Link to={after === APP_HOME ? '/signup' : `/signup?next=${encodeURIComponent(after)}`} style={{ color:BRAND, fontWeight:800, textDecoration:'none' }}>{t('auth.signup')}</Link>
             </p>
           </>
         )}

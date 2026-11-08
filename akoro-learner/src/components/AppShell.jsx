@@ -51,6 +51,7 @@ import { featureGated } from '../utils/planOverride.js';
 import NowStudyingTabletBar from './dashboard/NowStudyingTabletBar.jsx';
 import { useHigherEd } from '../hooks/useStudyTier.js';
 import { BRAND, RED, GREEN } from '../constants.js';
+import { APP_HOME } from '../config/target.js';
 
 /* ── Sidebar collapse — user-driven, remembered, EXPANDED by default ──
    v2 key: the default flipped from collapsed to expanded, and v1 values
@@ -122,7 +123,7 @@ const PAGE_NAV = [
 function useActiveRoutes() {
   const { pathname, search } = useLocation();
   const tab = new URLSearchParams(search).get('tab') || 'sessions';
-  const isTab  = (key) => pathname === '/app' && (tab === key || (key === 'sessions' && tab === 'challenges'));
+  const isTab  = (key) => pathname === APP_HOME && (tab === key || (key === 'sessions' && tab === 'challenges'));
   const isPage = (to)   => pathname === to || pathname.startsWith(to + '/');
   return { isTab, isPage };
 }
@@ -189,7 +190,7 @@ export function Sidebar({ badges = {}, collapsed = false }) {
   const goTab  = (key) => {
     const feature = GATED_TABS[key];
     if (feature && featureGated(feature)) return navigate(`/upgrade?trigger=${key}`);
-    navigate(key === 'sessions' ? '/app' : `/app?tab=${key}`);
+    navigate(key === 'sessions' ? APP_HOME : `${APP_HOME}?tab=${key}`);
   };
   // Gradebook is plan-gated for Freemium (tiers seed) — the row lands on
   // the paywall's gradebook trigger instead of the page.

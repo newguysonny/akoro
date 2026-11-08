@@ -20,6 +20,7 @@ import AddToCommunityPage from '../../components/communities/AddToCommunityPage.
 
 /* ── palette ──────────────────────────────────────────────── */
 import { INK, MUTED, BORDER, LIGHT, BG, FONT, GlobalCss, card, Btn, Avatar, LiveBadge, StarRow, PLATFORMS, PlatformBadge, ActionChips, SectionTitle, DEFAULT_MODULES, DEFAULT_COURSE, VideoPlayer, Curriculum, RV_BG, Reviews, AGENTS, BATTLES, BattleCard, BattlesSection, REVISIONS, RV_HOST_BG, RevisionsSection, mapCourse, CourseOverview, EnrolledVideoView } from './parts.jsx';
+import { APP_HOME } from '../../config/target.js';
 
 export default function CourseDetailsPage() {
   const { slug } = useParams();
@@ -32,7 +33,7 @@ export default function CourseDetailsPage() {
     if (location.key && location.key !== 'default') { navigate(-1); return; }
     // Deep-linked / new tab: signed-in learners land on the dashboard, guests on home.
     const signedIn = (() => { try { return !!localStorage.getItem('akoro_user'); } catch { return false; } })();
-    navigate(signedIn ? '/app' : '/');
+    navigate(signedIn ? APP_HOME : '/');
   };
   const { count: cartCount, inCart, addCourse } = useCart();
   const [addingCart, setAddingCart] = useState(false);
@@ -218,7 +219,7 @@ export default function CourseDetailsPage() {
             type={courseType} isEnrolled={isEnrolled} course={view.course} modules={view.modules}
             onPlay={() => {}} onEnrol={enroll} enrolling={enrolling}
             onAddToCart={addToCart} addingCart={addingCart} inCart={inCart(view.course.id)}
-            onJoinLive={() => navigate('/app')} onAgentSession={openAgentSession} onLessonMore={openLessonAdd} />
+            onJoinLive={() => navigate(APP_HOME)} onAgentSession={openAgentSession} onLessonMore={openLessonAdd} />
         )}
       </div>
 

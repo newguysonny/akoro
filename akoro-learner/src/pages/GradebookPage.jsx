@@ -14,6 +14,7 @@ import { ChevronDown, ArrowUpDown, X } from 'lucide-react';
 import { fetchMyGradebook, TYPE_LABEL, TYPE_DOT } from '../services/gradebookApi.js';
 import { BRAND, GREEN, RED } from '../constants.js';
 import { AppShell } from '../components/AppShell.jsx';
+import { APP_HOME } from '../config/target.js';
 
 /* Work types — the reference's type filter, with Akoro's activity kinds. */
 const TYPES = [
@@ -112,7 +113,7 @@ export default function GradebookPage() {
       <div style={{ background: 'var(--ak-surface)', backdropFilter: 'blur(14px)', borderBottom: '1px solid var(--ak-border)', padding: '14px 18px', zIndex: 100, flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <button onClick={() => navigate('/app')}
+            <button onClick={() => navigate(APP_HOME)}
               style={{ background: '#F0EBFF', border: '1px solid #DDD3FF', borderRadius: 100, width: 34, height: 34, cursor: 'pointer', color: BRAND, fontSize: 16, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               ‹
             </button>

@@ -57,6 +57,7 @@ import { useSessionAPI }   from '../hooks/useSessionAPI.js';
 import { useDecayAlerts }  from '../hooks/useDecayAlerts.js';
 import { useBattleAPI }    from '../hooks/useBattleAPI.js';
 import { openFor, workflowIdFromSearch } from '../lib/workflowRoute.js';
+import { APP_HOME } from '../config/target.js';
 
 
 export default function LearnerDashboard() {
@@ -151,7 +152,7 @@ export default function LearnerDashboard() {
   const goTab = (key) => {
     const feature = GATED_TABS[key];
     if (feature && featureGated(feature)) return navigate(`/upgrade?trigger=${key}`);
-    navigate(key === "sessions" ? "/app" : `/app?tab=${key}`);
+    navigate(key === "sessions" ? APP_HOME : `${APP_HOME}?tab=${key}`);
   };
   const [sessionTab,        setSessionTab]        = useState("all");
   const [liveSubTab,        setLiveSubTab]        = useState("starting-soon");
@@ -213,13 +214,13 @@ export default function LearnerDashboard() {
         } else if (open.kind === "assessment") {
           setAssessSession({ topic: open.topic, subject: open.subject, workflowId: open.workflowId, assessmentId: open.assessmentId });
         } else if (open.kind === "battle") {
-          navigate(`/app?tab=battles&battle=${encodeURIComponent(open.battleId)}`, { replace: true });
+          navigate(`${APP_HOME}?tab=battles&battle=${encodeURIComponent(open.battleId)}`, { replace: true });
           return;
         } else if (open.kind === "agent_chat") {
-          navigate("/app?tab=agent", { replace: true });
+          navigate(`${APP_HOME}?tab=agent`, { replace: true });
           return;
         }
-        navigate(left ? `/app?${left}` : "/app", { replace: true });
+        navigate(left ? `${APP_HOME}?${left}` : APP_HOME, { replace: true });
       })
       .catch((e) => { console.warn("[workflow] could not open", workflowId, e?.message || e); });
     return () => { gone = true; };
@@ -512,7 +513,7 @@ export default function LearnerDashboard() {
       // course; the focus prop makes PharmDProgram reopen the exact topic.
       const c = now.item.snapshot?.code;
       setPharmdFocus({ ...now.item.snapshot, ts: Date.now() });
-      navigate(`/app?tab=discovery&view=pharmd${c ? `&course=${encodeURIComponent(c)}` : ''}`);
+      navigate(`${APP_HOME}?tab=discovery&view=pharmd${c ? `&course=${encodeURIComponent(c)}` : ''}`);
     }
   };
 
@@ -1244,9 +1245,9 @@ export default function LearnerDashboard() {
               ? <ContentsDiscoveryTab initialQuery={discoverQuery}/>
               : discoverView==="pharmd"
               ? <PharmDProgram
-                  onClose={()=>navigate("/app?tab=discovery")}
+                  onClose={()=>navigate(`${APP_HOME}?tab=discovery`)}
                   courseRoute={pharmdCourseFromUrl()}
-                  onCourseRoute={(c)=>navigate(`/app?tab=discovery&view=pharmd${c?`&course=${encodeURIComponent(c)}`:""}`)}
+                  onCourseRoute={(c)=>navigate(`${APP_HOME}?tab=discovery&view=pharmd${c?`&course=${encodeURIComponent(c)}`:""}`)}
                   focus={pharmdFocus}
                   onFocusConsumed={()=>setPharmdFocus(null)}/>
               // A published programme from the admin catalogue — the generic
@@ -1254,23 +1255,23 @@ export default function LearnerDashboard() {
               : discoverView==="programme" && programmeIdFromUrl()
               ? <ProgrammePage
                   programmeId={programmeIdFromUrl()}
-                  onClose={()=>navigate("/app?tab=discovery")}
+                  onClose={()=>navigate(`${APP_HOME}?tab=discovery`)}
                   courseRoute={programmeCourseFromUrl()}
-                  onCourseRoute={(c)=>navigate(`/app?tab=discovery&view=programme&programme=${encodeURIComponent(programmeIdFromUrl())}${c?`&pcourse=${encodeURIComponent(c)}`:""}`)}/>
+                  onCourseRoute={(c)=>navigate(`${APP_HOME}?tab=discovery&view=programme&programme=${encodeURIComponent(programmeIdFromUrl())}${c?`&pcourse=${encodeURIComponent(c)}`:""}`)}/>
               : <DiscoverHub
                   userId={userProfile?.id}
-                  onOpenPharmd={()=>navigate("/app?tab=discovery&view=pharmd")}
-                  onOpenProgramme={(p)=>p?.id&&navigate(`/app?tab=discovery&view=programme&programme=${encodeURIComponent(p.id)}`)}
-                  onOpenContents={(q)=>navigate(`/app?tab=discovery&view=contents${q?`&q=${encodeURIComponent(q)}`:""}`)}
-                  onOpenRail={(rail,q)=>navigate(`/app?tab=discovery&view=courses&focus=${rail}${q?`&q=${encodeURIComponent(q)}`:""}`)}
-                  onOpenCourses={(q)=>navigate(`/app?tab=discovery&view=courses${q?`&q=${encodeURIComponent(q)}`:""}`)}
+                  onOpenPharmd={()=>navigate(`${APP_HOME}?tab=discovery&view=pharmd`)}
+                  onOpenProgramme={(p)=>p?.id&&navigate(`${APP_HOME}?tab=discovery&view=programme&programme=${encodeURIComponent(p.id)}`)}
+                  onOpenContents={(q)=>navigate(`${APP_HOME}?tab=discovery&view=contents${q?`&q=${encodeURIComponent(q)}`:""}`)}
+                  onOpenRail={(rail,q)=>navigate(`${APP_HOME}?tab=discovery&view=courses&focus=${rail}${q?`&q=${encodeURIComponent(q)}`:""}`)}
+                  onOpenCourses={(q)=>navigate(`${APP_HOME}?tab=discovery&view=courses${q?`&q=${encodeURIComponent(q)}`:""}`)}
                   onOpenCourse={(c)=>c?.slug&&navigate(`/course/${c.slug}`)}
                   onOpenRecord={openRecordTracked}
                   onOpenBattles={()=>goTab('battles')}
                   onOpenCommunity={(c)=>c?.id&&navigate(`/communities/${c.id}`)}
                   onOpenFolder={(f)=>navigate(`/library${f?.id?`?folder=${encodeURIComponent(f.id)}`:""}`)}
                   onOpenAgent={(a)=>a?.id&&navigate(`/agent/${a.id}`)}
-                  onOpenPharmdCourse={(code)=>navigate(`/app?tab=discovery&view=pharmd${code?`&course=${encodeURIComponent(code)}`:""}`)}/>
+                  onOpenPharmdCourse={(code)=>navigate(`${APP_HOME}?tab=discovery&view=pharmd${code?`&course=${encodeURIComponent(code)}`:""}`)}/>
               )
             : <DiscoveryTab/>)}
           {tab==="rankings" && <RankingsTab/>}

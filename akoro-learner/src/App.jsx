@@ -11,7 +11,7 @@ import ConfirmHost      from './components/common/ConfirmHost.jsx';
 import OfflineBanner     from './components/common/OfflineBanner.jsx';
 import UpdatePrompt      from './components/common/UpdatePrompt.jsx';
 import PresenceHeartbeat from './components/network/PresenceHeartbeat.jsx';
-import { TARGET, whereTo } from './config/target.js';
+import { TARGET, APP_HOME, whereTo } from './config/target.js';
 
 // Which site this build is (see config/target.js). These are literal at build time, so the other site's pages are
 // dropped from the bundle entirely — the landing doesn't ship the app, and the app doesn't ship the marketing pages.
@@ -94,7 +94,7 @@ function ProtectedRoute({ children }) {
 function OnboardingRoute({ children }) {
   const { isAuthenticated, user } = useAuth();
   if (!isAuthenticated) return <Navigate to="/signin" replace />;
-  if (user && user.onboardingCompleted) return <Navigate to="/app" replace />;
+  if (user && user.onboardingCompleted) return <Navigate to={APP_HOME} replace />;
   return children;
 }
 
@@ -102,14 +102,14 @@ function OnboardingRoute({ children }) {
 function GuestRoute({ children }) {
   const { isAuthenticated } = useAuth();
   const location = useLocation();
-  if (isAuthenticated) return <Navigate to={nextPath(location.search) || '/app'} replace />;
+  if (isAuthenticated) return <Navigate to={nextPath(location.search) || APP_HOME} replace />;
   return children;
 }
 
-/* The app's own front door: signed in → the dashboard, otherwise → sign in. (The landing owns the marketing home.) */
-function AppHome() {
-  const { isAuthenticated } = useAuth();
-  return <Navigate to={isAuthenticated ? '/app' : '/signin'} replace />;
+/* The old "/app" address (notifications, emails, saved links, the landing's old buttons) → the app's root, query and all. */
+function LegacyApp() {
+  const { search, hash } = useLocation();
+  return <Navigate to={`/${search}${hash}`} replace />;
 }
 
 /* A path that belongs to the other site of a split deployment goes there; anything else is a 404. */
@@ -145,9 +145,10 @@ function AppRoutes() {
       <ScrollToTop />
       <Suspense fallback={<RouteFallback />}>
       <Routes>
-      <Route path="/" element={TARGET === 'app' ? <AppHome /> : <LandingPage />}/>
+      {/* The app site's front door IS the dashboard (signed out → sign-in); on the landing and a full build "/" is the marketing home */}
+      <Route path="/" element={TARGET === 'app' ? <ProtectedRoute><LearnerDashboard /></ProtectedRoute> : <LandingPage />}/>
       {product && <Route path="/onboarding" element={<OnboardingRoute><OnboardingPage /></OnboardingRoute>}/>}
-      {product && <Route path="/app" element={<ProtectedRoute><LearnerDashboard /></ProtectedRoute>}/>}
+      {product && <Route path="/app" element={TARGET === 'app' ? <LegacyApp /> : <ProtectedRoute><LearnerDashboard /></ProtectedRoute>}/>}
       {product && <Route path="/settings/*" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>}/>}
       {product && <Route path="/fde-admin" element={<ProtectedRoute><FDEAdminPage /></ProtectedRoute>}/>}
       {product && <Route path="/notifications" element={<ProtectedRoute><NotificationsPage /></ProtectedRoute>}/>}
