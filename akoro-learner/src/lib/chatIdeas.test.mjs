@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { CHAT_STARTERS, cleanIdeas, protegeMoves } from './chatIdeas.js';
+import { CHAT_STARTERS, cleanIdeas, cleanMaterials, protegeMoves } from './chatIdeas.js';
 
 test('starters show what the agent can do, each with a ready-to-send example', () => {
   assert.equal(CHAT_STARTERS.length, 6);
@@ -23,4 +23,13 @@ test("the protégé's moves: a Teach me topic, and the guide's mark", () => {
     { guide: { name: 'NaNa Esumai' }, teach: { topic: 'Osmosis', subject: '' } });
   assert.deepEqual(protegeMoves([{ tool: 'create_task', success: true }]), {});
   assert.deepEqual(protegeMoves(undefined), {});
+});
+
+test("study material made in chat: the reader-tab link survives, with its tool; a folder choice becomes a reply chip", () => {
+  const ID = "11111111-1111-1111-1111-111111111111";
+  const [card] = cleanMaterials([{ kind: "study_output", title: "Quiz · Energy.pdf", sub: "10 questions", tool: "quiz", href: `/library?record=${ID}&artifact=${ID}` }]);
+  assert.deepEqual(card, { kind: "study_output", title: "Quiz · Energy.pdf", sub: "10 questions", tool: "quiz", href: `/library?record=${ID}&artifact=${ID}` });
+  const [pick] = cleanMaterials([{ kind: "choice", title: "Energy.pdf", action: { type: "reply", text: "Make the quiz from Energy.pdf" } }]);
+  assert.deepEqual(pick, { kind: "choice", title: "Energy.pdf", reply: "Make the quiz from Energy.pdf" });
+  assert.equal(cleanMaterials([{ kind: "study_output", title: "x", href: `/library?record=${ID}&artifact=nope` }]).length, 0, "a bad link is dropped");
 });

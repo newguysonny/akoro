@@ -44,7 +44,8 @@ export function materialsFrom(tool, result) {
         `/library?record=${x.recordId}${x.tool ? `&tool=${x.tool}` : ""}`));
     case "make_study_material": {
       // What chat made: a saved reader tab — the card opens the reader on it.
-      if (!r.made) return (r.records || []).map((x) => link("record", x.name, `/library?record=${x.recordId}`));
+      // Several documents in the folder: tapping one chooses it (sent as the learner's reply).
+      if (!r.made) return (r.records || []).map((x) => (x.name ? { kind: "choice", title: clip(x.name), action: { type: "reply", text: clip(`Make the ${r.tool || "quiz"} from ${x.name}`, 160) } } : null));
       const unit = r.tool === "quiz" ? "questions" : r.tool === "flashcards" ? "cards" : "points";
       const sub = r.tool === "podcast" ? "Being made — ready in a minute or two" : r.count ? `${r.count} ${unit}` : null;
       const m = withSub(link("study_output", `${TOOL_LABEL[r.tool] || r.tool} · ${r.name}`, r.href), sub);
@@ -66,7 +67,7 @@ export function collectMaterials(list) {
   const out = [];
   for (const m of (Array.isArray(list) ? list : []).flat()) {
     if (!m) continue;
-    const key = m.href || `${m.action?.type}:${String(m.action?.topic).toLowerCase()}`;
+    const key = m.href || `${m.action?.type}:${String(m.action?.topic ?? m.action?.text).toLowerCase()}`;
     if (seen.has(key)) continue;
     seen.add(key);
     out.push(m);

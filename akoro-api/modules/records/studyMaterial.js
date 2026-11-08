@@ -190,7 +190,7 @@ export async function makeStudyMaterial({ userId, tool, query = "", folder = "",
     const found = await findStudyRecord({ userId, query, folder, recordId });
     if (found.error) return { error: found.error };
     if (found.needsChoice) {
-      return { needsChoice: true, folder: found.folder?.name || null, records: found.needsChoice,
+      return { needsChoice: true, tool, folder: found.folder?.name || null, records: found.needsChoice,
         note: `Their "${found.folder?.name}" folder has several documents — ask which one (by name) to make the ${tool} from; don't guess.` };
     }
     const { resolveAskTargetFor } = await import("./access.js");

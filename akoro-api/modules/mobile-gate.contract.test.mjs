@@ -182,6 +182,8 @@ test("no source file uses a component or icon it never imports — the productio
       for (const m of src.matchAll(/(?:const|let|var)\s*\[([^[\]]*)\]\s*=/g))
         for (const p of m[1].split(","))
           if (/^\s*[A-Z]\w*\s*$/.test(p.trim())) known.add(p.trim());
+      // lazy imports destructured: const [{ default: App }, …] = await Promise.all([import(…), …])
+      for (const m of src.matchAll(/\{\s*default\s*:\s*([A-Z]\w*)\s*\}/g)) known.add(m[1]);
       // statement object destructuring: const { icon: Icon, color } = …
       for (const m of src.matchAll(/(?:const|let|var)\s*\{([^{}]*)\}\s*=/g)) {
         for (const p of m[1].split(",")) {
