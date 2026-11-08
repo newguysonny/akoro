@@ -142,14 +142,14 @@ export function buildAiGradeMessages({ assignment = {}, markdown = "", images = 
   const system = [
     `You are drafting marks for a teacher on a learner's submission for "${String(assignment.title || "an activity").slice(0, 160)}"${assignment.subject ? ` (${assignment.subject})` : ""}.`,
     "The teacher reviews and approves everything you produce. Be fair, specific and brief; never invent work the learner didn't submit.",
-    open.length ? "Mark each listed question: `read` is the learner's answer as you read it — their typed text, or their handwriting / drawing transcribed line by line (\"\" when there is none); `awarded` from 0 to its max points (halves allowed); `why` in one sentence citing what the learner wrote." : "",
+    open.length ? "Mark each listed question: `read` is ONLY for an answer given as a photo, drawing or file — their handwriting / drawing transcribed line by line; for a typed answer (or none) return \"\" — the teacher already has the typed text, and copying it only delays the score; `awarded` from 0 to its max points (halves allowed); `why` in one sentence citing what the learner wrote." : "",
     open.length ? open.map(({ q, i }) => `Q${i + 1} (index ${i}, max ${pointsOf(q)}${Number.isInteger(q?.passage) && passages[q.passage] ? `, about passage ${q.passage + 1}` : ""}): ${qText(q)}${q?.figure ? " [has a diagram the learner saw]" : ""}${typeof q === "object" && q?.answer ? `\n  Model answer: ${typeof q.answer === "object" ? Object.entries(q.answer).map(([k, v]) => `${k}: ${v}`).join("; ") : q.answer}` : ""}${q?.format === "label" ? " [the learner names each labelled part as \"P: …\" lines]" : ""}${isMcq(q) ? `\n  Options: ${q.options.map((o, j) => `${"ABCDEFGHIJ"[j]}. ${o}`).join("; ")}${q.correct != null ? `\n  Key: ${"ABCDEFGHIJ"[Number(q.correct)]} — award full marks only if the learner's answer (typed or in their file) clearly picks it` : ""}` : ""}${files.has(i) ? " [answered with an attached file or drawing — read it]" : ""}`).join("\n") : "",
     // A comprehension passage the open questions are about.
     open.some(({ q }) => Number.isInteger(q?.passage) && passages[q.passage])
       ? `Passages:\n${passages.map((p, n) => `Passage ${n + 1}${p.title ? ` — ${p.title}` : ""}:\n${String(p.text || "").slice(0, 6000)}`).join("\n\n")}` : "",
     schemePrompt(scheme, open),
     rubric.length ? `Score each rubric criterion with an integer level from 0 to its max, \`why\` in one sentence:\n${rubric.map((r) => `- ${r.name} (max ${r.max})`).join("\n")}` : "There is no rubric: return an empty rubric list.",
-    "Write `feedback` to the learner (2-4 sentences): what they did well, what to fix, one next step. Use the learner's language.",
+    "Write `feedback` to the learner (2-3 short sentences): what they did well, what to fix, one next step. Use the learner's language.",
     "Photos attached are the learner's own pages (e.g. handwriting) — read them as part of the submission.",
   ].filter(Boolean).join("\n\n");
   const content = [{ type: "text", text: `The submission:\n\n${String(markdown).slice(0, AI_GRADE_LIMITS.MAX_MARKDOWN_CHARS)}` }];
@@ -174,7 +174,9 @@ export function shapeAiGrade({ assignment = {}, submission = {}, json = {}, note
   const marked = openQuestions(questions, submission.answers || {}, files).map(({ q, i }) => {
     const max = pointsOf(q);
     const got = byIndex.get(i);
-    const read = String(got?.read || "").trim() ? { read: String(got.read).trim().slice(0, 1200) } : {};
+    // `read`: the model transcribes photo / drawing answers only; a typed answer is the learner's own text (never re-generated).
+    const typedText = String(submission.answers?.[String(i)] ?? submission.answers?.[i] ?? "").trim();
+    const read = String(got?.read || "").trim() ? { read: String(got.read).trim().slice(0, 1200) } : typedText ? { read: typedText.slice(0, 1200) } : {};
     const criteria = scheme ? criteriaFor(scheme, i) : [];
     if (criteria.length) {
       // The mark scheme decides: one level per marking point, the question's mark is their sum.
