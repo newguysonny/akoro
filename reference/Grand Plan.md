@@ -3550,6 +3550,17 @@ flag-by-flag rollout; old paths removed only after a release with flags on.
   document, so the agent routes there — `search_my_library` with the tool asked
   for links `/library?record=<id>&tool=<tool>`, which opens the reader on that
   tool (chat.study_tool_routing, reader.tool_link).
+- **Update (2026-11-08): step 6 built after all — chat makes the study material.**
+  "Create a quiz on the basic science material in my folder" → `make_study_material`
+  (quiz / flashcards / summary / podcast) finds the document (by name, by content, or in
+  the named Library folder — several files: the agent asks, each file a chip that chooses
+  it), builds it from the whole document with page citations, and saves it as a reader
+  tab (`edu.record_artifacts`, the same item the reader makes). The reply shows an output
+  card; Open → `/library?record=…&artifact=…`, the reader on that tab (even if closed).
+  The reader's own tools and chat share `records/studyMaterial.js`.
+  Sandbox: `study_material.quiz_from_folder` PASS (run 34db1f1f), `study_material.folder_asks`
+  PASS (run 143dba77), commit 37fc4073. Frontend gate `reader.artifact_link` PASS on phone
+  and desktop.
 
 ### Phase 15 — Endpoint and security audit follow-ups (audit 2026-10-25)
 - **Audit.** The live route table (Express, loaded locally) lists 1,203
