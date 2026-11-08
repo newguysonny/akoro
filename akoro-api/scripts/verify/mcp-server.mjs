@@ -1,18 +1,22 @@
 #!/usr/bin/env node
 /**
  * The Verification Gate as an MCP server (plan phase V3) — stdio, no
- * dependencies. Any MCP client (Claude Code, Claude Desktop, …) gets the gate
- * as tools:
+ * dependencies, plain MCP: any MCP client that runs local (stdio) servers can
+ * use it — Claude Code, OpenCode, Kilo Code, Cline, Roo Code, Cursor, Gemini
+ * CLI, Codex CLI, … (and so any model those tools run, DeepSeek included).
+ * Setup per client: reference/Verification Gate — Sandbox & MCP setup.md §3.
  *
  *   gate_status      which build and target the gate tests, sandbox state
  *   gate_scenarios   scenarios and suites (name, risk, params)
  *   gate_run         run a scenario or suite and wait for the verdict
  *   gate_get_run     one run's verdict, failed assertions and evidence
  *
- * Env:  AKORO_GATE_URL   e.g. https://api.akoro.name.ng   (no /api/verify)
+ * Env:  AKORO_GATE_URL   https://api.akoro.ng   (no /api/verify; the old
+ *                        api.akoro.name.ng redirects, and the key is not sent across it)
  *       AKORO_GATE_KEY   the gate key (AGENT_CONSOLE_KEY on the server)
+ *       NODE_USE_ENV_PROXY=1   behind a proxy (Node's fetch ignores HTTPS_PROXY otherwise)
  *
- * Claude Code:  claude mcp add akoro-gate -e AKORO_GATE_URL=… -e AKORO_GATE_KEY=… -- node akoro-api/scripts/verify/mcp-server.mjs
+ * Claude Code:  claude mcp add akoro-gate -e AKORO_GATE_URL=https://api.akoro.ng -e AKORO_GATE_KEY=… -- node akoro-api/scripts/verify/mcp-server.mjs
  */
 import { createInterface } from "node:readline";
 
