@@ -3834,6 +3834,18 @@ flag-by-flag rollout; old paths removed only after a release with flags on.
   Practice don't run on the shared agent loop yet (no loop guard / basis refusal
   there); in-app rows, socket events and some check-battle starts are not on the
   outbox; the agent-loop eval needs a model run.
+- **Update (2026-11-08):** two of the three open items closed.
+  - *Outbox:* a bell row (`notifications`) gets its id up front; a failed write goes to the
+    outbox (`in_app` channel), retried under the same id (never a second row) and its live
+    update sent once it lands. Allow on a `revision_battle` card is an outside action (made at
+    most once; an interrupted retry finds the battle). The class review battle already keeps
+    the first of two. Other socket events stay direct on purpose: each is a live hint for a
+    row that is already stored, which the app reloads. Sandbox: `outbox.bell_row_once`,
+    `outbox.proposal_battle_once`, `outbox.delivery` PASS (commit 8b2b10c5).
+  - *Agent-loop eval with the loop guard on (DeepSeek, sandbox):* 7/8 then 8/8 (bar 80%) — the
+    one miss ("one learner means a review, not a battle") did not repeat.
+  - *Still open:* Teaching, Decay review and Practice don't run on the shared agent loop yet
+    (no loop guard or basis refusal there).
 
 
 ### Phase 19 — Code structure: modules, layers, guardrails (from the DeepSeek Harness review, 2026-11-02)
