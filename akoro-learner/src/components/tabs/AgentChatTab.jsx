@@ -25,7 +25,6 @@ import StreamCaret from '../common/StreamCaret.jsx';
 import Spinner from '../common/Spinner.jsx';
 import { useInFlight } from '../../hooks/useInFlight.js';
 import StudyPrepChatCard from './studyPrep/StudyPrepChatCard.jsx';
-import { fetchActiveStudyPrepSession } from '../../services/studyPrepApi.js';
 import PlannerNotes from './agentChat/PlannerNotes.jsx';
 import AgentCheckCard from './agentChat/AgentCheckCard.jsx';
 import TraceBlocks from './agentChat/TraceBlocks.jsx';
@@ -750,17 +749,6 @@ function AgentChatTab({
   const PRI_LABEL = {high:t('agent.pri_high_label'),medium:t('agent.pri_medium_label'),low:t('agent.pri_low_label')};
   const PRI_BG    = {high:`${RED}15`,medium:`${GOLD}15`,low:`${GREEN}15`};
 
-  // The study-prep session is the durable layer — it outlives chats. An active one this chat doesn't show
-  // gets a slim bar above the message box: Continue starts the agent's turn, and the card comes in that turn
-  // (it used to be pushed onto the end of the chat as a message of its own, below the latest turn).
-  const [activePrep, setActivePrep] = useState(null);
-  useEffect(() => {
-    let cancelled = false;
-    fetchActiveStudyPrepSession()
-      .then((response) => { if (!cancelled && response?.session?.id) setActivePrep({ id: response.session.id, subject: response.session.subject || null }); })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, []);
   const [showWaiting, setShowWaiting] = useState(false);
 
   // The parent fetches the agent profile asynchronously; if it resolves after
@@ -1522,17 +1510,14 @@ function AgentChatTab({
                 ))}
               </div>
             )}
-            {/* What is still open but not in the turns on screen: one slim bar, never cards stacked under the latest turn. */}
+            {/* Changes still waiting for the learner's OK: one slim bar, never cards stacked under the latest turn. (A study prep in progress is not shown here: the Needs-you tab and the home workflow card carry it.) */}
             {(()=>{
               const waiting=pendingChanges.filter((c)=>c.sessionId&&c.sessionId===sessionId&&!messages.some((m)=>m.confirm?.confirmationId===c.confirmationId));
-              const prep=activePrep&&!pinnedPrep&&!messages.some((m)=>m.studyPrepSessionId===activePrep.id)?activePrep:null;
-              if(!waiting.length&&!prep) return null;
+              if(!waiting.length) return null;
               const bar={ display:"flex",alignItems:"center",gap:8,padding:"7px 11px",borderRadius:12,border:"1px solid var(--ak-border)",background:"var(--ak-surface-hover)",fontSize:12,fontWeight:800,color:"var(--ak-text)",fontFamily:"'Nunito',sans-serif" };
               const btn={ marginLeft:"auto",padding:"5px 12px",borderRadius:999,border:"none",background:BRAND,color:"#fff",fontSize:11.5,fontWeight:900,cursor:"pointer",fontFamily:"'Nunito',sans-serif" };
               return (
                 <div data-open-bar="" style={{ display:"flex",flexDirection:"column",gap:6,margin:"0 0 8px" }}>
-                  {prep&&<div style={bar}><Icon name="ti-route" size={14} color={BRAND}/><span>Study Prep{prep.subject?` · ${prep.subject}`:""} — in progress</span>
-                    <button type="button" disabled={loading||running} style={btn} onClick={()=>sendMessage("Continue my study prep session.")}>Continue</button></div>}
                   {waiting.length>0&&<div style={bar}><Icon name="ti-shield-check" size={14} color={BRAND}/><span>{waiting.length} change{waiting.length===1?"":"s"} waiting for your OK</span>
                     <button type="button" style={btn} onClick={()=>setShowWaiting((v)=>!v)}>{showWaiting?"Hide":"Show"}</button></div>}
                   {waiting.length>0&&showWaiting&&<div style={{ maxHeight:"36vh",overflowY:"auto" }}>{waiting.map((c)=><ConfirmChangeCard key={c.confirmationId} confirm={c} onDone={onCardDone}/>)}</div>}
