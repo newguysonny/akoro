@@ -92,7 +92,8 @@ export function scoreRun(sc, { calls, reply, executions, isSide }) {
   };
 }
 
-async function runOnce(sc, { model, userId }) {
+/** One benchmark scenario, once (exported for the gate's targeted check, evals.benchmark_cases). */
+export async function runOnce(sc, { model, userId }) {
   const { runAgentToolLoop, assembleChatDoctrine, getLearnerChatTools, isSideEffecting, shouldPlanFirst } = await chat();
   const isSide = (t) => isSideEffecting(t, {});
   const system = await assembleChatDoctrine({ role: "student", currentTimeContext: "\n\nCurrent date and time: Saturday, 31 October 2026, 10:00 (Africa/Lagos)." });
@@ -129,8 +130,12 @@ async function runOnce(sc, { model, userId }) {
   const scored = scoreRun(sc, { calls, reply, executions, isSide });
   const episode = recorder.finish({ ledger: out.ledger, success: scored.success, capabilities: sc.capabilities, difficulty: sc.difficulty, sideEffecting: isSide, scenario: sc.id });
   void saveEpisode(episode, { model }).catch(() => {});
-  return { ...scored, reply, calls: calls.map((c) => c.name), ms: Date.now() - started };
+  return { ...scored, reply, calls: calls.map((c) => c.name), ms: Date.now() - started,
+    // What the intent step read (kind, multi-step, next) and whether the plan was forced first — for diagnosing plan misses.
+    intent: intent ? { kind: intent.kind, multiStep: intent.multiStep, next: intent.next, steps: (intent.steps || []).length, planFirst: shouldPlanFirst(intent) } : null };
 }
+
+export { SCENARIOS as BENCHMARK_SCENARIOS };
 
 export const benchmarkSuite = {
   key: "benchmark",
@@ -152,7 +157,7 @@ export const benchmarkSuite = {
       return {
         passed,
         expected: sc.success,
-        actual: { calls: last.calls, reply: last.reply.slice(0, 300) },
+        actual: { calls: last.calls, intent: last.intent, reply: last.reply.slice(0, 300) },
         detail: JSON.stringify({ runs: runs.map((r) => ({ success: r.success, ms: r.ms, ...r.metrics })), failedChecks: Object.entries(last.checks).filter(([, v]) => !v).map(([k]) => k) }).slice(0, 1500),
       };
     },
