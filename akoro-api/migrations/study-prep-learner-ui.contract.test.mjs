@@ -30,11 +30,12 @@ test("the session card renders inside the Agent Chat tab from the session echo",
   assert.match(tab, /studyPrepSessionFallback/);
 });
 
-test("the durable session is found on tab mount — Continue brings its card back in a turn, never a message pushed under the latest turn", () => {
-  assert.match(tab, /fetchActiveStudyPrepSession\(\)/);
-  assert.match(tab, /setActivePrep\(\{ id: response\.session\.id/);
+test("an in-progress study prep is not announced above the composer — the Needs-you tab and the home workflow card carry it; its card still shows once, in its latest turn", () => {
+  assert.doesNotMatch(tab, /fetchActiveStudyPrepSession/);
+  assert.doesNotMatch(tab, /setActivePrep/);
+  assert.doesNotMatch(tab, /in progress<\/span>/);
+  assert.doesNotMatch(tab, /sendMessage\("Continue my study prep session\."\)/);
   assert.doesNotMatch(tab, /pick up where you left off/);
-  assert.match(tab, /sendMessage\("Continue my study prep session\."\)/);
   // A session's card shows in full once (its latest turn); earlier copies are one line.
   assert.match(tab, /lastPrepCardIdOf\(msg\.studyPrepSessionId\)!==msg\.id/);
   // Waiting changes: this chat's only, in the bar — not stacked at the end of the chat.
