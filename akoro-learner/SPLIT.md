@@ -83,4 +83,5 @@ A signed-out visitor on `/` is sent to `/signin` and brought back after. A full/
 - **landing**: writes real HTML per public page (`dist/<route>/index.html`, from `src/seo/pages.js`) with its own title, description, canonical, Open Graph, JSON-LD and a text snapshot; blog posts are fetched from the API at build time (skipped if it's unreachable); `robots.txt`, `sitemap.xml`; and `app-shell.html`, the noindex fallback that `vercel.json` rewrites every other URL to. Set `VITE_SITE_URL=https://akoro.ng` there. A post published between deploys appears after the next deploy (use a Vercel deploy hook on a schedule).
 - **app**: the whole host is `noindex` (added to `index.html` by `vite.config.js`).
 - Identity words live in `src/seo/site.js`; page copy in `src/seo/pages.js`. Old `/student-info`, `/instructor-info`, `/school-info` 301 to `/for-students`, `/for-teachers`, `/for-schools` (`vercel.json`).
+- `llms.txt` is generated too (same words as the site; Google does not use it, some AI tools read it).
 - Guard: `src/seo/seo.contract.test.mjs`.

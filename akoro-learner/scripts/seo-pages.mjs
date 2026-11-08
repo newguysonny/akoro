@@ -16,7 +16,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { PAGES, pageFor } from '../src/seo/pages.js';
-import { BRAND, TITLE, DESCRIPTION, LOGO_PATH, SOCIALS, ALTERNATE_NAMES, siteUrl } from '../src/seo/site.js';
+import { BRAND, TITLE, DESCRIPTION, ENTITY, CONCEPT, DIFFERENCE, LOGO_PATH, SOCIALS, ALTERNATE_NAMES, siteUrl } from '../src/seo/site.js';
 
 const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const jsonLd = (obj) => JSON.stringify(obj).replace(/</g, '\\u003c');
@@ -129,6 +129,21 @@ export async function loadRenderer() {
   return (await import(pathToFileURL(path.resolve('.ssr/ssr-entry.js')).href)).renderRoute;
 }
 
+/** llms.txt: a plain-text description of the site for AI tools that read it. Same words as the site; no ranking promise. */
+export function llmsTxt(base, posts = []) {
+  const link = (p) => `- [${p.h1}](${base}${p.path}): ${p.description}`;
+  const byPath = (...ps) => ps.map((x) => PAGES.find((p) => p.path === x)).filter(Boolean);
+  return [
+    `# ${BRAND}`, '', `> ${DESCRIPTION}`, '',
+    `${ENTITY} ${CONCEPT} ${DIFFERENCE}`, '',
+    '## Learn about Akoro', ...byPath('/ai-protege', '/how-it-works', '/about').map(link), '',
+    '## For', ...byPath('/for-students', '/for-teachers', '/for-schools', '/exam-prep').map(link), '',
+    '## More', ...byPath('/pricing', '/compare', '/partners', '/contact', '/privacy', '/terms').map(link), '',
+    ...(posts.length ? ['## Blog', ...posts.slice(0, 20).map((p) => `- [${p.title}](${base}/blog/${p.slug})${p.excerpt ? `: ${p.excerpt}` : ''}`), ''] : []),
+    '## Profiles', ...SOCIALS.map((c) => `- [${c.label}](${c.href})`), '',
+  ].join('\n');
+}
+
 const writePage = async (dist, route, html) => {
   const dir = route === '/' ? dist : path.join(dist, route);
   await mkdir(dir, { recursive: true });
@@ -182,6 +197,7 @@ export async function main({ dist = 'dist', target = 'full', env = {}, fetchImpl
     urls.push({ loc: url, lastmod: p.published_at ? new Date(p.published_at).toISOString().slice(0, 10) : undefined });
   }
 
+  await writeFile(path.join(dist, 'llms.txt'), llmsTxt(base, posts));
   await writeFile(path.join(dist, 'robots.txt'), `User-agent: *\nAllow: /\n\nSitemap: ${base}/sitemap.xml\n`);
   await writeFile(path.join(dist, 'sitemap.xml'),
     `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n` +

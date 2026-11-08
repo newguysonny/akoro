@@ -107,3 +107,13 @@ test('prerender: the rendered React page becomes the page body; a page that fail
   assert.match(await read(dist, 'about/index.html'), /data-prerendered/);
   assert.match(await read(dist, 'terms/index.html'), /data-prerendered/);
 });
+
+test('llms.txt describes the site in its own words and links the real pages', async () => {
+  const { dist } = await build('landing');
+  const t = await read(dist, 'llms.txt');
+  assert.match(t, /^# Akoro\n\n> Akoro helps students learn by teaching AI agents/);
+  assert.match(t, /\(https:\/\/akoro\.ng\/ai-protege\)/);
+  assert.match(t, /\(https:\/\/x\.com\/akorohq_app\)/);
+  for (const [, to] of LEGACY) assert.ok(t.includes(`https://akoro.ng${to})`), to);
+  assert.ok(!(await readdir((await build('app')).dist)).includes('llms.txt'), 'the app host has none');
+});
