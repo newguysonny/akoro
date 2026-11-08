@@ -229,6 +229,9 @@ session mode" (`fresh | continuation | decay`); "Adaptive Learning Workflow"
 | D53 | Past papers are private | A learner's uploaded past papers (and the questions parsed from them) are visible to that learner only; sharing to a community is a separate, explicit act. | Copyright and exam-board material. User decision (2026-10-19). |
 | D54 | Materials → study plan: new workflow or not? | **Extend, don't fork.** Study Prep gains a fourth syllabus source, `materials` (a folder); its topic loop is unchanged. Only the ingest — upload → folder → extraction → structure → offer more — is a new, small workflow (`material_ingest`) on the engine, because it is long-running, retried, idempotent and waits on the learner. Everything else is tools. | Reuses the Phase 1 engine, the records pipeline (hanji-parse on RunPod reads scanned/photographed pages) and the reader study tools. |
 | D55 | Several files at once, and where they go | **Per file, into the learner's own folders.** Each file in a message is sorted on its own; one upload (card, Undo) per folder. A folder the learner keeps for the subject wins — one they chose before, one holding that subject's uploads, or one named for it ("Bio", "SS2 Biology") — kinds kept apart only where they already are; two that fit → the card asks and the pick is remembered; a new "Subject — Kind" folder only when none fits. Reading can move a file (a name that misled); a subject still unknown → the card asks. Undo = Recently deleted for 30 days (Restore), then deleted for good. Chat-per-folder rejected: the Library is by subject, and Study Prep's "most tested" needs every year of a subject together. | `folderMatch.js`, `material_folder_defaults`, `records.deleted_at`, `materials/purge.js`; gate `materials.sort_own_folders`, `chat.upload_saved`. |
+| D56 | Memory has a lifecycle | Every learner memory has an **origin** (`learner_said` or `agent_inferred`), an optional **expiry**, and a status of `active`, `forgotten`, `expired` or `superseded`. A request meant for now ("explain it simply today") is never stored as a lasting preference. A contradicting memory supersedes the old one (kept, timestamped), it does not sit beside it. The learner sees origin and dates and can edit or forget any memory. | From the modern-agent-engineering review (2026-11-08), §8 there. Memory today is permanent until forgotten (`edu.learner_agent_memories`: three kinds, `active`/`forgotten`). |
+| D57 | Failed work is visible | Anything that exhausted its retries (outbox rows `failed`/`dropped`, failed ticks, failed deferred jobs) lands in one admin **Failed work** list with the reason, attempts and a redacted payload. An admin can retry once (through the same idempotency key) or dismiss with a note; both are audit-logged. A rising count raises an alert. Nothing outside the outbox's own retries retries on its own. | Same review, §17. The outbox already keeps `failed after N tries · dropped and why`; no admin screen shows them. |
+| D58 | Prompt and guide changes are releases | A change to `akoro-agent/**` (workspace files, the 23 strategy guides) or a strategy version runs the eval suites that cover it, candidate against current, before it merges. A previously passing case that now fails blocks the change, whatever the average. Each workflow event and strategy outcome carries the content hash of the guides it used, so a regression points at one change. Rollback is the revert. | Same review, §15 and §19. The admin Evals page and suites exist (Phase 17); nothing ties them to guide or prompt changes, and no event records which guide version ran. |
 | D10 | Who writes narration? | **Harness templates** (`ActivityNarrator`, grown from `narration.js:deliberate()`) for facts; the agent's `intent` (≤ 240 chars, sanitised, untrusted display text) for "why". v3's `narration` field **is** `intent`. | Deterministic where possible (v3 §40), already built (v7). |
 | D11 | Event store | New generic `edu.workflow_events`. `study_prep_events` is kept read-only and backfilled. | One stream model for four workflows (v3 §43). |
 | D12 | Live transport | **Event store is the source of truth; transport is replaceable.** Teaching and Decay keep the existing Socket.IO connection. Study Prep and Practice use SSE (same heartbeat pattern as `/chat/agent`). Both carry the identical event envelope. Replay: `GET /api/workflows/:id/events?after=N`. | v3 §42–43; reuses what already works. |
@@ -4364,6 +4367,9 @@ LLM failure must never corrupt workflow state.
 | Q29 | ~~Where Ideas live~~ — **resolved (D48):** a section in the agent tab. | Done |
 | Q30 | A "Feed" of posts written for the learner (briefings, study tips from the blog)? Not in this phase — rule 13 limits it to approved content. | Later |
 | Q31 | Do instructors get quiet learning (memories of their teaching preferences) too? | Phase 13 step 7 |
+| Q32 | Memory defaults: how long does an unconfirmed `learning_summary` stay active (proposal: 90 days), and does a one-off request expire at the end of the session or after 24 hours? | Phase 22 A |
+| Q33 | Failed work: how many failures in an hour raise an alert (proposal: 5), and who gets it? | Phase 22 B |
+| Q34 | Change evaluation: which suites must pass for which files, and what is the bar for a model-judged suite (a fixed pass rate, or "no worse than current")? | Phase 22 C |
 
 ---
 
@@ -4380,6 +4386,7 @@ LLM failure must never corrupt workflow state.
 | Agent-driven teaching turn, controller agent, loop end/cap/fallback, learner model switching, learn_with_guide mode, retrieval_practice | User decisions (this review) | Claude API reference (model ids, prices, tool_choice/thinking/refusal behaviour, 2026-10-06) |
 | Proactive agent (suggestions, ideas, goal work, quiet learning) | User request 2026-10-18 + the reference assistant's conversation (noticed → ready fix → go-ahead → report) | Inventory of `modules/autonomy/`, `agent-proposals/`, `learner-autonomy.js`, agent memory tables (2026-10-18) |
 | Code facts | `akoro-api` / `akoro-learner` as of 2026-10-09 | — |
+| Memory lifecycle, failed-work list, change evaluation (Phase 22) | `reference/modern agent engineering.md` §8, §15, §17, §19, audited 2026-11-08 against this plan, the Self-Tooling plan and the Security Audit plan | `The Agent Architecture Stack…` §5, §9 |
 
 #### Phase 21 part 2 — Agents start conversations on their own (2026-11-07) — DONE, verified on the sandbox
 
@@ -4396,3 +4403,65 @@ The agent reaches out to other agents by itself. Its learner supervises: the age
 - **Sandbox, commit 46b617a2 (topic start) and 755559dd (the rest): all 12 `outreach.*` checks PASS.** They cover struggle consult, topic start with a friend, stranger card, friend-request card, share-data card, battle-invite card, offline then answered, daily cap, blocked pair skipped, younger learner asked first, two-way round trip, and no personal details sent.
 - **Note:** on the sandbox, @tester01 is a JSS learner, so the checks set the learner's level for each run.
 - **Not built yet:** a learner-facing screen listing what the agent started on its own. Today it shows only as chat lines and cards.
+
+#### Phase 22 — Controlled improvement and operations (from the modern-agent-engineering review, 2026-11-08) — 🆕 PLANNED, not started
+
+**Why.** Two reference documents (`The Agent Architecture Stack…`, `modern agent engineering.md`) were audited against this plan. Most of both is already here (harness, state rules, idempotency, evidence, the gate, the security audit). Three gaps would affect learners or reliability, and they are the only things added now. Everything else from the review is listed under "Later" with the condition that brings it back.
+
+##### Part A — Memory lifecycle (D56)
+
+**What exists (checked in code, 2026-11-08).** `edu.learner_agent_memories`: three kinds (`learning_summary`, `study_preference`, `learner_goal`), status `active` or `forgotten`, 1,500 characters, tied to the chat turn that produced it. Quiet learning (`agent-memory/quietLearning.js`, `quietLearningCore.js`) adds, updates or forgets up to 8 a pass and drops sensitive content. The learner can list and forget memories (`GET`/`DELETE /memories`, Settings → memory). **Missing:** expiry, origin, any difference between a lasting preference and a one-off request, and what happens when a new memory contradicts an old one.
+
+**Steps, in order:**
+1. **Migration.** Add `origin` (`learner_said` | `agent_inferred`), `expires_at` (nullable), `last_confirmed_at`, `supersedes_id`, `evidence_quote` (what the learner said, ≤ 300 characters); widen `status` to `active | forgotten | expired | superseded`. Existing rows: `origin = agent_inferred`, no expiry, so nothing changes until a rule applies.
+2. **Rules in `quietLearningCore.js` (pure, tested).**
+   - A `study_preference` needs an `evidence_quote` from the learner, or the same preference in two separate sessions. Otherwise it is stored as a `learning_summary` that expires, or not at all.
+   - A request worded for now ("today", "this time", "just for this one") is a one-off: it may shape this session and is never stored as lasting.
+   - A `learner_goal` expires on its date, or Q32 days after the last confirmation.
+   - An unconfirmed `learning_summary` is retired after Q32 days.
+   - A memory that contradicts an active one of the same kind and topic sets the old one `superseded` (kept, timestamped); it is never added alongside.
+3. **Context.** The Context Manager reads `active` memories only; an expired or superseded memory never enters a prompt. Memories stay guidance, never evidence (D50 unchanged).
+4. **Learner screen** (Settings → memory): show origin, date and expiry; add *Edit* next to *Forget*; "Why do you remember this?" shows the quote.
+5. **Daily tick** `memory-expiry` moves due memories to `expired`.
+6. **Gate scenario `memory.lifecycle`** on the sandbox: "explain it simply today" stores no lasting preference · "I always prefer short answers" stores one with its quote · a contradiction supersedes · an expired memory is absent from the context · edit and forget work.
+
+**Acceptance.** Contract tests for every rule; the gate scenario PASS on the deployed commit; no memory without `origin`.
+
+##### Part B — Failed work list (D57)
+
+**What exists.** `lib/outbox.js` keeps every push, email, SMS and outside action in `edu.outbox` with its outcome: sent, `failed after N tries`, or dropped and why. Ticks (`lib/cronTicks.js`) return an error when one fails. **Missing:** a screen. A failed delivery today is found only by querying the table. ❓ Verify before building whether failed ticks and deferred jobs are recorded anywhere; if not, Step 1 adds a small `edu.failed_work` row for them.
+
+**Steps, in order:**
+1. **Read-only list** `GET /api/admin/failed-work`: outbox rows `failed`/`dropped`, plus failed ticks and deferred jobs once recorded. Fields: kind, channel, recipient (masked), reason, attempts, first and last failure, payload with tokens, addresses and message bodies redacted.
+2. **Actions:** *Retry once* re-submits through the original idempotency key (so a message that did go out is not sent twice); *Dismiss* needs a note. Both go through `auditAdmin()`. Never retry an outside action whose `check` says it already happened.
+3. **Admin page** "Failed work": filter by kind and age, counts per day.
+4. **Alert** through the existing `alertWorker`: Q33 failures in an hour.
+5. **Gate scenario `failedwork.list_retry`**: force a failing channel on a test learner, see the row, retry it, confirm exactly one delivery.
+
+**Acceptance.** A deliberately failed delivery shows up with its reason within a minute; retry sends once; dismiss is audit-logged; the alert fires in the gate scenario.
+
+##### Part C — Prompt and guide changes are releases (D58)
+
+**What exists.** The agent's instructions are files: `akoro-api/akoro-agent/**` (65 workspace Markdown files in the Context Manager manifest) and 23 strategy guides, versioned only by git. Eval suites run from the admin Evals page and through the gate (`evals.run`). **Missing:** any link between a change to these files and an eval run, and any record of which guide text a given run used.
+
+**Steps, in order:**
+1. **Coverage map** `akoro-agent/evals-coverage.json`: file or folder → the suites that exercise it (Q34). A contract test fails if a file has no entry.
+2. **Content hash** of each workspace and strategy file computed at load; stamped as `guide_hash` on workflow events and on `recordStrategyOutcome`. (Strategy `version` stays; the hash catches edits that forgot to bump it.)
+3. **Compare run.** A gate scenario `evals.compare` runs the covering suites at the candidate commit and at the current one on the sandbox and reports, per case, pass to fail and fail to pass. **Rule:** any pass-to-fail case blocks the change; otherwise the pass rate must be at least the bar in Q34.
+4. **Process:** a change to `akoro-agent/**` or a strategy does not merge without a compare result in its commit message (the gate's result id). Revert is the rollback; the hash in events says which change a regression started with.
+5. Model-judged suites cost money: run only the suites the coverage map names, never the whole set.
+
+**Acceptance.** A deliberately worsened guide fails `evals.compare`; an unchanged one passes; every new event carries `guide_hash`.
+
+##### Later (reviewed, not added — and what would bring each back)
+
+| Idea | Why not now | Comes back when |
+|---|---|---|
+| Per-run change receipt (context used, versions, tools, corrections, retries, cost, result, rollback point) | `workflow_events` plus Part C's `guide_hash` already hold most of it | support cannot explain a run from its events |
+| Self-improvement review loop (a separate agent reads run history and proposes guide edits for human approval) | Needs months of real runs and Part C first | enough run history, and Part C is in use |
+| Verified-success metrics (verified success rate, cost per verified success, policy-violation rate) | Useful for pricing, no learner effect; the Token Metrics plan has cost | pricing or coin limits are reviewed |
+| Adversarial test suite (injection, permission escalation, malformed tool output) beyond the `security` scenario | The audit plans it (§P); `lib/untrusted.js` is the control | the audit's Phase 4 runs |
+| Planning contract (acceptance criteria up front; proceed / gather / ask / stop) | Learner-confirmed plans cover most of it; Phase 16 adds the task ledger | Phase 16 is done and gaps remain |
+| Tool versioning on rebuild | Self-Tooling plan lists it as "Not built" | a rebuilt tool breaks an earlier use |
+| Production sampling of real runs | Needs consent and privacy rules first | consent screens exist |
+| Multi-agent task leases, universal runtime service, computer-use controls, legal/enterprise agent sections | Do not fit Akoro | never, unless the product changes |
