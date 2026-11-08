@@ -1360,13 +1360,16 @@ router.post("/:id/complete", asyncHandler(async (req, res) => {
     await edu().from("self_study_targets").update({ ai_grade: { status: "making", at: now() } }).eq("id", target.id).then(() => {}, () => {});
   }
   // Marking starts at once, in parallel with the PDF — the learner's score takes seconds, not the PDF's time.
+  // With auto-grading on, the PDF is built AFTER the marking: three hand-ins at once used to build three PDFs
+  // beside their marking and slow it (the learner's score doesn't need the PDF; the marker reads the answers).
+  const buildCopies = () => buildSubmissionArtifacts(target.id)
+    .catch((e) => console.warn("[self-study] post-submit build failed (built on first open):", String(e?.message || e).slice(0, 160)));
   if (brief?.details?.ai_auto_grade) {
     aiGradeTarget(target.id)
       .then((draft) => (draft && brief.details.ai_release !== "review" ? releaseAiGrade(target.id) : null))
-      .catch((e) => console.warn("[self-study] instant marking failed:", String(e?.message || e).slice(0, 160)));
-  }
-  buildSubmissionArtifacts(target.id)
-    .catch((e) => console.warn("[self-study] post-submit build failed (built on first open):", String(e?.message || e).slice(0, 160)));
+      .catch((e) => console.warn("[self-study] instant marking failed:", String(e?.message || e).slice(0, 160)))
+      .finally(buildCopies);
+  } else buildCopies();
   // Event trigger: study work completed — fresh signal for the planner.
   emitAutonomyEvent(req.user.id, "self_study").catch(() => {});
   ok(res, data);

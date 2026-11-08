@@ -82,7 +82,7 @@ test("MCQs are scored exactly from the key — typed answers (or an older option
 
 test("the model sees only what it marks: open questions (with any model answer), the rubric, the work and photos", () => {
   const [sys, user] = buildAiGradeMessages({ assignment, markdown: "# Plants\nMy answers", images: [{ mime: "image/png", bytes: Buffer.from("png") }] });
-  assert.match(sys.content, /Q2 \(index 1, max 4\): Why are leaves thin\?\n  Model answer: Short diffusion distance\./);
+  assert.match(sys.content, /Q2 \(max 4\): Why are leaves thin\?\n  Model answer: Short diffusion distance\./);   // no 0-based index beside the 1-based label
   assert.doesNotMatch(sys.content, /Pigment\?/);                    // auto-scored MCQs aren't sent
   assert.match(sys.content, /- Accuracy \(max 4\)\n- Clarity \(max 3\)/);
   assert.match(sys.content, /teacher reviews and approves/);

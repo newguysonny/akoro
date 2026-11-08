@@ -93,8 +93,10 @@ export function aiGradeSchema() {
     properties: {
       // `read`: what the learner answered, as the marker read it (their handwriting
       // transcribed) — shown beside the marks box on the submission paper.
-      questions: { type: "array", items: { type: "object", additionalProperties: false, required: ["index", "read", "awarded", "why"],
-        properties: { index: { type: "integer" }, read: { type: "string" }, awarded: { type: "number" }, why: { type: "string" } } } },
+      // `number`: the question number as shown to the model (Q2 → 2). It used to be a 0-based index next to
+      // a 1-based label, and a model that answered with the number shifted every mark onto the next question.
+      questions: { type: "array", items: { type: "object", additionalProperties: false, required: ["number", "read", "awarded", "why"],
+        properties: { number: { type: "integer" }, read: { type: "string" }, awarded: { type: "number" }, why: { type: "string" } } } },
       rubric: { type: "array", items: { type: "object", additionalProperties: false, required: ["criterion", "level", "why"],
         properties: { criterion: { type: "string" }, level: { type: "integer" }, why: { type: "string" } } } },
       // With a mark scheme: the level picked for each marking point (its id), in marks.
@@ -142,8 +144,8 @@ export function buildAiGradeMessages({ assignment = {}, markdown = "", images = 
   const system = [
     `You are drafting marks for a teacher on a learner's submission for "${String(assignment.title || "an activity").slice(0, 160)}"${assignment.subject ? ` (${assignment.subject})` : ""}.`,
     "The teacher reviews and approves everything you produce. Be fair, specific and brief; never invent work the learner didn't submit.",
-    open.length ? "Mark each listed question: `read` is ONLY for an answer given as a photo, drawing or file — their handwriting / drawing transcribed line by line; for a typed answer (or none) return \"\" — the teacher already has the typed text, and copying it only delays the score; `awarded` from 0 to its max points (halves allowed); `why` in one sentence citing what the learner wrote." : "",
-    open.length ? open.map(({ q, i }) => `Q${i + 1} (index ${i}, max ${pointsOf(q)}${Number.isInteger(q?.passage) && passages[q.passage] ? `, about passage ${q.passage + 1}` : ""}): ${qText(q)}${q?.figure ? " [has a diagram the learner saw]" : ""}${typeof q === "object" && q?.answer ? `\n  Model answer: ${typeof q.answer === "object" ? Object.entries(q.answer).map(([k, v]) => `${k}: ${v}`).join("; ") : q.answer}` : ""}${q?.format === "label" ? " [the learner names each labelled part as \"P: …\" lines]" : ""}${isMcq(q) ? `\n  Options: ${q.options.map((o, j) => `${"ABCDEFGHIJ"[j]}. ${o}`).join("; ")}${q.correct != null ? `\n  Key: ${"ABCDEFGHIJ"[Number(q.correct)]} — award full marks only if the learner's answer (typed or in their file) clearly picks it` : ""}` : ""}${files.has(i) ? " [answered with an attached file or drawing — read it]" : ""}`).join("\n") : "",
+    open.length ? "Mark each listed question, giving its `number` exactly as shown (Q2 → 2): `read` is ONLY for an answer given as a photo, drawing or file — their handwriting / drawing transcribed line by line; for a typed answer (or none) return \"\" — the teacher already has the typed text, and copying it only delays the score; `awarded` from 0 to its max points (halves allowed); `why` in one sentence citing what the learner wrote." : "",
+    open.length ? open.map(({ q, i }) => `Q${i + 1} (max ${pointsOf(q)}${Number.isInteger(q?.passage) && passages[q.passage] ? `, about passage ${q.passage + 1}` : ""}): ${qText(q)}${q?.figure ? " [has a diagram the learner saw]" : ""}${typeof q === "object" && q?.answer ? `\n  Model answer: ${typeof q.answer === "object" ? Object.entries(q.answer).map(([k, v]) => `${k}: ${v}`).join("; ") : q.answer}` : ""}${q?.format === "label" ? " [the learner names each labelled part as \"P: …\" lines]" : ""}${isMcq(q) ? `\n  Options: ${q.options.map((o, j) => `${"ABCDEFGHIJ"[j]}. ${o}`).join("; ")}${q.correct != null ? `\n  Key: ${"ABCDEFGHIJ"[Number(q.correct)]} — award full marks only if the learner's answer (typed or in their file) clearly picks it` : ""}` : ""}${files.has(i) ? " [answered with an attached file or drawing — read it]" : ""}`).join("\n") : "",
     // A comprehension passage the open questions are about.
     open.some(({ q }) => Number.isInteger(q?.passage) && passages[q.passage])
       ? `Passages:\n${passages.map((p, n) => `Passage ${n + 1}${p.title ? ` — ${p.title}` : ""}:\n${String(p.text || "").slice(0, 6000)}`).join("\n\n")}` : "",
@@ -167,7 +169,9 @@ export function shapeAiGrade({ assignment = {}, submission = {}, json = {}, note
   const questions = Array.isArray(assignment.details?.questions) ? assignment.details.questions : [];
   const files = fileQuestions(submission);
   const mcq = scoreMcqs(questions, submission.answers || {}, files);
-  const byIndex = new Map((Array.isArray(json?.questions) ? json.questions : []).map((q) => [Number(q?.index), q]));
+  // `number` is the question as shown (1-based); `index` (0-based) is still read from an older draft.
+  const byIndex = new Map((Array.isArray(json?.questions) ? json.questions : [])
+    .map((q) => [Number.isInteger(Number(q?.number)) && q?.number != null ? Number(q.number) - 1 : Number(q?.index), q]));
   const scheme = gradingScheme(assignment.details);
   const levelsIn = new Map((Array.isArray(json?.marking) ? json.marking : []).map((m) => [String(m?.id || ""), m]));
   const marking = [];

@@ -197,23 +197,6 @@ export async function readMarkedCopy(target) {
 
 /* ── AI auto-grade (drafts for the instructor) ────────────────────────── */
 
-/**
- * The submission as markdown WITHOUT building the PDF — what the AI marker reads when the learner has just
- * handed in and nothing is stored yet (typed answers, Word/text attachments; photos go to the model as images).
- */
-async function quickMarkdown(targetId) {
-  const loaded = await loadSubmission(targetId);
-  if (!loaded) throw new Error("Submission not found.");
-  const files = [];
-  for (const row of loaded.fileRows) {
-    let text = null, kind = row.kind || "other";
-    if (kind === "text" || kind === "docx") {
-      try { text = await attachmentText(kind, await readSubmissionFile(row)); } catch { /* the model still sees the name */ }
-    }
-    files.push({ name: row.name, size: row.size || 0, kind, bytes: Buffer.alloc(0), text, question: row.question_index ?? undefined });
-  }
-  return submissionMarkdown({ assignment: loaded.assignment, learner: loaded.learner, submission: loaded.target.submission || {}, files });
-}
 
 /** Draft marks for one submission, billed to the activity's owner. */
 export async function aiGradeTarget(targetId) {
@@ -223,21 +206,30 @@ export async function aiGradeTarget(targetId) {
   let owner = null;
   return runAiGrade(targetId, {
     save: async (id, ai) => { await edu().from("self_study_targets").update({ ai_grade: ai }).eq("id", id); },
+    // Two round trips, not six: the hand-in first, then the assignment, the learner and the files together;
+    // the markdown is laid out from what is already here (marking never waits for the PDF).
     load: async (id) => {
       const { data: t } = await edu().from("self_study_targets")
         .select("id, assignment_id, student_id, submission, submission_pdf").eq("id", id).maybeSingle();
       if (!t?.submission?.submittedAt) throw new Error("Nothing has been submitted yet.");
-      const { data: assignment } = await edu().from("self_study_assignments")
-        .select("id, title, subject, details, created_by").eq("id", t.assignment_id).maybeSingle();
+      const ids = (t.submission.files || []).map((f) => f.id).filter(Boolean);
+      const [{ data: assignment }, { data: learner }, { data: rows }] = await Promise.all([
+        edu().from("self_study_assignments").select("id, title, type, subject, topic, details, due_at, created_by").eq("id", t.assignment_id).maybeSingle(),
+        db.from("users").select("full_name, username").eq("id", t.student_id).maybeSingle(),
+        ids.length ? edu().from("self_study_files").select("id, name, size, mime, kind, storage_key, data, question_index").eq("target_id", t.id).in("id", ids) : Promise.resolve({ data: [] }),
+      ]);
       owner = assignment?.created_by || null;
-      // Straight from the answers when the stored copy isn't ready — marking must not wait for the PDF.
-      const markdown = pdfIsCurrent(t) && t.submission_pdf?.mdKey
-        ? (await readSubmissionArtifact(t, "md")).toString("utf8")
-        : await quickMarkdown(t.id);
-      const ids = (t.submission.files || []).map((f) => f.id);
-      const { data: rows } = ids.length
-        ? await edu().from("self_study_files").select("id, name, size, mime, kind, storage_key, data").in("id", ids)
-        : { data: [] };
+      let markdown;
+      if (pdfIsCurrent(t) && t.submission_pdf?.mdKey) markdown = (await readSubmissionArtifact(t, "md")).toString("utf8");
+      else {
+        const files = [];
+        for (const row of rows || []) {
+          let text = null; const kind = row.kind || "other";
+          if (kind === "text" || kind === "docx") { try { text = await attachmentText(kind, await readSubmissionFile(row)); } catch { /* the model still sees the name */ } }
+          files.push({ name: row.name, size: row.size || 0, kind, bytes: Buffer.alloc(0), text, question: row.question_index ?? undefined });
+        }
+        markdown = submissionMarkdown({ assignment: assignment || {}, learner: { name: learner?.full_name, username: learner?.username }, submission: t.submission || {}, files });
+      }
       const images = [];
       const notes = [];
       for (const r of rows || []) {
