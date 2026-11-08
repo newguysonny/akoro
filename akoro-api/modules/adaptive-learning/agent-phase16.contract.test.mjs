@@ -146,9 +146,10 @@ test("intent: read, cleaned, shown; greetings skip the call; failures pass throu
   assert.equal(needsIntentStep("thanks!"), false);
   assert.equal(needsIntentStep("Make me a revision plan for Biology and set a task for Friday"), true);
   const i = parseIntent('{"want":"A Biology revision plan and a Friday task","kind":"action","multi_step":true,"missing":["which topics"]}');
-  assert.deepEqual(i, { want: "A Biology revision plan and a Friday task", kind: "action", multiStep: true, missing: ["which topics"] });
+  // Phase 22 Part E adds the next-step decision (missing → ask) and the drafted steps.
+  assert.deepEqual(i, { want: "A Biology revision plan and a Friday task", kind: "action", multiStep: true, missing: ["which topics"], next: "ask", steps: [] });
   assert.equal(parseIntent('{"want":"x","kind":"hack"}'), null);
-  assert.match(renderIntent(i), /call update_plan with the steps first/);
+  assert.match(renderIntent(i), /call update_plan first with the steps and done_when/);
   assert.match(renderIntent(i), /Not said yet: which topics/);
   assert.equal(await runIntentStep({ message: "Make me a plan for Biology now", create: async () => { throw new Error("402"); } }), null);
 });

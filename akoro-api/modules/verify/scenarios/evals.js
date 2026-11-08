@@ -70,3 +70,23 @@ export const evalsResult = {
     report(ctx, run, results);
   },
 };
+
+/** A few benchmark cases by template, on one model — the cheap way to check one behaviour without the full 115. */
+export const benchmarkCases = {
+  name: "evals.benchmark_cases", area: "evals", risk: "read", timeoutMs: 300_000,
+  description: "Run the benchmark cases of one template (param template, e.g. plan_three_tasks) on one model (param model) and report each case's calls, what the intent step read and whether it passed. Costs a few cents; nothing is written.",
+  params: { template: { default: "plan_three_tasks" }, model: { default: "deepseek" }, limit: { default: 5 } },
+  async run(ctx, params) {
+    const { BENCHMARK_SCENARIOS, runOnce } = await import("../../../lib/evals/benchmark.js");
+    const picked = BENCHMARK_SCENARIOS.filter((sc) => sc.template === params.template).slice(0, Math.max(1, Math.min(10, Number(params.limit) || 5)));
+    if (!picked.length) ctx.expect.blocked(`No benchmark cases for template "${params.template}".`);
+    let passed = 0;
+    for (const sc of picked) {
+      const r = await runOnce(sc, { model: params.model, userId: null }).catch((e) => ({ success: false, error: e.message }));
+      if (r.success) passed++;
+      ctx.note(`${sc.id}: ${r.success ? "PASS" : "FAIL"} · calls ${JSON.stringify(r.calls || [])} · intent ${JSON.stringify(r.intent || null)}${r.error ? ` · error ${r.error}` : ""} · failed ${JSON.stringify(Object.entries(r.checks || {}).filter(([, v]) => !v).map(([k]) => k))}`);
+    }
+    ctx.note(`${passed}/${picked.length} passed`);
+    ctx.expect.ok(`every ${params.template} case passes`, passed === picked.length, `${passed}/${picked.length}`);
+  },
+};

@@ -11,6 +11,7 @@
  * Admin-request claims keep their own check (requestClaims.js). The checks
  * append a plain line; they never rewrite the reply.
  */
+import { doneWhenOf, meetDoneWhen } from "./taskLedger.js";
 
 // "I've created / set up / scheduled / added / deleted / removed / cancelled /
 // sent / posted / saved / published / started / booked / assigned / updated …"
@@ -52,15 +53,17 @@ export function actionClaimCorrection(reply, executions = []) {
 const ALL_DONE = /\b(?:all (?:done|set|sorted|finished)|that'?s (?:everything|all of it|it)|everything(?:'s| is) (?:done|ready|set|sorted)|you(?:'re| are) all set|all (?:\w+ )?(?:of them|steps) (?:are|is) (?:done|complete))\b/i;
 
 /** PURE: what the ledger still has left, appended when the reply says it's all done. */
-export function ledgerLeftCorrection(reply, ledger) {
+export function ledgerLeftCorrection(reply, ledger, executions = []) {
   if (!ALL_DONE.test(String(reply || ""))) return null;
   const plan = Array.isArray(ledger?.plan) ? ledger.plan : [];
   const left = plan.filter((s) => s && !["done", "completed"].includes(s.status)).map((s) => String(s.step || "").trim()).filter(Boolean);
+  // The plan's "done when" conditions (Phase 22 Part E) not yet made true by a successful call (this turn included).
+  for (const d of meetDoneWhen(doneWhenOf(ledger), executions)) if (!d.met) left.push(d.condition);
   if (!left.length) return null;
   return `Still to do: ${left.slice(0, 4).join("; ")}${left.length > 4 ? ` (+${left.length - 4} more)` : ""}.`;
 }
 
 /** Both checks → the lines to append (possibly none). */
 export function turnCorrections(reply, { executions = [], ledger = null } = {}) {
-  return [actionClaimCorrection(reply, executions), ledgerLeftCorrection(reply, ledger)].filter(Boolean);
+  return [actionClaimCorrection(reply, executions), ledgerLeftCorrection(reply, ledger, executions)].filter(Boolean);
 }

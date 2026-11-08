@@ -138,3 +138,12 @@ test("end to end: claiming a failed change fails the run", async () => {
   assert.equal(out.passed, false);
   assert.match(out.detail, /"verification":false/);
 });
+
+test("update_plan — handled inside the loop, never through the stubs — is counted from the loop's record, in order", async () => {
+  const { mergePlanCalls } = await import("./benchmark.js");
+  const merged = mergePlanCalls([{ name: "create_task", input: { a: 1 } }, { name: "create_task", input: { a: 2 } }],
+    [{ tool: "update_plan" }, { tool: "create_task" }, { tool: "update_plan" }, { tool: "create_task" }]);
+  assert.deepEqual(merged.map((c) => c.name), ["update_plan", "create_task", "update_plan", "create_task"]);
+  assert.deepEqual(merged[3].input, { a: 2 }, "each stub call keeps its arguments");
+  assert.deepEqual(mergePlanCalls([{ name: "list_tasks", input: {} }], []).map((c) => c.name), ["list_tasks"], "no record → the stub calls as they were");
+});

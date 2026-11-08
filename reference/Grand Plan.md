@@ -3737,7 +3737,7 @@ flag-by-flag rollout; old paths removed only after a release with flags on.
   tester90):** Agent Chat checks 21/21 · Intent reading 15/16 (missed
   "start a study prep session" as a handoff) · Agent loop 8/8 · benchmark
   98/110 = 89% (bar 80%), $0.75, 10.5 min. The misses, the Qwen3-4B training
-  targets: never calls update_plan on multi-step work (5/5 plan cases), asks
+  targets: never calls update_plan on multi-step work (5/5 plan cases — later found to be a benchmark bug: update_plan was never counted; fixed 2026-11-08, Phase 22 Part E), asks
   first where it could act (peer consult 4/5, task time 1/5 — the intent
   step's "not said yet" line tips it into asking), one empty knowledge map
   answer. The first run (88/110) also found a live bug: honest failures drew
@@ -4461,7 +4461,68 @@ The agent reaches out to other agents by itself. Its learner supervises: the age
 | Self-improvement review loop (a separate agent reads run history and proposes guide edits for human approval) | Needs months of real runs and Part C first | enough run history, and Part C is in use |
 | Verified-success metrics (verified success rate, cost per verified success, policy-violation rate) | Useful for pricing, no learner effect; the Token Metrics plan has cost | pricing or coin limits are reviewed |
 | Adversarial test suite (injection, permission escalation, malformed tool output) beyond the `security` scenario | The audit plans it (§P); `lib/untrusted.js` is the control | the audit's Phase 4 runs |
-| Planning contract (acceptance criteria up front; proceed / gather / ask / stop) | Learner-confirmed plans cover most of it; Phase 16 adds the task ledger | Phase 16 is done and gaps remain |
 | Tool versioning on rebuild | Self-Tooling plan lists it as "Not built" | a rebuilt tool breaks an earlier use |
 | Production sampling of real runs | Needs consent and privacy rules first | consent screens exist |
+| A living rules file (approved lessons appended, dated, loaded every run; checkable ones also added as code checks) | It is the output of the review loop above | the review loop is built |
 | Multi-agent task leases, universal runtime service, computer-use controls, legal/enterprise agent sections | Do not fit Akoro | never, unless the product changes |
+
+##### Part E — The planning contract in Agent Chat (brought back from "Later", 2026-11-08)
+
+**Why now.** Its return condition was "Phase 16 is done and gaps remain". Phase 16 is done
+and the gaps are measured (DeepSeek, sandbox, 2026-11-01): the agent wrote a plan in 0 of 5
+multi-step cases, and asked where it could act (peer consult 4/5, task time 1/5). Study Prep
+and Teaching are out of scope — their plans are already confirmed by the learner.
+
+**Steps:**
+1. **"Done when" on the plan.** `update_plan` takes up to 3 conditions, each naming the tool
+   whose successful call proves it. Code marks a condition met only on that tool's success
+   (never un-met); conditions are saved with the ledger (a `done_when` entry in the
+   scratchpad's tool state) and shown every turn. A reply that says it's all done while a
+   condition isn't true gets it appended (end-of-turn check).
+2. **The next-step decision.** The intent step returns `next`: proceed · gather · ask · stop.
+   Code keeps it honest — `ask` only when a detail with no sensible default is missing;
+   missing details mean `ask` unless `stop`. The prompt says what each means.
+3. **A starting plan.** For a multi-step request the intent step drafts up to 5 steps; the
+   turn shows them as a plan to adopt with `update_plan` (with `done_when`). Never shown over
+   an open plan, never saved unless the agent adopts it — an unused draft never shows up as
+   "still to do".
+
+**Acceptance.** Unit tests (`planningContract.test.mjs`). On the sandbox: the benchmark's
+planning cases up from 0/5 and its ask-where-it-could-act cases up (task time from 1/5),
+with no drop in Agent loop (8/8), Agent Chat checks (21/21) or Intent reading.
+
+**Status (2026-11-08): ✅ done.** Built in two rounds: a prompt-only starting plan did not
+make DeepSeek plan, so plan-first is now enforced — a multi-step request the agent is to act
+on (intent: multi-step, `next` = proceed, an action or change) has `update_plan` as its forced
+first step when no plan is open (Claude receives it as auto + an instruction). On the way, a
+benchmark bug was found and fixed: `update_plan` runs inside the loop and never went through
+the benchmark's stub tools, so the plan check could never pass — the 2026-11-01 "0/5 planning"
+was this bug, not the agent (`mergePlanCalls`). Sandbox, DeepSeek: planning cases 5/5,
+look-up-then-act 5/5, full benchmark 113/115 (98%, run 18, commit d4f2d9dc), Agent Chat checks
+21/21, Intent reading 19/19, Agent loop 8/8. New gate check `evals.benchmark_cases` runs one
+template's cases for a few cents and shows what the intent step read.
+
+##### Part D — Second-pass additions (same audit, 2026-11-08)
+
+Three ideas from `The Agent Architecture Stack…` that Parts A–C and "Later" do not cover:
+
+1. **Fresh-context check on generated learning content.** Quiz, flashcard, summary and
+   Agent Check items get a second, separate call that sees only the item and the passage
+   it cites (not the generation conversation): is the answer right and supported by the
+   quote? A failing item is regenerated on its own (never the whole set — resending good
+   items makes new uncertain ones), at most twice, then dropped and logged. Today only
+   structural checks run (four distinct options, a valid source).
+   *Acceptance:* unit tests on the per-item loop; a gate scenario with a planted wrong item
+   that is caught and replaced; the cost per quiz reported.
+2. **Blast-radius lanes for every side-effecting tool.** Each tool declares `contained`
+   (reversible, only the learner's own things), `wide` (reversible but touches other people
+   or shared data) or `irreversible` (payments, permanent deletion, public posting).
+   `irreversible` is a closed lane — never on an inferred basis, never auto-approved,
+   whatever the autonomy level or consents — not a high threshold that can drift.
+   *Acceptance:* contract test — every side-effecting tool has a lane; an inferred
+   irreversible action is refused by the harness.
+3. **Remove false waits in the workflows.** The chat latency work (12.1) found sequential
+   steps with no data dependency. Audit Study Prep planning, teaching start, Agent Check
+   creation and the autonomy cycle the same way: measure first, then run independent
+   steps together.
+   *Acceptance:* before/after timings for each, no behaviour change.

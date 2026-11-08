@@ -17,6 +17,7 @@ import { createEpisodeRecorder } from "../../modules/agent-contract/episode.js";
 import { saveEpisode } from "../../modules/agent-contract/store.js";
 import { turnCorrections } from "../../modules/adaptive-learning/turnCheck.js";
 import { runIntentStep, renderIntent } from "../../modules/adaptive-learning/intentStep.js";
+import { renderDraftPlan } from "../../modules/adaptive-learning/taskLedger.js";
 import { openai } from "../aiModel.js";
 import { canonicalArgs } from "../../modules/agent-runtime/loopGuard.js";
 
@@ -91,8 +92,21 @@ export function scoreRun(sc, { calls, reply, executions, isSide }) {
   };
 }
 
-async function runOnce(sc, { model, userId }) {
-  const { runAgentToolLoop, assembleChatDoctrine, getLearnerChatTools, isSideEffecting } = await chat();
+/** PURE: the stub calls in order, with each update_plan the loop handled itself put back where it ran. */
+export function mergePlanCalls(calls = [], executions = []) {
+  const out = [];
+  let i = 0;
+  for (const x of executions || []) {
+    if (x?.tool === "update_plan") out.push({ name: "update_plan", input: {} });
+    else if (i < calls.length) out.push(calls[i++]);
+  }
+  while (i < calls.length) out.push(calls[i++]);
+  return out;
+}
+
+/** One benchmark scenario, once (exported for the gate's targeted check, evals.benchmark_cases). */
+export async function runOnce(sc, { model, userId }) {
+  const { runAgentToolLoop, assembleChatDoctrine, getLearnerChatTools, isSideEffecting, shouldPlanFirst } = await chat();
   const isSide = (t) => isSideEffecting(t, {});
   const system = await assembleChatDoctrine({ role: "student", currentTimeContext: "\n\nCurrent date and time: Saturday, 31 October 2026, 10:00 (Africa/Lagos)." });
   const tools = getLearnerChatTools().map((t) => ({ type: "function", function: { name: t.name, description: t.description, parameters: t.input_schema } }));
@@ -111,11 +125,13 @@ async function runOnce(sc, { model, userId }) {
   // The intent step, as the chat route runs it before the loop — on the model under test, so the whole turn is one model's.
   const intent = await runIntentStep({ message: sc.request, recent: sc.history || [], timeoutMs: 20_000,
     create: (body) => openai.chat.completions.create({ ...body, model, ...meta }) });
-  const turnSystem = system + renderIntent(intent);
+  // As the chat route builds it: the intent, and for a multi-step request the starting plan (Phase 22 Part E).
+  const turnSystem = system + renderIntent(intent) + (intent?.multiStep ? renderDraftPlan(intent.steps, null) : "");
   const recorder = createEpisodeRecorder({ surface: "agent_chat", role: "student", source: "synthetic", system: turnSystem, tools, state: { intent }, messages, meta: { model } });
   const out = await runAgentToolLoop({
     systemContent: turnSystem, messages, studentId: userId || "00000000-0000-4000-8000-00000000be00",
     tools, role: "student", model, streamText: true, trace: null, callTool, recorder, meta,
+    planFirst: shouldPlanFirst(intent),   // as the chat route runs it (Phase 22 Part E)
   });
   const reply = String(out.finalText || "").trim();
   recorder.decision({ reply });
@@ -123,11 +139,18 @@ async function runOnce(sc, { model, userId }) {
   // The error code each observation carried (the recorder saw the envelope).
   const obs = recorder.steps.flatMap((st) => st.observations || []);
   executions.forEach((x, i) => { x.errorCode = obs[i]?.error_code || null; });
-  const scored = scoreRun(sc, { calls, reply, executions, isSide });
+  // update_plan is handled inside the loop (the ledger), never through callTool — so it is
+  // taken from the loop's own record, in order, or the plan check could never pass.
+  const scoredCalls = mergePlanCalls(calls, executions);
+  const scored = scoreRun(sc, { calls: scoredCalls, reply, executions, isSide });
   const episode = recorder.finish({ ledger: out.ledger, success: scored.success, capabilities: sc.capabilities, difficulty: sc.difficulty, sideEffecting: isSide, scenario: sc.id });
   void saveEpisode(episode, { model }).catch(() => {});
-  return { ...scored, reply, calls: calls.map((c) => c.name), ms: Date.now() - started };
+  return { ...scored, reply, calls: scoredCalls.map((c) => c.name), ms: Date.now() - started,
+    // What the intent step read (kind, multi-step, next) and whether the plan was forced first — for diagnosing plan misses.
+    intent: intent ? { kind: intent.kind, multiStep: intent.multiStep, next: intent.next, steps: (intent.steps || []).length, planFirst: shouldPlanFirst(intent) } : null };
 }
+
+export { SCENARIOS as BENCHMARK_SCENARIOS };
 
 export const benchmarkSuite = {
   key: "benchmark",
@@ -149,7 +172,7 @@ export const benchmarkSuite = {
       return {
         passed,
         expected: sc.success,
-        actual: { calls: last.calls, reply: last.reply.slice(0, 300) },
+        actual: { calls: last.calls, intent: last.intent, reply: last.reply.slice(0, 300) },
         detail: JSON.stringify({ runs: runs.map((r) => ({ success: r.success, ms: r.ms, ...r.metrics })), failedChecks: Object.entries(last.checks).filter(([, v]) => !v).map(([k]) => k) }).slice(0, 1500),
       };
     },
