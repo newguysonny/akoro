@@ -113,13 +113,29 @@ async function fetchPosts(api, fetchImpl = globalThis.fetch) {
   } finally { clearTimeout(t); }
 }
 
+/** Builds src/seo/ssr-entry.jsx (the real React pages) and returns renderRoute(url) → HTML. Browser globals the app reads at import time are stubbed. */
+export async function loadRenderer() {
+  const { build } = await import('vite');
+  await build({ logLevel: 'warn', build: { ssr: 'src/seo/ssr-entry.jsx', outDir: '.ssr', emptyOutDir: true, copyPublicDir: false } });
+  const mem = () => { const m = new Map(); return { getItem: (k) => (m.has(k) ? m.get(k) : null), setItem: (k, v) => m.set(k, String(v)), removeItem: (k) => m.delete(k), clear: () => m.clear(), key: (i) => [...m.keys()][i] ?? null, get length() { return m.size; } }; };
+  const noop = () => {};
+  const el = () => new Proxy(function () {}, { get: (_t, k) => (k === 'style' ? { setProperty: noop, removeProperty: noop } : k === 'classList' ? { add: noop, remove: noop, toggle: noop, contains: () => false } : k === 'dataset' ? {} : k === 'children' || k === 'childNodes' ? [] : noop), set: () => true, apply: () => el() });
+  Object.assign(globalThis, {
+    localStorage: mem(), sessionStorage: mem(), window: globalThis, addEventListener: noop, removeEventListener: noop,
+    matchMedia: () => ({ matches: false, addEventListener: noop, removeEventListener: noop, addListener: noop, removeListener: noop }),
+    document: { documentElement: el(), body: el(), head: el(), createElement: el, querySelector: () => null, querySelectorAll: () => [], getElementById: () => null, addEventListener: noop, removeEventListener: noop, cookie: '', readyState: 'complete' },
+    location: { pathname: '/', search: '', hash: '', href: 'https://akoro.ng/', origin: 'https://akoro.ng', hostname: 'akoro.ng', protocol: 'https:' },
+  });
+  return (await import(pathToFileURL(path.resolve('.ssr/ssr-entry.js')).href)).renderRoute;
+}
+
 const writePage = async (dist, route, html) => {
   const dir = route === '/' ? dist : path.join(dist, route);
   await mkdir(dir, { recursive: true });
   await writeFile(path.join(dir, 'index.html'), html);
 };
 
-export async function main({ dist = 'dist', target = 'full', env = {}, fetchImpl } = {}) {
+export async function main({ dist = 'dist', target = 'full', env = {}, fetchImpl, renderRoute } = {}) {
   const base = siteUrl(env);
   const template = await readFile(path.join(dist, 'index.html'), 'utf8');
   const noindex = (t) => render(t, { title: TITLE, description: DESCRIPTION, robots: 'noindex, nofollow' });
@@ -136,12 +152,23 @@ export async function main({ dist = 'dist', target = 'full', env = {}, fetchImpl
 
   const posts = await fetchPosts(String(env.VITE_API_URL || '').replace(/\/+$/, ''), fetchImpl);
   const urls = [];
+  let rendered = 0;
   for (const page of PAGES) {
     const url = `${base}${page.path === '/' ? '/' : page.path}`;
     const extra = page.path === '/blog' ? posts.map((p) => [p.title, `/blog/${p.slug}`]) : [];
+    // The real page, rendered by React; the text snapshot only if that page can't be rendered (the build never fails over it).
+    let body;
+    if (renderRoute) {
+      try {
+        body = await renderRoute(page.path);
+        if (!/<h1[\s>]/.test(body)) throw new Error('no <h1> in the rendered page');
+        if (extra.length) body += `<nav aria-label="Articles"><ul>${extra.map(([t, h]) => `<li><a href="${esc(h)}">${esc(t)}</a></li>`).join('')}</ul></nav>`;
+        rendered++;
+      } catch (e) { console.warn(`seo: ${page.path} not prerendered (${e.message}) — using the text snapshot`); body = undefined; }
+    }
     await writePage(dist, page.path, render(template, {
       title: page.title, description: page.description, url, robots: 'index, follow', image: `${base}${LOGO_PATH}`,
-      graph: graphFor({ page, base, url }), body: snapshot(page, extra),
+      graph: graphFor({ page, base, url }), body: body ?? snapshot(page, extra),
     }));
     urls.push({ loc: url });
   }
@@ -159,12 +186,13 @@ export async function main({ dist = 'dist', target = 'full', env = {}, fetchImpl
   await writeFile(path.join(dist, 'sitemap.xml'),
     `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n` +
     urls.map((u) => `  <url><loc>${esc(u.loc)}</loc>${u.lastmod ? `<lastmod>${u.lastmod}</lastmod>` : ''}</url>`).join('\n') + `\n</urlset>\n`);
-  console.log(`seo: ${PAGES.length} pages + ${posts.length} posts, robots.txt, sitemap.xml (${base})`);
-  return { pages: PAGES.length, posts: posts.length };
+  console.log(`seo: ${PAGES.length} pages (${rendered} prerendered by React) + ${posts.length} posts, robots.txt, sitemap.xml (${base})`);
+  return { pages: PAGES.length, posts: posts.length, rendered };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const env = { ...process.env };
-  main({ dist: process.argv[2] || 'dist', target: ['landing', 'app'].includes(env.VITE_TARGET) ? env.VITE_TARGET : 'full', env })
+  const target = ['landing', 'app'].includes(env.VITE_TARGET) ? env.VITE_TARGET : 'full';
+  (async () => main({ dist: process.argv[2] || 'dist', target, env, renderRoute: target === 'app' ? undefined : await loadRenderer().catch((e) => { console.warn(`seo: React prerender unavailable (${e.message}) — using text snapshots`); return undefined; }) }))()
     .catch((e) => { console.error('seo-pages failed:', e); process.exit(1); });
 }

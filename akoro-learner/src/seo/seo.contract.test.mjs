@@ -96,3 +96,14 @@ test('consoles are kept out of search: instructor and admin carry noindex; admin
   for (const app of ['akoro-instructor', 'akoro-admin']) assert.match(await readFile(new URL(`${app}/index.html`, root), 'utf8'), /<meta name="robots" content="noindex, nofollow" \/>/, app);
   assert.equal(await readFile(new URL('akoro-admin/public/robots.txt', root), 'utf8'), 'User-agent: *\nDisallow: /\n');
 });
+
+test('prerender: the rendered React page becomes the page body; a page that fails to render falls back to the text snapshot', async () => {
+  const dist = await mkdtemp(path.join(os.tmpdir(), 'seo-'));
+  await writeFile(path.join(dist, 'index.html'), TEMPLATE);
+  const res = await main({ dist, target: 'landing', env: { VITE_SITE_URL: 'https://akoro.ng' },
+    renderRoute: async (p) => { if (p === '/about') throw new Error('boom'); if (p === '/terms') return '<div>no heading</div>'; return `<div id="x"><h1>Rendered ${p}</h1></div>`; } });
+  assert.equal(res.rendered, PAGES.length - 2);
+  assert.match(await read(dist, 'ai-protege/index.html'), /<h1>Rendered \/ai-protege<\/h1>/);
+  assert.match(await read(dist, 'about/index.html'), /data-prerendered/);
+  assert.match(await read(dist, 'terms/index.html'), /data-prerendered/);
+});

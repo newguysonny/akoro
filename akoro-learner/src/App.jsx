@@ -139,7 +139,7 @@ function RouteFallback() {
   );
 }
 
-function AppRoutes() {
+export function AppRoutes() {
   const site = SITE_BUILD;        // marketing pages: the landing (and a full build)
   const product = PRODUCT_BUILD;  // the learner product: the app (and a full build)
   return (
