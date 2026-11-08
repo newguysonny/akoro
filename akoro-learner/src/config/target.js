@@ -23,6 +23,7 @@ export const APP_HOME = homeFor(TARGET);
 const MARKETING = [
   /^\/$/, /^\/pricing\/?$/, /^\/about\/?$/, /^\/contact\/?$/, /^\/careers\/?$/, /^\/partners\/?$/, /^\/compare\/?$/, /^\/apply\/?$/,
   /^\/privacy\/?$/, /^\/terms\/?$/, /^\/instructor-info\/?$/, /^\/student-info\/?$/, /^\/school-info\/?$/,
+  /^\/for-teachers\/?$/, /^\/for-students\/?$/, /^\/for-schools\/?$/, /^\/ai-protege\/?$/, /^\/how-it-works\/?$/, /^\/exam-prep\/?$/,
   /^\/blog(\/[^/]+)?\/?$/,
 ];
 /** First path segments that belong to the app. */

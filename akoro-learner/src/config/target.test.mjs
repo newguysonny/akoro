@@ -10,7 +10,7 @@ test('defaults: a plain build is "full" and the two sites are the agreed hosts',
 });
 
 test('ownerOf: marketing paths belong to the site, product paths to the app, the rest is unknown', () => {
-  for (const p of ['/', '/pricing', '/about', '/contact', '/careers', '/partners', '/compare', '/apply', '/privacy', '/terms', '/instructor-info', '/student-info', '/school-info', '/blog', '/blog/how-to-study', '/pricing/']) assert.equal(ownerOf(p), 'site', p);
+  for (const p of ['/', '/pricing', '/about', '/contact', '/careers', '/partners', '/compare', '/apply', '/privacy', '/terms', '/instructor-info', '/student-info', '/school-info', '/for-students', '/for-teachers', '/for-schools', '/ai-protege', '/how-it-works', '/exam-prep', '/blog', '/blog/how-to-study', '/pricing/']) assert.equal(ownerOf(p), 'site', p);
   for (const p of ['/app', '/signin', '/signup', '/forgot-password', '/reset-password', '/auth/callback', '/join/abc', '/onboarding', '/settings', '/settings/agent/memory', '/activities/1', '/gradebook', '/library', '/communities/x/people', '/wallet', '/checkout', '/orders', '/upgrade', '/course/maths', '/write/blog/new', '/agent/5', '/cart', '/notifications']) assert.equal(ownerOf(p), 'app', p);
   for (const p of ['/nope', '/blogs', '/pricing-old', '/appx']) assert.equal(ownerOf(p), 'unknown', p);
 });
