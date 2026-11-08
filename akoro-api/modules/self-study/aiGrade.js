@@ -152,7 +152,7 @@ export function buildAiGradeMessages({ assignment = {}, markdown = "", images = 
     schemePrompt(scheme, open),
     rubric.length ? `Score each rubric criterion with an integer level from 0 to its max, \`why\` in one sentence:\n${rubric.map((r) => `- ${r.name} (max ${r.max})`).join("\n")}` : "There is no rubric: return an empty rubric list.",
     "Write `feedback` to the learner (2-3 short sentences): what they did well, what to fix, one next step. Use the learner's language.",
-    "Photos attached are the learner's own pages (e.g. handwriting) — read them as part of the submission.",
+    "Photos attached are the learner's own pages (e.g. handwriting) — read them as part of the submission. A word or line the learner crossed out (struck through, scribbled over) is NOT part of their answer: write it as ~~word~~ in `read` and give it no credit.",
   ].filter(Boolean).join("\n\n");
   const content = [{ type: "text", text: `The submission:\n\n${String(markdown).slice(0, AI_GRADE_LIMITS.MAX_MARKDOWN_CHARS)}` }];
   for (const img of images.slice(0, AI_GRADE_LIMITS.MAX_IMAGES)) {

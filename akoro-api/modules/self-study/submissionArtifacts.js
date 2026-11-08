@@ -204,8 +204,9 @@ export async function aiGradeTarget(targetId) {
     import("./aiGrade.js"), import("../../lib/aiModel.js"), import("../../lib/coins.js"), import("./aiGrade.js"),
   ]);
   let owner = null;
+  let usedModel = null;   // the model that actually marked (kept on the teacher-only draft)
   return runAiGrade(targetId, {
-    save: async (id, ai) => { await edu().from("self_study_targets").update({ ai_grade: ai }).eq("id", id); },
+    save: async (id, ai) => { await edu().from("self_study_targets").update({ ai_grade: ai?.status === "ready" && usedModel ? { ...ai, model: usedModel } : ai }).eq("id", id); },
     // Two round trips, not six: the hand-in first, then the assignment, the learner and the files together;
     // the markdown is laid out from what is already here (marking never waits for the PDF).
     load: async (id) => {
@@ -248,6 +249,7 @@ export async function aiGradeTarget(targetId) {
         response_format: { type: "json_schema", json_schema: { name: "activity_ai_grade", strict: true, schema: aiGradeSchema() } },
         ...(owner ? { __userId: owner } : {}), ...(billTo ? { __billTo: billTo } : {}), __feature: "activity_ai_grade",
       });
+      usedModel = completion.model || null;
       return completion.choices?.[0]?.message?.content || "{}";
     },
   });
