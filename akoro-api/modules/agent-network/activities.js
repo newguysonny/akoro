@@ -22,6 +22,7 @@ import { canMessage } from "./filters.js";
 import { relationsOf, blockedWith, getSettings } from "./network.js";
 
 import { addLater } from "../../lib/deferredJobs.js";
+import { appLink } from "../../lib/urls.js";
 const edu = () => db.schema("edu");
 const fail = (message, status = 400) => Object.assign(new Error(message), { status });
 const first = (full, username) => String(full || "").trim().split(/\s+/)[0] || username || "a learner";
@@ -70,7 +71,7 @@ export async function requestBuddy(meId, { to, goal = null, subject = null, exam
   if (error) throw fail(/duplicate|uq_study_buddies_pair/i.test(error.message) ? "You're already buddies (or asked)." : error.message, 409);
   const { data: me } = await db.from("users").select("full_name, username").eq("id", meId).maybeSingle();
   await notifyUser({ userId: target.id, type: "study_buddy", title: `🤝 ${first(me?.full_name, me?.username)} wants your agents to be study buddies`,
-    content: [goal, subject, exam].filter(Boolean).join(" · ") || "Weekly check-ins to keep each other on track", relatedId: data.id, link: "/app?tab=agent" }).catch(() => {});
+    content: [goal, subject, exam].filter(Boolean).join(" · ") || "Weekly check-ins to keep each other on track", relatedId: data.id, link: appLink("tab=agent") }).catch(() => {});
   return { requested: data.id };
 }
 
@@ -83,7 +84,7 @@ export async function respondBuddy(meId, id, accept) {
     : { status: "declined" }).eq("id", id);
   const { data: me } = await db.from("users").select("full_name, username").eq("id", meId).maybeSingle();
   await notifyUser({ userId: b.requester_id, type: "study_buddy", title: accept ? `🤝 ${first(me?.full_name, me?.username)} is your study buddy now` : "Study buddy request declined",
-    content: accept ? "Your agents will check in with each other every week." : "", relatedId: id, link: "/app?tab=agent" }).catch(() => {});
+    content: accept ? "Your agents will check in with each other every week." : "", relatedId: id, link: appLink("tab=agent") }).catch(() => {});
   return { status: accept ? "active" : "declined" };
 }
 
@@ -129,7 +130,7 @@ export async function buddyCheckin(meId, id, note = "") {
   await edu().from("agent_messages").insert({ from_user: meId, to_user: other, kind: "buddy_checkin", body: text, status: "delivered" });
   await edu().from("study_buddies").update({ last_checkin_at: new Date().toISOString(), next_checkin_at: new Date(Date.now() + WEEK_MS).toISOString() }).eq("id", id);
   const { data: me } = await db.from("users").select("full_name, username").eq("id", meId).maybeSingle();
-  await notifyUser({ userId: other, type: "study_buddy", title: `🤝 ${first(me?.full_name, me?.username)}'s agent checked in`, content: text.split("\n")[0], relatedId: id, link: "/app?tab=agent" }).catch(() => {});
+  await notifyUser({ userId: other, type: "study_buddy", title: `🤝 ${first(me?.full_name, me?.username)}'s agent checked in`, content: text.split("\n")[0], relatedId: id, link: appLink("tab=agent") }).catch(() => {});
   return { sent: true, snapshot: mine };
 }
 
@@ -371,7 +372,7 @@ export async function createCircle(meId, input = {}) {
   for (const to of (Array.isArray(input.invite) ? input.invite : []).slice(0, max - 1)) {
     try {
       const u = await resolveUser(to); await mayReach(meId, u);
-      await notifyUser({ userId: u.id, type: "revision_circle", title: `📚 You're invited to a revision circle: ${c.title}`, content: scheduled ? `Starts ${new Date(scheduled).toLocaleString("en-GB", { timeZone: "Africa/Lagos", weekday: "short", hour: "2-digit", minute: "2-digit" })}` : "Join to revise together — it ends in a group battle.", relatedId: c.id, link: "/app?tab=battles" });
+      await notifyUser({ userId: u.id, type: "revision_circle", title: `📚 You're invited to a revision circle: ${c.title}`, content: scheduled ? `Starts ${new Date(scheduled).toLocaleString("en-GB", { timeZone: "Africa/Lagos", weekday: "short", hour: "2-digit", minute: "2-digit" })}` : "Join to revise together — it ends in a group battle.", relatedId: c.id, link: appLink("tab=battles") });
       invited.push(u.id);
     } catch { /* skip that one */ }
   }
@@ -408,7 +409,7 @@ async function startCircleIfReady(c) {
     await edu().from("revision_circles").update({ status: "cancelled" }).eq("id", c.id);
     for (const uid of ids) {
       await notifyUser({ userId: uid, type: "circle_cancelled", title: `Revision circle cancelled: ${c.title}`,
-        content: `Its battle couldn't start — ${e?.message || "try again later"}. Start a new circle any time.`, relatedId: c.id, link: "/app?tab=battles" }).catch(() => {});
+        content: `Its battle couldn't start — ${e?.message || "try again later"}. Start a new circle any time.`, relatedId: c.id, link: appLink("tab=battles") }).catch(() => {});
     }
     throw e;
   }

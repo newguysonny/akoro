@@ -267,7 +267,7 @@ export const agentCheckStop = {
     const work = await runningWork(me.id);
     const listed = work.agentChecks.find((c) => c.battleId === battleId);
     ctx.expect.ok("running work lists the check", !!listed, JSON.stringify(work.agentChecks));
-    ctx.expect.eq("with its Battles link", listed?.link, `/app?tab=battles&battle=${battleId}`);
+    ctx.expect.eq("with its Battles link", listed?.link, `/?tab=battles&battle=${battleId}`);
 
     const stop = await stopAgentCheck({ learnerId: me.id });
     ctx.note(`stop: ${JSON.stringify(stop)}`);

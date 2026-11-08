@@ -21,6 +21,7 @@ import { CAPABILITIES, FORBIDDEN } from "./capabilities.js";
 import { activeGrants } from "./registry.js";
 import { notifyUser } from "../notify.js";
 import { RULES, withActionBasis } from "../agent-runtime/actionBasis.js";
+import { appLink } from "../../lib/urls.js";
 
 const edu = () => db.schema("edu");
 export const REQUEST_TTL_DAYS = 14;
@@ -198,7 +199,7 @@ export async function postIntoChat({ userId, conversationId, title, text, kind =
   const { error } = await db.from("chat_messages").upsert({ id: messageId || randomUUID(), session_id: sessionId, user_id: userId, role: "agent", text, created_at: now, ...(meta ? { meta } : {}) }, { onConflict: "id", ignoreDuplicates: true });
   if (error) throw new Error("couldn't post into the chat");
   await db.from("chat_sessions").update({ updated_at: now, last_message_at: now }).eq("id", sessionId).eq("user_id", userId).then(() => {}, () => {});
-  const link = `/app?tab=agent&sessionId=${encodeURIComponent(sessionId)}`;
+  const link = appLink(`tab=agent&sessionId=${encodeURIComponent(sessionId)}`);
   await notifyUser({ userId, type: kind, title: String(title || "Your agent").slice(0, 120), content: text.slice(0, 300), relatedId: sessionId, link }).catch(() => {});
   try { global.io?.to(`user:${userId}`).emit("chat_follow_up_ready", { sessionId, title }); } catch { /* the notification is the durable path */ }
   return { sessionId };

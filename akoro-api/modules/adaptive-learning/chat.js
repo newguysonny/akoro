@@ -2505,7 +2505,7 @@ async function runChatTool(name, input, studentId, { conversationId = null, role
       if (!input?.sessionId && !input?.topic) return clarify("topic", "Which topic should the guide review? Or pick one of your teaching sessions.");
       try {
         const r = await requestGuideReview({ learnerId: studentId, sessionId: input.sessionId || null, subject: input.subject || null, topic: input.topic || null });
-        return { started: true, battleId: r.battleId, title: r.title, questions: r.questions, reviewsLeftToday: r.left, link: `/app?tab=battles&battle=${r.battleId}` };
+        return { started: true, battleId: r.battleId, title: r.title, questions: r.questions, reviewsLeftToday: r.left, link: appLink(`tab=battles&battle=${r.battleId}`) };
       } catch (e) { return { started: false, error: e.message }; }
     }
     case "set_agent_auto_reply": {
@@ -3698,6 +3698,7 @@ async function processAttachments(attachments = []) {
 // ReferenceError: assembleChatDoctrine is not defined.
 import { tutorSystemPrompt, assembleChatDoctrine } from "../agent-context/chat-doctrine.js";
 import { safeCompare } from "../../lib/safeCompare.js";
+import { appLink } from "../../lib/urls.js";
 export { tutorSystemPrompt, assembleChatDoctrine };
 
 /* chat.completions streaming → `delta` events. Returns the full text. */

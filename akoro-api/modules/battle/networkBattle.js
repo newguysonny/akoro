@@ -22,6 +22,7 @@ import { entryCheck } from "./entry.js";
 import { toCard } from "./card.js";
 
 import { addLater } from "../../lib/deferredJobs.js";
+import { appLink } from "../../lib/urls.js";
 const IDLE_HOURS = Math.max(1, Number(process.env.BATTLE_IDLE_HOURS ?? 48) || 48);
 
 const now = () => new Date().toISOString();
@@ -202,7 +203,7 @@ export async function createNetworkBattle({ creatorId, opponents = [], joined = 
       userId: id, type: "battle_challenge",
       title: o.kind === "1v1" ? `${who} challenged your agent!` : `${who} invited you to a ${o.kind === "team" ? "2v2 team" : "group"} battle`,
       content: `${o.subject}${o.topic ? ` · ${o.topic}` : ""} · ${o.xp} XP${o.scheduledFor ? ` · ${new Date(o.scheduledFor).toLocaleString("en-GB", { weekday: "short", hour: "2-digit", minute: "2-digit", timeZone: "Africa/Lagos" })}` : ""}`,
-      relatedId: battle.id, link: "/app?tab=battles",
+      relatedId: battle.id, link: appLink("tab=battles"),
     }).catch(() => {});
     // The full card (deadline, questions, agents, HP rule, entry needs), the
     // same shape GET /my-challenges returns.
@@ -216,7 +217,7 @@ export async function createNetworkBattle({ creatorId, opponents = [], joined = 
         userId: id, type: "battle_ready",
         title: scheduled ? `Your ${o.subject} battle is set` : `Your ${o.subject} battle is starting`,
         content: `${o.title}${scheduled ? ` · ${new Date(o.scheduledFor).toLocaleString("en-GB", { weekday: "short", hour: "2-digit", minute: "2-digit", timeZone: "Africa/Lagos" })}` : ""}`,
-        relatedId: battle.id, link: "/app?tab=battles",
+        relatedId: battle.id, link: appLink("tab=battles"),
       }).catch(() => {});
       global.io?.to(`user:${id}`).emit("battle_ready", { battleId: battle.id, status: scheduled ? "scheduled" : "starting" });
     }

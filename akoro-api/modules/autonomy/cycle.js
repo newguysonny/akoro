@@ -22,6 +22,7 @@ import { modesFor, recordObservations } from "./kindModes.js";
 import { allOff, defaultModeFor, LEARNER_PROACTIVE_KINDS, MAX_OBSERVATIONS_PER_RUN, observeOnly, splitByMode } from "./kindModesCore.js";
 import { usdCost } from "../../lib/aiPricing.js";
 import { RULES, basisColumns } from "../agent-runtime/actionBasis.js";
+import { appLink } from "../../lib/urls.js";
 
 const edu = () => db.schema("edu");
 
@@ -608,7 +609,7 @@ export async function runAutonomyCycleForUser(userId, trigger = "nightly", { rea
       // Through notifyUser: the bell row, the live socket and web push (the
       // learner's push preference respected) — a bare insert reached none.
       if (!delivered.posted) await notifyUser({
-        userId, type: "agent_proposals", link: "/app?tab=agent",
+        userId, type: "agent_proposals", link: appLink("tab=agent"),
         title: `${toInsert.length} suggestion${toInsert.length === 1 ? "" : "s"} from your agent`,
         content: reasoned.summary ? String(reasoned.summary).slice(0, 300) : "Your agent reviewed your goals overnight — take a look in Suggestions.",
       }).catch(() => { /* the inbox badge is the durable surface */ });

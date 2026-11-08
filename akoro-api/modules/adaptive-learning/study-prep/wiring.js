@@ -41,6 +41,7 @@ import { makeAgentCheckRun } from "./agent-check-run.js";
 import { HANDOFF_AUTO_APPROVE_MS, teachingView } from "../teaching-session/workflow.js";
 import { AUTO_START_MS, WAKE_DECISIONS, WAKE_FINAL_ACTIONS, WAKE_LABELS, autoStartFor, settleStep, spentOnChecks, wakeGoal } from "./wake.js";
 import { TERMINAL_ACTIONS } from "./agent-loop.js";
+import { appLink } from "../../../lib/urls.js";
 
 // Default-on kill switch: study-prep ships enabled; =false removes every surface.
 export const studyPrepEnabled = () => String(process.env.AKORO_STUDY_PREP_ENABLED ?? "true").toLowerCase() !== "false";
@@ -294,15 +295,15 @@ export async function runningWork(learnerId) {
     out.studyPlan = view ? {
       sessionId: row.id, subject: view.session.subject, status: view.session.status, goal: view.session.goal,
       activeTopic: active?.label || null, topicsUnderstood: view.topics.filter((t) => t.status === "understood").length, topics: view.topics.length,
-      nextCheck: view.nextCheck || null, link: "/app?tab=agent",
+      nextCheck: view.nextCheck || null, link: appLink("tab=agent"),
     } : null;
     if (active?.checkBattleId && !active.checkScoredAt) {
       const check = await findCheckByBattle(active.checkBattleId).catch(() => null);
       out.agentChecks.push({
         topic: active.label, mode: active.checkMode, battleId: active.checkBattleId,
         answered: Number(check?.metadata?.answered) || 0, total: Number(check?.metadata?.total) || null,
-        link: `/app?tab=battles&battle=${active.checkBattleId}`,
-        markdown: `[Watch in Battles](/app?tab=battles&battle=${active.checkBattleId})`,
+        link: appLink(`tab=battles&battle=${active.checkBattleId}`),
+        markdown: `[Watch in Battles](${appLink(`tab=battles&battle=${active.checkBattleId}`)})`,
       });
     }
   }
@@ -310,8 +311,8 @@ export async function runningWork(learnerId) {
   out.teachingSessions = row ? (await teachingHandoff().listOpen(learnerId).catch(() => []))
     .filter((t) => t.from?.sessionId === row.id)
     .map((t) => ({
-      topic: t.topic, state: t.state, focus: t.focus, progress: t.progress, link: "/app?tab=sessions",
-      markdown: "[Open your sessions](/app?tab=sessions)",
+      topic: t.topic, state: t.state, focus: t.focus, progress: t.progress, link: appLink("tab=sessions"),
+      markdown: `[Open your sessions](${appLink("tab=sessions")})`,
     })) : [];
   return out;
 }

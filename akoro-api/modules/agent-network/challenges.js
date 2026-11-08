@@ -24,6 +24,7 @@ import { NETWORK_KEYS, seriesTemplate } from "../battle/seriesCore.js";
 import { canFind } from "./filters.js";
 import { relationsOf, blockedWith, getSettings } from "./network.js";
 import { notifyUser } from "../notify.js";
+import { appLink } from "../../lib/urls.js";
 
 const edu = () => db.schema("edu");
 const fail = (message, status = 400) => Object.assign(new Error(message), { status });
@@ -167,7 +168,7 @@ async function expireStale(rows) {
       if (done?.length) {
         for (const uid of [r.created_by, ...(r.accepted_by || [])]) {
           await notifyUser({ userId: uid, type: "challenge_request_expired", title: `Challenge request expired: ${r.title || r.subject}`,
-            content: `Only ${1 + (r.accepted_by || []).length} of ${r.max_players} seats filled in time, so no battle was made.`, relatedId: r.id, link: "/app?tab=challenges" }).catch(() => {});
+            content: `Only ${1 + (r.accepted_by || []).length} of ${r.max_players} seats filled in time, so no battle was made.`, relatedId: r.id, link: appLink("tab=challenges") }).catch(() => {});
         }
       }
       out.push({ ...r, status: "expired" });
@@ -259,7 +260,7 @@ export async function acceptChallengeRequest(meId, requestId) {
 
   if (!full) {
     await notifyUser({ userId: r.created_by, type: "battle_accepted", title: "🙌 Someone joined your challenge request",
-      content: `${r.title} · ${1 + accepted.length}/${r.max_players} seats`, relatedId: r.id, link: "/app?tab=battles" }).catch(() => {});
+      content: `${r.title} · ${1 + accepted.length}/${r.max_players} seats`, relatedId: r.id, link: appLink("tab=battles") }).catch(() => {});
     return { seated: true, full: false, seats: `${1 + accepted.length}/${r.max_players}` };
   }
   try {
@@ -269,7 +270,7 @@ export async function acceptChallengeRequest(meId, requestId) {
     });
     await edu().from("challenge_requests").update({ battle_id: battle.battleId }).eq("id", r.id);
     await notifyUser({ userId: r.created_by, type: "battle_accepted", title: "⚔️ Your challenge request was taken!",
-      content: `${r.title} · ${r.scheduled_for ? "starts at its time" : "starting now"}`, relatedId: battle.battleId, link: "/app?tab=battles" }).catch(() => {});
+      content: `${r.title} · ${r.scheduled_for ? "starts at its time" : "starting now"}`, relatedId: battle.battleId, link: appLink("tab=battles") }).catch(() => {});
     return { seated: true, full: true, battleId: battle.battleId, status: battle.status };
   } catch (e) {
     // The battle couldn't be made: give the seat back so the request stays open.

@@ -4,6 +4,7 @@
 import db from "../../db.js";
 import { notifyUser } from "../notify.js";
 import { embedForSearch } from "../../lib/searchEmbedding.js";
+import { appLink } from "../../lib/urls.js";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const clip = (text, max) => { const s = String(text ?? ""); return s.length > max ? `${s.slice(0, max - 1)}…` : s; };
@@ -185,7 +186,7 @@ export async function postToChat(userId, { chatId, message, currentChatId = null
   try {
     await notifyUser({
       userId, type: "agent_follow_up", title: session?.title || "New message from your agent",
-      content: clip(text, 280), relatedId: id, link: `/app?tab=agent&sessionId=${encodeURIComponent(id)}`,
+      content: clip(text, 280), relatedId: id, link: appLink(`tab=agent&sessionId=${encodeURIComponent(id)}`),
     });
   } catch { /* the message itself is saved */ }
   try { global.io?.to(`user:${userId}`).emit("chat_follow_up_ready", { sessionId: id, title: session?.title }); } catch { /* best effort */ }
