@@ -3737,7 +3737,7 @@ flag-by-flag rollout; old paths removed only after a release with flags on.
   tester90):** Agent Chat checks 21/21 · Intent reading 15/16 (missed
   "start a study prep session" as a handoff) · Agent loop 8/8 · benchmark
   98/110 = 89% (bar 80%), $0.75, 10.5 min. The misses, the Qwen3-4B training
-  targets: never calls update_plan on multi-step work (5/5 plan cases), asks
+  targets: never calls update_plan on multi-step work (5/5 plan cases — later found to be a benchmark bug: update_plan was never counted; fixed 2026-11-08, Phase 22 Part E), asks
   first where it could act (peer consult 4/5, task time 1/5 — the intent
   step's "not said yet" line tips it into asking), one empty knowledge map
   answer. The first run (88/110) also found a live bug: honest failures drew
@@ -4490,6 +4490,17 @@ and Teaching are out of scope — their plans are already confirmed by the learn
 **Acceptance.** Unit tests (`planningContract.test.mjs`). On the sandbox: the benchmark's
 planning cases up from 0/5 and its ask-where-it-could-act cases up (task time from 1/5),
 with no drop in Agent loop (8/8), Agent Chat checks (21/21) or Intent reading.
+
+**Status (2026-11-08): ✅ done.** Built in two rounds: a prompt-only starting plan did not
+make DeepSeek plan, so plan-first is now enforced — a multi-step request the agent is to act
+on (intent: multi-step, `next` = proceed, an action or change) has `update_plan` as its forced
+first step when no plan is open (Claude receives it as auto + an instruction). On the way, a
+benchmark bug was found and fixed: `update_plan` runs inside the loop and never went through
+the benchmark's stub tools, so the plan check could never pass — the 2026-11-01 "0/5 planning"
+was this bug, not the agent (`mergePlanCalls`). Sandbox, DeepSeek: planning cases 5/5,
+look-up-then-act 5/5, full benchmark 113/115 (98%, run 18, commit d4f2d9dc), Agent Chat checks
+21/21, Intent reading 19/19, Agent loop 8/8. New gate check `evals.benchmark_cases` runs one
+template's cases for a few cents and shows what the intent step read.
 
 ##### Part D — Second-pass additions (same audit, 2026-11-08)
 
