@@ -24,6 +24,7 @@ import {
   FaLinkedin, FaYoutube, FaInstagram, FaFacebook, FaXTwitter,
 } from 'react-icons/fa6';
 import { INSTRUCTOR_URL, B, B2, G, GL, R, BG, FontStyle, useReveal, Reveal, SL, Btn } from './shared.jsx';
+import Identity from './Identity.jsx';
 import { Header, Drawer, QuickInfo, FinalCTA, Footer, StickyBar } from './chrome.jsx';
 import { ProblemSolution, HowItWorks, Courses, Outcomes, Pricing, Instructors, FAQ } from './sections.jsx';
 
@@ -40,6 +41,7 @@ export default function LandingPage() {
   <SFSHero />
 </div>
         
+        <Identity />
         <NewsCarousel />
         <QuickActions />
         <QuickInfo onSignup={goSignup}/>

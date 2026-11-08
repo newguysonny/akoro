@@ -10,14 +10,14 @@ const SEGMENTS = [
       "https://images.unsplash.com/photo-1503676260728-1c00da094a0b?w=700&h=500&fit=crop",
     title: "For Learners",
     features: ["AI Assessment", "AI Quizzes"],
-    href: "student-info",
+    href: "for-students",
   },
   {
     image:
       "https://images.unsplash.com/photo-1580582932707-520aed937b7b?w=700&h=500&fit=crop",
     title: "For Instructors",
     features: ["Lesson Planner", "Weekly Forecast", "Worksheets"],
-    href: "instructor-info",
+    href: "for-teachers",
   },
   {
     image:
@@ -28,7 +28,7 @@ const SEGMENTS = [
       "Staff & Team Management",
       "Academic Management",
     ],
-    href: "school-info",
+    href: "for-schools",
   },
 ];
 

@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import RouteMeta from './seo/RouteMeta.jsx';
 import { useEffect, Suspense } from 'react';
 import { lazyWithRetry } from './utils/lazyWithRetry.js';
 import { nextPath } from './utils/nextPath.js';
@@ -23,6 +24,7 @@ const PRODUCT_BUILD = import.meta.env.VITE_TARGET !== 'landing';  // the learner
 const LandingPage = SITE_BUILD ? lazyWithRetry(() => import('./pages/LandingPage.jsx')) : null;
 const InstructorInfoPage = SITE_BUILD ? lazyWithRetry(() => import('./pages/InstructorInfoPage.jsx')) : null;
 const SchoolInfoPage = SITE_BUILD ? lazyWithRetry(() => import('./pages/SchoolInfoPage.jsx')) : null;
+const ContentPage = SITE_BUILD ? lazyWithRetry(() => import('./pages/ContentPage.jsx')) : null;
 const StudentInfoPage = SITE_BUILD ? lazyWithRetry(() => import('./pages/StudentInfoPage.jsx')) : null;
 const OnboardingPage = PRODUCT_BUILD ? lazyWithRetry(() => import('./pages/OnboardingPage.jsx')) : null;
 const LearnerDashboard = PRODUCT_BUILD ? lazyWithRetry(() => import('./pages/LearnerDashboard.jsx')) : null;
@@ -143,6 +145,7 @@ function AppRoutes() {
   return (
     <>
       <ScrollToTop />
+      {site && <RouteMeta />}
       <Suspense fallback={<RouteFallback />}>
       <Routes>
       {/* The app site's front door IS the dashboard (signed out → sign-in); on the landing and a full build "/" is the marketing home */}
@@ -172,9 +175,16 @@ function AppRoutes() {
       {product && <Route path="/orders"     element={<ProtectedRoute><OrderHistoryPage /></ProtectedRoute>}/>}
       {site && <Route path="/privacy"  element={<PrivacyPolicyPage />}/>}
       {site && <Route path="/terms"    element={<TermsOfServicePage />}/>}
-      {site && <Route path="/instructor-info"    element={<InstructorInfoPage />}/>}
-      {site && <Route path="/student-info"    element={<StudentInfoPage />}/>}
-      {site && <Route path="/school-info"    element={<SchoolInfoPage />}/>}
+      {site && <Route path="/for-teachers"    element={<InstructorInfoPage />}/>}
+      {site && <Route path="/for-students"    element={<StudentInfoPage />}/>}
+      {site && <Route path="/for-schools"    element={<SchoolInfoPage />}/>}
+      {/* The old addresses (vercel.json also 301s them) */}
+      {site && <Route path="/instructor-info" element={<Navigate to="/for-teachers" replace />}/>}
+      {site && <Route path="/student-info"    element={<Navigate to="/for-students" replace />}/>}
+      {site && <Route path="/school-info"     element={<Navigate to="/for-schools" replace />}/>}
+      {site && <Route path="/ai-protege"   element={<ContentPage path="/ai-protege" />}/>}
+      {site && <Route path="/how-it-works" element={<ContentPage path="/how-it-works" />}/>}
+      {site && <Route path="/exam-prep"    element={<ContentPage path="/exam-prep" />}/>}
         
         
       {site && <Route path="/pricing"  element={<PricingPage />}/>}

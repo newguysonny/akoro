@@ -75,3 +75,12 @@ On the app site (`VITE_TARGET=app`) the dashboard lives at `https://app.akoro.ng
 keeping the query, so old links, notifications, emails and the API's deep links (`/app?tab=agent&…`) keep working; the landing forwards `/app` to the app's root too.
 A signed-out visitor on `/` is sent to `/signin` and brought back after. A full/unsplit build keeps `/` = marketing home and `/app` = dashboard. Pages navigate with
 `APP_HOME` (`src/config/target.js`), never a literal `/app` (a test enforces it); the API-defined `/app?…` deep links and the markdown whitelist are the deliberate exceptions.
+
+## Search (SEO) — what the build does
+
+`npm run build` = `vite build` then `scripts/seo-pages.mjs` (it reads `VITE_TARGET`, `VITE_SITE_URL`, `VITE_API_URL`):
+
+- **landing**: writes real HTML per public page (`dist/<route>/index.html`, from `src/seo/pages.js`) with its own title, description, canonical, Open Graph, JSON-LD and a text snapshot; blog posts are fetched from the API at build time (skipped if it's unreachable); `robots.txt`, `sitemap.xml`; and `app-shell.html`, the noindex fallback that `vercel.json` rewrites every other URL to. Set `VITE_SITE_URL=https://akoro.ng` there. A post published between deploys appears after the next deploy (use a Vercel deploy hook on a schedule).
+- **app**: the whole host is `noindex` (added to `index.html` by `vite.config.js`).
+- Identity words live in `src/seo/site.js`; page copy in `src/seo/pages.js`. Old `/student-info`, `/instructor-info`, `/school-info` 301 to `/for-students`, `/for-teachers`, `/for-schools` (`vercel.json`).
+- Guard: `src/seo/seo.contract.test.mjs`.

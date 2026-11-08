@@ -9,6 +9,7 @@
 import { useState, useEffect } from 'react';
 import LanguageMenu from './LanguageMenu.jsx';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
+import { SOCIALS, ENTITY } from '../seo/site.js';
 import { Menu, X, ArrowRight, BookOpen, Zap, Map, TrendingUp, DollarSign, Users, MessageSquare, Download } from 'lucide-react';
 import { FaLinkedin, FaYoutube, FaInstagram, FaFacebook, FaXTwitter } from 'react-icons/fa6';
 import AkoroLogo from './common/AkoroLogo.jsx';
@@ -331,8 +332,8 @@ export function SiteFooter() {
   const navigate = useNavigate();
   const go = (href) => { if (href.startsWith('/')) navigate(href); };
   const cols = [
-    { title: 'Product',     links: [['How it works','/student-info'],['For students','/student-info'],['For instructors','/instructor-info'],['Pricing','/pricing'],['Browse courses','/signup']] },
-    { title: 'For Schools', links: [['Schools overview','/school-info'],['Pricing','/pricing'],['Why Akoro','/compare'],['Pilot programme','/school-info'],['Talk to sales','/contact'],['Become a partner','/partners']] },
+    { title: 'Product',     links: [['What is an AI protege?','/ai-protege'],['How Akoro works','/how-it-works'],['Akoro for students','/for-students'],['Akoro for teachers','/for-teachers'],['Exam preparation','/exam-prep'],['Pricing','/pricing']] },
+    { title: 'For Schools', links: [['Akoro for schools','/for-schools'],['Pricing','/pricing'],['Why Akoro','/compare'],['Pilot programme','/for-schools'],['Talk to sales','/contact'],['Become a partner','/partners']] },
     { title: 'Company',     links: [['About Us','/about'],['Blog','/blog'],['Careers','/careers'],['Press','/contact'],['Contact','/contact'],['Partners','/partners'],['Privacy Policy','/privacy'],['Terms of Service','/terms']] },
   ];
   const socials = [
@@ -341,7 +342,7 @@ export function SiteFooter() {
     { icon: <FaYoutube size={14}/>,   label: 'YouTube' },
     { icon: <FaInstagram size={14}/>, label: 'Instagram' },
     { icon: <FaFacebook size={14}/>,  label: 'Facebook' },
-  ];
+  ].map((x) => ({ ...x, href: SOCIALS.find((c) => c.label === x.label)?.href }));
   const legal = [
     { label: 'Privacy Policy', href: '/privacy' },
     { label: 'Terms of Service', href: '/terms' },
@@ -358,14 +359,14 @@ export function SiteFooter() {
               <AkoroLogo size={32} radius={9}/>
               <span className="sc-fs" style={{ fontSize: 19, color: '#1A1A2E' }}>Akoro</span>
             </div>
-            <p style={{ fontSize: 13.5, color: '#7A7880', lineHeight: 1.7, maxWidth: 240, marginBottom: 20 }}>AI Learning Agents — teach your agent, NaNa Esumai guides every session and teaches you back.</p>
+            <p style={{ fontSize: 13.5, color: '#7A7880', lineHeight: 1.7, maxWidth: 240, marginBottom: 20 }}>{ENTITY} Teach your AI protege, and learn by teaching.</p>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              {socials.map(({ icon, label }) => (
-                <button key={label} aria-label={label} style={{ width: 34, height: 34, borderRadius: 8, background: '#fff', border: '1px solid #DDD8CF', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#7A7880', transition: 'all .18s' }}
+              {socials.map(({ icon, label, href }) => (
+                <a key={label} href={href} target="_blank" rel="noopener noreferrer me" aria-label={`Akoro on ${label}`} style={{ textDecoration: 'none', width: 34, height: 34, borderRadius: 8, background: '#fff', border: '1px solid #DDD8CF', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#7A7880', transition: 'all .18s' }}
                   onMouseEnter={e => { e.currentTarget.style.borderColor = B; e.currentTarget.style.color = B; }}
                   onMouseLeave={e => { e.currentTarget.style.borderColor = '#DDD8CF'; e.currentTarget.style.color = '#7A7880'; }}>
                   {icon}
-                </button>
+                </a>
               ))}
             </div>
           </div>

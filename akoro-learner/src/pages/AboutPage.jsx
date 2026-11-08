@@ -100,10 +100,10 @@ export default function AboutPage() {
               <span style={{ fontSize: 11, fontWeight: 700, color: '#fff', letterSpacing: '0.14em', textTransform: 'uppercase' }}>Our Story</span>
             </div>
             <h1 style={{ ...HEADING('clamp(28px,5vw,52px)'), color: '#fff', marginBottom: 20, maxWidth: 720, marginLeft: 'auto', marginRight: 'auto' }}>
-              We're on a mission to make learning actually stick
+              About Akoro: we're on a mission to make learning actually stick
             </h1>
             <p style={{ fontSize: 'clamp(15px,2vw,18px)', color: 'rgba(255,255,255,.88)', maxWidth: 560, margin: '0 auto 40px', lineHeight: 1.75 }}>
-              Akoro is an AI-powered learning platform built in Lagos, Nigeria — designed around the science of how the human brain actually retains information.
+              Akoro is an education and learning platform built around AI proteges, made in Lagos, Nigeria — designed around the science of how people actually retain information.
             </p>
             <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
               {[['40,000+', 'Students learning'],['500+', 'Schools onboarded'],['12', 'States reached'],['89%', 'Retention rate']].map(([stat, label]) => (

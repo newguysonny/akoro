@@ -19,6 +19,8 @@ export default defineConfig({
   },
   plugins: [
     react(),
+    // The app host is not for search: its pages carry noindex (added here, before the service worker precaches index.html).
+    { name: 'akoro-noindex-app', transformIndexHtml: (html) => (process.env.VITE_TARGET === 'app' ? html.replace('</head>', '    <meta name="robots" content="noindex, nofollow" />\n  </head>') : html) },
     VitePWA({
       // The marketing site is a plain website: no service worker, nothing installable.
       disable: LANDING,
