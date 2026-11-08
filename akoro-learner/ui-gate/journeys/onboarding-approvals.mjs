@@ -84,7 +84,7 @@ const results = [];
 const check = (name, ok, detail) => { results.push({ name, ok: !!ok, ...(ok ? {} : { detail }) }); console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${ok ? '' : `  → ${JSON.stringify(detail ?? null).slice(0, 400)}`}`); return !!ok; };
 const note = (text) => { results.push({ note: text }); console.log(`note  ${text}`); };
 const settle = (page, ms = 1200) => page.waitForTimeout(ms);
-const composer = (page) => page.locator('.ob-composer input').last();
+const composer = (page) => page.locator('.ob-composer textarea').last();
 const send = (page) => page.getByRole('button', { name: 'Send message' });
 const chips = async (page) => (await page.locator('.ob-q button').allInnerTexts()).map((x) => x.trim());
 const pick = (page, name) => page.getByRole('button', { name, exact: true }).click();
@@ -113,7 +113,7 @@ async function signup(page, base, who) {
 /* ── 1. instructor ── */
 async function instructorOnboards(ip, I) {
   check('instructor: sign-up lands on the onboarding chat', await signup(ip, I, instructor), ip.url());
-  await ip.waitForSelector('.ob-composer input:not([disabled])', { timeout: 45_000 }); await settle(ip);
+  await ip.waitForSelector('.ob-composer textarea:not([disabled])', { timeout: 45_000 }); await settle(ip);
   check('instructor: the name arrives pre-filled from sign-up', (await composer(ip).inputValue()).includes(instructor.name), await composer(ip).inputValue());
   await composer(ip).fill(`Dr. ${instructor.name}`); await send(ip).click();
   await ip.waitForSelector('.ob-search', { timeout: 20_000 }); await settle(ip);

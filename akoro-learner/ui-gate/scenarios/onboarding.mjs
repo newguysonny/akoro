@@ -48,7 +48,7 @@ async function captureWrites(t, pattern, method, into) {
   t.cleanup(() => t.page.unroute(pattern).catch(() => {}));
 }
 
-const composer = (page) => page.locator('.ob-composer input').last();
+const composer = (page) => page.locator('.ob-composer textarea').last();
 const sendButton = (page) => page.getByRole('button', { name: 'Send message' });
 const chipNames = async (page) => (await page.locator('.ob-q button').allInnerTexts()).map((x) => x.trim());
 const settle = (page) => page.waitForTimeout(1_000);   // Ako types for ~0.6s before each question
@@ -192,7 +192,7 @@ export const instructorScenarios = [
       await captureWrites(t, '**/api/profiles/me/school-request', 'POST', request);
 
       await page.goto(`${t.app}/onboarding`, { waitUntil: 'domcontentloaded' });
-      t.check('an un-onboarded instructor lands on the onboarding chat', await page.waitForSelector('.ob-composer input:not([disabled])', { timeout: 45_000 }).then(() => true, () => false), { actual: page.url() });
+      t.check('an un-onboarded instructor lands on the onboarding chat', await page.waitForSelector('.ob-composer textarea:not([disabled])', { timeout: 45_000 }).then(() => true, () => false), { actual: page.url() });
       await settle(page);
       // 1 · name — required (the account's own name arrives pre-filled; clear it to check the rule)
       await composer(page).fill('');

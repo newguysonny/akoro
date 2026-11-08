@@ -539,6 +539,7 @@ function SessionChatView({
         {chatMode === "guide" ? (
           <div style={{ marginBottom:8 }}>
             <FortizoChatComposer
+              newlineOnTouchEnter
               value={input}
               onChange={onInputChange}
               onSend={guide?.onSend ? () => guide.onSend(input) : undefined}

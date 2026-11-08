@@ -300,7 +300,7 @@ export default function OnboardingPage() {
     done: tr('chat_ph_done'),
   }[stepId] || tr('chat_ph_default'));
 
-  const focusComposer = () => document.querySelector('.ob-composer input')?.focus();
+  const focusComposer = () => document.querySelector('.ob-composer textarea')?.focus();
   const teacherList = useMemo(() => filterTeachers(teachers, teacherQuery), [teachers, teacherQuery]);
   const subjectList = useMemo(() => subjectChoices(prefillRef.current?.subjects, ans.level), [ans.level, stepIdx]); // eslint-disable-line react-hooks/exhaustive-deps
 
