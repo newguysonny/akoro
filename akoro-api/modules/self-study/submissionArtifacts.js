@@ -252,7 +252,7 @@ export async function aiGradeTarget(targetId) {
     chat: async (messages) => {
       const billTo = owner ? await schoolBillTo(owner).catch(() => null) : null;
       const completion = await openai.chat.completions.create({
-        model: OPENAI_MODEL, temperature: 0.2, max_tokens: 2500, messages,
+        model: OPENAI_MODEL, temperature: 0, max_tokens: 2500, messages,   // 0: the same answer gets the same mark
         response_format: { type: "json_schema", json_schema: { name: "activity_ai_grade", strict: true, schema: aiGradeSchema() } },
         ...(owner ? { __userId: owner } : {}), ...(billTo ? { __billTo: billTo } : {}), __feature: "activity_ai_grade",
       });

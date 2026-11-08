@@ -22,7 +22,7 @@ const isMcq = (q) => Array.isArray(q?.options) && q.options.length >= 2;
 const maxOf = (q) => Number(q?.max_points ?? q?.points) || 0;
 
 const GOOD = "Plants use light energy, water and carbon dioxide to make glucose and oxygen. Chlorophyll in the chloroplasts absorbs the light; the glucose is the plant's food and oxygen is released through the stomata.";
-const WEAK = "Plants need sun.";
+const WEAK = "I don't know.";
 
 export const classAutoGrade = {
   name: "grading.class_auto_grade", area: "activities", risk: "write", timeoutMs: 480_000,
@@ -100,7 +100,10 @@ export const classAutoGrade = {
     // 6. Hand-ins, all at once: learner 1 everything right; the others mixed.
     const right = (q) => String.fromCharCode(65 + Number(q.correct ?? 0));
     const wrong = (q) => String.fromCharCode(65 + ((Number(q.correct ?? 0) + 1) % q.options.length));
-    const answersFor = (k) => questions.map((q, i) => (isMcq(q) ? (k % 2 === 0 ? right(q) : wrong(q)) : (k === 0 ? GOOD : i === writtenAt[0] ? GOOD : WEAK)));
+    // A good written answer is the question's own model answer (else a general one); a weak one says nothing.
+    const goodFor = (q) => { const a = q?.answer; return (typeof a === "object" && a ? Object.values(a).join(" ") : String(a || "")).trim() || GOOD; };
+    const answersFor = (k) => questions.map((q, i) => (isMcq(q) ? (k % 2 === 0 ? right(q) : wrong(q)) : (k === 0 ? goodFor(q) : i === writtenAt[0] ? goodFor(q) : WEAK)));
+    ctx.note(`model answers on the paper: ${writtenAt.filter((i) => questions[i]?.answer).length}/${writtenAt.length}`);
     await Promise.all(takers.map(async (u, k) => {
       const a = answersFor(k);
       for (let i = 0; i < a.length; i++) {
@@ -123,6 +126,12 @@ export const classAutoGrade = {
       }
       return { u, row, secs: Math.round((Date.now() - t0) / 100) / 10 };
     }));
+    // Where the time went, per hand-in (the teacher-only draft carries it).
+    const timing = await ctx.db.rows("edu.self_study_targets", { assignment_id: id }, { columns: "student_id, ai_grade" });
+    for (const t of timing) {
+      const who = takers.find((u) => u.id === t.student_id);
+      if (who && t.ai_grade?.timing) ctx.note(`@${who.username} marking: ${t.ai_grade.timing.totalMs}ms (load ${t.ai_grade.timing.loadMs}ms, model ${t.ai_grade.timing.modelMs}ms)`);
+    }
     for (const { u, row, secs } of results) {
       ctx.note(`@${u.username}: ${row?.graded ? `${row.grade}% after ${secs}s` : `not marked after ${secs}s`} · per question ${(row?.feedbackQuestions || []).map((m) => `${m.index + 1}:${m.awarded}/${m.max}`).join(" ")}`);
       ctx.expect.ok(`@${u.username}'s score arrives within ${p.scoreSeconds}s`, !!row?.graded && secs <= Number(p.scoreSeconds), { graded: !!row?.graded, secs });
@@ -134,6 +143,10 @@ export const classAutoGrade = {
     const [best, ...rest] = results;
     if (best.row?.graded && rest.some((r) => r.row?.graded)) {
       ctx.expect.ok("the all-right answers score at least as well as the mixed ones", rest.filter((r) => r.row?.graded).every((r) => best.row.grade >= r.row.grade), results.map((r) => r.row?.grade));
+      // The same answer to the same question gets the same mark (the first written question: everyone answered it with its model answer).
+      const q1 = writtenAt[0];
+      const same = results.filter((r) => r.row?.graded).map((r) => (r.row.feedbackQuestions || []).find((m) => m.index === q1)?.awarded);
+      ctx.expect.ok(`the same answer to question ${q1 + 1} gets the same mark for everyone`, new Set(same).size === 1, same);
       const mcqMark = (r) => (r.row.feedbackQuestions || []).find((m) => m.index === mcqAt);
       ctx.expect.eq("the multiple choice is marked from the key (right = full)", mcqMark(best)?.awarded, maxOf(questions[mcqAt]));
     }

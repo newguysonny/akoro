@@ -220,23 +220,30 @@ export function shapeAiGrade({ assignment = {}, submission = {}, json = {}, note
  * caller and the test). Never throws: a failure lands as status "failed".
  */
 export async function runAiGrade(targetId, deps) {
+  const t0 = Date.now();
+  const marks = { loadMs: 0, modelMs: 0 };
   await deps.save(targetId, { status: "making", at: new Date().toISOString() });
   try {
     const { assignment, submission, markdown, images, notes = [] } = await deps.load(targetId);
+    marks.loadMs = Date.now() - t0;
     const questions = Array.isArray(assignment.details?.questions) ? assignment.details.questions : [];
     let json = {};
     // Only MCQs and no rubric → nothing for the model to do.
     const answers = submission?.answers || {};
     const files = fileQuestions(submission);
     if (openQuestions(questions, answers, files).length || rubricRows(assignment.details).length || !questions.length) {
-      try { json = JSON.parse(await deps.chat(buildAiGradeMessages({ assignment, markdown, images, answers, files })) || "{}"); }
+      const tm = Date.now();
+      try { json = JSON.parse(await deps.chat(buildAiGradeMessages({ assignment, markdown, images, answers, files })) || "{}"); marks.modelMs = Date.now() - tm; }
       catch (e) {
         if (e?.name === "InsufficientCoins") throw new Error("Out of AI credit — top up to draft marks.");
         throw e;
       }
     }
     const draft = shapeAiGrade({ assignment, submission, json, notes });
-    await deps.save(targetId, { status: "ready", ...draft, at: new Date().toISOString() });
+    // `timing` stays on the teacher-only draft (never in a learner's copy): where an instant score's seconds go.
+    await deps.save(targetId, { status: "ready", ...draft, at: new Date().toISOString(), timing: { totalMs: Date.now() - t0, loadMs: marks.loadMs, modelMs: marks.modelMs } });
+    // Where the time goes (the learner waits on this for an instant score).
+    console.log(`[ai-grade] ${targetId}: ready in ${Date.now() - t0}ms (load ${marks.loadMs}ms, model ${marks.modelMs}ms, ${images.length} image(s))`);
     return draft;
   } catch (e) {
     const error = String(e?.message || e).slice(0, 200);
