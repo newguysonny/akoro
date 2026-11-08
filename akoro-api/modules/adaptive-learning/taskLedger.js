@@ -14,7 +14,7 @@
  * learner_agent_conversation_scratchpads row (goal, plan, completed,
  * next_steps, open_questions, progress_summary).
  */
-export const LEDGER_LIMITS = Object.freeze({ STEPS: 8, STEP_CHARS: 160, GOAL_CHARS: 300, QUESTIONS: 3, COMPLETED: 6, SUMMARY_CHARS: 2000 });
+export const LEDGER_LIMITS = Object.freeze({ STEPS: 8, STEP_CHARS: 160, GOAL_CHARS: 300, QUESTIONS: 3, COMPLETED: 6, SUMMARY_CHARS: 2000, DONE_WHEN: 3 });
 export const STEP_STATUSES = Object.freeze(["pending", "in_progress", "done", "blocked"]);
 
 const clip = (s, n) => String(s ?? "").replace(/\s+/g, " ").trim().slice(0, n);
@@ -39,6 +39,17 @@ export const UPDATE_PLAN_TOOL = Object.freeze({
         },
       },
       open_questions: { type: "array", maxItems: LEDGER_LIMITS.QUESTIONS, items: { type: "string" }, description: "What you still need the learner to tell you." },
+      done_when: {
+        type: "array", maxItems: LEDGER_LIMITS.DONE_WHEN,
+        description: "Phase 22 Part E: how you and the learner will know it's finished — up to 3 checkable conditions, each naming the tool whose successful call proves it (e.g. { condition: 'A revision task exists for Friday 4pm', tool: 'create_task' }). Write them with the first plan.",
+        items: {
+          type: "object", additionalProperties: false, required: ["condition", "tool"],
+          properties: {
+            condition: { type: "string", description: "One checkable condition, in the learner's terms." },
+            tool: { type: "string", description: "The tool whose successful call makes it true." },
+          },
+        },
+      },
     },
     required: ["steps"],
   },
@@ -52,6 +63,20 @@ export function planOf(ledger) {
       const status = s.status === "completed" ? "done" : s.status;   // stored as "completed" (the scratchpad's word)
       return { step: clip(s.step, LEDGER_LIMITS.STEP_CHARS), status: STEP_STATUSES.includes(status) ? status : "pending", ...(s.tool ? { tool: clip(s.tool, 60) } : {}) };
     });
+}
+
+/** The plan's "done when" conditions ([{ condition, tool, met }]) — on the ledger, or kept as a done_when entry in toolState. */
+export function doneWhenOf(ledger) {
+  const raw = Array.isArray(ledger?.doneWhen) ? ledger.doneWhen
+    : (Array.isArray(ledger?.toolState) ? ledger.toolState.find((t) => t?.tool === "done_when")?.items : null) || [];
+  return raw.filter((d) => d && clip(d.condition, 1) && clip(d.tool, 1)).slice(0, LEDGER_LIMITS.DONE_WHEN)
+    .map((d) => ({ condition: clip(d.condition, LEDGER_LIMITS.STEP_CHARS), tool: clip(d.tool, 60), met: d.met === true }));
+}
+
+/** PURE: conditions met once their tool has succeeded (this turn or before); never un-met. */
+export function meetDoneWhen(doneWhen, executions = []) {
+  const ok = new Set((executions || []).filter((x) => x?.success && x.tool !== "update_plan").map((x) => x.tool));
+  return (doneWhen || []).map((d) => ({ ...d, met: d.met === true || ok.has(d.tool) }));
 }
 
 /** Where the chat summary reaches (contextBudget.js): kept as a summary_mark entry in toolState. */
@@ -84,14 +109,21 @@ export function applyPlanUpdate(previous, input, executions = []) {
   }
   const goal = clip(input?.goal, LEDGER_LIMITS.GOAL_CHARS) || clip(previous?.goal, LEDGER_LIMITS.GOAL_CHARS) || null;
   const openQuestions = (Array.isArray(input?.open_questions) ? input.open_questions : []).map((q) => clip(q, 200)).filter(Boolean).slice(0, LEDGER_LIMITS.QUESTIONS);
-  const ledger = { ...(previous || {}), goal, plan: steps, openQuestions, modelPlan: true };
+  // "Done when" (Part E): given with the plan, or kept from before; met only by a successful call of its tool.
+  const givenDoneWhen = (Array.isArray(input?.done_when) ? input.done_when : [])
+    .map((d) => ({ condition: clip(d?.condition, LEDGER_LIMITS.STEP_CHARS), tool: clip(d?.tool, 60) }))
+    .filter((d) => d.condition && d.tool).slice(0, LEDGER_LIMITS.DONE_WHEN);
+  const doneWhen = meetDoneWhen(givenDoneWhen.length ? givenDoneWhen.map((d) => ({ ...d, met: doneWhenOf(previous).some((p) => p.met && p.condition === d.condition) })) : doneWhenOf(previous), executions);
+  const ledger = { ...(previous || {}), goal, plan: steps, openQuestions, doneWhen, modelPlan: true };
   const left = steps.filter((s) => s.status !== "done").map((s) => s.step);
+  const unmet = doneWhen.filter((d) => !d.met).map((d) => d.condition);
   return {
     ledger,
     result: {
       saved: true, goal, steps,
       ...(held.length ? { heldBack: held, note: "These are still in progress: a step is done only when a tool you called succeeded for it." } : {}),
-      ...(left.length ? { left } : { left: [], note: "Every step is done — tell the learner what was achieved." }),
+      ...(doneWhen.length ? { doneWhen } : { note: "Add done_when: up to 3 checkable conditions, each with the tool that proves it." }),
+      ...(left.length || unmet.length ? { left: [...left, ...unmet.map((c) => `Not yet true: ${c}`)] } : { left: [], note: "Every step is done and every condition holds — tell the learner what was achieved." }),
     },
   };
 }
@@ -112,6 +144,7 @@ export function nextLedger(previous, turnLedger, userMessage, executions = []) {
     ...ran.map((x) => `Ran ${String(x.tool).replace(/_/g, " ")}.`),
   ].map((c) => clip(c, 320)).filter(Boolean))].slice(-LEDGER_LIMITS.COMPLETED);
   const mark = summaryMarkOf(base) || summaryMarkOf(previous);
+  const doneWhen = meetDoneWhen(doneWhenOf(base), executions);
   return {
     goal: clip(base.goal, LEDGER_LIMITS.GOAL_CHARS) || clip(userMessage, LEDGER_LIMITS.GOAL_CHARS) || "Help with the learner's study request",
     progressSummary: clip(base.progressSummary, LEDGER_LIMITS.SUMMARY_CHARS),
@@ -123,8 +156,22 @@ export function nextLedger(previous, turnLedger, userMessage, executions = []) {
     toolState: [
       ...ran.slice(-4).map((x) => ({ tool: x.tool, success: true, ...(x.sideEffecting ? { sideEffecting: true } : {}) })),
       ...(mark ? [{ tool: "summary_mark", success: true, mark }] : []),
+      ...(doneWhen.length ? [{ tool: "done_when", success: true, items: doneWhen }] : []),
     ],
   };
+}
+
+/**
+ * Phase 22 Part E: a starting plan for a multi-step request, drafted by the intent step,
+ * shown only when the ledger has no open plan. Never saved on its own — it is kept
+ * only if the agent adopts it with update_plan, so an unused draft never shows up as
+ * "still to do".
+ */
+export function renderDraftPlan(steps = [], ledger = null) {
+  const open = planOf(ledger).some((s) => s.status !== "done");
+  const list = (steps || []).map((st) => clip(st, LEDGER_LIMITS.STEP_CHARS)).filter(Boolean).slice(0, 5);
+  if (open || list.length < 2) return "";
+  return `\n\n## A starting plan (read from their request)\n${list.map((st, i) => `${i + 1}. ${st}`).join("\n")}\nAdopt it with update_plan before your first other tool — the steps (change them if needed) and done_when — then mark each step done as its tool succeeds.`;
 }
 
 /** The ledger in the system prompt. Empty when there is nothing in it. */
@@ -134,6 +181,8 @@ export function renderLedger(ledger) {
   const parts = [];
   if (ledger?.goal) parts.push(`Goal: ${clip(ledger.goal, LEDGER_LIMITS.GOAL_CHARS)}`);
   if (plan.length) parts.push(`Steps:\n${plan.map((s) => `- [${s.status}] ${s.step}${s.tool ? ` (${s.tool})` : ""}`).join("\n")}`);
+  const doneWhen = doneWhenOf(ledger);
+  if (doneWhen.length) parts.push(`Done when:\n${doneWhen.map((d) => `- [${d.met ? "true" : "not yet"}] ${d.condition} (${d.tool})`).join("\n")}`);
   const questions = (ledger?.openQuestions || []).filter(Boolean);
   if (questions.length) parts.push(`Waiting on the learner:\n${list(questions)}`);
   if (ledger?.progressSummary) parts.push(`Earlier in this chat (summary):\n${clip(ledger.progressSummary, 2000)}`);

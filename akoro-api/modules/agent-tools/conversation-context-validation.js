@@ -66,8 +66,9 @@ export function normaliseScratchpad(value) {
   if (new Set(scratchpad.plan.map((item) => item.step)).size !== scratchpad.plan.length) {
     throw new Error("scratchpad plan must not contain duplicates");
   }
-  // Four tool results, plus at most one summary_mark (where the ledger's summary of the chat reaches).
-  if (!Array.isArray(value.toolState) || value.toolState.length > 5) throw new Error("scratchpad tool state is invalid");
+  // Four tool results, plus at most one summary_mark (where the ledger's summary of the chat reaches)
+  // and one done_when (the plan's checkable finish line, Phase 22 Part E).
+  if (!Array.isArray(value.toolState) || value.toolState.length > 6) throw new Error("scratchpad tool state is invalid");
   scratchpad.toolState = value.toolState.map((item) => {
     if (!item || typeof item !== "object" || Array.isArray(item)) throw new Error("scratchpad tool state is invalid");
     const tool = boundedText(item.tool, 80);
@@ -76,6 +77,10 @@ export function normaliseScratchpad(value) {
     if (item.sideEffecting === true) safe.sideEffecting = true;
     if (item.requiresConfirmation === true) safe.requiresConfirmation = true;
     if (tool === "summary_mark" && typeof item.mark === "string" && /^[a-f0-9]{8,40}$/.test(item.mark)) safe.mark = item.mark;
+    if (tool === "done_when" && Array.isArray(item.items)) {
+      safe.items = item.items.slice(0, 3).map((d) => ({ condition: boundedText(d?.condition, 160), tool: boundedText(d?.tool, 80), met: d?.met === true }))
+        .filter((d) => d.condition && TOOL_NAME.test(d.tool));
+    }
     return safe;
   });
   return scratchpad;

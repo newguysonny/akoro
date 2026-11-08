@@ -103,7 +103,7 @@ import {
 } from "./learner-autonomy.js";
 import { adminRequestOf, requestClaimCorrection } from "./requestClaims.js";
 // Phase 16: the task ledger, the end-of-turn check, recovery, the context budget and the intent step.
-import { UPDATE_PLAN_TOOL, applyPlanUpdate, nextLedger, renderLedger, summaryMarkOf } from "./taskLedger.js";
+import { UPDATE_PLAN_TOOL, applyPlanUpdate, nextLedger, renderLedger, renderDraftPlan, summaryMarkOf } from "./taskLedger.js";
 import { turnCorrections } from "./turnCheck.js";
 import { failed as toolFailed, shouldRetry, recoveryHint } from "./toolRecovery.js";
 import { runWithinLimit } from "./toolLimits.js";
@@ -4912,7 +4912,9 @@ router.post("/agent", async (req, res) => {
     mark("intent");
     const turnSystem = systemContent
       + (summaryNow ? `\n\n## Earlier in this chat (summary)\n${summaryNow}` : "")
-      + renderIntent(intent);
+      + renderIntent(intent)
+      // Phase 22 Part E: a multi-step request gets a starting plan to adopt (kept only if the agent adopts it).
+      + (intent?.multiStep ? renderDraftPlan(intent.steps, conversation?.scratchpad || null) : "");
     const ledgerIn = conversation?.scratchpad ? { ...conversation.scratchpad, progressSummary: summaryNow, summaryMark } : (summaryNow ? { progressSummary: summaryNow, summaryMark } : null);
     const recorder = (await recordsRealTraffic(req.user.id).catch(() => false))
       ? createEpisodeRecorder({ surface: "agent_chat", role, system: turnSystem, source: "real",
