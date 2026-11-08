@@ -4396,3 +4396,81 @@ The agent reaches out to other agents by itself. Its learner supervises: the age
 - **Sandbox, commit 46b617a2 (topic start) and 755559dd (the rest): all 12 `outreach.*` checks PASS.** They cover struggle consult, topic start with a friend, stranger card, friend-request card, share-data card, battle-invite card, offline then answered, daily cap, blocked pair skipped, younger learner asked first, two-way round trip, and no personal details sent.
 - **Note:** on the sandbox, @tester01 is a JSS learner, so the checks set the learner's level for each run.
 - **Not built yet:** a learner-facing screen listing what the agent started on its own. Today it shows only as chat lines and cards.
+
+### Phase 22 — Learning edges: verify, remember, improve (from "The Agent Architecture Stack", audit 2026-11-08)
+- **Source.** `reference/The Agent Architecture Stack: Loops, Graphs, Harnesses, and
+  Self-Improvement.md`, audited against this plan and the code on 2026-11-08.
+- **Already in place (not repeated here):** bounded loops with real stop conditions
+  (task ledger, loop guard, tool time limits, retry caps — Phases 16, 18); the check
+  outside the model (Verification Gate, end-of-turn claims check); recovery by
+  failure type (16.3); permissions outside the model and asked/inferred basis (18.6);
+  a person at the highest-consequence point (approval cards, V4); durable state and
+  traces (scratchpad, episodes, event stream, chat trace); store first, send after
+  (18.5); schedules plus event triggers (autonomy planner, inbox wakes); routing by
+  state (decay review); a concept prerequisite graph (`concept_edges`,
+  `prerequisite_gap`); agent identity and Online status (Phase 21).
+- **The gap, in one line.** Akoro fixes each run (the short "correction edge") but has
+  almost no long "learning edge": failures, low ratings and admin corrections are
+  recorded and then nobody turns them into a permanent change.
+- **Items, in order:**
+  1. **Change receipt on every turn and episode.** Record the prompt version (a hash
+     of the assembled prompt parts plus the ids of any admin overrides), the policy
+     and tool-catalogue version, the model, tools called, checks, retries, human
+     corrections and cost — so a regression can be traced to the change that caused
+     it. Episodes today record the model but not the prompt or policy version.
+     *Exit:* contract test — every saved episode and chat trace carries the versions;
+     an admin override changes the prompt version.
+  2. **Fresh-context check on generated learning content.** Quiz, flashcard, summary
+     and Agent Check items get a second, separate call that sees only the item and
+     the passage it cites (not the generation conversation): is the answer right and
+     supported by the quote? A failing item is regenerated on its own (never the
+     whole set), at most twice, then dropped and logged. Today only structural
+     checks run (four distinct options, a valid source).
+     *Exit:* unit tests on the item loop; a gate scenario with a planted wrong item
+     that is caught and replaced; cost per quiz reported.
+  3. **Memories with evidence and history.** Quiet learning may add, update or
+     forget a memory with no quote and no history — an update silently overwrites.
+     Each add or update must carry a verbatim snippet from the conversation; an
+     update keeps the old version (dated, superseded) instead of overwriting; a
+     contradiction with an existing memory is shown to the learner on the Memory
+     page to confirm, not resolved by the model.
+     *Exit:* contract tests (no quote → refused; update keeps history); Memory page
+     UI after preview approval.
+  4. **Blast-radius lanes for every side-effecting tool.** Each tool declares
+     `contained` (reversible, only the learner's own things), `wide` (reversible but
+     touches others or shared data) or `irreversible` (payments, permanent
+     deletion, public posting). `irreversible` is a closed lane: never on an
+     inferred basis, never auto-approved, whatever the autonomy level or consents.
+     *Exit:* contract test — every side-effecting tool has a lane; an inferred
+     irreversible action is refused by the harness.
+  5. **The weekly improvement review.** A scheduled job with fresh context reads the
+     week's failed episodes, worst-rated replies, recovery logs, repeated
+     corrections, escalations and gate failures; groups recurring causes; and
+     proposes specific diffs (a prompt part, a tool description, a validator, a
+     rule) as an admin approval item with its evidence. It never writes them itself.
+     *Exit:* a gate scenario: seeded failures → one grouped proposal with evidence;
+     nothing changes until an admin approves.
+  6. **Evaluate before keeping.** An approved change — from the review or an admin's
+     prompt override (18.7) — runs the agent eval suites (agent, agent-checks,
+     benchmark) before and after; if the score drops, it is flagged and offered for
+     rollback, with the earlier version kept.
+     *Exit:* an override that lowers the score is flagged with both scores; rollback
+     restores the earlier text.
+  7. **A living rules file.** Approved lessons go into a dated, append-only rules
+     file in the agent workspace (`akoro-agent/`), loaded every run; where a rule
+     can be checked in code, it is also added as a check ("encode rules twice").
+     *Exit:* a rule added through the review is present in the next turn's prompt
+     and its receipt version changes.
+  8. **Remove false waits in the workflows.** The chat latency work (12.1) found
+     sequential steps with no data dependency; audit Study Prep planning, teaching
+     start, Agent Check creation and the autonomy cycle the same way (measure first,
+     then run independent steps together).
+     *Exit:* before/after timings for each, with no behaviour change.
+- **Considered, not adopted:** a separate knowledge-graph database (the concept graph
+  and struggle records cover the multi-hop questions Akoro asks today; revisit with
+  evidence); a team-workspace model for agents (Phase 21 already gives each learner's
+  agent identity, status and handoffs); the reference's folder layout (Phase 19
+  covers structure).
+- **Order of work:** 1 and 4 (small, in the runtime), then 2 and 3, then 5–7
+  together (they share the approval and eval plumbing), then 8.
+- **Status (2026-11-08):** planned.
