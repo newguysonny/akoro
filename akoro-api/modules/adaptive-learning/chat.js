@@ -4100,13 +4100,16 @@ export function clarify(field, question, extra = {}) {
   return { needsClarification: true, missing: field, question, ...extra };
 }
 
+/** Phase 22 Part E: plan first when the request takes several steps and the agent is to act now (not ask, not stop). */
+export const shouldPlanFirst = (intent) => !!(intent?.multiStep && intent.next === "proceed" && ["action", "change"].includes(intent.kind));
+
 // Exported (below) for the benchmark (lib/evals/benchmark.js), which runs this same loop with stub tools.
 // `callTool` is the one seam: production executes the real tools; the benchmark passes stubs.
 // `recorder`: an agent-contract/episode.js recorder when the turn is recorded.
 // `basis` (Phase 18 item 6): a turn a person's message started is explicit; a turn
 // started for them (a proactive kind, a workflow) passes { basis: "inferred", rule }.
 // `toolLimitMs`: one time limit for every call (tests, the benchmark); else each tool's own (toolLimits.js).
-async function runAgentToolLoop({ systemContent, messages, studentId, conversationId = null, status, tools = openAiChatTools(), requiredTool = null, role = "student", trace = null, isAborted = () => false, think = false, streamText = true, model = null, teacherWords = null, ledger = null, callTool = null, recorder = null, meta = null, basis = "explicit", toolLimitMs = null }) {
+async function runAgentToolLoop({ systemContent, messages, studentId, conversationId = null, status, tools = openAiChatTools(), requiredTool = null, role = "student", trace = null, isAborted = () => false, think = false, streamText = true, model = null, teacherWords = null, ledger = null, callTool = null, recorder = null, meta = null, basis = "explicit", toolLimitMs = null, planFirst = false }) {
   const turnBasis = actionBasis(basis, { basis: "explicit" });
   const runTool = callTool || ((name, input) => executeChatTool(name, input, studentId, { conversationId, role, basis: turnBasis }));
   // The loop guard (loopGuard.js): the same call again in a row gets a reminder in its observation.
@@ -4140,9 +4143,12 @@ async function runAgentToolLoop({ systemContent, messages, studentId, conversati
     // This force is limited to capability questions: it guarantees the
     // response is based on the live Akoro inventory, but does not choose an
     // endpoint, shape learner-facing prose, or invent a feature.
+    // Phase 22 Part E: a multi-step request the agent is to act on starts by writing its plan
+    // (update_plan with steps and done_when) — enforced on the first step, not left to a prompt hint.
+    const planStep = iteration === 0 && !requiredTool && planFirst && !(Array.isArray(ledgerNow?.plan) && ledgerNow.plan.some((st) => st && !["done", "completed"].includes(st.status)));
     const toolChoice = iteration === 0 && requiredTool
       ? { type: "function", function: { name: requiredTool } }
-      : "auto";
+      : planStep ? { type: "function", function: { name: UPDATE_PLAN_TOOL.name } } : "auto";
     // Words the model writes stream live as an activity block. The step's
     // thinking row closes when they start (they narrate the step themselves).
     // Research mode buffers instead: its answer is regenerated on the
@@ -4924,6 +4930,7 @@ router.post("/agent", async (req, res) => {
     const prepared = await runAgentToolLoop({
       recorder,
       ledger: ledgerIn,
+      planFirst: shouldPlanFirst(intent),
       teacherWords: draftFollowUp ? userMessage.slice(0, 1500) : null,
       systemContent: turnSystem,
       messages: [...fit.kept, { role: "user", content: userContent }],

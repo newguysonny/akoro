@@ -93,7 +93,7 @@ export function scoreRun(sc, { calls, reply, executions, isSide }) {
 }
 
 async function runOnce(sc, { model, userId }) {
-  const { runAgentToolLoop, assembleChatDoctrine, getLearnerChatTools, isSideEffecting } = await chat();
+  const { runAgentToolLoop, assembleChatDoctrine, getLearnerChatTools, isSideEffecting, shouldPlanFirst } = await chat();
   const isSide = (t) => isSideEffecting(t, {});
   const system = await assembleChatDoctrine({ role: "student", currentTimeContext: "\n\nCurrent date and time: Saturday, 31 October 2026, 10:00 (Africa/Lagos)." });
   const tools = getLearnerChatTools().map((t) => ({ type: "function", function: { name: t.name, description: t.description, parameters: t.input_schema } }));
@@ -118,6 +118,7 @@ async function runOnce(sc, { model, userId }) {
   const out = await runAgentToolLoop({
     systemContent: turnSystem, messages, studentId: userId || "00000000-0000-4000-8000-00000000be00",
     tools, role: "student", model, streamText: true, trace: null, callTool, recorder, meta,
+    planFirst: shouldPlanFirst(intent),   // as the chat route runs it (Phase 22 Part E)
   });
   const reply = String(out.finalText || "").trim();
   recorder.decision({ reply });

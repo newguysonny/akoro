@@ -69,3 +69,13 @@ test("wiring: the chat turn shows the starting plan for multi-step requests; the
   assert.match(chat, /\+ \(intent\?\.multiStep \? renderDraftPlan\(intent\.steps, conversation\?\.scratchpad \|\| null\) : ""\)/);
   assert.match(intent, /max_tokens: 320/);
 });
+
+test("plan first is enforced on the first step of a multi-step action turn — not when asking, stopping or with an open plan", async () => {
+  const chat = await readFile(new URL("./chat.js", import.meta.url), "utf8");
+  const bench = await readFile(new URL("../../lib/evals/benchmark.js", import.meta.url), "utf8");
+  assert.match(chat, /export const shouldPlanFirst = \(intent\) => !!\(intent\?\.multiStep && intent\.next === "proceed" && \["action", "change"\]\.includes\(intent\.kind\)\);/);
+  assert.match(chat, /const planStep = iteration === 0 && !requiredTool && planFirst && !\(Array\.isArray\(ledgerNow\?\.plan\)/);
+  assert.match(chat, /planStep \? \{ type: "function", function: \{ name: UPDATE_PLAN_TOOL\.name \} \} : "auto"/);
+  assert.match(chat, /planFirst: shouldPlanFirst\(intent\),/);
+  assert.match(bench, /planFirst: shouldPlanFirst\(intent\),/, "the benchmark runs the turn as chat does");
+});
