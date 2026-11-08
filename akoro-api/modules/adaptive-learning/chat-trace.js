@@ -26,6 +26,7 @@
 export const CHAT_TOOL_DISPLAY = Object.freeze({
   get_learner_context:            { category: "research", headline: "Reviewing your study profile",        description: "Looking at your class, subjects and recent activity" },
   get_agent_capabilities:         { category: "research", headline: "Checking what I can do for you",      description: "Reading the list of things your agent can help with" },
+  make_study_material:            { category: "action",   headline: "Making your study material",          description: "Building it from your document and saving it in the reader", done: "Made your study material" },
   analyse_past_papers:            { category: "research", headline: "Looking across your past papers",     description: "Finding the topics that keep coming up" },
   search_my_library:              { category: "research", headline: "Searching your library",              description: "Looking through the materials you saved" },
   check_progress:                 { category: "research", headline: "Checking your progress",              description: "Looking at your recent results and streaks" },

@@ -315,6 +315,7 @@ export default function LibraryPage() {
   const [viewer, setViewer]     = useState(null);   // the record open as a session
   // ?tool= from an Agent Chat link: the reader opens on that study tool (Quiz, Flashcards…).
   const [viewerTool, setViewerTool] = useState(null);
+  const [viewerArtifact, setViewerArtifact] = useState(null);   // a saved tab to open on (made in Agent Chat)
 
   /* Semantic search — the server searches INSIDE your records (what a paste
      says, what a scanned PDF contains, what a recording was about), fused
@@ -390,6 +391,8 @@ export default function LibraryPage() {
         const target = (recs || []).find((r) => `${r.id}` === `${recordParam}`);
         const tool = searchParams.get('tool');
         if (target && READER_TOOLS.has(tool)) setViewerTool(tool);
+        const artifactParam = searchParams.get('artifact');
+        if (target && /^[0-9a-f-]{36}$/i.test(artifactParam || '')) setViewerArtifact(artifactParam);
         if (target) openRecordRef.current?.(target);
       }
     } finally { setLoading(false); }
@@ -858,8 +861,9 @@ export default function LibraryPage() {
         <RecordTeachSession
           record={viewer}
           openTool={viewerTool}
-          onClose={() => { setViewer(null); setViewerTool(null); }}
-          onMinimize={() => { setViewer(null); setViewerTool(null); }}
+          openArtifact={viewerArtifact}
+          onClose={() => { setViewer(null); setViewerTool(null); setViewerArtifact(null); }}
+          onMinimize={() => { setViewer(null); setViewerTool(null); setViewerArtifact(null); }}
           onOpened={handleRecordOpened}
           onProgress={handleRecordProgress}
         />

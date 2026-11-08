@@ -651,6 +651,31 @@ export const scenarios = [
     },
   },
   {
+    name: 'reader.artifact_link',
+    description: "A quiz made in Agent Chat links to /library?record=…&artifact=…: the reader opens with that quiz tab showing — even after the learner closed it.",
+    async run(t) {
+      const { page } = t;
+      const marker = newMarker();
+      const made = await t.api('POST', '/api/records', { kind: 'paste', name: `${marker} Energy notes`, content: PARAS.join('\n\n') });
+      const record = made.body?.data?.record || made.body?.data;
+      if (!record?.id) t.block(`saving the pasted record answered ${made.status}: ${made.body?.message || ''}`);
+      t.cleanup(async () => { await t.api('DELETE', `/api/records/${record.id}`); });
+      // The saved tab chat makes (records/studyMaterial.js), here saved closed.
+      const prompt = `${marker} Where does aerobic respiration happen?`;
+      const opts = ['Mitochondria', 'Nucleus', 'Golgi apparatus', 'Ribosome'].map((text, i) => ({ key: 'ABCD'[i], text, correct: i === 0 }));
+      const art = await t.api('POST', '/api/records/artifacts', { recordId: record.id, kind: 'quiz', open: false,
+        params: { scope: 'Whole document', from: 'chat' },
+        content: { quizQuestions: [{ prompt, options: opts, explanation: 'Mitochondria release the energy stored in glucose.', cite: null }],
+          ui: { quizAnswers: [{ selected: null, checked: false, dontKnow: false }] } } });
+      const artifact = art.body?.data?.artifact;
+      if (!artifact?.id) t.block(`saving the quiz tab answered ${art.status}: ${art.body?.message || ''}`);
+      await page.goto(`${t.app}/library?record=${record.id}&artifact=${artifact.id}`, { waitUntil: 'domcontentloaded' });
+      t.check('the reader opens showing that quiz', await page.getByText(prompt).first().waitFor({ timeout: 45_000 }).then(() => true, () => false));
+      t.check('…with its answers to pick', await page.getByText('Golgi apparatus').first().waitFor({ timeout: 10_000 }).then(() => true, () => false));
+      t.check('…on this document', await page.getByText(`${marker} Energy notes`).first().isVisible().catch(() => false));
+    },
+  },
+  {
     name: 'library.recently_deleted',
     description: "A chat upload the learner undid is in the Library's Recently deleted (a tile after Folders) with the days left; Restore puts it back; Delete forever asks, then it's gone for good.",
     async run(t) {

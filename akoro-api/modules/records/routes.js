@@ -72,6 +72,7 @@ import { activePremiumUserIds, resolveContentAccess, resolveAskTargetFor } from 
 import { officeKindOf } from "./officeText.js";
 import { storedTextKindOf, extractStoredText } from "./storedText.js";
 import { TOOL_IDS, TOOL_LIMITS, toolSchema, buildToolMessages, shapeToolResult, gatherToolPassages } from "./toolsLib.js";
+import { generateToolResult, startPodcast } from "./studyMaterial.js";
 import {
   validateArtifactInput, validateArtifactPatch, listArtifacts, createArtifact, updateArtifact, deleteArtifact,
   getArtifactRow, toApiArtifact, SERVER_MADE_KINDS,
@@ -1008,35 +1009,9 @@ router.post("/tools/:tool", authenticateToken, asyncHandler(async (req, res) => 
     difficulty: typeof raw.difficulty === "string" ? raw.difficulty.slice(0, 10) : "",
   };
 
-  const passages = await gatherToolPassages({
-    target, scope, pageNumber: Number.isInteger(pageNumber) && pageNumber >= 1 ? pageNumber : null,
-    pageText, focus: values.focus, search: searchRecordChunks,
-  });
-  if (!passages.length) {
-    return res.status(409).json({ success: false, message: scope === "page"
-      ? "This page has no readable text yet — extract the document's text first."
-      : "This document isn't readable yet — extract its text (or transcribe the recording) first." });
-  }
-
-  try {
-    const completion = await openai.chat.completions.create({
-      model: OPENAI_MODEL,
-      temperature: 0.3,
-      max_tokens: tool === "quiz" ? 2400 : 1600,
-      messages: buildToolMessages({ tool, docName: target.name, passages, values }),
-      response_format: { type: "json_schema", json_schema: { name: `reader_${tool}`, strict: true, schema: toolSchema(tool) } },
-    });
-    let json = null;
-    try { json = JSON.parse(completion.choices?.[0]?.message?.content || "{}"); } catch { json = {}; }
-    const result = shapeToolResult(tool, json, passages, values);
-    const items = result.summaryPoints || result.quizQuestions || result.cardSet || [];
-    if (!items.length) return res.status(422).json({ success: false, message: "Couldn't build that from this material — try a different page or focus." });
-    return res.json({ success: true, data: { tool, scope, ...result, passages: passages.length } });
-  } catch (err) {
-    if (err?.name === "InsufficientCoins") return res.status(402).json({ success: false, message: "You're out of AI credit — top up to keep generating." });
-    console.warn("[records-tools] failed:", String(err?.message || err).slice(0, 200));
-    return res.status(424).json({ success: false, message: "Couldn't generate that right now — try again in a moment." });
-  }
+  const g = await generateToolResult({ target, tool, scope, pageNumber: Number.isInteger(pageNumber) && pageNumber >= 1 ? pageNumber : null, pageText, values });
+  if (g.status) return res.status(g.status).json({ success: false, message: g.message });
+  return res.json({ success: true, data: { tool, scope, ...g.result } });
 }));
 
 // ─── Podcast: a two-voice study episode from the document ──────────────────
@@ -1066,63 +1041,15 @@ router.post("/podcast", authenticateToken, asyncHandler(async (req, res) => {
   if (target.status) return res.status(target.status).json({ success: false, message: target.message });
 
   const userId = req.user.id;
-  const billTo = getAiBillTo();
-  const { ok } = await coinsAvailable({ userId, billTo, min: 1 });
-  if (!ok) return res.status(402).json({ success: false, message: "You're out of AI credit — top up to make episodes.", code: "INSUFFICIENT_COINS" });
-
-  // One episode at a time per document: a second request while one is
-  // being made would only double the bill.
-  const existing = await listArtifacts({ userId, recordId: target.recordId });
-  if (existing.some((a) => a.kind === "podcast" && podcastInFlight(a.content))) {
-    return res.status(409).json({ success: false, message: "An episode for this document is already being made — it'll be ready in a minute or two." });
-  }
-
   const scope = req.body?.scope === "document" ? "document" : "page";
   const pageNumber = Number(req.body?.pageNumber);
   const page = Number.isInteger(pageNumber) && pageNumber >= 1 ? pageNumber : null;
   const pageText = typeof req.body?.pageText === "string" ? req.body.pageText.slice(0, TOOL_LIMITS.MAX_PAGE_TEXT_CHARS) : "";
   const raw = req.body?.values && typeof req.body.values === "object" ? req.body.values : {};
-  const focus = typeof raw.focus === "string" ? raw.focus.slice(0, TOOL_LIMITS.MAX_FOCUS_CHARS) : "";
-  const length = lengthOf(raw.length);
-  const startedAt = new Date().toISOString();
-
-  const created = await createArtifact({
-    userId, recordId: target.recordId,
-    row: {
-      kind: "podcast", page_number: page, open: true,
-      params: { focus, length: typeof raw.length === "string" ? raw.length.slice(0, 40) : length.id, scope: scope === "document" ? "Whole document" : "This page" },
-      content: { podcast: { status: "making", length: length.id, startedAt } },
-    },
-  });
-  if (created.error) return res.status(409).json({ success: false, message: created.error });
-  const artifactId = created.artifact.id;
-  res.status(202).json({ success: true, data: { artifact: await withPodcastAudio(created.artifact, userId) } });
-
-  // After the response: script → narration → storage → the item is ready.
-  let spokeWith = PODCAST_LIMITS.TTS_MODEL;   // the provider that narrated, for the charge
-  void runPodcastJob({ artifactId, target, scope, pageNumber: page, pageText, focus, length, startedAt }, {
-    gather: (args) => gatherToolPassages({ ...args, search: searchRecordChunks }),
-    chat: async (messages, len) => {
-      const completion = await openai.chat.completions.create({
-        model: OPENAI_MODEL, temperature: 0.7, max_tokens: len.maxTokens, messages,
-        response_format: { type: "json_schema", json_schema: { name: "reader_podcast", strict: true, schema: podcastSchema() } },
-        __userId: userId, __billTo: billTo, __feature: "reader_podcast",
-      });
-      return completion.choices?.[0]?.message?.content || "{}";
-    },
-    speak: async (input, voice) => {
-      // Deepgram Aura first; OpenAI tts-1 only as the fallback (voice/tts.js).
-      const { model, buffer } = await speakBuffer({ text: input, voice, openai });
-      spokeWith = model;
-      return buffer;
-    },
-    charge: (chars) => debitCoins({
-      userId, billTo, coins: coinsForTtsChars(spokeWith, chars),
-      feature: "reader_podcast_tts", model: spokeWith, ref: artifactId,
-    }),
-    store: (audio) => putRecordObject({ userId, name: `podcasts/${artifactId}.mp3`, body: audio, contentType: "audio/mpeg" }),
-    update: (id, content) => updateArtifact({ userId, id, patch: { content, updated_at: new Date().toISOString() } }),
-  });
+  // The episode is written, narrated and stored after the response (studyMaterial.startPodcast).
+  const out = await startPodcast({ userId, target, scope, pageNumber: page, pageText, values: raw, deps: { speakBuffer, putRecordObject } });
+  if (out.status) return res.status(out.status).json({ success: false, message: out.message, ...(out.code ? { code: out.code } : {}) });
+  res.status(202).json({ success: true, data: { artifact: await withPodcastAudio(out.artifact, userId) } });
 }));
 
 /* GET /api/records/podcast/:id — one podcast item (the reader polls it). */

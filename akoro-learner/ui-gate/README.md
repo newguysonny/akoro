@@ -26,7 +26,7 @@ Only `PASS` is verified. Exit code 0 only for `PASS`.
 - `live` — the deployed app (`UI_GATE_APP`) and its API (`UI_GATE_API`).
 - `local` (default) — this checkout, built and served on `127.0.0.1:4321` by
   `vite preview`, with `/api` and `/socket.io` passed through to `UI_GATE_API`
-  (default `https://api.akoro.name.ng`) — see `vite.gate.config.mjs`.
+  (default `https://api.akoro.ng`) — see `vite.gate.config.mjs`.
   `--no-build` reuses the last build.
 
 **Accounts** — only the seeded test learners (`tester01`–`tester50`

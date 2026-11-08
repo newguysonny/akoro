@@ -20,7 +20,7 @@ export const CHAT_TOOL_FAMILY_LIMITS_MS = Object.freeze({
 /** Tools that call a model or another agent before they answer: the `model` family. */
 export const MODEL_BACKED_CHAT_TOOLS = Object.freeze([
   "consult_peer_agents", "consult_teaching_guide", "ask_to_be_taught", "analyse_past_papers",
-  "search_my_study_knowledge", "search_my_library", "read_blog_post",
+  "search_my_study_knowledge", "search_my_library", "make_study_material", "read_blog_post",
   "start_study_prep_session", "challenge_agent", "class_battle", "rematch_battle", "request_guide_review",
   "prepare_activity", "revise_activity_draft", "run_teaching_tool", "check_activity_outcomes",
 ]);

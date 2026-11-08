@@ -73,6 +73,7 @@
     { "text": "Search my saved study notes for anything about osmosis.", "tool": "search_my_study_knowledge", "args": { "query": "/osmosis/i" }, "run": true },
     { "text": "Do I have any notes in my library on photosynthesis?", "tool": "search_my_library", "args": { "query": "/photosynthesis/i" }, "run": true },
     { "text": "Which topics keep coming up in my WAEC Biology past papers?", "tool": "analyse_past_papers", "run": true },
+    { "text": "Create a quiz on the basic science material in my folder", "tool": "make_study_material", "args": { "tool": "quiz", "folder": "basic science" } },
     { "text": "Show my concept tracker — which concepts am I still working on?", "tool": "get_concept_tracker_summary", "run": true },
     { "text": "Summarise my learning insights.", "tool": "get_learning_insights_summary", "run": true },
     { "text": "How ready am I for my exam? Show my exam-prep status.", "tool": "get_exam_prep_status", "run": true },

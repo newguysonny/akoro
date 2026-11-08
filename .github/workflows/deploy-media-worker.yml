@@ -16,7 +16,7 @@
 #   MW_R2_SECRET_ACCESS_KEY  │
 #   MW_R2_BUCKET_NAME        │
 #   MW_R2_PUBLIC_URL         ┘
-#   MW_API_BASE_URL          — e.g. https://api.akoro.name.ng
+#   MW_API_BASE_URL          — e.g. https://api.akoro.ng
 #
 # Run: Actions tab → "Deploy media-worker" → Run workflow.
 # Verify afterwards: GET <workers-url>/edge-health (no wake), then /healthz

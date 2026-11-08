@@ -228,10 +228,10 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
   // Opened from a link that names a study tool: the reader opens on it, once, when the material is ready.
   const openToolDone = useRef(false);
   useEffect(() => {
-    if (!config?.openTool || openToolDone.current || (content && content.state !== 'ready')) return;
+    if (!(config?.openTool || config?.openArtifact) || openToolDone.current || (content && content.state !== 'ready')) return;
     openToolDone.current = true;
     setReaderOpen(true);
-  }, [config?.openTool, content?.state]);
+  }, [config?.openTool, config?.openArtifact, content?.state]);
   // A citation chip on the protégé's message: open the reader on that page
   // and flash the cited box (or seek the recording). The key re-fires a
   // jump to the same place; closing clears it so a reopen doesn't replay it.
@@ -1078,6 +1078,7 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
     renderPageContent: content.renderPageContent || null,
     rawPages: content.rawPages || false,
     initialTool: config?.openTool || null,
+    initialArtifactId: config?.openArtifact || null,
     pageBlocks: content.pageBlocks || null,
     transcript: content.transcript || null,
     onTranscribe: content.onTranscribe || null,

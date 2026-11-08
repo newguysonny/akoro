@@ -94,7 +94,7 @@ function ThoughtBlock({ thinking, streaming }) {
 }
 
 const FIND_SIMILAR = "Find similar material";   // the API's structureChips label
-const MATERIAL_ICON = { study_tool:"ti-layout-grid", folder:"ti-folder", blog:"ti-article", my_blog:"ti-pencil", course:"ti-school", record:"ti-paperclip", topic:"ti-chalkboard", activity:"ti-list-check" };
+const MATERIAL_ICON = { study_tool:"ti-layout-grid", choice:"ti-paperclip", folder:"ti-folder", blog:"ti-article", my_blog:"ti-pencil", course:"ti-school", record:"ti-paperclip", topic:"ti-chalkboard", activity:"ti-list-check" };
 
 /* Each suggestion kind's label and icon in Suggestions (the ready kinds, §7.16.3). */
 const SUGG_KIND = {
@@ -106,6 +106,31 @@ const SUGG_KIND = {
 };
 
 /* Ideas: the icon for what it builds, and for where it came from. */
+/* A study tool chat made (saved as a reader tab): kind, document, count — Open goes to the reader on that tab. */
+const OUTPUT_ICON = { quiz: "ti-list-check", flashcards: "ti-cards", summary: "ti-align-left", podcast: "ti-headphones" };
+const OUTPUT_KIND = { quiz: "Quiz", flashcards: "Flashcards", summary: "Summary", podcast: "Podcast" };
+function StudyOutputCard({ m, onOpen }) {
+  const tool = m.tool || "quiz";
+  const making = tool === "podcast" && /being made/i.test(m.sub || "");
+  const name = String(m.title || "").replace(/^[^·]+·\s*/, "");
+  const tint = tool === "podcast" ? { bg: "#F4A62A1f", fg: "#C77D0A" } : { bg: `${BRAND}14`, fg: BRAND };
+  return (
+    <button type="button" data-material="study_output" data-tool={tool} onClick={onOpen}
+      style={{ display:"flex",alignItems:"center",gap:11,width:"100%",maxWidth:460,padding:"10px 12px",borderRadius:14,border:`1px solid ${BRAND}26`,background:"var(--ak-surface)",cursor:"pointer",fontFamily:"'Nunito',sans-serif",textAlign:"left",boxShadow:"0 1px 2px rgba(20,10,60,.04)" }}>
+      <span style={{ width:38,height:38,borderRadius:10,background:tint.bg,color:tint.fg,display:"grid",placeItems:"center",flexShrink:0 }}><Icon name={OUTPUT_ICON[tool]||"ti-file"} size={20}/></span>
+      <span style={{ display:"grid",minWidth:0,flex:1 }}>
+        <span style={{ fontSize:10,fontWeight:900,letterSpacing:".04em",color:BRAND,textTransform:"uppercase" }}>{OUTPUT_KIND[tool]||tool}</span>
+        <span style={{ fontSize:13,fontWeight:800,color:"var(--ak-text)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{name}</span>
+        <span style={{ fontSize:11,fontWeight:600,color:"var(--ak-text-sub)" }}>
+          {making&&<span style={{ display:"inline-block",width:6,height:6,borderRadius:"50%",background:"#C77D0A",marginRight:5,verticalAlign:1 }}/>}
+          {making ? m.sub : `${m.sub ? `${m.sub} · ` : ""}saved in the reader`}
+        </span>
+      </span>
+      <span style={{ display:"flex",alignItems:"center",gap:3,color:BRAND,fontSize:12,fontWeight:800,flexShrink:0 }}>Open <Icon name="ti-chevron-right" size={13}/></span>
+    </button>
+  );
+}
+
 const IDEA_ICON = { quiz: "ti-list-check", teach: "ti-school", plan: "ti-calendar-event", notes: "ti-notes", battle: "ti-swords", chat: "ti-message-circle" };
 const IDEA_FROM = { record: "ti-paperclip", goal: "ti-target", weak: "ti-chart-line", note: "ti-bookmark" };
 
@@ -1371,7 +1396,10 @@ function AgentChatTab({
                   {/* Materials the tools found — each opens the material (or teaches the topic). */}
                   {!isMe&&msg.materials?.length>0&&(
                     <div aria-label={t('agent.materials')} style={{ display:"flex",flexWrap:"wrap",gap:6,marginTop:8 }}>
-                      {msg.materials.map((m)=>m.sub?(
+                      {msg.materials.map((m)=>m.kind==='study_output'&&m.href?(
+                        // What chat made (quiz, flashcards, summary, podcast): a saved reader tab — tap opens the reader on it (preview approved 2026-11-07).
+                        <StudyOutputCard key={m.href} m={m} onOpen={()=>navigate(m.href)}/>
+                      ):m.sub&&m.kind==='blog_passage'?(
                         // A blog passage the answer used: the post and its section, opening the post (preview approved 2026-11-07).
                         <button key={m.href} type="button" data-material={m.kind} onClick={()=>navigate(m.href)}
                           style={{ display:"flex",alignItems:"center",gap:7,maxWidth:"100%",padding:"6px 10px",borderRadius:12,border:"1px solid var(--ak-border2)",background:"var(--ak-surface)",cursor:"pointer",fontFamily:"'Nunito',sans-serif",textAlign:"left" }}>
@@ -1382,9 +1410,9 @@ function AgentChatTab({
                           </span>
                         </button>
                       ):(
-                        <button key={m.href||`t:${m.teach.topic}`} type="button" data-material={m.kind}
-                          onClick={()=>{ if(m.href) navigate(m.href); else if(onTeachTopic) onTeachTopic(m.teach); }}
-                          disabled={!m.href&&!onTeachTopic} title={m.href?t('agent.materials'):t('agent.syllabus_hint')}
+                        <button key={m.href||(m.teach?`t:${m.teach.topic}`:`r:${m.reply}`)} type="button" data-material={m.kind}
+                          onClick={()=>{ if(m.href) navigate(m.href); else if(m.reply) sendMessage(m.reply); else if(onTeachTopic) onTeachTopic(m.teach); }}
+                          disabled={!m.href&&!m.reply&&!onTeachTopic} title={m.href?t('agent.materials'):m.reply?m.reply:t('agent.syllabus_hint')}
                           style={{ display:"inline-flex",alignItems:"center",gap:5,maxWidth:"100%",padding:"6px 11px",borderRadius:20,border:`1.5px solid ${BRAND}40`,background:"var(--ak-surface)",color:BRAND,fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"'Nunito',sans-serif",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>
                           <Icon name={MATERIAL_ICON[m.kind]||"ti-arrow-up-right"} size={12}/>
                           <span style={{ overflow:"hidden",textOverflow:"ellipsis" }}>{m.title}</span>

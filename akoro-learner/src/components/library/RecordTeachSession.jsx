@@ -110,6 +110,7 @@ const storeSid = (rid, sid) => {
 
 export default function RecordTeachSession({ record, onClose, onMinimize, onOpened, onProgress,
   openTool = null,      // a study tool to open the reader on (an Agent Chat link)
+  openArtifact = null,  // a saved tab to open the reader on (made in Agent Chat)
   downloadUrl = null,   // records from the discovery feed ride a presigned
                         // URL — the shelf's /:id/file route is owner-scoped
 }) {
@@ -724,6 +725,7 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
         subject: 'General',
         reference,
         ...(openTool ? { openTool } : {}),
+        ...(openArtifact ? { openArtifact } : {}),
         // The whole document: the session searches it every turn and the
         // protégé cites the passages it used (chips jump the reader).
         ...(askTarget ? { document: askTarget } : {}),

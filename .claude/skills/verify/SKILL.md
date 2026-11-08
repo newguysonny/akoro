@@ -14,11 +14,11 @@ ERROR, INCONCLUSIVE and "no run" are not verified — report them as they are.
 
 ## Reaching it
 
-`https://api.akoro.name.ng/api/verify` — the cloud environment's network
+`https://api.akoro.ng/api/verify` — the cloud environment's network
 secret adds `Authorization: Bearer <AGENT_CONSOLE_KEY>`; never ask for the key.
 
 ```bash
-B=https://api.akoro.name.ng/api/verify
+B=https://api.akoro.ng/api/verify
 curl -s $B/scenarios | jq '.data.scenarios[] | {name, risk, description}'
 curl -s $B/suites | jq
 ```
@@ -43,7 +43,7 @@ that. The whole path is tested on the sandbox with suite `real-user`.
 ## Workflow
 
 1. Unit/contract tests pass locally.
-2. Push. Wait for Render: poll `curl -s https://api.akoro.name.ng/health | jq -r .build.git`
+2. Push. Wait for Render: poll `curl -s https://api.akoro.ng/health | jq -r .build.git`
    until it equals the pushed commit (`git rev-parse HEAD`).
 3. Run the affected suite (or scenario), pinned to that commit:
    ```bash

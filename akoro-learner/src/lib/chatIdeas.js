@@ -59,7 +59,7 @@ export function protegeMoves(executions) {
 
 /* Only the app's own pages, deduped, at most 8 (the API builds these from
    tool results; the client still refuses anything that isn't a known route). */
-const MATERIAL_HREF = [/^\/blog\/[\w-]+$/, /^\/write\/blog\/[\w-]+$/, /^\/course\/[\w-]+$/, /^\/library\?record=[0-9a-f-]{36}(?:&tool=(?:quiz|flashcards|summary|notes|podcast))?$/i, /^\/library\?folder=[0-9a-f-]{36}$/i, /^\/activities\/[\w-]+$/];
+const MATERIAL_HREF = [/^\/blog\/[\w-]+$/, /^\/write\/blog\/[\w-]+$/, /^\/course\/[\w-]+$/, /^\/library\?record=[0-9a-f-]{36}(?:&tool=(?:quiz|flashcards|summary|notes|podcast))?$/i, /^\/library\?folder=[0-9a-f-]{36}$/i, /^\/library\?record=[0-9a-f-]{36}&artifact=[0-9a-f-]{36}$/i, /^\/activities\/[\w-]+$/];
 export function cleanMaterials(list) {
   const seen = new Set();
   const out = [];
@@ -68,11 +68,14 @@ export function cleanMaterials(list) {
     if (!title) continue;
     const href = typeof m.href === 'string' && MATERIAL_HREF.some((re) => re.test(m.href)) ? m.href : null;
     const teach = m.action?.type === 'teach' && m.action.topic ? { topic: String(m.action.topic), subject: String(m.action.subject || '') } : null;
-    if (!href && !teach) continue;
-    const key = href || `teach:${teach.topic.toLowerCase()}`;
+    // A choice the agent asked for ("which document?"): tapping it sends this as the learner's reply.
+    const reply = !href && !teach && m.action?.type === 'reply' && m.action.text ? String(m.action.text).slice(0, 160) : null;
+    if (!href && !teach && !reply) continue;
+    const key = href || (teach ? `teach:${teach.topic.toLowerCase()}` : `reply:${reply.toLowerCase()}`);
     if (seen.has(key)) continue;
     seen.add(key);
-    out.push({ kind: String(m.kind || ''), title: title.slice(0, 90), ...(m.sub ? { sub: String(m.sub).slice(0, 90) } : {}), ...(href ? { href } : { teach }) });
+    const tool = ['quiz', 'flashcards', 'summary', 'podcast'].includes(m.tool) ? m.tool : null;
+    out.push({ kind: String(m.kind || ''), title: title.slice(0, 90), ...(m.sub ? { sub: String(m.sub).slice(0, 90) } : {}), ...(tool ? { tool } : {}), ...(href ? { href } : teach ? { teach } : { reply }) });
     if (out.length >= 8) break;
   }
   return out;

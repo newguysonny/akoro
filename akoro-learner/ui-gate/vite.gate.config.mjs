@@ -8,7 +8,7 @@
 import { defineConfig } from 'vite';
 const base = (await import(process.env.UI_GATE_BASE_CONFIG || '../vite.config.js')).default;
 
-const target = process.env.UI_GATE_API || 'https://api.akoro.name.ng';
+const target = process.env.UI_GATE_API || 'https://api.akoro.ng';
 const port = Number(process.env.UI_GATE_PORT || 4321);
 // Behind an outbound proxy (a cloud sandbox), the pass-through goes through it too.
 const outbound = process.env.HTTPS_PROXY

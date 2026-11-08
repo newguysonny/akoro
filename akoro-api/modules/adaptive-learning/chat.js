@@ -1012,7 +1012,7 @@ export const CHAT_TOOLS = [
   },
   {
     name: "search_my_library",
-    description: "Find documents in the signed-in learner's own Library (uploads, links, pasted notes) by name or by what is inside them. Use when recommending study material, or when they ask for their notes or a document; the reply then shows each one as a link that opens it in the reader. When they ask for flashcards, a quiz, a summary, notes or a podcast FROM their material, call this with `tool` set: the reader builds those from the document itself (cited, saved with it), and the link opens it on that tool — say so in one line and don't write them in chat. Search again every time (the Library changes; an earlier answer in this chat may be out of date). Never invent a document — mention only what this returns, by name; never show record ids, the app shows each as a link.",
+    description: "Find documents in the signed-in learner's own Library (uploads, links, pasted notes) by name or by what is inside them. Use when recommending study material, or when they ask for their notes or a document; the reply then shows each one as a link that opens it in the reader. When they ask you to MAKE a quiz, flashcards, a summary or a podcast from their material, use make_study_material instead (it builds it and saves it). For notes (they write those themselves), call this with `tool` set: the link opens the document on that tool. Search again every time (the Library changes; an earlier answer in this chat may be out of date). Never invent a document — mention only what this returns, by name; never show record ids, the app shows each as a link.",
     input_schema: {
       type: "object",
       properties: {
@@ -1020,6 +1020,22 @@ export const CHAT_TOOLS = [
         tool: { type: "string", enum: ["quiz", "flashcards", "summary", "notes", "podcast"], description: "The reader's study tool they asked for, if any — the link opens the document on it." },
       },
       required: ["query"],
+    },
+  },
+  {
+    name: "make_study_material",
+    description: "Make a quiz, flashcards, a summary or a podcast FROM the signed-in learner's own Library material, and save it in the reader (cited to the document's pages). Use when they ask e.g. 'create a quiz on the basic science material in my folder', 'make flashcards from my Cell notes', 'turn my chemistry notes into a podcast'. Give `folder` when they name a folder, `query` for the topic or document name. The reply shows the result as a card that opens the reader on it — say what you made in one line (how many questions or cards, from which document); never write the questions, cards or summary in chat. A podcast takes a minute or two to finish: say it's being made. If the folder holds several documents and none clearly matches, it returns them — ask which one. Never invent a document.",
+    input_schema: {
+      type: "object",
+      properties: {
+        tool: { type: "string", enum: ["quiz", "flashcards", "summary", "podcast"], description: "What to make." },
+        query: { type: "string", description: "The topic or document name to make it from (optional with a folder)." },
+        folder: { type: "string", description: "The Library folder they named, e.g. 'Basic Science' (optional)." },
+        focus: { type: "string", description: "A narrower focus inside the document, e.g. 'photosynthesis' (optional)." },
+        count: { type: "string", description: "How many questions or cards, if they said (e.g. '10')." },
+        difficulty: { type: "string", enum: ["easy", "medium", "hard"], description: "Quiz difficulty, if they said." },
+      },
+      required: ["tool"],
     },
   },
   {
@@ -2697,6 +2713,12 @@ async function runChatTool(name, input, studentId, { conversationId = null, role
             ...(tool ? { note: `Each link opens the document in the reader on its ${tool} tool, which builds it from the whole document — point them there in one line; don't write the ${tool} in chat, don't comment on the document's title or contents, and don't say what you can or can't see inside it (the reader reads all of it).` } : {}) }
           : { records: [], note: "Nothing in their Library matches — say so; don't invent a document." };
       } catch (error) { return { error: "Their Library is unavailable right now" }; }
+    }
+    case "make_study_material": {
+      // The learner's own records only; the result is a saved reader tab (edu.record_artifacts).
+      const { makeStudyMaterial } = await import("../records/studyMaterial.js");
+      return makeStudyMaterial({ userId: studentId, tool: input?.tool, query: input?.query, folder: input?.folder,
+        focus: input?.focus || "", count: input?.count || "", difficulty: input?.difficulty || "" });
     }
     case "analyse_past_papers": {
       // The learner's own parsed past papers only (D53).
