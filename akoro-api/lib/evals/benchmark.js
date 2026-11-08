@@ -92,6 +92,18 @@ export function scoreRun(sc, { calls, reply, executions, isSide }) {
   };
 }
 
+/** PURE: the stub calls in order, with each update_plan the loop handled itself put back where it ran. */
+export function mergePlanCalls(calls = [], executions = []) {
+  const out = [];
+  let i = 0;
+  for (const x of executions || []) {
+    if (x?.tool === "update_plan") out.push({ name: "update_plan", input: {} });
+    else if (i < calls.length) out.push(calls[i++]);
+  }
+  while (i < calls.length) out.push(calls[i++]);
+  return out;
+}
+
 /** One benchmark scenario, once (exported for the gate's targeted check, evals.benchmark_cases). */
 export async function runOnce(sc, { model, userId }) {
   const { runAgentToolLoop, assembleChatDoctrine, getLearnerChatTools, isSideEffecting, shouldPlanFirst } = await chat();
@@ -127,10 +139,13 @@ export async function runOnce(sc, { model, userId }) {
   // The error code each observation carried (the recorder saw the envelope).
   const obs = recorder.steps.flatMap((st) => st.observations || []);
   executions.forEach((x, i) => { x.errorCode = obs[i]?.error_code || null; });
-  const scored = scoreRun(sc, { calls, reply, executions, isSide });
+  // update_plan is handled inside the loop (the ledger), never through callTool — so it is
+  // taken from the loop's own record, in order, or the plan check could never pass.
+  const scoredCalls = mergePlanCalls(calls, executions);
+  const scored = scoreRun(sc, { calls: scoredCalls, reply, executions, isSide });
   const episode = recorder.finish({ ledger: out.ledger, success: scored.success, capabilities: sc.capabilities, difficulty: sc.difficulty, sideEffecting: isSide, scenario: sc.id });
   void saveEpisode(episode, { model }).catch(() => {});
-  return { ...scored, reply, calls: calls.map((c) => c.name), ms: Date.now() - started,
+  return { ...scored, reply, calls: scoredCalls.map((c) => c.name), ms: Date.now() - started,
     // What the intent step read (kind, multi-step, next) and whether the plan was forced first — for diagnosing plan misses.
     intent: intent ? { kind: intent.kind, multiStep: intent.multiStep, next: intent.next, steps: (intent.steps || []).length, planFirst: shouldPlanFirst(intent) } : null };
 }
