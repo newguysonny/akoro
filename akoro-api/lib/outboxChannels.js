@@ -7,6 +7,9 @@
  *   push           web push to the learner's devices (notify.js); a device
  *                  already reached is not pushed again on a retry
  *   email          the platform notification email (notify.js)
+ *   in_app         the bell row (public.notifications) whose first write failed: written
+ *                  with the id chosen at the time (a retry never makes a second row), then
+ *                  its live update to the learner's open app
  *   session_email · sms · session_push · whatsapp
  *                  live-session and direct notices (services/notificationService.js)
  *
@@ -47,6 +50,14 @@ export function outboxChannels() {
         const { sendNotificationEmail } = await import("../modules/auth/emails.js");
         await sendNotificationEmail(p);
         return {};
+      },
+    }],
+    ["in_app", {
+      async send(p) {
+        const { writeInAppRow, emitInApp } = await import("../modules/notify.js");
+        const row = await writeInAppRow(p);
+        emitInApp(p, row);
+        return { result: { id: row.id } };
       },
     }],
     ["session_email", session("session_email")],

@@ -17,7 +17,7 @@
 CREATE TABLE IF NOT EXISTS edu.outbox (
   id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   idem_key     text NOT NULL,
-  channel      text NOT NULL,                  -- push | email | session_email | sms | whatsapp | session_push | action:<kind>
+  channel      text NOT NULL,                  -- push | email | in_app | session_email | sms | whatsapp | session_push | action:<kind>
   order_key    text NOT NULL,                  -- sent in created order within one key
   user_id      uuid,
   payload      jsonb NOT NULL DEFAULT '{}'::jsonb,

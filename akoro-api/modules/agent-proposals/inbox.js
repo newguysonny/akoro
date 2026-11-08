@@ -22,6 +22,17 @@ import { spreadDue } from "../autonomy/readyKinds.js";
 
 import { DISMISS_REASONS, reasonOf, normalizeTitle, mergeInbox, parseRef } from "./inboxCore.js";
 
+/** The check battle an interrupted Allow already made for this learner and topic (recovery), or null. */
+export async function madeCheckBattle({ learnerId, topic, since }) {
+  const { data } = await db.from("battles").select("id, total_questions, title").eq("battle_type", "check").eq("topic", topic)
+    .gte("created_at", since).neq("status", "cancelled").order("created_at", { ascending: false }).limit(5);
+  for (const b of data || []) {
+    const { data: seat } = await db.from("battle_participants").select("battle_id").eq("battle_id", b.id).eq("user_id", learnerId).maybeSingle();
+    if (seat) return { battleId: b.id, placed: b.total_questions, title: b.title };
+  }
+  return null;
+}
+
 export { DISMISS_REASONS, reasonOf, normalizeTitle, mergeInbox, parseRef };
 
 const edu = () => db.schema("edu");
@@ -163,7 +174,12 @@ export async function approveProposal(userId, id) {
       detail = { sessionId: result.sessionId, status: result.status || null };
     } else if (kind === "revision_battle") {
       const { createCheckBattle } = await import("../battle/agentCheck.js");
-      const r = await createCheckBattle({ learnerId: userId, subject: payload.subject || null, topic: payload.topic, total: 5, mode: "retest" });
+      const { outsideAction } = await import("../../lib/outbox.js");
+      // At most once (Phase 18 item 5): interrupted after the battle was made, the retry finds it instead of making a second.
+      const r = (await outsideAction({ kind: "proposal_check_battle", key: `proposal:${claimed.id}:battle`, userId,
+        act: () => createCheckBattle({ learnerId: userId, subject: payload.subject || null, topic: payload.topic, total: 5, mode: "retest" }),
+        check: (journal) => madeCheckBattle({ learnerId: userId, topic: payload.topic, since: journal.created_at }),
+      })).result;
       ref = r.battleId;
       detail = { battleId: r.battleId, placed: r.placed, title: r.title };
     } else if (kind === "follow_up_question") {
