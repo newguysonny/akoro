@@ -1,7 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { BRAND } from '../../constants.js';
 import { Icon } from './Icons.jsx';
 import QuoteChip from './QuoteChip.jsx';
+
+const MAX_INPUT_HEIGHT = 120;   // ≈ 5 lines of the composer's text
 
 /*
  * The layout is adapted from akoro-learner/reference/FortizoApp.jsx's
@@ -174,6 +176,9 @@ export default function FortizoChatComposer({
   // above the input with a remove control (the copilot pattern).
   quote = null,
   onQuoteClear,
+  // On a phone or tablet the keyboard's Enter key starts a new line (it shows ↵) and the arrow button sends; on a
+  // computer Enter still sends and Shift+Enter starts a new line. Off by default: single-answer prompts keep Enter = send.
+  newlineOnTouchEnter = false,
 }) {
   const composerRef = useRef(null);
   const inputRef = useRef(null);
@@ -182,12 +187,21 @@ export default function FortizoChatComposer({
   const inputDisabled = disabled;
   const canSend = !disabled && !sendDisabled;
 
+  const touchKeyboard = () => typeof window !== 'undefined' && !!window.matchMedia?.('(pointer: coarse)').matches;
   const sendFromKeyboard = event => {
-    if (event.key === 'Enter' && !event.shiftKey) {
-      event.preventDefault();
-      if (canSend) onSend?.();
-    }
+    if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent?.isComposing) return;
+    if (newlineOnTouchEnter && touchKeyboard()) return;   // a new line; the send arrow sends
+    event.preventDefault();
+    if (canSend) onSend?.();
   };
+
+  // One line to start with, growing as the learner types (up to ~5 lines, then it scrolls).
+  useLayoutEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${Math.min(Math.max(el.scrollHeight, 34), MAX_INPUT_HEIGHT)}px`;
+  }, [value]);
 
   const surface = dark ? 'rgba(255,255,255,.075)' : '#F8F9FC';
   const border = dark ? 'rgba(255,255,255,.13)' : '#DFE3ED';
@@ -200,8 +214,10 @@ export default function FortizoChatComposer({
       transition: 'border-color .16s, box-shadow .16s',
     }}>
       <QuoteChip quote={quote} onClear={onQuoteClear} dark={dark}/>
-      <input
+      <textarea
         ref={inputRef}
+        rows={1}
+        enterKeyHint={newlineOnTouchEnter && touchKeyboard() ? 'enter' : 'send'}
         value={value}
         onChange={event => onChange?.(event.target.value)}
         onKeyDown={sendFromKeyboard}
@@ -211,9 +227,9 @@ export default function FortizoChatComposer({
         onFocus={event => { event.currentTarget.parentElement.style.borderColor = BRAND; event.currentTarget.parentElement.style.boxShadow = `0 0 0 3px ${BRAND}1C`; }}
         onBlur={event => { event.currentTarget.parentElement.style.borderColor = border; event.currentTarget.parentElement.style.boxShadow = dark ? 'none' : '0 4px 14px rgba(30,41,59,.055)'; }}
         style={{
-          display: 'block', width: '100%', height: 34, padding: '0 3px 8px', border: 0,
-          outline: 'none', background: 'transparent', color: inputColor, fontSize: 13,
-          fontWeight: 600, fontFamily: "'Nunito',sans-serif",
+          display: 'block', width: '100%', height: 34, maxHeight: MAX_INPUT_HEIGHT, padding: '0 3px 8px', border: 0,
+          outline: 'none', background: 'transparent', color: inputColor, fontSize: 13, lineHeight: 1.45,
+          resize: 'none', overflowY: 'auto', fontWeight: 600, fontFamily: "'Nunito',sans-serif",
         }}
       />
 

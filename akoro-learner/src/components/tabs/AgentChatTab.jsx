@@ -1531,6 +1531,7 @@ function AgentChatTab({
             )}
             <div ref={composerWrapRef}>
             <FortizoChatComposer
+              newlineOnTouchEnter
               value={input}
               onChange={setInput}
               onSend={()=>sendMessage()}
