@@ -23,7 +23,7 @@ import { spreadDue } from "../autonomy/readyKinds.js";
 import { DISMISS_REASONS, reasonOf, normalizeTitle, mergeInbox, parseRef } from "./inboxCore.js";
 
 /** The check battle an interrupted Allow already made for this learner and topic (recovery), or null. */
-async function madeCheckBattle({ learnerId, topic, since }) {
+export async function madeCheckBattle({ learnerId, topic, since }) {
   const { data } = await db.from("battles").select("id, total_questions, title").eq("battle_type", "check").eq("topic", topic)
     .gte("created_at", since).neq("status", "cancelled").order("created_at", { ascending: false }).limit(5);
   for (const b of data || []) {
