@@ -127,10 +127,13 @@ export const classAutoGrade = {
       return { u, row, secs: Math.round((Date.now() - t0) / 100) / 10 };
     }));
     // Where the time went, per hand-in (the teacher-only draft carries it).
-    const timing = await ctx.db.rows("edu.self_study_targets", { assignment_id: id }, { columns: "student_id, ai_grade" });
+    const timing = await ctx.db.rows("edu.self_study_targets", { assignment_id: id }, { columns: "student_id, ai_grade, submission, graded_at" });
     for (const t of timing) {
       const who = takers.find((u) => u.id === t.student_id);
-      if (who && t.ai_grade?.timing) ctx.note(`@${who.username} marking: ${t.ai_grade.timing.totalMs}ms (load ${t.ai_grade.timing.loadMs}ms, model ${t.ai_grade.timing.modelMs}ms)`);
+      if (!who) continue;
+      // Server-side: from the hand-in to the stored grade (what the app's live "graded" push follows).
+      const server = t.graded_at && t.submission?.submittedAt ? Math.round((Date.parse(t.graded_at) - Date.parse(t.submission.submittedAt)) / 100) / 10 : null;
+      if (t.ai_grade?.timing) ctx.note(`@${who.username} marking: ${t.ai_grade.timing.totalMs}ms (load ${t.ai_grade.timing.loadMs}ms, model ${t.ai_grade.timing.modelMs}ms) · hand-in → grade stored: ${server ?? "?"}s`);
     }
     for (const { u, row, secs } of results) {
       ctx.note(`@${u.username}: ${row?.graded ? `${row.grade}% after ${secs}s` : `not marked after ${secs}s`} · per question ${(row?.feedbackQuestions || []).map((m) => `${m.index + 1}:${m.awarded}/${m.max}`).join(" ")}`);
@@ -152,7 +155,15 @@ export const classAutoGrade = {
     }
 
     // 8. The teacher's view: the marks are on the activity.
-    const view = await ctx.http({ as: T, path: `/api/self-study/${id}` });
+    // A momentary 503 (the sandbox restarting or busy) is retried, and every status reported.
+    let view = null; const statuses = [];
+    for (let i = 0; i < 4; i++) {
+      view = await ctx.http({ as: T, path: `/api/self-study/${id}` });
+      statuses.push(view.status);
+      if (view.status === 200) break;
+      await wait(3000 * (i + 1));
+    }
+    if (statuses.length > 1) ctx.note(`teacher's view answered ${statuses.join(" → ")}`);
     const targets = view.body?.data?.targets || view.body?.data?.assignment?.targets || [];
     const marked = targets.filter((t) => takers.some((u) => u.id === (t.student_id || t.studentId)) && (t.grade ?? t.score) != null);
     ctx.note(`teacher's view: ${view.status} · ${targets.length} learners · ${marked.length} with a mark`);
