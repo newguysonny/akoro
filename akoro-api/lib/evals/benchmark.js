@@ -17,6 +17,7 @@ import { createEpisodeRecorder } from "../../modules/agent-contract/episode.js";
 import { saveEpisode } from "../../modules/agent-contract/store.js";
 import { turnCorrections } from "../../modules/adaptive-learning/turnCheck.js";
 import { runIntentStep, renderIntent } from "../../modules/adaptive-learning/intentStep.js";
+import { renderDraftPlan } from "../../modules/adaptive-learning/taskLedger.js";
 import { openai } from "../aiModel.js";
 import { canonicalArgs } from "../../modules/agent-runtime/loopGuard.js";
 
@@ -111,7 +112,8 @@ async function runOnce(sc, { model, userId }) {
   // The intent step, as the chat route runs it before the loop — on the model under test, so the whole turn is one model's.
   const intent = await runIntentStep({ message: sc.request, recent: sc.history || [], timeoutMs: 20_000,
     create: (body) => openai.chat.completions.create({ ...body, model, ...meta }) });
-  const turnSystem = system + renderIntent(intent);
+  // As the chat route builds it: the intent, and for a multi-step request the starting plan (Phase 22 Part E).
+  const turnSystem = system + renderIntent(intent) + (intent?.multiStep ? renderDraftPlan(intent.steps, null) : "");
   const recorder = createEpisodeRecorder({ surface: "agent_chat", role: "student", source: "synthetic", system: turnSystem, tools, state: { intent }, messages, meta: { model } });
   const out = await runAgentToolLoop({
     systemContent: turnSystem, messages, studentId: userId || "00000000-0000-4000-8000-00000000be00",
