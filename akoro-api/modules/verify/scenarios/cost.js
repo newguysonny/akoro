@@ -40,3 +40,22 @@ export const memoryPrefilter = {
     ctx.expect.eq("item cap enforced", capped.memories.length, 12);
   },
 };
+
+// Lever 4: the quiz scaffold (ids, numbers, marks, lettered options) is built in code.
+export const quizScaffold = {
+  name: "cost.quiz_scaffold", area: "cost", risk: "read",
+  description: "The quiz scaffold is deterministic code: ids, sequential numbers, marks and lettered options are assembled from the model's content rows, so the fixed shape is identical every run.",
+  async run(ctx) {
+    const { assembleQuiz } = await import("../../tasks/tools/quiz-scaffold.js");
+    let i = 0;
+    const out = assembleQuiz([
+      { question: "2+2?", options: ["1", "2", "3", "4"], answer: "4" },
+      { question: "Explain gravity" },
+    ], { marksPerQuestion: 3, format: "mixed", idFactory: () => `id-${++i}` });
+    ctx.expect.eq("two questions assembled", out.length, 2);
+    ctx.expect.eq("sequential numbers", out.map((q) => q.n).join(","), "1,2");
+    ctx.expect.eq("marks applied from the request", out.map((q) => q.marks).join(","), "3,3");
+    ctx.expect.eq("options lettered", (out[0].options || []).join("|"), "A. 1|B. 2|C. 3|D. 4");
+    ctx.expect.eq("no options on a short-answer", "options" in out[1], false);
+  },
+};

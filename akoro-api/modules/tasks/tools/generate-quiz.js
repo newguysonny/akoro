@@ -6,9 +6,9 @@
 import { z }              from "zod";
 import { TaskOutputDB }   from "../lib/db.js";
 
-import { v4 as uuid }     from "uuid";
 import { openai, OPENAI_MODEL } from "../../../lib/aiModel.js";
 import { parseJsonLoose } from "./_json.js";
+import { assembleQuiz } from "./quiz-scaffold.js";
 
 // ─── Tool definition ──────────────────────────────────────────────────────────
 // This is the shape the LLM sees.
@@ -110,19 +110,17 @@ async function callLlmForQuestions(input) {
 
 ${formatInstructions}
 ${difficultyInstructions}
-Each question is worth ${input.marksPerQuestion} marks.
 
+Write ONLY the question content. Do not include ids, question numbers or marks — the app adds the numbers, ids and marks itself.
 Respond with a JSON array only — no markdown, no preamble:
 [
   {
-    "id": "<uuid>",
     "question": "<question text>",
     "type": "mcq" | "short_answer" | "true_false",
-    "options": ["A. ...", "B. ...", "C. ...", "D. ..."],  // mcq only, omit for short_answer
+    "options": ["...", "...", "...", "..."],  // mcq only: exactly 4 options, no A./B. prefixes
     "answer": "<correct answer or full model answer>",
     "explanation": "<why this is the answer>",
-    "difficulty": "easy" | "medium" | "hard",
-    "marks": ${input.marksPerQuestion}
+    "difficulty": "easy" | "medium" | "hard"
   }
 ]`;
 
@@ -136,6 +134,7 @@ Respond with a JSON array only — no markdown, no preamble:
 
   const parsed = parseJsonLoose(text);
 
-  // Ensure all questions have valid UUIDs
-  return parsed.map((q) => ({ ...q, id: q.id || uuid() }));
+  // Lever 4: the model wrote only the content; the fixed scaffold (ids, numbers,
+  // marks, lettered options, type) is assembled here, identically every run.
+  return assembleQuiz(parsed, { marksPerQuestion: input.marksPerQuestion, format: input.format });
 }
