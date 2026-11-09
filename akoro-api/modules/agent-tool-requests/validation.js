@@ -13,6 +13,15 @@ export const TOOL_REQUEST_CATEGORIES = new Set([
   "other",
 ]);
 
+/**
+ * What kind of thing the learner is asking for. 'tool' is a missing tool,
+ * executor or integration; 'component' is a missing learning method/component
+ * (a study technique or reusable learning building-block the Creator Agent
+ * would compose). 'capability' is reserved for the self-tooling escalation
+ * flow and is never set by a plain learner submission.
+ */
+export const TOOL_REQUEST_KINDS = new Set(["tool", "component"]);
+
 export const TOOL_REQUEST_STATUSES = new Set([
   "new",
   "under_review",
@@ -48,13 +57,14 @@ export function normaliseToolRequest(body = {}) {
   if (!body || typeof body !== "object" || Array.isArray(body)) {
     throw new Error("A tool request is required");
   }
-  const allowed = new Set(["title", "description", "category"]);
+  const allowed = new Set(["title", "description", "category", "kind"]);
   if (Object.keys(body).some((key) => !allowed.has(key))) {
     throw new Error("tool request contains unexpected data");
   }
   const title = boundedText(body.title, 120);
   const description = boundedText(body.description, 800);
   const category = boundedText(body.category, 40).toLowerCase();
+  const kind = boundedText(body.kind ?? "tool", 20).toLowerCase();
   if (title.length < 6 || title.length > 120) {
     throw new Error("title must be 6 to 120 characters");
   }
@@ -64,10 +74,13 @@ export function normaliseToolRequest(body = {}) {
   if (!TOOL_REQUEST_CATEGORIES.has(category)) {
     throw new Error("category is invalid");
   }
+  if (!TOOL_REQUEST_KINDS.has(kind)) {
+    throw new Error("kind is invalid");
+  }
   if (containsSensitiveDetail(`${title}\n${description}`)) {
     throw new Error("Remove contact details, passwords, tokens, and other secrets before submitting a tool request");
   }
-  return { title, description, category };
+  return { title, description, category, kind };
 }
 
 /** Only an admin may move a request through this deliberately small workflow. */

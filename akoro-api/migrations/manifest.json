@@ -213,6 +213,7 @@
     "2026-agent-episodes.sql",
     "2026-self-tooling-tools.sql",
     "2026-self-tooling-escalation.sql",
+    "2026-agent-tool-requests-kind-component.sql",
     "2026-self-tooling-instructors.sql",
     "2026-seed-school.sql",
     "2026-seed-agent-testers.sql",

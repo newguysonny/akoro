@@ -15,7 +15,23 @@ test("tool requests are compact, categorised, and whitespace-normalised", () => 
     title: "Add a revision timer",
     description: "I want a focused timer that can start from a study task and show short breaks.",
     category: "organisation",
+    kind: "tool",
   });
+});
+
+test("component kind is accepted and defaults to tool; unknown kinds are rejected", () => {
+  assert.deepEqual(normaliseToolRequest({
+    title: "Active recall learning method",
+    description: "A study session that hides the material and asks me to reconstruct it from memory.",
+    category: "study_support",
+    kind: "component",
+  }).kind, "component");
+  assert.throws(() => normaliseToolRequest({
+    title: "A valid feature title",
+    description: "This description has enough detail for the request.",
+    category: "other",
+    kind: "widget",
+  }), /kind/);
 });
 
 test("tool requests reject too-short, unclassified, and raw-extra payloads at the boundary", () => {

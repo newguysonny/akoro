@@ -14,12 +14,13 @@ import { normaliseToolRequest } from "./validation.js";
 /** A request in one of these is closed: asking again re-opens it. */
 export const CLOSED_STATUSES = new Set(["declined", "implemented", "expired"]);
 
-function fingerprint({ title, description, category }) {
+function fingerprint({ title, description, category, kind }) {
   return createHash("sha256")
     .update(JSON.stringify({
       title: title.toLocaleLowerCase("en-US"),
       description: description.toLocaleLowerCase("en-US"),
       category,
+      kind,
     }))
     .digest("hex");
 }
@@ -32,6 +33,7 @@ export function publicLearnerToolRequest(row = {}) {
     status: row.status,
     title: row.title,
     category: row.category,
+    kind: row.kind || "tool",
   };
 }
 
@@ -51,13 +53,14 @@ export async function createLearnerToolRequest({ learnerId, body }) {
       title: request.title,
       description: request.description,
       category: request.category,
+      kind: request.kind,
       request_fingerprint: requestFingerprint,
       status: "new",
       created_at: now,
       updated_at: now,
       last_status_changed_at: now,
     })
-    .select("id, title, category, status, created_at")
+    .select("id, title, category, kind, status, created_at")
     .maybeSingle();
 
   if (!inserted.error && inserted.data) {
@@ -68,7 +71,7 @@ export async function createLearnerToolRequest({ learnerId, body }) {
   }
 
   const existing = await db.schema("edu").from("agent_tool_requests")
-    .select("id, title, category, status, created_at")
+    .select("id, title, category, kind, status, created_at")
     .eq("requester_id", learnerId)
     .eq("request_fingerprint", requestFingerprint)
     .maybeSingle();
@@ -79,7 +82,7 @@ export async function createLearnerToolRequest({ learnerId, body }) {
     const reopened = await db.schema("edu").from("agent_tool_requests")
       .update({ status: "new", updated_at: now, last_status_changed_at: now })
       .eq("id", existing.data.id)
-      .select("id, title, category, status, created_at")
+      .select("id, title, category, kind, status, created_at")
       .maybeSingle();
     if (reopened.error || !reopened.data) throw new Error("Tool request could not be re-opened");
     return { ...publicLearnerToolRequest({ ...reopened.data, createdNew: false }), reopened: true, previousStatus: existing.data.status };

@@ -27,6 +27,7 @@ const REVIEW_STATUSES = ['new', 'under_review', 'planned', 'declined', 'implemen
 
 const KINDS = [
   { key: 'tool', label: 'Tool ideas' },
+  { key: 'component', label: 'Learning methods' },
   { key: 'capability', label: 'Permissions' },
   { key: 'grants', label: 'Granted' },
 ];
@@ -200,10 +201,13 @@ export default function AgentToolRequestsPage() {
 
 function EmptyState({ kind, activeStatus, hasSearch }) {
   const permissions = kind === 'capability';
-  const message = hasSearch ? 'No requests match that search.' : activeStatus ? `No ${STATUS[activeStatus]?.label.toLowerCase() || 'matching'} requests.` : permissions ? 'No permission requests waiting.' : 'No learner-approved tool requests yet.';
+  const components = kind === 'component';
+  const message = hasSearch ? 'No requests match that search.' : activeStatus ? `No ${STATUS[activeStatus]?.label.toLowerCase() || 'matching'} requests.` : permissions ? 'No permission requests waiting.' : components ? 'No learning-method requests yet.' : 'No learner-approved tool requests yet.';
   const hint = permissions
     ? "These appear on their own when a learner's agent builds a tool that needs a permission that's off — approve it here and the tool is finished in their chat."
-    : 'Agent Chat never files these automatically; the learner must ask for submission.';
+    : components
+      ? "Learners request new study techniques or learning components here; their agent files it only after they ask."
+      : 'Agent Chat never files these automatically; the learner must ask for submission.';
   return <div style={{ minHeight: 220, display: 'grid', placeItems: 'center', padding: 28, textAlign: 'center' }}>
     <div><div style={{ width: 46, height: 46, display: 'inline-grid', placeItems: 'center', background: '#FFF7ED', borderRadius: 14, marginBottom: 10 }}><Wrench size={21} color={AMBER} /></div>
       <div style={{ fontFamily: FONT, color: INK, fontWeight: 700, fontSize: 14 }}>{message}</div>

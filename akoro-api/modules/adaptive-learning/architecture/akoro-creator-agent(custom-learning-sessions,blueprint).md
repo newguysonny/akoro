@@ -210,7 +210,9 @@ Persist `session_blueprints` row → create `adaptive_sessions` row → register
 
 ### Stage 6 (fallback) — Component request loop
 
-When composition fails — the learner wants something no registered component covers — the Creator Agent must say so explicitly rather than silently approximating. This is the bridge between learner creativity and the deliberate build process:
+When composition fails — the learner wants something no registered component covers — the Creator Agent must say so explicitly rather than silently approximating. This is the bridge between learner creativity and the deliberate build process.
+
+**This is already built into the live Agent Chat system**, not a new endpoint: the agent calls `submit_tool_request` with `kind="component"`, which persists to `edu.agent_tool_requests` and lands on the admins' **Agent requests page** for review (the same queue that handles `kind="tool"` ideas and `kind="capability"` permission grants):
 
 ```
 LEARNER PROMPT  (no component covers it)
@@ -219,10 +221,10 @@ LEARNER PROMPT  (no component covers it)
 CREATOR AGENT  →  "I can't express this with the current components"
         │
         ▼
-[REQUEST]  POST /api/adaptive/components/request
-        │        { prompt, intent, closest_components, missing_capability }
+[REQUEST]  submit_tool_request { kind: "component", title, description, category }
+        │
         ▼
-TRIAGE QUEUE  →  engineering reviews, prioritizes
+edu.agent_tool_requests  →  admins' Agent requests page (review queue)
         │
         ▼
 BUILD  →  TEST  →  REVIEW  →  REGISTER  →  available to all learners
@@ -230,11 +232,11 @@ BUILD  →  TEST  →  REVIEW  →  REGISTER  →  available to all learners
 
 **Who builds new components:** the **Akoro engineering team** — never the learner, and never generated at runtime. A new component is designed, coded, tested, reviewed, and registered exactly once; from then on every learner's Creator Agent can compose it.
 
-- **Learner** → *requests* (expresses the idea, can't and shouldn't author code).
+- **Learner** → *requests* (expresses the idea via `submit_tool_request kind="component"`, can't and shouldn't author code).
 - **School admin** → configures *within* the platform (`lesson_ladders`, approvals); does not author components.
 - **Engineering** → builds the component once, deliberately.
 
-The request row records: the learner's prompt, the parsed intent, the closest components the registry offered, and the specific missing capability. This is what the team actually needs to build the right thing, in the learner's own words.
+The request row (`edu.agent_tool_requests`) records a compact, learner-approved description — never the raw chat transcript — plus the `category` and `kind`, enough for the team to triage the missing component in the learner's own words.
 
 ## 10. Integration with the existing engines
 
@@ -375,7 +377,7 @@ Session detail shows: instructions, selected method, current topic/concept, lear
 | Phase | Deliverable | Notes |
 |---|---|---|
 | 1 | Component registry + blueprint schema | `session_blueprints` table; `component` registry module; validation |
-| 2 | Creator Agent endpoint | `POST /api/adaptive/sessions/blueprint` — NL → validated blueprint; preview response; Stage 6 fallback → `POST /api/adaptive/components/request` |
+| 2 | Creator Agent endpoint | `POST /api/adaptive/sessions/blueprint` — NL → validated blueprint; preview response; Stage 6 fallback → existing `submit_tool_request` with `kind="component"` |
 | 3 | Phase-engine consumes blueprints | Refactor `orchestrator.js`; default blueprint = today's 4 phases (backward compatible) |
 | 4 | Session manager + sidebar integration | CRUD, duplicate/pause/archive; preview UI |
 | 5 | Adaptive scheduling | Spaced review + performance-based interval adjustment; interleaving |
