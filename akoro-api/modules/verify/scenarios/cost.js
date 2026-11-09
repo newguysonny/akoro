@@ -116,3 +116,22 @@ export const activitiesPlan = {
     ctx.expect.ok("missing objectives get a placeholder", String((objectives.Genetics || [])[0] || "").includes("Genetics"), objectives.Genetics);
   },
 };
+
+// Lever 4 (teaching resources): drafts emit content only; the server fills structure.
+export const teachingScaffold = {
+  name: "cost.teaching_scaffold", area: "cost", risk: "read",
+  description: "Teaching-resource drafts emit content only; kind/tone/layout are filled in code (the fixed document structure is not model output).",
+  async run(ctx) {
+    const { assembleResourceDoc, COMPACT_TEMPLATE_RULE } = await import("../../teaching/contentScaffold.js");
+    const out = assembleResourceDoc({ entries: [{ title: "x", sections: [
+      { label: "Common Misconception", body: "..." },
+      { label: "Fix Strategies", items: ["a", "b"] },
+      { label: "Materials", items: [{ label: "Board", value: "Chalk" }] },
+    ] }] });
+    const s = out.entries[0].sections;
+    ctx.expect.eq("kinds inferred", s.map((x) => x.kind).join(","), "text,list,fields");
+    ctx.expect.eq("tone derived from label", s[0].tone, "danger");
+    ctx.expect.eq("layout defaulted", out.entries[0].layout, "stack");
+    ctx.expect.ok("draft rule omits kind/tone/layout", /Omit "kind", "tone" and "layout"/.test(COMPACT_TEMPLATE_RULE), {});
+  },
+};

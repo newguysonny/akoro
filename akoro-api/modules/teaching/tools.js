@@ -31,6 +31,7 @@ import { chargeForAI, schoolBillTo, debitCoins, coinsAvailable, InsufficientCoin
 import { serverError } from "../../lib/httpError.js";
 import { closeJson } from "./jsonRepair.js";
 import { TEMPLATE_RULE, normalizeResult, toMarkdown, toLegacy } from "./template.js";
+import { COMPACT_TEMPLATE_RULE, assembleResourceDoc } from "./contentScaffold.js";
 
 const router = Router();
 const TEACHER_ROLES = ["instructor", "teacher", "school", "school_admin", "admin"];
@@ -338,7 +339,7 @@ export async function generateToolResult({ tool, input, userId, base = null, req
   const resultOf = (r) => {
     const data = parseJson(r);
     if (!data) return null;
-    const result = normalizeResult(data, { tool, input });
+    const result = assembleResourceDoc(data, { tool, input });
     return result.entries.length ? result : null;
   };
   // A first draft that comes back short ("Five Ways In" holding two hooks) is not usable either:
@@ -354,6 +355,9 @@ export async function generateToolResult({ tool, input, userId, base = null, req
     : tool.prompt(input);
   let resp, raw = "";
   const usage = {};
+  // Lever 4: a first draft gets the content-only contract (the server fills kind/tone/layout);
+  // a revision keeps the full template so the change is predictable.
+  const systemContent = (base && request) ? tool.system : tool.system.replace(TEMPLATE_RULE, COMPACT_TEMPLATE_RULE);
   const tried = [];
   for (let attempt = 0; attempt < 2; attempt++) {
     const firmer = attempt && wanted && tried.length
@@ -361,7 +365,7 @@ export async function generateToolResult({ tool, input, userId, base = null, req
       : "";
     resp = await openai.chat.completions.create({
       model: OPENAI_MODEL, max_tokens: tool.maxTokens, temperature: 0.6,
-      messages: [{ role: "system", content: tool.system }, { role: "user", content: ask + firmer }],
+      messages: [{ role: "system", content: systemContent }, { role: "user", content: ask + firmer }],
     });
     for (const [k, v] of Object.entries(resp.usage || {})) if (typeof v === "number") usage[k] = (usage[k] || 0) + v;
     raw = resp.choices?.[0]?.message?.content?.trim() || "";
