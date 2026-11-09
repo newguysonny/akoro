@@ -1158,6 +1158,16 @@ export const CHAT_TOOLS = [
       required: ["title", "description", "category"],
     },
   },
+  {
+    name: "check_my_requests",
+    description:
+      "Read the status of the feature requests this learner has filed with the admins " +
+      "(tool ideas or learning component requests): title, kind, status " +
+      "(new / under_review / planned / declined / implemented) and any admin note. Use " +
+      "when the learner asks \"is my request ready?\", \"did the admins build it?\", or " +
+      "before you confirm a requested feature is available.",
+    input_schema: { type: "object", properties: {}, required: [] },
+  },
 ];
 
 /** Hide feature-gated tools from the model catalogue until the matching Akoro slice is enabled. */
@@ -2938,6 +2948,21 @@ async function runChatTool(name, input, studentId, { conversationId = null, role
           : request.reopened ? `You had asked for this before (${request.previousStatus}); it is re-opened and back on the admins' Agent requests page.`
           : `You already asked for this${when ? ` on ${when}` : ""}; that request is still ${String(request.status).replace(/_/g, " ")}. Say it is the same request, still waiting — not a new one.`,
       };
+    }
+    case "check_my_requests": {
+      const { data } = await db.schema("edu").from("agent_tool_requests")
+        .select("title, kind, status, admin_note, updated_at")
+        .eq("requester_id", studentId)
+        .order("updated_at", { ascending: false })
+        .limit(10);
+      const requests = (data || []).map((r) => ({
+        title: r.title,
+        kind: r.kind,
+        status: r.status,
+        ready: r.status === "implemented",
+        note: r.admin_note || null,
+      }));
+      return { requests, count: requests.length };
     }
     default: {
       // A tool the learner's agent built (self-tooling) — read-only, re-checked every call.

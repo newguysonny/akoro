@@ -19,6 +19,7 @@ import {
 import { CAPABILITIES } from "../self-tooling/capabilities.js";
 import { decideRequest, revokeGrant } from "../self-tooling/escalation.js";
 import { enqueueResume } from "../self-tooling/resumeQueue.js";
+import { reviewToolRequest } from "../agent-tool-requests/service.js";
 
 const router = Router();
 const adminOnly = [authenticateToken, requireRole(["admin"])];
@@ -155,12 +156,31 @@ router.patch("/agent-tool-requests/:requestId", adminOnly, asyncHandler(async (r
   if (update.status && DECISION_ONLY_STATUSES.has(update.status)) {
     return res.status(422).json({ success: false, error: "Approve a capability request with Decide — it grants the capability and resumes the learner's build." });
   }
+
+  // A status change goes through the shared review, which also notifies the
+  // requester when a tool/component request becomes planned or implemented.
+  if (update.status) {
+    let out;
+    try {
+      out = await reviewToolRequest({
+        requestId: req.params.requestId,
+        status: update.status,
+        adminNote: update.admin_note ?? null,
+        admin: { id: req.user?.id ?? null, label: req.user?.full_name || req.user?.email || "admin" },
+      });
+    } catch (e) { return res.status(e.status || 400).json({ success: false, error: e.message }); }
+    const { data: full } = await db.schema("edu").from("agent_tool_requests")
+      .select(REQUEST_COLUMNS).eq("id", req.params.requestId).maybeSingle();
+    if (!full) return res.status(404).json({ success: false, error: "Tool request was not found" });
+    const requesters = await requesterMap([full]);
+    return res.json({ success: true, notified: out.notified, request: requestWithRequester(full, requesters) });
+  }
+
+  // Note-only edit (no status change): no notification.
   const now = new Date().toISOString();
-  const patch = { ...update, reviewed_by: req.user.id, updated_at: now };
-  if (update.status) patch.last_status_changed_at = now;
   const { data, error } = await db.schema("edu").from("agent_tool_requests")
-    .update(patch).eq("id", req.params.requestId)
-    .select(REQUEST_COLUMNS).maybeSingle();
+    .update({ admin_note: update.admin_note, reviewed_by: req.user.id, updated_at: now })
+    .eq("id", req.params.requestId).select(REQUEST_COLUMNS).maybeSingle();
   if (error) throw error;
   if (!data) return res.status(404).json({ success: false, error: "Tool request was not found" });
   const requesters = await requesterMap([data]);

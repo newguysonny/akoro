@@ -914,3 +914,59 @@ export const componentRequest = {
     ctx.expect.ok("asking again returns the same request (deduped)", again?.duplicate === true || again?.submitted === false, again);
   },
 };
+
+/**
+ * The complete circle for a component request: the learner files it
+ * (kind=component), an admin marks it implemented with a note, the learner is
+ * notified, and the learner's own agent confirms it is ready via
+ * check_my_requests — with the transcript kept in the run evidence.
+ */
+export const componentRequestDelivered = {
+  name: "selftool.component_request_delivered", area: "self-tooling", risk: "write",
+  description: "The full learner → admin → learner circle for a component request: filed (kind=component) → admin marks it implemented with a note → the learner is notified → the learner's agent confirms it is ready via check_my_requests (transcript kept in evidence).",
+  params: { learner: { default: "@tester27" } },
+  async run(ctx, p) {
+    const me = await ctx.as(p.learner);
+
+    // 1. File a component request (deterministic tool call).
+    const input = {
+      title: `${ctx.marker} Delivered component: active recall`,
+      description: "An active-recall learning component that hides the learner's notes and asks them to recall the content from memory.",
+      category: "study_support", kind: "component",
+    };
+    const filed = await ctx.agent.tool({ as: p.learner, tool: "submit_tool_request", mode: "live", input });
+    ctx.expect.ok("component request filed", filed?.submitted === true || filed?.duplicate === true, filed);
+    const rows = await ctx.db.rows("edu.agent_tool_requests", { requester_id: me.id, kind: "component", title: { like: `${ctx.marker}%` } }, { columns: "id, kind, status", limit: 5 });
+    for (const r of rows) ctx.cleanup(() => ctx.db.deleteOwned("edu.agent_tool_requests", { ownerColumn: "requester_id", ownerId: me.id, filters: { id: r.id } }));
+    ctx.cleanup(() => ctx.db.deleteOwned("notifications", { ownerColumn: "user_id", ownerId: me.id, filters: { type: "agent_tool_request" } }));
+    ctx.expect.ok("stored as a component, waiting", rows.length > 0 && rows.every((r) => r.kind === "component" && r.status === "new"), rows);
+    const req = rows[0];
+    if (!req) return;
+
+    // 2. An admin marks it implemented with a note → the learner is notified.
+    const { reviewToolRequest } = await import("../../agent-tool-requests/service.js");
+    const delivered = await reviewToolRequest({
+      requestId: req.id, status: "implemented",
+      adminNote: "Active recall is now available as a Learning Session component.",
+      admin: { id: null, label: "verification gate" },
+    });
+    ctx.expect.eq("marked implemented", delivered?.request?.status, "implemented");
+    ctx.expect.ok("the learner was notified", delivered?.notified === true, delivered);
+    ctx.expect.gte("a notification row exists for the requester", await ctx.db.count("notifications", { user_id: me.id, type: "agent_tool_request" }), 1);
+
+    // 3. The learner's agent can confirm it, through the same tool the app uses.
+    const check = await ctx.agent.tool({ as: p.learner, tool: "check_my_requests", mode: "live", input: {} });
+    const mine = (check?.requests || []).find((r) => String(r.title || "").startsWith(ctx.marker));
+    ctx.expect.ok("check_my_requests lists it as ready", !!mine && mine.status === "implemented" && mine.ready === true, check);
+
+    // 4. A real agent turn: the learner asks if it is ready; the agent checks and confirms. Transcript kept.
+    const turn = await ctx.agent.chat({ as: p.learner, mode: "live", model: p.model, prompt: "Is my active-recall component request ready? If it is, tell me what I can do now." });
+    ctx.expect.eq("turn answered", turn.status, 200);
+    ctx.note(`TRANSCRIPT · ${me.username}`);
+    ctx.note(`You: Is my active-recall component request ready? If it is, tell me what I can do now.`);
+    for (const t of turn.tools || []) ctx.note(`· tool ${t.tool}: ${JSON.stringify(t.input || {}).slice(0, 120)} → ${JSON.stringify(t.result || {}).slice(0, 220)}`);
+    ctx.note(`Agent: ${String(turn.reply || "").replace(/\s+/g, " ").slice(0, 480)}`);
+    ctx.expect.ok("the agent checked the request status", (turn.tools || []).some((t) => t.tool === "check_my_requests"), (turn.tools || []).map((t) => t.tool));
+    ctx.expect.ok("and told the learner it is ready", /ready|available|built|implemented/i.test(String(turn.reply || "")), String(turn.reply || "").slice(0, 200));
+  },
+};

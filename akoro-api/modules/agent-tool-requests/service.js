@@ -89,3 +89,50 @@ export async function createLearnerToolRequest({ learnerId, body }) {
   }
   return publicLearnerToolRequest({ ...existing.data, createdNew: false });
 }
+
+/** Admins move a tool/component request through these; capability requests use the decide/grant flow. */
+const REVIEW_STATUSES = new Set(["new", "under_review", "planned", "declined", "implemented"]);
+/** Moving to one of these tells the requester (closing the loop). */
+const NOTIFY_STATUSES = new Set(["planned", "implemented"]);
+
+/**
+ * Review a tool/component request: set its status (and optional note) and, when it
+ * moves to planned or implemented, notify the requester so the learner (and their
+ * agent, via check_my_requests) learns it is on its way or ready. Capability
+ * requests are left to the decide/grant flow, which already resumes the build.
+ */
+export async function reviewToolRequest({ requestId, status, adminNote = null, admin = null }) {
+  if (!requestId) throw Object.assign(new Error("requestId is required"), { status: 422 });
+  if (!REVIEW_STATUSES.has(status)) throw Object.assign(new Error("status is invalid"), { status: 422 });
+  const now = new Date().toISOString();
+
+  const { data: current, error: readError } = await db.schema("edu").from("agent_tool_requests")
+    .select("id, requester_id, kind, title, status").eq("id", requestId).maybeSingle();
+  if (readError) throw new Error(readError.message);
+  if (!current) throw Object.assign(new Error("Tool request was not found"), { status: 404 });
+
+  const { data: updated, error: updateError } = await db.schema("edu").from("agent_tool_requests")
+    .update({ status, admin_note: adminNote, reviewed_by: admin?.id ?? null, updated_at: now, last_status_changed_at: now })
+    .eq("id", requestId)
+    .select("id, requester_id, kind, title, description, category, status, admin_note, reviewed_by, last_status_changed_at, created_at, updated_at")
+    .maybeSingle();
+  if (updateError) throw new Error(updateError.message);
+
+  let notified = false;
+  if (NOTIFY_STATUSES.has(status) && status !== current.status && current.kind !== "capability" && updated?.requester_id) {
+    const ready = status === "implemented";
+    const { error: notifyError } = await db.from("notifications").insert({
+      user_id: updated.requester_id,
+      type: "agent_tool_request",
+      title: ready ? "Your requested feature is ready" : "Your requested feature is planned",
+      content: ready
+        ? `"${updated.title}" is ready${updated.admin_note ? `: ${updated.admin_note}` : ". Ask your agent to use it."}`
+        : `"${updated.title}" is planned${updated.admin_note ? `: ${updated.admin_note}` : "."}`,
+      related_id: requestId,
+    });
+    notified = !notifyError;
+    if (notifyError) console.warn("[agent-tool-requests] notify failed:", notifyError.message);
+  }
+
+  return { request: updated, notified };
+}
