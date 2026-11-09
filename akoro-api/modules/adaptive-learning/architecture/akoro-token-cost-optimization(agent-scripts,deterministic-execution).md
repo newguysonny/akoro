@@ -70,6 +70,7 @@ The **measurement** exists, but the **deterministic execution layer does not ext
 | D5 | **The gateway stays the single chokepoint.** Scripts run *before* the gateway (pre-filter) or *replace* a call entirely — never a second, un-metered LLM path. | Preserves the metering/security invariant from `docs/llm-cost-model.md` |
 | D6 | **The model only ever sees the distilled result.** Filters, dedup, and scaffolding happen in code; the model receives the small output. | The `analyze_logs.py` contract — 150k tokens → 200 |
 | D7 | **Replay caches are keyed on content, not identity.** Cache keys hash the *text*, so the cache self-invalidates when content changes. | No stale-result bugs from a key that outlives its input |
+| D8 | **Test a lever with the existing harness, never a new one.** A lever ships with a golden fixture in `lib/evals/data/` scored by the existing `matches`/`scoreRun` — no bespoke test runner. | The sandbox + eval harness already cover plumbing, scoring, and cost; a parallel harness would drift and double the surface |
 
 ## 6. The deterministic-execution levers
 
@@ -203,7 +204,28 @@ Each phase is byte-identical-first (golden snapshot → extract → verify → d
 | 5 | Ingestion artifact | Re-ingesting an unchanged PDF does not re-run vision; the normalized structure is identical |
 | 6 | Metering integrity | A scripted path produces **zero** gateway charges for the removed call, and the gateway remains the only LLM path (D5) |
 
-## 11. Open design decisions
+## 11. Sandbox & benchmarking reuse
+
+The levers are tested by **reusing** the existing sandbox and eval harness, not by building new test infrastructure. Two trust domains, kept deliberately separate:
+
+- **User-authored tool logic** runs in `modules/self-tooling/sandbox/` (`function run(input, data, akoro)`) — that sandbox is *already* the compile-to-code pattern (a deterministic function replaces per-run LLM inference), and it is precedent that this works at scale here.
+- **Platform levers** (this plan's scripts) are trusted code in `lib/` / `scripts/`, validated by the eval harness — they must **never** be routed through the user-facing sandbox. Different trust domain, same principle (`D8`).
+
+The eval harness already provides everything a lever's validation needs:
+
+| Harness piece | Where | Role in validating a lever |
+|---|---|---|
+| Deterministic stand-in model | `scripts/golden-path/mock-openai.mjs` (regex `pickTool`/`contentFor`) | Proves plumbing — routing, arg validation, DB writes, coin charging, failure branches — with **no key and no cost** |
+| Stubbed-tool loop | `lib/evals/benchmark.js` (`callTool` seam over the real `chat.js` loop) | Exercises a lever in situ with no side effects |
+| Deterministic scoring | `benchmark.js#scoreRun` + `lib/evals/match.js` | Judges output with regex/equality — no second LLM judge doubling the cost |
+| Golden fixtures, data not code | `lib/evals/data/{intent,routing,questions,recall,ladder,learner-tools,agent-checks}.json` | The byte-identical snapshots from §7 Stage 2 / §10 |
+| Cost estimate | `lib/evals/index.js#estimateUsd` | Prices the LLM path *before* it runs, so the before/after cost delta of a lever is a number, not a claim |
+
+The consequence that makes this a cost lever in its own right: **once a surface becomes a script, its benchmark becomes zero-token.** The LLM intent classifier needs a live key (`routing.json` cases); the script version is just code over the same dataset. `estimateUsd` already exists to *show* that delta.
+
+**What scripts cannot test (and the harness already says so):** `gp-evals.mjs` refuses to run the real eval suite without a live key because against the stand-in model "every case would pass for the wrong reason." A script can regress against goldens for free, but it cannot prove the real model picks the right tool on novel input — that is the `routing.js` suite's job and it still needs the live model. The plan therefore **shrinks** the set of things that need an LLM benchmark; it does not delete them.
+
+## 12. Open design decisions
 
 - **Cache storage & TTL.** Embedding/result caches: Redis (fast, disposable) vs Postgres (source of truth) — the same split the token-economics plan already calls out. Content-hash keys self-invalidate; TTL is a secondary safety.
 - **Which surfaces are *truly* deterministic.** Intent classification and embedding are clear; grading commentary and tutoring prose are not. The `Determine` stage (§7 Stage 3) needs an explicit owner call per surface, not a blanket rule.
