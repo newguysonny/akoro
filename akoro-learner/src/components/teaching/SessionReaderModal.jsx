@@ -1950,12 +1950,12 @@ export default function SessionReaderModal({
             ) : (
             <div ref={viewerRef} onClick={handleViewerClick}
               className={`pdf-scroll h-full overflow-auto flex flex-col items-center ${rawPages ? "px-1.5 md:px-3 pt-2 md:pt-3 pb-8" : "px-3 md:px-6 pt-9 pb-16"}`}
-              style={{ background: "var(--ak-bg)" }}>
+              style={{ background: "var(--ak-bg)", alignItems: zoom > 1 ? "flex-start" : "center" }}>
               {pages.map((p, i) => (
                 <div
                   key={i}
                   data-page-index={i}
-                  style={{ transform: `scale(${zoom})`, transformOrigin: "top center" }}
+                  style={{ zoom }}
                   className={`doc-page relative w-full shadow-lg ${rawPages
                     // A finished PDF page brings its own margins — render it
                     // flush: no inner padding, no width cap, a tight gap so
