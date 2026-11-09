@@ -118,16 +118,27 @@ export async function triggerNow(task) {
 }
 
 /**
- * ONE repeatable job (1/min) that drains due tasks — replaces one BullMQ job per
- * task. BullMQ charges per job (add/move/XADD/finish/DEL), so one job per task
- * was the Redis bill; this makes it ~1 job/minute regardless of task count.
+ * The task tick — an IN-PROCESS interval that reads due tasks from Postgres and
+ * runs them. No BullMQ job and no Redis command for the tick itself (the same
+ * pattern as lib/deferredJobs.js). One replica; runDueTasks claims each task
+ * atomically so a second tick can't double-run it. Removes any earlier release's
+ * BullMQ `task-tick` repeat (which would keep firing).
  */
-export async function startTaskTick() {
+let tickTimer = null;
+export async function startTaskTick({ everyMs = 60_000 } = {}) {
   if (!tasksTickEnabled()) return { skipped: "TASKS_TICK=off" };
-  await taskQueue.add("task-tick", { _tick: true }, {
-    repeat: { pattern: "* * * * *" }, jobId: "task-tick",
-    removeOnComplete: true, removeOnFail: { count: 5 }, attempts: 1,
-  }).catch((e) => console.warn("[tasks] tick register failed:", e.message));
+  if (tickTimer) return { registered: true };
+  taskQueue.removeRepeatable("task-tick", { pattern: "* * * * *" }).catch(() => {});
+  const tick = async () => {
+    try {
+      const { runDueTasks } = await import("./worker.js");
+      const r = await runDueTasks();
+      if (r?.ran) console.log(`[tasks] tick ran ${r.ran} task(s)`);
+    } catch (e) { console.warn("[tasks] tick failed:", e?.message); }
+  };
+  tickTimer = setInterval(tick, everyMs);
+  tickTimer.unref?.();
+  setTimeout(tick, 5_000).unref?.();
   return { registered: true };
 }
 

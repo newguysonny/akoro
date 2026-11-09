@@ -151,6 +151,12 @@ export async function runDueTasks({ limit = 25, ids = null } = {}) {
   let ran = 0;
   for (const t of due) {
     if (learnerIds.has(t.creator_id) || t.status === "cancelled") continue;
+    // Atomic claim: only the tick that flips pending/queued → running executes it
+    // (protects against two ticks overlapping, and a second replica later).
+    const { data: claimed } = await db.from("tasks")
+      .update({ status: "running", started_at: new Date().toISOString() })
+      .eq("id", t.id).in("status", ["pending", "queued"]).select("id").maybeSingle();
+    if (!claimed) continue;
     try {
       await runOneTask({ id: `tick-${t.id}`, data: { taskId: t.id } });
       ran++;
