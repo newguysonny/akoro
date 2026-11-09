@@ -128,8 +128,10 @@ let tickTimer = null;
 export async function startTaskTick({ everyMs = 60_000 } = {}) {
   if (!tasksTickEnabled()) return { skipped: "TASKS_TICK=off" };
   if (tickTimer) return { registered: true };
-  // Remove any earlier release's BullMQ `task-tick` repeat (by key, so it really
-  // stops) and any already-scheduled copies — otherwise it keeps firing forever.
+  // Remove any earlier release's BullMQ `task-tick` repeat/delayed copy AND its
+  // deferred row — otherwise the deferred row releases it again after boot and it
+  // keeps firing forever. Safe: the tick reads real tasks from Postgres, so no
+  // task is lost by clearing task-runner's legacy queue/deferred entries.
   try {
     const reps = await taskQueue.getRepeatableJobs();
     for (const r of reps) if (r?.name === "task-tick") await taskQueue.removeRepeatableByKey(r.key);
@@ -137,6 +139,8 @@ export async function startTaskTick({ everyMs = 60_000 } = {}) {
       const jobs = await taskQueue.getJobs([st], 0, 50).catch(() => []);
       for (const j of jobs) if (j?.name === "task-tick") await j.remove().catch(() => {});
     }
+    const { default: db } = await import("../../db.js");
+    await db.schema("edu").from("deferred_jobs").delete().eq("queue", "task-runner");
   } catch { /* best effort */ }
   const tick = async () => {
     try {
