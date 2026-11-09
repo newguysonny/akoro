@@ -47,6 +47,13 @@ router.get("/scenarios", asyncHandler(async (req, res) => {
 }));
 router.get("/suites", (_req, res) => res.json({ success: true, data: listSuites() }));
 
+// BullMQ cost diagnostic: which queue is churning jobs (the Upstash command mix
+// is BullMQ). Read it from a browser: GET /api/verify/queues?key=…
+router.get("/queues", asyncHandler(async (_req, res) => {
+  const { queueCounts } = await import("../../lib/queueHealth.js");
+  return res.json({ success: true, data: await queueCounts() });
+}));
+
 router.post("/runs", asyncHandler(async (req, res) => {
   if (goesToSandbox(req.body?.target || req.query.target)) {
     const { target, ...body } = req.body || {};
