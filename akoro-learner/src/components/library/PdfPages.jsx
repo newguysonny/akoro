@@ -76,10 +76,21 @@ export function PdfPage({ pdf, pageNumber, blocks = null }) {
         const base = page.getViewport({ scale: 1 });
         const cssWidth = wrap.clientWidth || 640;
         const cssScale = cssWidth / base.width;               // CSS-pixel scale
-        const dpr = Math.min(window.devicePixelRatio || 1, 2);
-        const viewport = page.getViewport({ scale: cssScale * dpr });
-        canvas.width = viewport.width;
-        canvas.height = viewport.height;
+        // Draw at DEVICE resolution for the reader's MAX zoom. The reader
+        // magnifies with transform:scale(zoom ≤ 1.5); a canvas drawn only at the
+        // on-screen width (and dpr capped at 2) was what made pages look blurry —
+        // and much worse as you zoomed in. Supersampling to dpr × maxZoom keeps
+        // the page crisp at every zoom level without re-rendering on each step.
+        const dpr = Math.min(window.devicePixelRatio || 1, 3);
+        const MAX_ZOOM = 1.5;                                 // SessionReaderModal's zoom cap
+        let renderScale = cssScale * dpr * MAX_ZOOM;
+        const MAX_PIXELS = 6_000_000;                         // keep a page's backing store < ~6 MP
+        if (base.width * renderScale * base.height * renderScale > MAX_PIXELS) {
+          renderScale = Math.sqrt(MAX_PIXELS / (base.width * base.height));
+        }
+        const viewport = page.getViewport({ scale: renderScale });
+        canvas.width = Math.round(viewport.width);
+        canvas.height = Math.round(viewport.height);
         canvas.style.width = '100%';
         canvas.style.height = 'auto';
         setAspect(base.height / base.width);
