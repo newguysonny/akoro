@@ -7,6 +7,7 @@
 import { TaskFileDB, AgentDB } from "./db.js";
 import db from "../../../db.js";
 import { untrusted, UNTRUSTED_SYSTEM_RULE } from "../../../lib/untrusted.js";
+import { preFilterFileTexts } from "./contextPrefilter.js";
 
 export async function buildContext(task) {
   const [agent, files] = await Promise.all([
@@ -28,8 +29,16 @@ export async function buildContext(task) {
     text:     f.ocr_text ?? "",
   })).filter((f) => f.text);
 
+  // Lever 3: distill the attached files BEFORE the model sees them (drop empty,
+  // dedup identical OCR, cap per-file and total). On normal inputs this is a
+  // no-op; on a big upload it turns a 60k-token dump into a bounded slice.
+  const { fileTexts: boundedFileTexts, stats: contextStats } = preFilterFileTexts(fileTexts, {
+    perFileChars: Number(process.env.TASK_CONTEXT_FILE_CHARS) || undefined,
+    totalChars:   Number(process.env.TASK_CONTEXT_TOTAL_CHARS) || undefined,
+  });
+
   const systemPrompt = buildSystemPrompt(agent, course, task.task_type ?? "general");
-  const prompt       = buildTaskPrompt(task, files, fileTexts, course);
+  const prompt       = buildTaskPrompt(task, files, boundedFileTexts, course);
 
   return {
     systemPrompt,
@@ -42,7 +51,8 @@ export async function buildContext(task) {
       courseId:  task.course_id ?? null,
       agentName: agent.name ?? agent.agent_name,
       files,
-      fileTexts,
+      fileTexts: boundedFileTexts,
+      contextStats,
     },
   };
 }
