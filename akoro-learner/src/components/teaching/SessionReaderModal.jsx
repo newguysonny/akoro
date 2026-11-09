@@ -1955,7 +1955,7 @@ export default function SessionReaderModal({
                 <div
                   key={i}
                   data-page-index={i}
-                  style={{ zoom }}
+                  style={{ width: `${Math.round(zoom * 100)}%` }}
                   className={`doc-page relative w-full shadow-lg ${rawPages
                     // A finished PDF page brings its own margins — render it
                     // flush: no inner padding, no width cap, a tight gap so
