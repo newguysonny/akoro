@@ -1066,3 +1066,55 @@ export const bugReportDelivered = {
     ctx.expect.ok("check_my_requests lists the bug as fixed", !!mine && mine.kind === "bug" && mine.status === "implemented", check);
   },
 };
+
+// The server runs a real (read-only) agent turn after the learner confirms a
+// change. Proven by the deterministic follow-up message id, not the model's words.
+export const decisionFollowUp = {
+  name: "selftool.decision_followup", area: "self-tooling", risk: "write", timeoutMs: 120_000,
+  description: "After a confirm, the server runs an agent turn and posts its reply — asserted by the deterministic follow-up message id (sha256 of the confirmation id).",
+  params: { learner: { default: "@tester27" } },
+  async run(ctx, p) {
+    await needCreate(ctx);
+    const me = await ctx.as(p.learner);
+    const { default: db } = await import("../../../db.js");
+    const { activeGrants } = await import("../../self-tooling/registry.js");
+    const tag = ctx.marker.slice(8, 16).replace(/[^a-z0-9]/g, "x");
+    const name = `verify_done_${tag}`;
+
+    const { data: grant, error: gErr } = await db.schema("edu").from("capability_grants")
+      .insert({ capability: "verify.task_done", note: `gate ${ctx.marker}`, expires_at: new Date(Date.now() + 15 * 60_000).toISOString() }).select("id").single();
+    if (gErr) ctx.expect.blocked(`couldn't grant the probe: ${gErr.message}`);
+    ctx.cleanup(async () => { await db.schema("edu").from("capability_grants").update({ revoked_at: new Date().toISOString() }).eq("id", grant.id); await activeGrants({ fresh: true }); });
+    await activeGrants({ fresh: true });
+    ctx.cleanup(() => ctx.db.deleteOwned("tasks", { ownerColumn: "creator_id", ownerId: me.id, filters: { title: { like: `${ctx.marker}%` } } }));
+    ctx.cleanup(() => ctx.db.deleteOwned("edu.agent_tools", { ownerColumn: "owner_id", ownerId: me.id, filters: { name } }));
+    ctx.cleanup(() => ctx.db.deleteOwned("edu.agent_tool_write_confirmations", { ownerColumn: "principal_id", ownerId: me.id, filters: { tool_name: "selftool:verify.task_done" } }));
+    ctx.cleanup(() => ctx.db.deleteOwned("chat_sessions", { ownerColumn: "user_id", ownerId: me.id, filters: { title: "Your agent" } }));
+    ctx.cleanup(() => ctx.db.deleteOwned("chat_sessions", { ownerColumn: "user_id", ownerId: me.id, filters: { title: "Your change" } }));
+    ctx.cleanup(() => ctx.db.deleteOwned("notifications", { ownerColumn: "user_id", ownerId: me.id, filters: { title: { like: "Your %" } } }));
+    ctx.cleanup(() => ctx.db.deleteOwned("chat_messages", { ownerColumn: "user_id", ownerId: me.id, filters: { text: { like: "Done — %" } } }));
+    ctx.cleanup(() => ctx.db.deleteOwned("chat_messages", { ownerColumn: "user_id", ownerId: me.id, filters: { text: { like: "Not changed — %" } } }));
+
+    const t = await ctx.agent.tool({ as: p.learner, tool: "create_task", mode: "live", input: { title: `${ctx.marker} revise vectors`, priority: "low", dueInMinutes: 60 } });
+    ctx.expect.ok("task created", !t?.error, t?.error);
+
+    const r = await ctx.agent.tool({ as: p.learner, tool: "create_tool", mode: "live", input: {
+      goal: `Mark my tasks whose title starts with "${ctx.marker}" as done`, name, label: `${ctx.marker} finish`, hint: { views: ["my_tasks"], capabilities: ["verify.task_done"] } } });
+    const card = r?.result?.confirmation;
+    if (!card?.confirmationId) { ctx.expect.blocked(`no card: ${r?.result?.status || r?.error || "unknown"}`); return; }
+
+    const ok = await ctx.http({ as: p.learner, method: "POST", path: `/api/self-tooling/confirmations/${card.confirmationId}/confirm` });
+    ctx.expect.status("confirmed", ok, 200);
+
+    // The deterministic follow-up id the async agent turn posts.
+    const { createHash } = await import("node:crypto");
+    const expectedId = `00000000-0000-4000-8000-${createHash("sha256").update(`followup-${card.confirmationId}`).digest("hex").slice(0, 12)}`;
+    let row = null;
+    for (let i = 0; i < 40 && !row; i++) {
+      [row] = await ctx.db.rows("chat_messages", { id: expectedId }, { columns: "id, role, text" });
+      if (!row) await new Promise((resolve) => setTimeout(resolve, 900));
+    }
+    ctx.cleanup(() => ctx.db.deleteOwned("chat_messages", { ownerColumn: "user_id", ownerId: me.id, filters: { id: expectedId } }));
+    ctx.expect.ok("the agent's decision follow-up was posted (server ran the turn)", !!row && row.role === "agent" && String(row.text || "").trim().length > 0, row);
+  },
+};
