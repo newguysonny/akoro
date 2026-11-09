@@ -32,8 +32,16 @@ export async function queueCounts({ redisUrl = process.env.REDIS_URL } = {}) {
         counts = { error: String(e?.message || e).slice(0, 80) };
       }
       const eventsStream = await probe.xlen(`${PREFIX}:${name}:events`).catch(() => null);
+      let repeatables = null;
+      try {
+        const conn2 = new Redis(redisUrl, redisConnectionOptions({ label: `queue-health-rep:${name}` }));
+        const q2 = new Queue(name, { connection: conn2 });
+        repeatables = (await q2.getRepeatableJobs()).map((r) => r.name);
+        await q2.close();
+        await conn2.quit().catch(() => {});
+      } catch { repeatables = null; }
       const backlog = (counts.active || 0) + (counts.waiting || 0) + (counts.delayed || 0) + (counts.prioritized || 0);
-      rows.push({ queue: name, backlog, eventsStream, ...counts });
+      rows.push({ queue: name, backlog, eventsStream, repeatables, ...counts });
       await conn.quit().catch(() => {});
     }
   } finally {

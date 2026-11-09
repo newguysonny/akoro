@@ -128,7 +128,16 @@ let tickTimer = null;
 export async function startTaskTick({ everyMs = 60_000 } = {}) {
   if (!tasksTickEnabled()) return { skipped: "TASKS_TICK=off" };
   if (tickTimer) return { registered: true };
-  taskQueue.removeRepeatable("task-tick", { pattern: "* * * * *" }).catch(() => {});
+  // Remove any earlier release's BullMQ `task-tick` repeat (by key, so it really
+  // stops) and any already-scheduled copies — otherwise it keeps firing forever.
+  try {
+    const reps = await taskQueue.getRepeatableJobs();
+    for (const r of reps) if (r?.name === "task-tick") await taskQueue.removeRepeatableByKey(r.key);
+    for (const st of ["delayed", "waiting", "prioritized"]) {
+      const jobs = await taskQueue.getJobs([st], 0, 50).catch(() => []);
+      for (const j of jobs) if (j?.name === "task-tick") await j.remove().catch(() => {});
+    }
+  } catch { /* best effort */ }
   const tick = async () => {
     try {
       const { runDueTasks } = await import("./worker.js");
