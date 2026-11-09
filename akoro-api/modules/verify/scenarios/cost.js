@@ -22,3 +22,21 @@ export const contextPrefilter = {
     })(), {});
   },
 };
+
+// Lever 3 (chat surface): recalled memory is deduped and capped before the prompt.
+export const memoryPrefilter = {
+  name: "cost.memory_prefilter", area: "cost", risk: "read",
+  description: "Recalled learner memory is deduped (whitespace-insensitive) and capped by count and characters before it enters the prompt — same distinct memory, fewer tokens.",
+  async run(ctx) {
+    const { preFilterMemories } = await import("../../adaptive-learning/chat-memory.js");
+    const { memories, stats } = preFilterMemories([
+      { kind: "note", content: "Likes fractions" },
+      { kind: "note", content: "  Likes   fractions " },
+      { kind: "note", content: "   " },
+    ]);
+    ctx.expect.eq("duplicate memory dropped", stats.deduped, 1);
+    ctx.expect.eq("one distinct memory kept", memories.length, 1);
+    const capped = preFilterMemories(Array.from({ length: 50 }, (_, i) => ({ kind: "note", content: `n${i}` })), { maxItems: 12 });
+    ctx.expect.eq("item cap enforced", capped.memories.length, 12);
+  },
+};
