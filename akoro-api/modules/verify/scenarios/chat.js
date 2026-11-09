@@ -243,7 +243,7 @@ export const recurringTask = {
     if (!taskId) return;
     ctx.cleanup(() => ctx.db.deleteOwned("tasks", { ownerColumn: "creator_id", ownerId: me.id, filters: { id: taskId } }));
     const row = (await ctx.db.rows("tasks", { id: taskId }, { columns: "id, title, due_at, payload", limit: 1 }))[0];
-    ctx.expect.eq("stored recurrence everyDays=1", Number(row?.payload?.recurrence?.everyDays), 1);
+    ctx.expect.eq("stored recurrence everySeconds=86400", Number(row?.payload?.recurrence?.everySeconds), 86400);
 
     const toggled = await ctx.http({ as: p.learner, method: "PATCH", path: `/api/tasks/${taskId}/toggle` });
     ctx.expect.status("toggled done", toggled, 200);
@@ -253,7 +253,7 @@ export const recurringTask = {
     ctx.cleanup(() => ctx.db.deleteOwned("tasks", { ownerColumn: "creator_id", ownerId: me.id, filters: { id: next.id } }));
     const delta = (new Date(next.due_at).getTime() - new Date(row.due_at).getTime()) / 86_400_000;
     ctx.expect.ok("next due is one day later", Math.abs(delta - 1) < 0.001, { prev: row.due_at, next: next.due_at, delta });
-    ctx.expect.eq("next is pending and still repeating", [next.status, Number(next.payload?.recurrence?.everyDays)], ["pending", 1]);
+    ctx.expect.eq("next is pending and still repeating", [next.status, Number(next.payload?.recurrence?.everySeconds)], ["pending", 86400]);
   },
 };
 
