@@ -5,6 +5,7 @@ import { followUpDeliverIntoChat, taskDueInMinutes, noResidue, sweepStale } from
 import { viewsMatchSchema, schemaLookupSafe, agentUsesSchemaLookup, createSpecMatchesDb, createRejectsForbidden, registerReuseDisable, agentBuildsTool, escalateAndResume, agentEscalates, promotionCheck, promotePlatform, sandboxContained, codeToolBuilt, writeConfirm, instructorToolMatchesDb, instructorScope, instructorAgentBuilds, permissionRequestIsReal, toolJourney, deleteTasks, componentRequest, componentRequestDelivered, myLibraryView, groupTotal, bugReportDelivered } from "./selftool.js";
 import { privacyEdges } from "./network.js";
 import { rateLimitCountedOnce, battleEntryGates } from "./platform.js";
+import { embeddingCacheHit } from "./embeddings.js";
 import { realUserRun } from "./realuser.js";
 import { syllabusCoverage } from "./curriculum.js";
 import { planCompletes, practiceChargedOnce, generatedOutline, agentCheckBattle, agentCheckStop, classSyllabusFirst, workflowMirror, agentWakes, replaceAndCancel, teachingHandoff } from "./studyprep.js";
@@ -66,7 +67,7 @@ import { pickPersisted, pickReachesWorkflows, noForcedToolChoiceClaude, refusalF
 import { runToMastery, teachingChain } from "./teachingChain.js";
 import { PHASE5_TOOLS } from "./phase5Tools.js";
 
-const ALL = [healthBuild, toolsCatalogue, sessionTokensOnly, r2Live, embeddingsLive, embeddingsCompare, searchTextFallback, scheduleMessageHere, toolErrorHonesty, pastQuestionsTruth, historyTools, readToolsRun, dryRunNoWrites, protegeIdentity, hourlyFollowUp, recurringTask,
+const ALL = [healthBuild, toolsCatalogue, sessionTokensOnly, r2Live, embeddingsLive, embeddingsCompare, embeddingCacheHit, searchTextFallback, scheduleMessageHere, toolErrorHonesty, pastQuestionsTruth, historyTools, readToolsRun, dryRunNoWrites, protegeIdentity, hourlyFollowUp, recurringTask,
   privacyEdges, rateLimitCountedOnce, battleEntryGates, followUpDeliverIntoChat, taskDueInMinutes, noResidue,
   viewsMatchSchema, schemaLookupSafe, agentUsesSchemaLookup, createSpecMatchesDb, createRejectsForbidden, registerReuseDisable, agentBuildsTool, escalateAndResume, agentEscalates, promotionCheck, promotePlatform, sandboxContained, codeToolBuilt, writeConfirm, instructorToolMatchesDb, instructorScope, instructorAgentBuilds, realUserRun, syllabusCoverage, planCompletes, practiceChargedOnce, generatedOutline, bridgePersists, conceptCurve, suggestionsAnswer, suggestionsSurviveRefresh, studyToolRouting, untaughtFlashcards, tailoredChips, chatUploadFiled, pastPaperStructured, sortOwnFolders, materialsMultiFileDiag, readyProposal, goalWork, ideasFlow, consentsQuietBudget, instructorProactive, voiceSpeak, voiceLive, sweepStale, agentCheckBattle, agentCheckStop, classSyllabusFirst, historyPages, workflowMirror, agentWakes, replaceAndCancel, teachingHandoff, eventStream, paperStructured, ...chatToSubmissionScenarios, ...gradingScenarios, authoringVersionsParts, authoringDiagramsEdits, inboxOneList, quietLearningPass, plannerRichGather, proactiveInChat, readerBackend, socketSession, guideIdeasSession, courseOneRecord,
   teachingToolRouting, teachingToolRuns, activityToolRouting, draftLifecycle, routineLifecycle,

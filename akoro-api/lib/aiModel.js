@@ -8,6 +8,7 @@
  * OPENAI_MODEL; it defaults to the tutor-chat model.
  */
 import { embeddingsProvider, isSelfHostedModel, runpodEmbeddings } from "./embeddingProvider.js";
+import { singleTextKey, cacheModel, embeddingCacheGet, embeddingCachePut } from "./embeddingCache.js";
 import OpenAI from "openai";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { coinsAvailable, chargeForAI, InsufficientCoins } from "./coins.js";
@@ -392,7 +393,30 @@ async function meteredEmbeddings(params = {}) {
   const feature = params.__feature ?? store.feature ?? "embedding";
   const billTo  = platform ? null : params.__billTo  ?? store.billTo  ?? null;
   const clean = { ...params }; delete clean.__userId; delete clean.__feature; delete clean.__ref; delete clean.__billTo; delete clean.__payer;
+
+  // Lever 2 (token-cost plan): an embedding is a pure function of (provider, model,
+  // text). Serve identical single-text embeddings from the content-hash cache — no
+  // tokens, no latency — instead of paying to embed the same text again. Batch
+  // (array) inputs bypass the cache; misses do the real call below and fill it.
+  const cacheKey = singleTextKey(clean);
+  if (cacheKey) {
+    const hit = await embeddingCacheGet(cacheKey);
+    if (hit) return {
+      object: "list",
+      data: [{ object: "embedding", embedding: hit, index: 0 }],
+      model: cacheModel(clean),
+      usage: { prompt_tokens: 0, total_tokens: 0 },
+      cached: true,
+    };
+  }
+
   const res = await embeddingsBreaker.fire(clean);
+  if (cacheKey) {
+    const vec = res?.data?.[0]?.embedding;
+    // Awaited so the very next identical call is a guaranteed hit (a cache that
+    // races its own writer would re-embed). The upsert is one indexed row.
+    if (Array.isArray(vec)) await embeddingCachePut(cacheKey, cacheModel(clean), vec);
+  }
   if ((userId || billTo) && res?.usage) {
     chargeForAI({ userId, feature, billTo, model: isSelfHostedModel(res.model) ? res.model : clean.model || "text-embedding-3-small", usage: { prompt_tokens: res.usage.prompt_tokens ?? res.usage.total_tokens ?? 0, completion_tokens: 0 } })
       .catch((e) => { if (!(e instanceof InsufficientCoins)) console.warn("[coins] embed charge failed:", e.message); });
