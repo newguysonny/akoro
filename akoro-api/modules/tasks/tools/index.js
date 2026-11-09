@@ -22,7 +22,6 @@ import { interactiveMaterialDefinition, executeInteractiveMaterial } from "./int
 import { assignBattleDefinition,    executeAssignBattle    } from "./assign-battle.js";
 import { assignSelfStudyDefinition, executeAssignSelfStudy } from "./assign-self-study.js";
 import { teachingToolDefinition,    executeTeachingTool    } from "./teaching-tool.js";
-import { submitCapabilityRequestDefinition, executeSubmitCapabilityRequest } from "./submit-capability-request.js";
 
 export const ALL_TOOLS = [
   { definition: generateQuizDefinition,     execute: executeGenerateQuiz     },
@@ -45,7 +44,6 @@ export const ALL_TOOLS = [
   { definition: assignBattleDefinition,        execute: executeAssignBattle        },
   { definition: assignSelfStudyDefinition,     execute: executeAssignSelfStudy     },
   { definition: teachingToolDefinition,        execute: executeTeachingTool        },
-  { definition: submitCapabilityRequestDefinition, execute: executeSubmitCapabilityRequest },
 ];
 
 const tool = (name) => {
