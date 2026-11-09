@@ -5,11 +5,11 @@ export const embeddingCacheHit = {
   name: "embeddings.cache_hit", area: "embeddings", risk: "read",
   description: "An identical single-text embedding is served from the content-hash cache on the 2nd call (cached=true, 0 tokens, identical vector); a cache row is written; batch inputs bypass the cache.",
   async run(ctx) {
-    const { canEmbed } = await import("../../lib/embeddingProvider.js");
+    const { canEmbed } = await import("../../../lib/embeddingProvider.js");
     if (!canEmbed()) ctx.expect.blocked("no embedding provider configured on this server");
 
-    const { openai } = await import("../../lib/aiModel.js");
-    const { singleTextKey } = await import("../../lib/embeddingCache.js");
+    const { openai } = await import("../../../lib/aiModel.js");
+    const { singleTextKey } = await import("../../../lib/embeddingCache.js");
     const text = `verification probe ${ctx.marker} ${Date.now()}`;   // unique ⇒ a cold miss first
 
     const first = (await openai.embeddings.create({ input: text, __feature: "verify" }))?.data?.[0]?.embedding;
