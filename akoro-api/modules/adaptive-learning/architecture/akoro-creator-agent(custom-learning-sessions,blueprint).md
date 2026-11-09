@@ -138,7 +138,7 @@ The single artifact the Creator Agent produces. Stored in a new `session_bluepri
 
 ## 9. The Creator Agent pipeline
 
-Five stages, mirroring Creator Mode but bounded by the registry:
+Five primary stages, plus a fallback branch (Stage 6), mirroring Creator Mode but bounded by the registry:
 
 ```
 LEARNER PROMPT
@@ -149,14 +149,9 @@ LEARNER PROMPT
      ▼
 [2] COMPOSE ── assemble the workflow from the registry; parameterize
      │
-     ▼
-[3] VALIDATE ── every stage resolves to a registered component; gates server-enforceable
+     ├── expressible ──────────────▶ [3] VALIDATE ──▶ [4] PREVIEW ──▶ [5] SAVE
      │
-     ▼
-[4] PREVIEW ── render the plan as human-readable steps for confirmation
-     │
-     ▼
-[5] SAVE ── persist blueprint; create session; register in the manager
+     └── not expressible ──────────▶ [6] REQUEST ── structured feature request → triage queue
 ```
 
 ### Stage 1 — Interpret
@@ -184,6 +179,8 @@ The Creator Agent extracts a parameter table from the prompt. Example prompt →
 
 Maps the parameter table to a `workflow` array over the registry. This is a deterministic composition step, not free-form generation.
 
+**If the request cannot be expressed with the registry, do not approximate it.** Route to Stage 6 (component request loop) instead of silently substituting a closest-fit workflow.
+
 ### Stage 3 — Validate
 
 Hard checks, enforced server-side:
@@ -210,6 +207,34 @@ Your learning process:
 ### Stage 5 — Save
 
 Persist `session_blueprints` row → create `adaptive_sessions` row → register in the session manager. The learner lands in the preview-confirmed session.
+
+### Stage 6 (fallback) — Component request loop
+
+When composition fails — the learner wants something no registered component covers — the Creator Agent must say so explicitly rather than silently approximating. This is the bridge between learner creativity and the deliberate build process:
+
+```
+LEARNER PROMPT  (no component covers it)
+        │
+        ▼
+CREATOR AGENT  →  "I can't express this with the current components"
+        │
+        ▼
+[REQUEST]  POST /api/adaptive/components/request
+        │        { prompt, intent, closest_components, missing_capability }
+        ▼
+TRIAGE QUEUE  →  engineering reviews, prioritizes
+        │
+        ▼
+BUILD  →  TEST  →  REVIEW  →  REGISTER  →  available to all learners
+```
+
+**Who builds new components:** the **Akoro engineering team** — never the learner, and never generated at runtime. A new component is designed, coded, tested, reviewed, and registered exactly once; from then on every learner's Creator Agent can compose it.
+
+- **Learner** → *requests* (expresses the idea, can't and shouldn't author code).
+- **School admin** → configures *within* the platform (`lesson_ladders`, approvals); does not author components.
+- **Engineering** → builds the component once, deliberately.
+
+The request row records: the learner's prompt, the parsed intent, the closest components the registry offered, and the specific missing capability. This is what the team actually needs to build the right thing, in the learner's own words.
 
 ## 10. Integration with the existing engines
 
@@ -350,7 +375,7 @@ Session detail shows: instructions, selected method, current topic/concept, lear
 | Phase | Deliverable | Notes |
 |---|---|---|
 | 1 | Component registry + blueprint schema | `session_blueprints` table; `component` registry module; validation |
-| 2 | Creator Agent endpoint | `POST /api/adaptive/sessions/blueprint` — NL → validated blueprint; preview response |
+| 2 | Creator Agent endpoint | `POST /api/adaptive/sessions/blueprint` — NL → validated blueprint; preview response; Stage 6 fallback → `POST /api/adaptive/components/request` |
 | 3 | Phase-engine consumes blueprints | Refactor `orchestrator.js`; default blueprint = today's 4 phases (backward compatible) |
 | 4 | Session manager + sidebar integration | CRUD, duplicate/pause/archive; preview UI |
 | 5 | Adaptive scheduling | Spaced review + performance-based interval adjustment; interleaving |
@@ -372,6 +397,7 @@ Acceptance scenarios to build before marking complete:
 | 6 | Spaced schedule | Struggled concept gets earlier review; remembered gets longer interval |
 | 7 | Iterative edit | "add flashcards" bumps `version` and preserves prior progress |
 | 8 | Backward compat | A pre-refactor session still runs its 4 phases identically |
+| 9 | Unsupported request | A prompt no component covers returns an explicit "unsupported" response + a triage request row, not a coerced blueprint |
 
 ## 18. Open design decisions
 
