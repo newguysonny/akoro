@@ -201,3 +201,58 @@ export const historyPages = {
     ctx.expect.eq("no limit: the whole transcript (copy chat)", (all.body?.messages || []).length, total);
   },
 };
+
+// "every hour" — the hourly repeat option on scheduled chat messages (previously
+// impossible: daily/weekdays only). Bounded to a 1-day series by default.
+export const hourlyFollowUp = {
+  name: "chat.hourly_follow_up", area: "agent-chat", risk: "write",
+  description: "Scheduling an HOURLY check-in works: repeat='hourly' is stored, the series is bounded (1 day by default), and cancelling removes it.",
+  params: { learner: { default: "@tester01" } },
+  async run(ctx, p) {
+    const me = await ctx.as(p.learner);
+    const out = await ctx.agent.tool({ as: p.learner, tool: "schedule_chat_follow_up", mode: "live",
+      input: { message: `${ctx.marker} hourly check-in`, inMinutes: 60, repeat: "hourly", repeatDays: 1, where: "new" } });
+    ctx.expect.ok("scheduled hourly", out?.scheduled === true && out?.repeat === "hourly", out);
+    const rows = await ctx.db.rows("edu.scheduled_chat_follow_ups", { user_id: me.id }, { columns: "id, repeat, repeat_until, scheduled_at, message", limit: 20 });
+    const mine = rows.find((r) => String(r.message || "").includes(ctx.marker));
+    for (const r of rows.filter((x) => String(x.message || "").includes(ctx.marker))) ctx.cleanup(() => ctx.db.deleteOwned("edu.scheduled_chat_follow_ups", { ownerColumn: "user_id", ownerId: me.id, filters: { id: r.id } }));
+    ctx.expect.ok("stored with repeat=hourly", mine?.repeat === "hourly", mine);
+    if (mine) {
+      const span = Math.round((Date.parse(mine.repeat_until) - Date.parse(mine.scheduled_at)) / 86_400_000);
+      ctx.expect.eq("series spans one day", span, 1);
+    }
+    // Remove the queued delivery so nothing fires after the test.
+    if (out?.followUpId) {
+      ctx.cleanup(async () => { try { await ctx.agent.tool({ as: p.learner, tool: "cancel_scheduled_chat_follow_up", mode: "live", input: { followUpId: out.followUpId } }); } catch { /* best effort */ } });
+    }
+  },
+};
+
+// Repeating to-dos: create a daily task, complete it, and the next occurrence is
+// spawned with the due date advanced by the interval.
+export const recurringTask = {
+  name: "tasks.recurring_task", area: "agent-chat", risk: "write",
+  description: "A repeating study task ('daily') carries its recurrence, and completing it spawns the next occurrence about one interval later (pending, still repeating).",
+  params: { learner: { default: "@tester01" } },
+  async run(ctx, p) {
+    const me = await ctx.as(p.learner);
+    const created = await ctx.agent.tool({ as: p.learner, tool: "create_task", mode: "live",
+      input: { title: `${ctx.marker} Daily reading`, priority: "medium", dueInMinutes: 120, repeat: "daily" } });
+    ctx.expect.ok("task created with a daily repeat", created?.created === true && created?.repeatsEveryDays === 1, created);
+    const taskId = created?.taskId;
+    if (!taskId) return;
+    ctx.cleanup(() => ctx.db.deleteOwned("tasks", { ownerColumn: "creator_id", ownerId: me.id, filters: { id: taskId } }));
+    const row = (await ctx.db.rows("tasks", { id: taskId }, { columns: "id, title, due_at, payload", limit: 1 }))[0];
+    ctx.expect.eq("stored recurrence everyDays=1", Number(row?.payload?.recurrence?.everyDays), 1);
+
+    const toggled = await ctx.http({ as: p.learner, method: "PATCH", path: `/api/tasks/${taskId}/toggle` });
+    ctx.expect.status("toggled done", toggled, 200);
+    const next = toggled.body?.next;
+    ctx.expect.ok("a next occurrence was created", !!next?.id, toggled.body);
+    if (!next?.id) return;
+    ctx.cleanup(() => ctx.db.deleteOwned("tasks", { ownerColumn: "creator_id", ownerId: me.id, filters: { id: next.id } }));
+    const delta = (new Date(next.due_at).getTime() - new Date(row.due_at).getTime()) / 86_400_000;
+    ctx.expect.ok("next due is one day later", Math.abs(delta - 1) < 0.001, { prev: row.due_at, next: next.due_at, delta });
+    ctx.expect.eq("next is pending and still repeating", [next.status, Number(next.payload?.recurrence?.everyDays)], ["pending", 1]);
+  },
+};

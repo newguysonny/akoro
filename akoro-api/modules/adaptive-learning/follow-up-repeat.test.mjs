@@ -10,15 +10,25 @@ const { formatToolRows } = await import("./chat-follow-ups.js");
 
 const inHours = (h) => new Date(Date.now() + h * 3_600_000).toISOString();
 
-test("repeat: daily/weekdays accepted, default 30 days, bounded; anything else refused", () => {
+test("repeat: daily/weekdays/hourly accepted, defaults bounded; anything else refused", () => {
   const v = validateFollowUpInput({ message: "Your daily subject check", scheduledAt: inHours(2), repeat: "daily" });
   assert.equal(v.repeat, "daily");
   assert.equal(Math.round((Date.parse(v.repeatUntil) - Date.parse(v.scheduledAt)) / 86_400_000), 30);
   assert.equal(validateFollowUpInput({ message: "x", scheduledAt: inHours(2) }).repeat, null, "one-off by default");
-  assert.throws(() => validateFollowUpInput({ message: "x", scheduledAt: inHours(2), repeat: "hourly" }), /repeat/);
+  const h = validateFollowUpInput({ message: "x", scheduledAt: inHours(2), repeat: "hourly" });
+  assert.equal(h.repeat, "hourly");
+  assert.equal(Math.round((Date.parse(h.repeatUntil) - Date.parse(h.scheduledAt)) / 86_400_000), 1, "hourly defaults to a 1-day series");
+  assert.throws(() => validateFollowUpInput({ message: "x", scheduledAt: inHours(2), repeat: "hourly", repeatDays: 30 }), /repeatDays/);
+  assert.throws(() => validateFollowUpInput({ message: "x", scheduledAt: inHours(2), repeat: "minutely" }), /repeat/);
   assert.throws(() => validateFollowUpInput({ message: "x", scheduledAt: inHours(2), repeat: "daily", repeatDays: 365 }), /repeatDays/);
   assert.throws(() => validateFollowUpInput({ message: "x", scheduledAt: inHours(2), runTool: "DROP TABLE" }), /runTool/);
   assert.equal(validateFollowUpInput({ message: "x", scheduledAt: inHours(2), runTool: "untouched_subjects" }).runTool, "untouched_subjects");
+});
+
+test("nextOccurrence: hourly advances one hour and ends at repeatUntil", () => {
+  const now = Date.parse("2026-11-01T00:00:00Z");
+  assert.equal(nextOccurrence({ scheduledAt: "2026-11-05T15:30:00.000Z", repeat: "hourly", timezone: "Africa/Lagos", now }), "2026-11-05T16:30:00.000Z");
+  assert.equal(nextOccurrence({ scheduledAt: "2026-11-05T15:30:00.000Z", repeat: "hourly", repeatUntil: "2026-11-05T16:00:00Z", timezone: "Africa/Lagos", now }), null);
 });
 
 test("nextOccurrence: same clock time next day; weekdays skip Sat/Sun in the learner's zone; ends at repeatUntil", () => {
@@ -47,7 +57,7 @@ test("formatToolRows: a short plain list, capped", () => {
 
 test("wiring: the agent's tool offers repeat + runTool, and runTool must be the learner's own active tool", async () => {
   const chat = await readFile(new URL("./chat.js", import.meta.url), "utf8");
-  assert.match(chat, /repeat: \{ type: "string", enum: \["daily", "weekdays"\]/);
+  assert.match(chat, /repeat: \{ type: "string", enum: \["daily", "weekdays", "hourly"\]/);
   assert.match(chat, /isn't one of the learner's active tools/);
   const fu = await readFile(new URL("./chat-follow-ups.js", import.meta.url), "utf8");
   assert.match(fu, /One pending occurrence per series/);

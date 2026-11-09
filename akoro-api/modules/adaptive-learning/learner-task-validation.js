@@ -34,6 +34,20 @@ function preciseDueAt(value) {
 export function validateLearnerTaskInput(input = {}, { defaultTimezone = PLATFORM_TIMEZONE } = {}) {
   const timezone = limitedText(input.timezone, "timezone", { max: 80 }) || defaultTimezone || PLATFORM_TIMEZONE;
   if (!isIanaTimeZone(timezone)) throw new Error("timezone must be a valid IANA timezone");
+
+  // A repeating to-do regenerates its next occurrence when the learner completes
+  // it (see tasks/routes.js toggle). daily = 1 day, weekly = 7 days, interval = N.
+  const repeat = input.repeat == null || input.repeat === "" || input.repeat === "none" ? null : String(input.repeat);
+  if (repeat && !["daily", "weekly", "interval"].includes(repeat)) throw new Error("repeat must be 'daily', 'weekly' or 'interval'");
+  let recurrenceEveryDays = null;
+  if (repeat === "daily") recurrenceEveryDays = 1;
+  else if (repeat === "weekly") recurrenceEveryDays = 7;
+  else if (repeat === "interval") {
+    const n = Number(input.repeatIntervalDays);
+    if (!Number.isInteger(n) || n < 1 || n > 365) throw new Error("repeatIntervalDays must be a whole number from 1 to 365");
+    recurrenceEveryDays = n;
+  }
+
   return {
     title: limitedText(input.title, "title", { required: true, max: 180 }),
     description: limitedText(input.description, "description", { max: 800 }),
@@ -44,5 +58,6 @@ export function validateLearnerTaskInput(input = {}, { defaultTimezone = PLATFOR
     dueAt: preciseDueAt(input.dueAt) ?? (Number(input.dueInMinutes) > 0 && Number(input.dueInMinutes) <= 525_600
       ? new Date(Date.now() + Math.round(Number(input.dueInMinutes) * 60_000)).toISOString() : null),
     timezone,
+    recurrenceEveryDays,
   };
 }

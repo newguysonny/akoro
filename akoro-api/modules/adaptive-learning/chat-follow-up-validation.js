@@ -49,11 +49,18 @@ export function validateFollowUpInput(input = {}, { defaultTimezone = TIME_ZONE_
   // Repeating check-ins ("every day at 4:30pm"): the series ends after
   // repeatDays (default 30, max 90); cancelling the pending one ends it sooner.
   const repeat = input.repeat == null || input.repeat === "" || input.repeat === "none" ? null : String(input.repeat);
-  if (repeat && !REPEATS.has(repeat)) throw new Error("repeat must be 'daily' or 'weekdays'");
+  if (repeat && !REPEATS.has(repeat)) throw new Error("repeat must be 'daily', 'weekdays' or 'hourly'");
   let repeatUntil = null;
   if (repeat) {
-    const days = input.repeatDays == null ? 30 : Number(input.repeatDays);
-    if (!Number.isInteger(days) || days < 1 || days > 90) throw new Error("repeatDays must be a whole number from 1 to 90");
+    // Hourly is bounded tighter (1–7 days ⇒ 24–168 sends, one pending at a time).
+    const defaultDays = repeat === "hourly" ? 1 : 30;
+    const maxDays = repeat === "hourly" ? 7 : 90;
+    const days = input.repeatDays == null ? defaultDays : Number(input.repeatDays);
+    if (!Number.isInteger(days) || days < 1 || days > maxDays) {
+      throw new Error(repeat === "hourly"
+        ? "repeatDays must be a whole number from 1 to 7 for an hourly repeat"
+        : "repeatDays must be a whole number from 1 to 90");
+    }
     repeatUntil = new Date(time.getTime() + days * DAY_MS).toISOString();
   }
   // One of the learner's own read tools, run fresh at each send (its answer is added to the message).
@@ -63,7 +70,8 @@ export function validateFollowUpInput(input = {}, { defaultTimezone = TIME_ZONE_
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-const REPEATS = new Set(["daily", "weekdays"]);
+const HOUR_MS = 60 * 60 * 1000;
+const REPEATS = new Set(["daily", "weekdays", "hourly"]);
 const TOOL_NAME = /^[a-z][a-z0-9_]{2,47}$/;
 
 /** Day of week (0 = Sunday) of an instant in a time zone. */
@@ -75,15 +83,17 @@ function weekdayIn(date, timeZone) {
 /**
  * PURE: the next send time of a repeating check-in, or null when the series
  * is over. Same clock time the next day (weekdays: skips Saturday and Sunday
- * in the learner's time zone). Never earlier than `now` + 1 minute, so a late
- * delivery doesn't fire a backlog of past days.
+ * in the learner's time zone); hourly: one hour later. Never earlier than
+ * `now` + 1 minute, so a late delivery doesn't fire a backlog of past sends.
  */
 export function nextOccurrence({ scheduledAt, repeat, repeatUntil, timezone = TIME_ZONE_FALLBACK, now = Date.now() }) {
   if (!REPEATS.has(repeat)) return null;
+  const step = repeat === "hourly" ? HOUR_MS : DAY_MS;
   let t = new Date(scheduledAt).getTime();
   if (!Number.isFinite(t)) return null;
-  for (let guard = 0; guard < 400; guard++) {
-    t += DAY_MS;
+  const guardMax = repeat === "hourly" ? 24 * 130 : 400;
+  for (let guard = 0; guard < guardMax; guard++) {
+    t += step;
     if (repeat === "weekdays" && [0, 6].includes(weekdayIn(new Date(t), timezone))) continue;
     if (t > now + MIN_DELAY_MS) break;
   }

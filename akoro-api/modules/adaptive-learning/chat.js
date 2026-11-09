@@ -350,7 +350,7 @@ export const CHAT_TOOLS = [
   },
   {
     name: "create_task",
-    description: "Create one learner-owned study task (a to-do on their Tasks list) after the learner explicitly asks. If they want the AGENT TO SEND THEM A MESSAGE later ('message me in 10 minutes', 'remind me here at 5pm'), use schedule_chat_follow_up instead — a task does not send anything. For a relative time like 'in 30 minutes' use dueInMinutes; for 'tomorrow' alone ask for the time. First call get_learner_context when the request needs a clock date.",
+    description: "Create one learner-owned study task (a to-do on their Tasks list) after the learner explicitly asks. If they want the AGENT TO SEND THEM A MESSAGE later ('message me in 10 minutes', 'remind me here at 5pm'), use schedule_chat_follow_up instead — a task does not send anything. For a relative time like 'in 30 minutes' use dueInMinutes; for 'tomorrow' alone ask for the time. First call get_learner_context when the request needs a clock date. For a task that REPEATS ('every day', 'weekly', 'every 3 days'), pass repeat (and repeatIntervalDays for interval); it needs a due time, and completing it creates the next occurrence.",
     input_schema: {
       type: "object",
       properties: {
@@ -362,6 +362,8 @@ export const CHAT_TOOLS = [
         dueInMinutes: { type: "number", description: "Due this many minutes from now — use for relative times like 'in 10 minutes' or 'in 2 hours' (120) instead of working out dueAt." },
         timezone:    { type: "string", description: "Optional IANA timezone for display, e.g. Africa/Lagos. Defaults to the account timezone returned by get_learner_context." },
         course:      { type: "string", description: "Related course or subject (optional)" },
+        repeat:      { type: "string", enum: ["daily", "weekly", "interval"], description: "Make the task repeat: 'daily', 'weekly', or 'interval' (with repeatIntervalDays). Omit for a one-off to-do. A repeating task needs a due time (dueAt or dueInMinutes) to anchor it; when the learner completes it, the next occurrence is created automatically." },
+        repeatIntervalDays: { type: "number", description: "With repeat='interval': how many days between occurrences (1–365)." },
       },
       required: ["title", "priority"],
     },
@@ -392,8 +394,8 @@ export const CHAT_TOOLS = [
         chatId: { type: "string", description: "With where='chat': the chatId from list_chats." },
         timezone: { type: "string", description: "Optional IANA timezone for display, for example Africa/Lagos. Defaults to the account timezone returned by get_learner_context." },
         title: { type: "string", description: "Optional title for the new chat, for example 'Biology revision check-in'." },
-        repeat: { type: "string", enum: ["daily", "weekdays"], description: "Repeat at the same clock time: 'daily' (every day) or 'weekdays' (Mon–Fri). For 'every day', 'each morning', 'remind me daily'. The first send is scheduledAt; each later one goes into the same chat." },
-        repeatDays: { type: "number", description: "With repeat: how many days the series runs (default 30, max 90)." },
+        repeat: { type: "string", enum: ["daily", "weekdays", "hourly"], description: "Repeat: 'daily' (every day), 'weekdays' (Mon–Fri), or 'hourly' (every hour). For 'every day'/'each morning'/'remind me daily' use daily; for 'every hour'/'hourly check-in' use hourly. The first send is scheduledAt; each later one goes into the same chat." },
+        repeatDays: { type: "number", description: "With repeat: how many days the series runs. Daily/weekdays default 30 (max 90); hourly default 1 (max 7)." },
         runTool: { type: "string", description: "Optional: the name of one of the learner's OWN read tools (from Settings → Agent → My tools / their tool list) to run fresh at each send; its answer is added under the message — e.g. a 'subjects I haven't studied' tool for a daily reminder." },
       },
       required: ["message"],
@@ -2000,6 +2002,9 @@ async function runChatTool(name, input, studentId, { conversationId = null, role
       try {
         const context = await getLearnerProfileContext(studentId);
         const taskInput = validateLearnerTaskInput(input, { defaultTimezone: context.timeZone });
+        if (taskInput.recurrenceEveryDays && !taskInput.dueAt) {
+          return clarify("dueAt", "A repeating task needs a due time to anchor it — when should the first one be due (a date/time, or 'in 2 hours')?", { action: "create_task" });
+        }
         const { data: agentRow } = await db.from("user_agents").select("id").eq("user_id", studentId).maybeSingle();
         // tasks.agent_id is required — a learner who hasn't made their agent yet
         // got a raw database error here.
@@ -2008,7 +2013,11 @@ async function runChatTool(name, input, studentId, { conversationId = null, role
           creator_id: studentId, agent_id: agentRow?.id,
           title: taskInput.title, description: taskInput.description, priority: taskInput.priority,
           status: "pending", task_type: "general",
-          payload: { due: taskInput.due, course: taskInput.course },
+          payload: {
+            due: taskInput.due,
+            course: taskInput.course,
+            ...(taskInput.recurrenceEveryDays ? { recurrence: { everyDays: taskInput.recurrenceEveryDays } } : {}),
+          },
           due_at: taskInput.dueAt,
           timezone: taskInput.timezone,
         }).select().single();
@@ -2022,6 +2031,7 @@ async function runChatTool(name, input, studentId, { conversationId = null, role
           created: true, taskId: task.id, title: task.title, description: task.description,
           priority: task.priority, dueAt: task.due_at ?? null, timezone: task.timezone,
           dueLocal: task.due_at ? localiseInstant(task.due_at, taskInput.timezone) : null,
+          repeatsEveryDays: taskInput.recurrenceEveryDays || null,
           autonomyEligible: Boolean(task.due_at && !task.is_recurring),
         };
       } catch (error) {

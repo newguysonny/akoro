@@ -1,6 +1,6 @@
 // The scenario registry. Add a scenario: export it from an area file and list it here.
 import { healthBuild, toolsCatalogue, sessionTokensOnly, r2Live, embeddingsLive, embeddingsCompare, searchTextFallback } from "./smoke.js";
-import { scheduleMessageHere, toolErrorHonesty, pastQuestionsTruth, historyTools, readToolsRun, dryRunNoWrites, protegeIdentity, historyPages } from "./chat.js";
+import { scheduleMessageHere, toolErrorHonesty, pastQuestionsTruth, historyTools, readToolsRun, dryRunNoWrites, protegeIdentity, historyPages, hourlyFollowUp, recurringTask } from "./chat.js";
 import { followUpDeliverIntoChat, taskDueInMinutes, noResidue, sweepStale } from "./writes.js";
 import { viewsMatchSchema, schemaLookupSafe, agentUsesSchemaLookup, createSpecMatchesDb, createRejectsForbidden, registerReuseDisable, agentBuildsTool, escalateAndResume, agentEscalates, promotionCheck, promotePlatform, sandboxContained, codeToolBuilt, writeConfirm, instructorToolMatchesDb, instructorScope, instructorAgentBuilds, permissionRequestIsReal, toolJourney, deleteTasks, componentRequest, componentRequestDelivered } from "./selftool.js";
 import { privacyEdges } from "./network.js";
@@ -66,7 +66,7 @@ import { pickPersisted, pickReachesWorkflows, noForcedToolChoiceClaude, refusalF
 import { runToMastery, teachingChain } from "./teachingChain.js";
 import { PHASE5_TOOLS } from "./phase5Tools.js";
 
-const ALL = [healthBuild, toolsCatalogue, sessionTokensOnly, r2Live, embeddingsLive, embeddingsCompare, searchTextFallback, scheduleMessageHere, toolErrorHonesty, pastQuestionsTruth, historyTools, readToolsRun, dryRunNoWrites, protegeIdentity,
+const ALL = [healthBuild, toolsCatalogue, sessionTokensOnly, r2Live, embeddingsLive, embeddingsCompare, searchTextFallback, scheduleMessageHere, toolErrorHonesty, pastQuestionsTruth, historyTools, readToolsRun, dryRunNoWrites, protegeIdentity, hourlyFollowUp, recurringTask,
   privacyEdges, rateLimitCountedOnce, battleEntryGates, followUpDeliverIntoChat, taskDueInMinutes, noResidue,
   viewsMatchSchema, schemaLookupSafe, agentUsesSchemaLookup, createSpecMatchesDb, createRejectsForbidden, registerReuseDisable, agentBuildsTool, escalateAndResume, agentEscalates, promotionCheck, promotePlatform, sandboxContained, codeToolBuilt, writeConfirm, instructorToolMatchesDb, instructorScope, instructorAgentBuilds, realUserRun, syllabusCoverage, planCompletes, practiceChargedOnce, generatedOutline, bridgePersists, conceptCurve, suggestionsAnswer, suggestionsSurviveRefresh, studyToolRouting, untaughtFlashcards, tailoredChips, chatUploadFiled, pastPaperStructured, sortOwnFolders, materialsMultiFileDiag, readyProposal, goalWork, ideasFlow, consentsQuietBudget, instructorProactive, voiceSpeak, voiceLive, sweepStale, agentCheckBattle, agentCheckStop, classSyllabusFirst, historyPages, workflowMirror, agentWakes, replaceAndCancel, teachingHandoff, eventStream, paperStructured, ...chatToSubmissionScenarios, ...gradingScenarios, authoringVersionsParts, authoringDiagramsEdits, inboxOneList, quietLearningPass, plannerRichGather, proactiveInChat, readerBackend, socketSession, guideIdeasSession, courseOneRecord,
   teachingToolRouting, teachingToolRuns, activityToolRouting, draftLifecycle, routineLifecycle,
@@ -96,7 +96,7 @@ export const SUITES = {
   // The proactive agent (Grand Plan §7.16): one inbox, by-kind accept, dismiss reasons.
   proactive: ["agent.inbox_one_list", "agent.quiet_learning", "agent.planner_rich_gather", "agent.proactive_in_chat", "agent.ready_proposal", "agent.goal_work", "agent.ideas", "agent.consents_quiet", "agent.instructor_proactive", "agent.kind_observe_then_live", "writes.no_residue"],
   // Real changes on test learners, then proof nothing was left behind.
-  writes: ["tasks.create_due_in_minutes", "followups.deliver_into_chat", "writes.no_residue"],
+  writes: ["tasks.create_due_in_minutes", "followups.deliver_into_chat", "tasks.recurring_task", "chat.hourly_follow_up", "writes.no_residue"],
   // Phase V4 end to end (sandbox only: BLOCKED on production).
   "real-user": ["verify.real_user_run", "writes.no_residue"],
   // One course record: Course Creator edits the courses row learners and schedules read.
