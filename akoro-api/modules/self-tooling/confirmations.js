@@ -149,6 +149,13 @@ export async function getConfirmation(id, userId) {
  * `callTool(name, args)` runs a learner chat tool as them (for runners that go
  * through an existing write tool).
  */
+/** Fire the server-side agent turn after a decision (best-effort, never blocks the response). */
+function kickDecisionFollowUp(args) {
+  import("./decisionFollowUp.js")
+    .then(({ runDecisionFollowUp }) => runDecisionFollowUp(args))
+    .catch(() => {});
+}
+
 export async function confirmWrite({ id, userId, callTool, buildTool = null, postIntoChat = null, toolDeps = null }) {
   const row = await owned(id, userId);
   if (row.status !== "pending") throw httpError(409, row.status === "consumed" ? "Already done" : `This change was ${row.status}`);
@@ -188,6 +195,8 @@ export async function confirmWrite({ id, userId, callTool, buildTool = null, pos
       : `Done — ${done} changed.`;
     await postIntoChat({ userId, conversationId, title: "Your change", text, kind: "agent_change_done",
       messageId: `00000000-0000-4000-8000-${createHash("sha256").update(id).digest("hex").slice(0, 12)}` }).catch(() => {});
+    // Then the agent sees the decision and continues (read-only) in its own turn.
+    kickDecisionFollowUp({ userId, conversationId, outcomeText: `I approved this change. The app applied it: ${text}`, confirmationId: id });
   }
   return { ...publicConfirmation({ ...claimed, preview: { ...claimed.preview, result } }) };
 }
@@ -205,6 +214,7 @@ export async function rejectWrite({ id, userId, postIntoChat = null }) {
     const conversationId = row.session_id && row.session_id !== "none" ? row.session_id : null;
     await postIntoChat({ userId, conversationId, title: "Your change", text: "Not changed — I left everything as it was.", kind: "agent_change_declined",
       messageId: `00000000-0000-4000-8000-${createHash("sha256").update(`declined-${id}`).digest("hex").slice(0, 12)}` }).catch(() => {});
+    kickDecisionFollowUp({ userId, conversationId, outcomeText: "I declined the change; nothing was altered.", confirmationId: id });
   }
   return publicConfirmation(data || row);
 }
@@ -266,6 +276,7 @@ async function confirmPermission(row, { userId, buildTool, postIntoChat, toolDep
         : `Thanks — ${toolId ? `"${result.label}" is switched on` : `I built "${result.label}"`}. Nothing matches it right now, so nothing would change. It's saved in your tools for next time.`;
     await postIntoChat({ userId, conversationId, title: result.label || "Your tool", text, kind: "agent_tool_built",
       messageId: `00000000-0000-4000-8000-${createHash("sha256").update(row.id).digest("hex").slice(0, 12)}` }).catch(() => {});
+    kickDecisionFollowUp({ userId, conversationId, outcomeText: `I approved "${result.label || "the tool"}". ${text}`, confirmationId: row.id });
   }
   return { ...publicConfirmation({ ...claimed, preview: { ...claimed.preview, result } }), next };
 }
