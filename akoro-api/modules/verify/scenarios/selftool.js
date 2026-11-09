@@ -526,6 +526,13 @@ export const writeConfirm = {
     const ok = await ctx.http({ as: p.learner, method: "POST", path: `/api/self-tooling/confirmations/${card2.confirmationId}/confirm` });
     ctx.expect.status("confirmed", ok, 200);
     ctx.expect.eq("both applied", ok.body?.data?.result?.done, 2);
+    // Server-side continuation: the outcome is posted into the chat by the server,
+    // not left only on the card (which the UI drops after the choice).
+    const posted = await ctx.db.rows("chat_messages", { user_id: me.id }, { columns: "id, text, role", limit: 100 });
+    ctx.expect.ok("the server posted the outcome into the chat", posted.some((m) => m.role === "agent" && /Done — 2 changed/.test(String(m.text || ""))), posted.map((m) => m.text).filter((t) => /changed/.test(String(t))));
+    ctx.cleanup(() => ctx.db.deleteOwned("chat_messages", { ownerColumn: "user_id", ownerId: me.id, filters: { text: { like: "Done — %" } } }));
+    ctx.cleanup(() => ctx.db.deleteOwned("chat_messages", { ownerColumn: "user_id", ownerId: me.id, filters: { text: { like: "Not changed — %" } } }));
+    ctx.cleanup(() => ctx.db.deleteOwned("chat_sessions", { ownerColumn: "user_id", ownerId: me.id, filters: { title: "Your change" } }));
     ctx.expect.ok("the tasks are done now", (await statusOf()).every((s) => s === "done"), await statusOf());
     const twice = await ctx.http({ as: p.learner, method: "POST", path: `/api/self-tooling/confirmations/${card2.confirmationId}/confirm` });
     ctx.expect.status("can't be used twice", twice, 409);

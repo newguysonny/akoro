@@ -900,11 +900,13 @@ function AgentChatTab({
 
   // After Approve or Confirm on a card the chat carries on, so the agent follows through where the learner can see it:
   // approved → it runs the tool (thinking, tools, the Confirm card); confirmed → it checks what changed and what's left.
+  // After the learner's choice the SERVER posts the follow-up into the chat; the
+  // card is removed from the UI (not kept showing "Done"). No client continuation.
   const onCardDone=(what,card)=>{
-    const name=card?.result?.label||card?.title||"the tool";
-    void sendMessage(what==="approved"
-      ? `Approved "${name}" — go ahead.`
-      : `Confirmed the change to ${(card?.items||[]).length||"those"} item${(card?.items||[]).length===1?"":"s"} — check it went through and tell me if anything is left.`);
+    const cid=card?.confirmationId;
+    if(!cid) return;
+    setMessages(prev=>prev.flatMap(m=>m.confirm?.confirmationId!==cid?[m]:(m.text?[{...m,confirm:null}]:[])));
+    setPendingChanges(prev=>prev.filter(c=>c.confirmationId!==cid));
   };
   const sendMessage=async(overrideText)=>{
     // Attachments can be sent with an empty message — a friendly default text

@@ -34,9 +34,11 @@ export default function ConfirmChangeCard({ confirm, onDone = null }) {
   const act = async (what) => {
     setBusy(true); setErr('');
     try {
-      const r = unwrap(await apiPost(`/api/self-tooling/confirmations/${state.confirmationId}/${what}`, state.kind === 'permission' && onDone ? { continueInChat: true } : {}));
+      // The server performs the write AND posts the follow-up into the chat; the
+      // card is not kept. No client-driven continuation is needed.
+      const r = unwrap(await apiPost(`/api/self-tooling/confirmations/${state.confirmationId}/${what}`, {}));
       setState((s) => ({ ...s, ...r }));
-      if (what === 'confirm' && onDone) onDone(state.kind === 'permission' ? 'approved' : 'confirmed', { ...state, ...r });
+      if (onDone) onDone(what === 'confirm' ? (state.kind === 'permission' ? 'approved' : 'confirmed') : 'rejected', { ...state, ...r });
     } catch (e) { setErr(e?.message || 'Could not do that.'); }
     finally { setBusy(false); }
   };

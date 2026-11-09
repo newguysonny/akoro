@@ -59,7 +59,10 @@ router.get("/confirmations", authenticateToken, asyncHandler(async (req, res) =>
   res.json({ success: true, data: { pending: await listPendingConfirmations(req.user.id) } });
 }));
 router.get("/confirmations/:id", authenticateToken, confirmationRoute((req) => getConfirmation(req.params.id, req.user.id)));
-router.post("/confirmations/:id/reject", authenticateToken, confirmationRoute((req) => rejectWrite({ id: req.params.id, userId: req.user.id })));
+router.post("/confirmations/:id/reject", authenticateToken, confirmationRoute(async (req) => {
+  const { postIntoChat } = await import("./escalation.js");
+  return rejectWrite({ id: req.params.id, userId: req.user.id, postIntoChat });
+}));
 router.post("/confirmations/:id/confirm", authenticateToken, confirmationRoute(async (req) => {
   const [{ executeChatTool, selfToolDeps }, { createTool }, { postIntoChat }] = await Promise.all([
     import("../adaptive-learning/chat.js"), import("./pipeline.js"), import("./escalation.js")]);
@@ -68,8 +71,7 @@ router.post("/confirmations/:id/confirm", authenticateToken, confirmationRoute(a
     // A permission card: approving builds the tool, as this learner.
     buildTool: (args) => createTool({ ...args, ...selfToolDeps(req.user.id, "student") }), postIntoChat,
     toolDeps: selfToolDeps(req.user.id, "student"),
-    // The app carries the chat on after Approve: the agent runs the tool in its next turn (thinking, tools, one card).
-    continueInChat: req.body?.continueInChat === true });
+  });
 }));
 
 export default router;
