@@ -1,3 +1,4 @@
+import { intervalSeconds, MIN_INTERVAL_SECONDS, MAX_INTERVAL_SECONDS } from "../../lib/scheduleInterval.js";
 /**
  * Validation and normalisation shared by learner task creation paths.
  *
@@ -39,13 +40,19 @@ export function validateLearnerTaskInput(input = {}, { defaultTimezone = PLATFOR
   // it (see tasks/routes.js toggle). daily = 1 day, weekly = 7 days, interval = N.
   const repeat = input.repeat == null || input.repeat === "" || input.repeat === "none" ? null : String(input.repeat);
   if (repeat && !["daily", "weekly", "interval"].includes(repeat)) throw new Error("repeat must be 'daily', 'weekly' or 'interval'");
-  let recurrenceEveryDays = null;
-  if (repeat === "daily") recurrenceEveryDays = 1;
-  else if (repeat === "weekly") recurrenceEveryDays = 7;
+  let recurrenceEverySeconds = null;
+  if (repeat === "daily") recurrenceEverySeconds = 86_400;
+  else if (repeat === "weekly") recurrenceEverySeconds = 604_800;
   else if (repeat === "interval") {
-    const n = Number(input.repeatIntervalDays);
-    if (!Number.isInteger(n) || n < 1 || n > 365) throw new Error("repeatIntervalDays must be a whole number from 1 to 365");
-    recurrenceEveryDays = n;
+    // Any interval the learner names: every N seconds/minutes/hours/days/weeks/months/years.
+    recurrenceEverySeconds = intervalSeconds(input.repeatEvery ?? input.every, input.repeatUnit ?? input.unit);
+    if (!recurrenceEverySeconds) {
+      const d = Number(input.repeatIntervalDays);
+      if (!Number.isInteger(d) || d < 1 || d > 365) throw new Error("repeat needs repeatEvery + repeatUnit, or repeatIntervalDays from 1 to 365");
+      recurrenceEverySeconds = d * 86_400;
+    }
+    if (recurrenceEverySeconds < MIN_INTERVAL_SECONDS) throw new Error(`an interval repeat must be at least ${MIN_INTERVAL_SECONDS} seconds apart`);
+    if (recurrenceEverySeconds > MAX_INTERVAL_SECONDS) throw new Error("the interval is too long");
   }
 
   return {
@@ -58,6 +65,9 @@ export function validateLearnerTaskInput(input = {}, { defaultTimezone = PLATFOR
     dueAt: preciseDueAt(input.dueAt) ?? (Number(input.dueInMinutes) > 0 && Number(input.dueInMinutes) <= 525_600
       ? new Date(Date.now() + Math.round(Number(input.dueInMinutes) * 60_000)).toISOString() : null),
     timezone,
-    recurrenceEveryDays,
+    ...(recurrenceEverySeconds ? {
+      recurrenceEverySeconds,
+      recurrenceEveryDays: recurrenceEverySeconds % 86_400 === 0 ? recurrenceEverySeconds / 86_400 : null,
+    } : {}),
   };
 }

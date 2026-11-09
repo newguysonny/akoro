@@ -1,4 +1,5 @@
 /** Input validation kept dependency-free so timing/timezone policy is testable. */
+import { intervalSeconds, MIN_INTERVAL_SECONDS, MAX_INTERVAL_SECONDS, seriesSpanMs } from "../../lib/scheduleInterval.js";
 
 const MIN_DELAY_MS = 60_000;
 const MAX_DELAY_MS = 180 * 24 * 60 * 60 * 1000;
@@ -49,9 +50,19 @@ export function validateFollowUpInput(input = {}, { defaultTimezone = TIME_ZONE_
   // Repeating check-ins ("every day at 4:30pm"): the series ends after
   // repeatDays (default 30, max 90); cancelling the pending one ends it sooner.
   const repeat = input.repeat == null || input.repeat === "" || input.repeat === "none" ? null : String(input.repeat);
-  if (repeat && !REPEATS.has(repeat)) throw new Error("repeat must be 'daily', 'weekdays' or 'hourly'");
+  if (repeat && !REPEATS.has(repeat)) throw new Error("repeat must be 'daily', 'weekdays', 'hourly' or 'interval'");
   let repeatUntil = null;
-  if (repeat) {
+  let everySeconds = null;
+  if (repeat === "interval") {
+    // Any interval the learner names: every N seconds/minutes/hours/days/weeks/months/years.
+    everySeconds = intervalSeconds(input.repeatEvery ?? input.every, input.repeatUnit ?? input.unit);
+    if (!everySeconds) throw new Error("repeatEvery and repeatUnit are required for an interval repeat");
+    if (everySeconds < MIN_INTERVAL_SECONDS) throw new Error(`an interval repeat must be at least ${MIN_INTERVAL_SECONDS} seconds apart`);
+    if (everySeconds > MAX_INTERVAL_SECONDS) throw new Error("the interval is too long");
+    const days = input.repeatDays == null ? 7 : Number(input.repeatDays);
+    if (!Number.isInteger(days) || days < 1 || days > 90) throw new Error("repeatDays must be a whole number from 1 to 90");
+    repeatUntil = new Date(time.getTime() + seriesSpanMs({ everySeconds, days })).toISOString();
+  } else if (repeat) {
     // Hourly is bounded tighter (1–7 days ⇒ 24–168 sends, one pending at a time).
     const defaultDays = repeat === "hourly" ? 1 : 30;
     const maxDays = repeat === "hourly" ? 7 : 90;
@@ -66,12 +77,12 @@ export function validateFollowUpInput(input = {}, { defaultTimezone = TIME_ZONE_
   // One of the learner's own read tools, run fresh at each send (its answer is added to the message).
   const runTool = input.runTool == null || input.runTool === "" ? null : String(input.runTool);
   if (runTool && !TOOL_NAME.test(runTool)) throw new Error("runTool must be the name of one of your tools");
-  return { message, title, timezone, scheduledAt: time.toISOString(), delayMs, repeat, repeatUntil, runTool };
+  return { message, title, timezone, scheduledAt: time.toISOString(), delayMs, repeat, repeatUntil, everySeconds, runTool };
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const HOUR_MS = 60 * 60 * 1000;
-const REPEATS = new Set(["daily", "weekdays", "hourly"]);
+const REPEATS = new Set(["daily", "weekdays", "hourly", "interval"]);
 const TOOL_NAME = /^[a-z][a-z0-9_]{2,47}$/;
 
 /** Day of week (0 = Sunday) of an instant in a time zone. */
@@ -86,12 +97,13 @@ function weekdayIn(date, timeZone) {
  * in the learner's time zone); hourly: one hour later. Never earlier than
  * `now` + 1 minute, so a late delivery doesn't fire a backlog of past sends.
  */
-export function nextOccurrence({ scheduledAt, repeat, repeatUntil, timezone = TIME_ZONE_FALLBACK, now = Date.now() }) {
+export function nextOccurrence({ scheduledAt, repeat, repeatUntil, everySeconds = null, timezone = TIME_ZONE_FALLBACK, now = Date.now() }) {
   if (!REPEATS.has(repeat)) return null;
-  const step = repeat === "hourly" ? HOUR_MS : DAY_MS;
+  if (repeat === "interval" && !(Number(everySeconds) >= MIN_INTERVAL_SECONDS)) return null;
+  const step = repeat === "interval" ? Number(everySeconds) * 1000 : repeat === "hourly" ? HOUR_MS : DAY_MS;
   let t = new Date(scheduledAt).getTime();
   if (!Number.isFinite(t)) return null;
-  const guardMax = repeat === "hourly" ? 24 * 130 : 400;
+  const guardMax = repeat === "interval" ? 5000 : repeat === "hourly" ? 24 * 130 : 400;
   for (let guard = 0; guard < guardMax; guard++) {
     t += step;
     if (repeat === "weekdays" && [0, 6].includes(weekdayIn(new Date(t), timezone))) continue;

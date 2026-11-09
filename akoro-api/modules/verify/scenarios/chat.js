@@ -256,3 +256,20 @@ export const recurringTask = {
     ctx.expect.eq("next is pending and still repeating", [next.status, Number(next.payload?.recurrence?.everyDays)], ["pending", 1]);
   },
 };
+
+// Arbitrary-interval check-in: every 90 minutes.
+export const intervalFollowUp = {
+  name: "chat.interval_follow_up", area: "agent-chat", risk: "write",
+  description: "An arbitrary-interval check-in ('every 90 minutes') stores every_seconds and repeats at that interval.",
+  params: { learner: { default: "@tester01" } },
+  async run(ctx, p) {
+    const me = await ctx.as(p.learner);
+    const out = await ctx.agent.tool({ as: p.learner, tool: "schedule_chat_follow_up", mode: "live", input: { message: `${ctx.marker} every 90 min`, inMinutes: 60, repeat: "interval", repeatEvery: 90, repeatUnit: "minute", where: "new" } });
+    ctx.expect.ok("scheduled at an interval (everySeconds 5400)", out?.scheduled === true && out?.everySeconds === 5400, out);
+    const rows = await ctx.db.rows("edu.scheduled_chat_follow_ups", { user_id: me.id }, { columns: "id, repeat, every_seconds, scheduled_at, message", limit: 20 });
+    const mine = rows.find((r) => String(r.message || "").includes(ctx.marker));
+    for (const r of rows.filter((x) => String(x.message || "").includes(ctx.marker))) ctx.cleanup(() => ctx.db.deleteOwned("edu.scheduled_chat_follow_ups", { ownerColumn: "user_id", ownerId: me.id, filters: { id: r.id } }));
+    ctx.expect.ok("stored repeat=interval with every_seconds 5400", mine?.repeat === "interval" && Number(mine?.every_seconds) === 5400, mine);
+    if (out?.followUpId) ctx.cleanup(async () => { try { await ctx.agent.tool({ as: p.learner, tool: "cancel_scheduled_chat_follow_up", mode: "live", input: { followUpId: out.followUpId } }); } catch { /* best effort */ } });
+  },
+};

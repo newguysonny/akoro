@@ -53,6 +53,7 @@ export async function scheduleChatFollowUp({ userId, input, defaultTimezone, tar
     status: "scheduled",
     // Only when used: a plain one-off never depends on the repeating columns.
     ...(validated.repeat ? { repeat: validated.repeat, repeat_until: validated.repeatUntil, series_id: id } : {}),
+    ...(validated.everySeconds ? { every_seconds: validated.everySeconds } : {}),
     ...(validated.runTool ? { run_tool: validated.runTool } : {}),
   };
   await insertAndQueue(row, validated.delayMs);
@@ -62,6 +63,7 @@ export async function scheduleChatFollowUp({ userId, input, defaultTimezone, tar
     timezone: validated.timezone,
     title: validated.title,
     ...(validated.repeat ? { repeat: validated.repeat, repeatUntil: validated.repeatUntil } : {}),
+    ...(validated.everySeconds ? { everySeconds: validated.everySeconds } : {}),
     ...(validated.runTool ? { runTool: validated.runTool } : {}),
   };
 }
@@ -118,7 +120,7 @@ async function freshToolText(followUp) {
 /** A repeating check-in: schedule the next one in the same chat (idempotent per occurrence). */
 async function scheduleNextInSeries(followUp) {
   if (!followUp.repeat) return null;
-  const next = nextOccurrence({ scheduledAt: followUp.scheduled_at, repeat: followUp.repeat, repeatUntil: followUp.repeat_until, timezone: followUp.timezone });
+  const next = nextOccurrence({ scheduledAt: followUp.scheduled_at, repeat: followUp.repeat, repeatUntil: followUp.repeat_until, everySeconds: followUp.every_seconds, timezone: followUp.timezone });
   if (!next) return null;
   const seriesId = followUp.series_id || followUp.id;
   // One pending occurrence per series: a retried delivery must not chain twice.
@@ -129,6 +131,7 @@ async function scheduleNextInSeries(followUp) {
     id: randomUUID(), user_id: followUp.user_id, chat_session_id: followUp.chat_session_id, chat_message_id: randomUUID(),
     title: followUp.title, message: followUp.message, timezone: followUp.timezone, scheduled_at: next, status: "scheduled",
     repeat: followUp.repeat, repeat_until: followUp.repeat_until, series_id: seriesId,
+    ...(followUp.every_seconds ? { every_seconds: followUp.every_seconds } : {}),
     ...(followUp.run_tool ? { run_tool: followUp.run_tool } : {}),
   };
   await insertAndQueue(row, new Date(next).getTime() - Date.now());

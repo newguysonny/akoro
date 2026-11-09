@@ -123,3 +123,24 @@ export const sweepStale = {
     ctx.expect.ok("the sweep ran", true);
   },
 };
+
+// Arbitrary-interval repeating task: every 2 hours.
+export const intervalTask = {
+  name: "tasks.interval_task", area: "tasks", risk: "write",
+  description: "A repeating task at an arbitrary interval ('every 2 hours') stores its recurrence in seconds and, when completed, spawns the next occurrence two hours later.",
+  params: { learner: { default: "@tester02" } },
+  async run(ctx, p) {
+    const me = await ctx.as(p.learner);
+    const created = await ctx.agent.tool({ as: p.learner, tool: "create_task", mode: "live", input: { title: `${ctx.marker} 2-hourly check`, priority: "medium", dueInMinutes: 120, repeat: "interval", repeatEvery: 2, repeatUnit: "hour" } });
+    ctx.expect.ok("interval task created (everySeconds 7200)", created?.created === true && created?.repeatsEverySeconds === 7200, created);
+    const id = created?.taskId;
+    if (!id) return;
+    ctx.cleanup(() => ctx.db.deleteOwned("tasks", { ownerColumn: "creator_id", ownerId: me.id, filters: { id } }));
+    const toggled = await ctx.http({ as: p.learner, method: "PATCH", path: `/api/tasks/${id}/toggle` });
+    ctx.expect.status("toggled done", toggled, 200);
+    const next = toggled.body?.next;
+    const deltaMs = next && created?.dueAt ? new Date(next.due_at).getTime() - new Date(created.dueAt).getTime() : null;
+    ctx.expect.ok("next occurrence is two hours later", deltaMs !== null && Math.abs(deltaMs - 7_200_000) < 1000, { deltaMs });
+    if (next?.id) ctx.cleanup(() => ctx.db.deleteOwned("tasks", { ownerColumn: "creator_id", ownerId: me.id, filters: { id: next.id } }));
+  },
+};

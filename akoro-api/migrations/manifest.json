@@ -238,6 +238,7 @@
     "2026-syllabus-imports.sql",
     "2026-repeating-chat-follow-ups.sql",
     "2026-hourly-chat-follow-ups.sql",
+    "2026-arbitrary-repeat.sql",
     "2026-agent-conversations.sql",
     "2026-concept-evidence-ambiguity-fix.sql",
     "2026-learning-struggles.sql",

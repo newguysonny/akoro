@@ -517,8 +517,8 @@ router.get("/queue/health", requireRole(["admin"]), async (req, res) => {
 });
 
 /** PURE: the next due instant for a repeating to-do, always in the future. */
-function nextRecurrenceDue(prevDueAt, everyDays, now = Date.now()) {
-  const step = Math.max(1, Math.floor(everyDays)) * 86_400_000;
+function nextRecurrenceDue(prevDueAt, everySeconds, now = Date.now()) {
+  const step = Math.max(60, Math.floor(everySeconds)) * 1000;
   let t = prevDueAt ? new Date(prevDueAt).getTime() : now;
   if (!Number.isFinite(t)) t = now;
   t += step;
@@ -528,13 +528,13 @@ function nextRecurrenceDue(prevDueAt, everyDays, now = Date.now()) {
 }
 
 /** Create the next occurrence of a repeating learner to-do (same task, due advanced). */
-async function spawnNextRecurrence(task, everyDays) {
-  const due = nextRecurrenceDue(task.due_at, everyDays);
+async function spawnNextRecurrence(task, everySeconds) {
+  const due = nextRecurrenceDue(task.due_at, everySeconds);
   const { data: next, error } = await db.from("tasks").insert({
     creator_id: task.creator_id, agent_id: task.agent_id,
     title: task.title, description: task.description, priority: task.priority,
     status: "pending", task_type: task.task_type || "general",
-    payload: { ...(task.payload || {}), recurrence: { everyDays } },
+    payload: { ...(task.payload || {}), recurrence: { everySeconds } },
     due_at: due.toISOString(), timezone: task.timezone, course_id: task.course_id ?? null,
   }).select().single();
   if (error) throw new Error(error.message);
@@ -563,10 +563,11 @@ router.patch("/:taskId/toggle", async (req, res) => {
       // Event trigger: a finished task is fresh signal for the planner.
       emitAutonomyEvent(req.user.id, "task_done").catch(() => {});
       // A repeating to-do regenerates its next occurrence once completed.
-      const everyDays = Number(task.payload?.recurrence?.everyDays);
-      if (Number.isInteger(everyDays) && everyDays >= 1) {
+      const everySeconds = Number(task.payload?.recurrence?.everySeconds)
+        || (Number(task.payload?.recurrence?.everyDays) > 0 ? Number(task.payload.recurrence.everyDays) * 86_400 : null);
+      if (Number.isInteger(everySeconds) && everySeconds >= 60) {
         try {
-          const next = await spawnNextRecurrence(task, everyDays);
+          const next = await spawnNextRecurrence(task, everySeconds);
           if (next) return res.json({ task: updated, next });
         } catch (recurErr) { console.warn("[tasks] recurrence spawn skipped:", recurErr.message); }
       }
