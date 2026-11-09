@@ -131,6 +131,35 @@ export class NaNaEsumai {
     return JSON.parse(res.choices[0].message.content).objectives || [];
   }
 
+  /* ── Generate objectives for MANY subtopics in one call ──── */
+  /**
+   * Lever 4/3 (token-cost plan): one bounded JSON call for the whole ladder,
+   * instead of one call per subtopic (a 10-rung ladder was 10 calls). Returns
+   * { "<subtopic>": ["<objective>", …] }; the caller assembles/the shape in code
+   * (self-study/plan-scaffold.js). A malformed answer is an empty object — the
+   * scaffold then fills a placeholder per subtopic, so the plan is never stuck.
+   */
+  async generateObjectivesBatch(subtopics, topic, subject, groundingContext = "") {
+    const list = (Array.isArray(subtopics) ? subtopics : []).map((s) => String(s ?? "").trim()).filter(Boolean);
+    if (!list.length) return {};
+    const res = await openai.chat.completions.create({
+      model: "gpt-4.1-mini", temperature: 0.2,
+      __timeoutMs: 45_000, __maxRetries: 1,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: (await buildObjectivesPrompt()) +
+          "\n\nYou will receive SEVERAL subtopics. Give 2–5 measurable objectives for EVERY one, keyed by the subtopic exactly as written." },
+        { role: "user", content:
+          (groundingContext ? `${groundingContext}\n\nKeep the objectives within the scope of the syllabus references above.\n\n` : "") +
+          `Topic: ${topic}\nSubject: ${subject}\n\nReturn JSON: { "objectives": { "<subtopic>": ["<objective>", ...] } }\nSubtopics:\n- ${list.join("\n- ")}` },
+      ],
+    });
+    try {
+      const parsed = JSON.parse(res.choices[0].message.content) || {};
+      return parsed.objectives && typeof parsed.objectives === "object" ? parsed.objectives : {};
+    } catch { return {}; }
+  }
+
   /* ── Assignment workbench: draft graded questions ────────── */
   /**
    * One bounded JSON call for an assignment's questions. The messages are

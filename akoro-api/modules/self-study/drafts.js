@@ -24,6 +24,7 @@ import { saveToolDraft, reviseToolDraft, retryToolVersion } from "../teaching/to
 import { cleanReview, reviewInstruction, scheduleActivityReview } from "./activityReview.js";
 import { callAsUser } from "../tasks/tools/assign-battle.js";
 import { mergePlanItems, wantsPlanEdit } from "./planEdit.js";
+import { assemblePlan } from "./plan-scaffold.js";
 import db from "../../db.js";
 import {
   nana, edu, ACTIVITY_TYPES, announceFor, mySchool,
@@ -200,10 +201,11 @@ export async function classroomName(id) {
 /** The plan generator behind POST /plan — the same one the workbench uses. */
 async function generatePlan(topic, subject) {
   const { subtopics } = await nana.generateSubtopics(topic, subject);
-  const lists = await Promise.all(subtopics.map((st) => nana.generateObjectives(st, topic, subject)));
-  const objectives = {};
-  subtopics.forEach((st, i) => { objectives[st] = lists[i]; });
-  return { subtopics, objectives };
+  // Lever 4/3: ONE batched objectives call (was one per subtopic) and the fixed
+  // plan shape is assembled in code. An objectives failure degrades to per-subtopic
+  // placeholders instead of failing the whole plan.
+  const objectivesRaw = await nana.generateObjectivesBatch(subtopics, topic, subject).catch(() => ({}));
+  return assemblePlan(subtopics, objectivesRaw);
 }
 
 // Ceiling for one background enrichment. The SDK calls are individually

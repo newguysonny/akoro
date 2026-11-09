@@ -100,3 +100,19 @@ export const ingestOnce = {
     ctx.expect.ok("different bytes → different key", contentKey(Buffer.from("x"), { scope: "verify" }) !== contentKey(Buffer.from("y"), { scope: "verify" }), {});
   },
 };
+
+// Lever 4/3 (activities workbench): the study-plan shape is assembled in code.
+export const activitiesPlan = {
+  name: "cost.activities_plan", area: "cost", risk: "read",
+  description: "The activity study plan is scripted: deduped subtopics, objectives keyed to exactly those subtopics, and a placeholder when the model returned none.",
+  async run(ctx) {
+    const { assemblePlan } = await import("../../self-study/plan-scaffold.js");
+    const { subtopics, objectives } = assemblePlan(
+      ["  Cells ", "Cells", "Genetics", ""],
+      { Cells: ["Identify organelles"], Genetics: [] },
+    );
+    ctx.expect.eq("subtopics deduped", subtopics.join(","), "Cells,Genetics");
+    ctx.expect.eq("objectives keyed to subtopics", Object.keys(objectives).join(","), "Cells,Genetics");
+    ctx.expect.ok("missing objectives get a placeholder", String((objectives.Genetics || [])[0] || "").includes("Genetics"), objectives.Genetics);
+  },
+};
