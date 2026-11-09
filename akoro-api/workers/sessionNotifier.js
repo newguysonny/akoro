@@ -41,7 +41,7 @@ export function sessionQueue() {
     defaultJobOptions: {
       attempts:         3,
       backoff:          { type: "exponential", delay: 60_000 },
-      removeOnComplete: { count: 200 },
+      removeOnComplete: { count: 20 },
       removeOnFail:     { count: 500 },
     },
   });

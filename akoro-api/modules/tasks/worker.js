@@ -6,13 +6,14 @@
 
 import { Worker }   from "bullmq";
 import Redis        from "ioredis";
-import { TaskDB, TaskRunDB, AgentDB } from "./lib/db.js";
+import { TaskDB, TaskRunDB, AgentDB, TaskScheduleDB } from "./lib/db.js";
 import db from "../../db.js";
 import { scheduleAutonomyReviewForTask } from "../adaptive-learning/learner-autonomy.js";
 import { buildContext }               from "./lib/context.js";
 import { deliver, deliverError, deliverProgress } from "./lib/deliver.js";
 import { getToolsForTask }                        from "./tools/index.js";
-import { recoverOverdueTasks }                    from "./scheduler.js";
+import { recoverOverdueTasks, startTaskTick }       from "./scheduler.js";
+import { nextCronRun } from "../../lib/deferredJobsCore.js";
 import { redisConnectionOptions }                        from "../../lib/redisOptions.js";
 import { traceRedis } from "../../lib/redisTrace.js";
 import { OPENAI_MODEL } from "../../lib/aiModel.js";
@@ -30,7 +31,7 @@ const MODEL = OPENAI_MODEL;
 const redis     = traceRedis(new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", redisConnectionOptions({ label: "tasks-worker" })), "tasks-worker");
 redis.on("error", (err) => console.error("[tasks/worker Redis]", err.message));
 
-export const taskWorker = new Worker("task-runner", async (job) => {
+async function runOneTask(job) {
   const { taskId } = job.data;
   console.log(`[tasks/worker] Starting job ${job.id} for task ${taskId}`);
 
@@ -125,7 +126,50 @@ export const taskWorker = new Worker("task-runner", async (job) => {
     await deliverError(task, run, err.message);
     throw err;
   }
-}, {
+}
+
+/**
+ * The 1/min tick: drain due TEACHER tasks from Postgres (learner tasks are
+ * skipped — running them would be a no-op that re-fired every tick). This is
+ * what replaces one BullMQ job per task.
+ */
+export async function runDueTasks({ limit = 25, ids = null } = {}) {
+  let due;
+  if (Array.isArray(ids) && ids.length) {
+    due = (await Promise.all(ids.slice(0, limit).map((id) => TaskDB.findById(id)))).filter(Boolean);
+  } else {
+    due = (await TaskDB.findOverdue()).slice(0, limit);
+  }
+  const creators = [...new Set(due.map((t) => t.creator_id).filter(Boolean))];
+  let learnerIds = new Set();
+  if (creators.length) {
+    const { data: users } = await db.from("users").select("id, role").in("id", creators);
+    learnerIds = new Set((users || [])
+      .filter((u) => ["student", "learner"].includes(String(u.role || "").toLowerCase()))
+      .map((u) => u.id));
+  }
+  let ran = 0;
+  for (const t of due) {
+    if (learnerIds.has(t.creator_id) || t.status === "cancelled") continue;
+    try {
+      await runOneTask({ id: `tick-${t.id}`, data: { taskId: t.id } });
+      ran++;
+    } catch (e) { console.warn(`[tasks/worker] tick task ${t.id} failed:`, e?.message); }
+    if (t.is_recurring) {
+      try {
+        const schedule = await TaskScheduleDB.findByTask(t.id);
+        if (schedule) await TaskDB.update(t.id, {
+          status: "queued",
+          due_at: nextCronRun(schedule.cron_expr, schedule.timezone, new Date()).toISOString(),
+          started_at: null, completed_at: null, bull_job_id: "tick",
+        });
+      } catch (e) { console.warn("[tasks/worker] reschedule failed:", e?.message); }
+    }
+  }
+  return { ran };
+}
+
+export const taskWorker = new Worker("task-runner", async (job) => (job.data?._tick ? runDueTasks() : runOneTask(job)), {
   connection:  redis,
   concurrency: 5,
   // Reduce idle Redis traffic on per-request-billed providers (Upstash):
@@ -146,6 +190,7 @@ taskWorker.on("failed",    (job, err) => {
 });
 
 // Recover overdue tasks on startup
+startTaskTick().then((r) => r?.registered && console.log("[tasks/worker] task tick registered (1 job/min)")).catch((e) => console.warn("[tasks/worker] tick register failed:", e?.message));
 recoverOverdueTasks().then((n) => n > 0 && console.log(`[tasks/worker] Recovered ${n} overdue tasks`));
 
 export default taskWorker;

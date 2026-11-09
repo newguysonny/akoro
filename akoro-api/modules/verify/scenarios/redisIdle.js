@@ -63,3 +63,45 @@ export const deferredRelease = {
     }
   },
 };
+
+// Tick mode: tasks are queued in Postgres; one repeatable job drains them. This
+// replaces the per-task BullMQ job that burned the Redis command quota.
+export const taskTick = {
+  name: "ops.task_tick", area: "ops", risk: "write",
+  description: "Tick mode queues tasks in Postgres (no BullMQ job per task); the 1/min tick is registered; learner tasks are excluded from execution (no re-fire loop).",
+  params: { learner: { default: "@tester27" } },
+  async run(ctx, p) {
+    if (String(process.env.TASKS_TICK ?? "on").trim().toLowerCase() === "off") ctx.expect.blocked("TASKS_TICK=off (legacy scheduling)");
+    const me = await ctx.as(p.learner);
+    const { default: db } = await import("../../../db.js");
+    const sched = await import("../../tasks/scheduler.js");
+    const work = await import("../../tasks/worker.js");
+
+    const created = await ctx.agent.tool({ as: p.learner, tool: "create_task", mode: "live", input: { title: `${ctx.marker} tick probe`, priority: "low", dueInMinutes: 120 } });
+    const taskId = created?.taskId;
+    ctx.expect.ok("task created", !!taskId, created);
+    if (!taskId) return;
+    ctx.cleanup(() => ctx.db.deleteOwned("tasks", { ownerColumn: "creator_id", ownerId: me.id, filters: { id: taskId } }));
+
+    // Make it due now + queued, so a tick would see it.
+    await db.from("tasks").update({ status: "queued", due_at: new Date(Date.now() - 60_000).toISOString() }).eq("id", taskId);
+
+    // Tick mode: scheduling a task must NOT add a BullMQ job.
+    const sum = (c) => (c.waiting || 0) + (c.delayed || 0) + (c.prioritized || 0) + (c.active || 0);
+    const before = await sched.taskQueue.getJobCounts("waiting", "delayed", "prioritized", "active");
+    const mark = await sched.scheduleTask({ id: taskId, is_recurring: false, due_at: new Date().toISOString(), creator_id: me.id });
+    const after = await sched.taskQueue.getJobCounts("waiting", "delayed", "prioritized", "active");
+    ctx.expect.eq("scheduling a task adds no BullMQ job", sum(after), sum(before));
+    ctx.expect.eq("queued via the tick marker", mark, "tick");
+
+    // The tick drains due tasks — but a learner-owned task is excluded (no re-fire loop).
+    const r = await work.runDueTasks({ ids: [taskId] });
+    ctx.expect.eq("learner task is excluded from execution", r.ran, 0);
+    const still = (await ctx.db.rows("tasks", { id: taskId }, { columns: "status" }))[0];
+    ctx.expect.eq("learner task was not executed", still?.status, "queued");
+
+    // Exactly one repeatable tick, not one job per task.
+    const reg = await sched.startTaskTick();
+    ctx.expect.eq("task tick registered", reg?.registered, true);
+  },
+};

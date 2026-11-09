@@ -33,7 +33,7 @@ import { appLink } from "../../lib/urls.js";
 const edu = () => db.schema("edu");
 const first = (full, username) => String(full || "").trim().split(/\s+/)[0] || username || "a learner";
 const SWEEP_MS = 5 * 60 * 1000;
-const inboxQueue = () => backgroundQueue("agent-inbox", { attempts: 2, backoff: { type: "exponential", delay: 10_000 }, removeOnComplete: { count: 200 }, removeOnFail: { count: 200 } });
+const inboxQueue = () => backgroundQueue("agent-inbox", { attempts: 2, backoff: { type: "exponential", delay: 10_000 }, removeOnComplete: { count: 20 }, removeOnFail: { count: 200 } });
 
 /** Is this learner's agent switched Online (the Agent Online toggle)? */
 export async function agentOnline(userId) {

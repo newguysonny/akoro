@@ -25,7 +25,7 @@ const STALE_DELIVERY_MS = 5 * 60 * 1000;
 const chatFollowUpQueue = () => backgroundQueue("chat-follow-ups", {
   attempts: 3,
   backoff: { type: "exponential", delay: 5_000 },
-  removeOnComplete: { count: 200 },
+  removeOnComplete: { count: 50 },
   removeOnFail: { count: 500 },
 });
 

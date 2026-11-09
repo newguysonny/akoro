@@ -34,7 +34,7 @@ export async function enqueueAutonomyCycle(userId, trigger = "nightly") {
     // ids (its Redis-key separator); the old colon-joined ids failed
     // every enqueue with "Custom Id cannot contain :".
     jobId: `cycle-${userId}-${trigger}-${new Date().toISOString().slice(0, 16).replace(/\D/g, "")}`,
-    removeOnComplete: { age: 3600, count: 500 },
+    removeOnComplete: { count: 20 },
     removeOnFail: { age: 6 * 3600 },
   });
 }
