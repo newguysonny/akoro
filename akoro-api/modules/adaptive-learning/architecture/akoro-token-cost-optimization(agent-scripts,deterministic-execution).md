@@ -177,6 +177,8 @@ Write the script, assert byte-identical output on the eval set (same discipline 
 | 4 | Chat memory/context | `chat-memory.js`, `chat-history-tools.js`, `contextBudget.js` | 3 | re-assemble per turn | deterministic dedup + budget-fit |
 | 5 | Content generators | `tasks/tools/worksheet-fill.js`, `lesson-plan-fill.js`, `mcq.js`, `generate-quiz.js` | 4 | model regenerates scaffold | scaffold script + LLM fill |
 | 6 | Syllabus PDF ingestion | `syllabus.js` (vision ingest) | 5 | vision extraction per document | compile-once artifact + cache |
+| 7 | Teach-session progression gate **(done — reference pattern)** | `teaching-session/state-machine.js` (`applyTeachingProgress`), `adaptive-engine.js` (`ACTION_FOR_DIALOGUE_MOVE`, `recommendNextAction`) | 1 | already pure: "no db, no LLM, no clock reads"; "neither the browser nor NaNa's recommendation can bypass it" | n/a — it is the proof Lever 1 works in production |
+| 8 | Creator Agent component configuration **(build script-first)** | `session_blueprints` + component registry (blueprint doc §9 — **not yet built**) | 4 | plan: Stage 2 Compose "deterministic composition step", Stage 3 Validate "hard checks, enforced server-side" | pure `composeBlueprint(parameters)` + `validateBlueprint(blueprint)` in the `state-machine.js` pattern; only Stage 1 Interpret metered |
 
 ## 9. Build order
 
