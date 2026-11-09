@@ -6,7 +6,7 @@
  * transcript, an execution queue, or permission for an agent to obtain a new
  * integration by itself.
  */
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 import db from "../../db.js";
 import { normaliseToolRequest } from "./validation.js";
@@ -95,11 +95,29 @@ const REVIEW_STATUSES = new Set(["new", "under_review", "planned", "declined", "
 /** Moving to one of these tells the requester (closing the loop). */
 const NOTIFY_STATUSES = new Set(["planned", "implemented"]);
 
+/** Post a proactive agent message into the learner's chat so the agent tells
+ *  them directly — not only a notifications-bell entry. Best-effort by callers. */
+async function informLearnerInChat({ userId, title, text }) {
+  const now = new Date().toISOString();
+  const sessionId = randomUUID();
+  const { error: sessionError } = await db.from("chat_sessions").insert({
+    id: sessionId, user_id: userId, title, created_at: now, updated_at: now, last_message_at: now,
+  });
+  if (sessionError) throw new Error(sessionError.message);
+  const { data: msg, error: messageError } = await db.from("chat_messages").insert({
+    session_id: sessionId, user_id: userId, role: "agent", text,
+  }).select("id").single();
+  if (messageError) throw new Error(messageError.message);
+  try { global.io?.to(`user:${userId}`).emit("chat_follow_up_ready", { sessionId, title }); } catch { /* best effort */ }
+  return { sessionId, messageId: msg?.id };
+}
+
 /**
  * Review a tool/component request: set its status (and optional note) and, when it
  * moves to planned or implemented, notify the requester so the learner (and their
- * agent, via check_my_requests) learns it is on its way or ready. Capability
- * requests are left to the decide/grant flow, which already resumes the build.
+ * agent, via check_my_requests) learns it is on its way or ready. When it ships,
+ * the agent also posts a message in their chat. Capability requests are left to
+ * the decide/grant flow, which already resumes the build.
  */
 export async function reviewToolRequest({ requestId, status, adminNote = null, admin = null }) {
   if (!requestId) throw Object.assign(new Error("requestId is required"), { status: 422 });
@@ -132,6 +150,17 @@ export async function reviewToolRequest({ requestId, status, adminNote = null, a
     });
     notified = !notifyError;
     if (notifyError) console.warn("[agent-tool-requests] notify failed:", notifyError.message);
+
+    // Shipped: the agent also tells the learner in their chat, not only the bell.
+    if (ready) {
+      try {
+        await informLearnerInChat({
+          userId: updated.requester_id,
+          title: "Your feature is ready",
+          text: `Good news — the feature you asked for, "${updated.title}", is ready${updated.admin_note ? `: ${updated.admin_note}` : "."} Ask me to use it any time.`,
+        });
+      } catch (e) { console.warn("[agent-tool-requests] chat message failed:", e?.message || e); }
+    }
   }
 
   return { request: updated, notified };

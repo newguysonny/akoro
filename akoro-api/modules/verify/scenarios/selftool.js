@@ -954,6 +954,15 @@ export const componentRequestDelivered = {
     ctx.expect.ok("the learner was notified", delivered?.notified === true, delivered);
     ctx.expect.gte("a notification row exists for the requester", await ctx.db.count("notifications", { user_id: me.id, type: "agent_tool_request" }), 1);
 
+    // 2b. The agent also posts the news into a chat (not only the bell).
+    const chatMsgs = await ctx.db.rows("chat_messages", { user_id: me.id, role: "agent" }, { columns: "id, session_id, text, created_at", limit: 50 });
+    const informed = chatMsgs.find((m) => String(m.text || "").includes(ctx.marker));
+    for (const m of chatMsgs.filter((x) => String(x.text || "").includes(ctx.marker))) {
+      ctx.cleanup(() => ctx.db.deleteOwned("chat_messages", { ownerColumn: "user_id", ownerId: me.id, filters: { id: m.id } }));
+      ctx.cleanup(() => ctx.db.deleteOwned("chat_sessions", { ownerColumn: "user_id", ownerId: me.id, filters: { id: m.session_id } }));
+    }
+    ctx.expect.ok("the agent messaged the learner in chat too", !!informed, informed);
+
     // 3. The learner's agent can confirm it, through the same tool the app uses.
     const check = await ctx.agent.tool({ as: p.learner, tool: "check_my_requests", mode: "live", input: {} });
     const mine = (check?.requests || []).find((r) => String(r.title || "").startsWith(ctx.marker));
@@ -968,5 +977,44 @@ export const componentRequestDelivered = {
     ctx.note(`Agent: ${String(turn.reply || "").replace(/\s+/g, " ").slice(0, 480)}`);
     ctx.expect.ok("the agent checked the request status", (turn.tools || []).some((t) => t.tool === "check_my_requests"), (turn.tools || []).map((t) => t.tool));
     ctx.expect.ok("and told the learner it is ready", /ready|available|built|implemented/i.test(String(turn.reply || "")), String(turn.reply || "").slice(0, 200));
+  },
+};
+
+// The Library has its OWN view over edu.records (documents), not taught notes —
+// and it has no subject, so a "Library count" counts documents, not subjects.
+export const myLibraryView = {
+  name: "selftool.my_library_view", area: "self-tooling", risk: "read",
+  description: "The Library has a Data View over edu.records (uploaded documents), scoped to the learner and excluding soft-deleted rows — not the taught study notes, and with no subject breakdown.",
+  params: { learner: { default: "@tester01" } },
+  async run(ctx, p) {
+    const me = await ctx.as(p.learner);
+    const { DATA_VIEWS } = await import("../../self-tooling/views.js");
+    const v = DATA_VIEWS.my_library;
+    ctx.expect.ok("my_library reads edu.records (self-scoped)", !!v && v.source.table === "records" && v.scope === "self", v && v.source);
+    ctx.expect.ok("it has no subject field (the Library has none)", !!v && !("subject" in v.fields), v && Object.keys(v.fields));
+    const { runDefinition } = await import("../../self-tooling/interpreters.js");
+    const out = await runDefinition({ kind: "spec", from: "my_library", select: ["name", "kind"], limit: 50 }, {}, { learnerId: me.id });
+    ctx.expect.ok("reading my_library works", Array.isArray(out.rows) && typeof out.total === "number", { total: out.total });
+  },
+};
+
+// A grouped query's total is the number of RECORDS that matched, not the number
+// of groups ("total 6 for 51 rows").
+export const groupTotal = {
+  name: "selftool.group_total", area: "self-tooling", risk: "write",
+  description: "A grouped query's total equals the sum of the group counts (records), not the number of groups.",
+  params: { learner: { default: "@tester01" } },
+  async run(ctx, p) {
+    const me = await ctx.as(p.learner);
+    const made = [];
+    for (let i = 0; i < 2; i++) {
+      const t = await ctx.agent.tool({ as: p.learner, tool: "create_task", mode: "live", input: { title: `${ctx.marker} total probe ${i}`, priority: "medium" } });
+      if (t?.taskId) { made.push(t.taskId); ctx.cleanup(() => ctx.db.deleteOwned("tasks", { ownerColumn: "creator_id", ownerId: me.id, filters: { id: t.taskId } })); }
+    }
+    ctx.expect.gte("created probe tasks", made.length, 2);
+    const { runDefinition } = await import("../../self-tooling/interpreters.js");
+    const out = await runDefinition({ kind: "spec", from: "my_tasks", group: { by: ["priority"], count: true }, select: ["priority", "count"] }, {}, { learnerId: me.id });
+    const sum = (out.rows || []).reduce((n, r) => n + (Number(r.count) || 0), 0);
+    ctx.expect.ok("total equals the sum of group counts (records, not groups)", out.total === sum && sum >= 2, { total: out.total, sum, rows: out.rows });
   },
 };

@@ -54,6 +54,12 @@ export const DATA_VIEWS = Object.freeze({
     scope: "self", source: { schema: "edu", table: "student_knowledge", owner: "student_id" },
     fields: { subject: text(), topic: text(), confidence: num(), source: text(), created_at: time() },
   },
+  my_library: {
+    description: "Documents in the learner's Library (uploads, links, pasted notes): name, kind, size and when added. This is uploaded material — NOT their taught study notes (that is my_study_notes), and it has no subject breakdown.",
+    keywords: ["library", "document", "documents", "file", "files", "upload", "uploaded", "pdf", "material", "paper", "papers"],
+    scope: "self", source: { schema: "edu", table: "records", owner: "user_id", where: { deleted_at: null } },
+    fields: { name: text({ sort: false }), kind: text(), size: int(), created_at: time() },
+  },
   my_learning_sessions: {
     description: "Teaching sessions the learner ran with their agent: subject, topic, status, start and end.",
     keywords: ["session", "lesson", "learning", "taught", "teach"],

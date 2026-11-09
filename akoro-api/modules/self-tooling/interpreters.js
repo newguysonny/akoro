@@ -311,10 +311,12 @@ export function dropUnsetFilters(value, input) {
 export async function runDefinition(def, input, { learnerId, callCapability }) {
   const d = bind(dropUnsetFilters(normalizeDefinition(def), input), input);
   let rows;
+  let matched = null;   // source records that matched, before group/select/limit
   let write = null;   // a recipe's write step: the change it PROPOSES (S6)
   if (d.kind === "spec") {
     rows = await readView(d.from, learnerId, { where: d.where || [] });
     rows = O.filter(rows, d.where || []);
+    matched = rows.length;
     for (const c of [].concat(d.compute || [])) rows = O.compute(rows, c);
     if (d.group) rows = O.group(rows, d.group);
     for (const s of [].concat(d.sort || [])) rows = O.sort(rows, s);
@@ -353,7 +355,11 @@ export async function runDefinition(def, input, { learnerId, callCapability }) {
     }
     rows = rows || [];
   }
-  const total = rows.length;
+  const outRows = Array.isArray(rows) ? rows : [];
+  // `total` is the number of records that matched — NOT the number of rows a
+  // group produced. A "group by subject" must still total the records, not the
+  // subjects; rebuilt tools reported "total 6" for 51 rows because of this.
+  const total = matched == null ? outRows.length : matched;
   // The private _ref never leaves the server.
-  return { rows: O.stripRefs(rows.slice(0, O.MAX_OUT)), total, truncated: total > O.MAX_OUT, ...(write ? { write } : {}) };
+  return { rows: O.stripRefs(outRows.slice(0, O.MAX_OUT)), total, truncated: outRows.length > O.MAX_OUT, ...(write ? { write } : {}) };
 }

@@ -25,11 +25,12 @@ export async function readView(viewName, learnerId, { where = [] } = {}) {
     if (!learnerId) throw new ToolError("no learner");
     if (ownerRel) q = q.eq(`${ownerRel}.${ownerCol}`, learnerId);   // owned through a parent row (inner join)
     else q = owners.length === 1 ? q.eq(owners[0], learnerId) : q.or(owners.map((o) => `${o}.eq.${learnerId}`).join(","));
-  } else if (view.scope === "public") {
-    for (const [k, v] of Object.entries(view.source.where || {})) q = q.eq(k, v);
-  } else {
+  } else if (view.scope !== "public") {
     throw new ToolError(`view ${viewName} has no readable scope`);
   }
+  // Fixed source filters for every scope: published-only content, and rows a
+  // view hides (e.g. soft-deleted records). A null value means IS NULL.
+  for (const [k, v] of Object.entries(view.source.where || {})) q = v === null ? q.is(k, null) : q.eq(k, v);
   // Push simple filters on the view's OWN columns down to the database (the
   // rest run in memory); values were bound and validated by the caller.
   for (const w of where) {
