@@ -119,6 +119,7 @@
     "2026-ai-call-log.sql",
     "2026-ai-spend-reporting.sql",
     "2026-embedding-cache.sql",
+    "2026-pdf-extraction-cache.sql",
     "2026-alerts.sql",
     "2026-eval-runs.sql",
     "2026-battle-answer-basis.sql",

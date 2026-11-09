@@ -59,3 +59,44 @@ export const quizScaffold = {
     ctx.expect.eq("no options on a short-answer", "options" in out[1], false);
   },
 };
+
+// Lever 4: worksheet/lesson-plan fixed shape (numbers, letters, types, phases) is scripted.
+export const generatorScaffold = {
+  name: "cost.generator_scaffold", area: "cost", risk: "read",
+  description: "Worksheet and lesson-plan structure is built in code: question numbers, lettered options, type coercion, and request-owned subject/class/duration with a canonical phase skeleton.",
+  async run(ctx) {
+    const { assembleWorksheetQuestions, assembleLessonPlan } = await import("../../tasks/tools/generator-scaffold.js");
+    const qs = assembleWorksheetQuestions([
+      { type: "mcq", question: "Capital of France?", options: ["Paris", "Rome"], answer: "Paris" },
+      { question: "Explain osmosis" },
+    ]);
+    ctx.expect.eq("questions numbered", qs.map((q) => q.n).join(","), "1,2");
+    ctx.expect.eq("options lettered", (qs[0].options || []).join("|"), "A. Paris|B. Rome");
+    ctx.expect.eq("short answer has no options", "options" in qs[1], false);
+    const lp = assembleLessonPlan({ phases: [] }, { subject: "Biology", yearGroup: "SS2", durationMins: 40 });
+    ctx.expect.eq("phases are canonical", lp.phases.map((p) => p.name).join(","), "Starter,Main,Plenary");
+    ctx.expect.eq("minutes sum to the lesson", lp.phases.reduce((n, p) => n + p.minutes, 0), 40);
+    ctx.expect.eq("duration from the request", lp.durationMins, 40);
+  },
+};
+
+// Lever 5: expensive extraction is compile-once (content-hash artifact cache).
+export const ingestOnce = {
+  name: "cost.ingest_once", area: "cost", risk: "read",
+  description: "Expensive extraction (vision/long-context) is compile-once: the same document bytes reuse the stored artifact instead of re-running the extractor.",
+  async run(ctx) {
+    const { contentKey, extractOnce } = await import("../../../lib/extractionCache.js");
+    const store = new Map();
+    let calls = 0;
+    const extract = async () => { calls++; return { name: "Physics", topics: [] }; };
+    const get = async (k) => store.get(k) ?? null;
+    const put = async (k, v) => { store.set(k, v); };
+    const key = contentKey(Buffer.from(ctx.marker), { scope: "verify" });
+    const a = await extractOnce({ key, extract, get, put });
+    const b = await extractOnce({ key, extract, get, put });
+    ctx.expect.eq("first call is a miss", a.cached, false);
+    ctx.expect.eq("second call is a hit", b.cached, true);
+    ctx.expect.eq("the extractor ran once", calls, 1);
+    ctx.expect.ok("different bytes → different key", contentKey(Buffer.from("x"), { scope: "verify" }) !== contentKey(Buffer.from("y"), { scope: "verify" }), {});
+  },
+};

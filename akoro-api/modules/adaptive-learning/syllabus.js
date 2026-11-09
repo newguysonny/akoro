@@ -18,6 +18,7 @@ import db from "../../db.js";
 import { openai, llmComplete } from "../../lib/aiModel.js";
 import { requireRole } from "../auth/routes.js";
 import { renderPdfToImages } from "./pdfRender.js";
+import { contentKey, extractOnce, makePgCache } from "../../lib/extractionCache.js";
 
 const VISION_MODEL = process.env.OPENAI_VISION_MODEL || "gpt-4o";
 
@@ -191,6 +192,20 @@ export async function extractSyllabusFromText(rawText, hint = {}) {
 // including multi-column tables it can SEE (no column-flattening) — and read
 // scanned/image PDFs. Costs a few cents per subject; used on demand.
 export async function extractSyllabusViaVision(buffer, hint = {}) {
+  // Lever 5 (compile-once): the vision extraction is the expensive step. Key it on
+  // the PDF content + model + hint so re-ingesting the same document reuses the
+  // stored artifact instead of paying for vision again.
+  const cache = makePgCache({ model: VISION_MODEL });
+  const key = contentKey(buffer, {
+    scope: "syllabus_vision",
+    model: VISION_MODEL,
+    hint: JSON.stringify({ exam: hint.exam || "", name: hint.name || "" }),
+  });
+  const { doc } = await extractOnce({ key, get: cache.get, put: cache.put, extract: () => visionExtract(buffer, hint) });
+  return doc;
+}
+
+async function visionExtract(buffer, hint = {}) {
   const { images, totalPages, rendered } = await renderPdfToImages(buffer, { maxPages: 15, scale: 2 });
   if (!images.length) throw new Error("Could not render any pages from this PDF");
 

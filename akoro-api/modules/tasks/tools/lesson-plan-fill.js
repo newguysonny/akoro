@@ -6,6 +6,7 @@ import { z } from "zod";
 import { TaskOutputDB } from "../lib/db.js";
 import { llmJson, ENRICHMENT } from "./_llm.js";
 import { saveToolOutput, resolveTemplate, templatePromptFragment, fillTemplateBody } from "./_store.js";
+import { assembleLessonPlan } from "./generator-scaffold.js";
 
 export const lessonPlanFillDefinition = {
   name: "lesson_plan_fill",
@@ -41,7 +42,7 @@ export async function executeLessonPlanFill(rawInput, ctx) {
   const input = schema.parse(rawInput);
   const tpl = await resolveTemplate({ toolTarget: "lesson_plan", templateId: input.templateId, ctx });
 
-  const plan = await llmJson(
+  const planRaw = await llmJson(
     `Create a detailed lesson plan.
 Topic: "${input.topic}"
 Subject: ${input.subject}
@@ -52,12 +53,10 @@ ${input.objectives.length ? `Objectives to cover:\n- ${input.objectives.join("\n
 ${ENRICHMENT}
 ${templatePromptFragment(tpl)}
 
+Do not repeat the subject, class or duration — the app fills those from the request.
 Return JSON:
 {
   "title": "<lesson title>",
-  "subject": "${input.subject}",
-  "yearGroup": "${input.yearGroup}",
-  "durationMins": ${input.durationMins},
   "objectives": ["<measurable objective>", ...],
   "materials": ["<material/resource>", ...],
   "keyVocabulary": ["<term>", ...],
@@ -75,6 +74,10 @@ Return JSON:
 }`,
     { maxTokens: 2500 }
   );
+
+  // Lever 4: subject/class/duration come from the REQUEST, never the model echo; the
+  // Starter/Main/Plenary skeleton is guaranteed.
+  const plan = assembleLessonPlan(planRaw, { subject: input.subject, yearGroup: input.yearGroup, durationMins: input.durationMins });
 
   // If the chosen template has a markdown body, fill it (AI fills the template).
   const filledBody = await fillTemplateBody(tpl, { ...plan, ...input });

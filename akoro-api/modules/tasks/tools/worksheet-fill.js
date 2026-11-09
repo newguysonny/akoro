@@ -6,6 +6,7 @@ import { z } from "zod";
 import { TaskOutputDB } from "../lib/db.js";
 import { llmJson, ENRICHMENT } from "./_llm.js";
 import { saveToolOutput, resolveTemplate, templatePromptFragment, fillTemplateBody } from "./_store.js";
+import { assembleWorksheetQuestions } from "./generator-scaffold.js";
 
 export const worksheetFillDefinition = {
   name: "worksheet_fill",
@@ -48,6 +49,7 @@ ${ENRICHMENT}
 Frame several questions with real-world contexts, and include at least one question that targets a common misconception.
 ${templatePromptFragment(tpl)}
 
+Do not number the questions or prefix option letters — the app does that.
 Return JSON:
 {
   "title": "<worksheet title>",
@@ -55,11 +57,14 @@ Return JSON:
   "realWorldConnections": ["<real-world application of this topic>", ...],
   "commonMisconceptions": ["<a common misconception and the correction>", ...],
   "questions": [
-    { "n": 1, "type": "mcq|fill_blank|short|problem", "question": "<text>", "options": ["..."]?, "answer": "<answer>"? }
+    { "type": "mcq|fill_blank|short|problem", "question": "<text>", "options": ["..."]?, "answer": "<answer>"? }
   ]
 }`,
     { maxTokens: 3000 }
   );
+
+  // Lever 4: script the fixed shape (numbers, type, lettered options); the model wrote only content.
+  if (Array.isArray(ws.questions)) ws.questions = assembleWorksheetQuestions(ws.questions);
 
   const filledBody = await fillTemplateBody(tpl, { ...ws, ...input });
   const content = { type: "worksheet", tool: "worksheet_fill", subject: input.subject, ...ws, ...(filledBody ? { body: filledBody, templateId: tpl?.id } : {}) };
