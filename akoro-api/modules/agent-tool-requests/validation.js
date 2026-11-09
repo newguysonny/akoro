@@ -17,10 +17,11 @@ export const TOOL_REQUEST_CATEGORIES = new Set([
  * What kind of thing the learner is asking for. 'tool' is a missing tool,
  * executor or integration; 'component' is a missing learning method/component
  * (a study technique or reusable learning building-block the Creator Agent
- * would compose). 'capability' is reserved for the self-tooling escalation
- * flow and is never set by a plain learner submission.
+ * would compose); 'bug' is a report that something is broken or wrong.
+ * 'capability' is reserved for the self-tooling escalation flow and is never
+ * set by a plain learner submission.
  */
-export const TOOL_REQUEST_KINDS = new Set(["tool", "component"]);
+export const TOOL_REQUEST_KINDS = new Set(["tool", "component", "bug"]);
 
 export const TOOL_REQUEST_STATUSES = new Set([
   "new",

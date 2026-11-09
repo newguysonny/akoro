@@ -1018,3 +1018,44 @@ export const groupTotal = {
     ctx.expect.ok("total equals the sum of group counts (records, not groups)", out.total === sum && sum >= 2, { total: out.total, sum, rows: out.rows });
   },
 };
+
+// A learner reports a bug (not a feature): same queue, but kind='bug' — admin
+// marks it fixed, the learner is notified, the agent messages them in chat, and
+// check_my_requests shows it.
+export const bugReportDelivered = {
+  name: "selftool.bug_report_delivered", area: "self-tooling", risk: "write",
+  description: "The full bug-report circle: submit_bug_report (kind=bug) → admin marks it fixed → the learner is notified → the agent also messages them in chat → check_my_requests shows it.",
+  params: { learner: { default: "@tester28" } },
+  async run(ctx, p) {
+    const me = await ctx.as(p.learner);
+    const filed = await ctx.agent.tool({ as: p.learner, tool: "submit_bug_report", mode: "live", input: {
+      title: `${ctx.marker} Library count shows 6 instead of 51`,
+      description: "The Library count tool reports a total of 6 while the subject rows add to 51; expected the total to equal the sum of documents.",
+      category: "other" } });
+    ctx.expect.ok("bug report filed", filed?.submitted === true || filed?.duplicate === true, filed);
+    const rows = await ctx.db.rows("edu.agent_tool_requests", { requester_id: me.id, kind: "bug", title: { like: `${ctx.marker}%` } }, { columns: "id, kind, status, title", limit: 5 });
+    for (const r of rows) ctx.cleanup(() => ctx.db.deleteOwned("edu.agent_tool_requests", { ownerColumn: "requester_id", ownerId: me.id, filters: { id: r.id } }));
+    ctx.cleanup(() => ctx.db.deleteOwned("notifications", { ownerColumn: "user_id", ownerId: me.id, filters: { type: "agent_tool_request" } }));
+    ctx.expect.ok("stored as kind=bug, waiting", rows.length > 0 && rows[0].kind === "bug" && rows[0].status === "new", rows);
+    const req = rows[0];
+    if (!req) return;
+
+    const { reviewToolRequest } = await import("../../agent-tool-requests/service.js");
+    const fixed = await reviewToolRequest({ requestId: req.id, status: "implemented", adminNote: "Fixed: the total now counts documents.", admin: { id: null, label: "verification gate" } });
+    ctx.expect.eq("marked implemented", fixed?.request?.status, "implemented");
+    ctx.expect.ok("the learner was notified", fixed?.notified === true, fixed);
+    ctx.expect.gte("a notification row exists", await ctx.db.count("notifications", { user_id: me.id, type: "agent_tool_request" }), 1);
+
+    const chatMsgs = await ctx.db.rows("chat_messages", { user_id: me.id, role: "agent" }, { columns: "id, session_id, text", limit: 50 });
+    const informed = chatMsgs.find((m) => String(m.text || "").includes(ctx.marker));
+    for (const m of chatMsgs.filter((x) => String(x.text || "").includes(ctx.marker))) {
+      ctx.cleanup(() => ctx.db.deleteOwned("chat_messages", { ownerColumn: "user_id", ownerId: me.id, filters: { id: m.id } }));
+      ctx.cleanup(() => ctx.db.deleteOwned("chat_sessions", { ownerColumn: "user_id", ownerId: me.id, filters: { id: m.session_id } }));
+    }
+    ctx.expect.ok("the agent messaged the learner in chat too", !!informed, informed);
+
+    const check = await ctx.agent.tool({ as: p.learner, tool: "check_my_requests", mode: "live", input: {} });
+    const mine = (check?.requests || []).find((r) => String(r.title || "").startsWith(ctx.marker));
+    ctx.expect.ok("check_my_requests lists the bug as fixed", !!mine && mine.kind === "bug" && mine.status === "implemented", check);
+  },
+};

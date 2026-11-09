@@ -26,6 +26,12 @@ test("component kind is accepted and defaults to tool; unknown kinds are rejecte
     category: "study_support",
     kind: "component",
   }).kind, "component");
+  assert.deepEqual(normaliseToolRequest({
+    title: "Library count shows the wrong total",
+    description: "The Library count tool reports 6 when there are 51 documents.",
+    category: "other",
+    kind: "bug",
+  }).kind, "bug");
   assert.throws(() => normaliseToolRequest({
     title: "A valid feature title",
     description: "This description has enough detail for the request.",

@@ -128,7 +128,7 @@ router.get("/agent-tool-requests", adminOnly, asyncHandler(async (req, res) => {
     .range(offset, offset + limit - 1);
   if (requestedStatus) requestsQuery = requestsQuery.eq("status", requestedStatus);
   const kind = boundedText(req.query.kind, 20).toLowerCase();
-  if (kind === "tool" || kind === "capability" || kind === "component") requestsQuery = requestsQuery.eq("kind", kind);
+  if (kind === "tool" || kind === "capability" || kind === "component" || kind === "bug") requestsQuery = requestsQuery.eq("kind", kind);
   if (search) requestsQuery = requestsQuery.or(`title.ilike.%${search}%,description.ilike.%${search}%`);
 
   const [{ data, count, error }, counts] = await Promise.all([requestsQuery, statusCounts()]);

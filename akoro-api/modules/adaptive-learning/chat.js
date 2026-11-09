@@ -1170,6 +1170,25 @@ export const CHAT_TOOLS = [
       "before you confirm a requested feature is available.",
     input_schema: { type: "object", properties: {}, required: [] },
   },
+  {
+    name: "submit_bug_report",
+    description:
+      "File a bug report for the Akoro team when something in the app is broken or wrong " +
+      "(a tool returns wrong numbers, a screen fails, a feature misbehaves). Use ONLY when " +
+      "the learner reports a problem and explicitly asks you to report it. Describe what " +
+      "happened vs what was expected, with the steps, and never paste private data. It lands " +
+      "on the admins' Agent requests page as a bug; when it is fixed the learner is notified " +
+      "and you are told here. Call it — never say a bug was reported without this call succeeding.",
+    input_schema: {
+      type: "object",
+      properties: {
+        title: { type: "string", description: "Short bug summary, e.g. 'Library count shows 6 instead of 51' (6 to 120 characters)." },
+        description: { type: "string", description: "What happened, what was expected, and the steps to reproduce. Concise; no private data (20 to 800 characters)." },
+        category: { type: "string", enum: ["study_support", "organisation", "integration", "accessibility", "other"], description: "Roughly where the bug is (defaults to other)." },
+      },
+      required: ["title", "description"],
+    },
+  },
 ];
 
 /** Hide feature-gated tools from the model catalogue until the matching Akoro slice is enabled. */
@@ -1452,7 +1471,7 @@ async function resolveLearnerSchoolContext(studentId) {
  * flag the scratchpad, and by the agent console's DRY mode, which answers
  * these with what they WOULD do instead of doing it (lib/dryRunContext.js).
  */
-export const SIDE_EFFECT_TOOLS = ["set_agent_auto_reply", "create_task", "suggest_help", "schedule_chat_follow_up", "post_to_chat", "create_tool", "cancel_scheduled_chat_follow_up", "submit_tool_request", "prepare_activity", "revise_activity_draft",
+export const SIDE_EFFECT_TOOLS = ["set_agent_auto_reply", "create_task", "suggest_help", "schedule_chat_follow_up", "post_to_chat", "create_tool", "cancel_scheduled_chat_follow_up", "submit_tool_request", "submit_bug_report", "prepare_activity", "revise_activity_draft",
           "create_goal", "update_goal_progress", "save_blog_draft", "publish_blog", "update_agent_network_settings", "block_agent", "log_past_question_practice",
           "challenge_agent", "class_battle", "post_challenge_request", "accept_challenge_request", "cancel_challenge_request", "rematch_battle", "request_guide_review", "message_agent", "reply_to_agent", "start_study_prep_session", "cancel_study_prep_session",
           "consult_peer_agents", "discard_activity_draft", "schedule_activity_routine", "cancel_activity_routine", "run_teaching_tool"];
@@ -2973,6 +2992,25 @@ async function runChatTool(name, input, studentId, { conversationId = null, role
         note: r.admin_note || null,
       }));
       return { requests, count: requests.length };
+    }
+    case "submit_bug_report": {
+      let request;
+      try {
+        request = await createLearnerToolRequest({
+          learnerId: studentId,
+          body: { title: input?.title, description: input?.description, category: input?.category || "other", kind: "bug" },
+        });
+      } catch (e) { return { submitted: false, error: e?.message || "Could not send the bug report." }; }
+      const when = request.created ? new Date(request.created).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : null;
+      return {
+        submitted: request.createdNew || !!request.reopened,
+        duplicate: !request.createdNew,
+        status: request.status,
+        title: request.title,
+        tell: request.createdNew ? "Sent: your bug report is on the Akoro team's list now."
+          : request.reopened ? "You had reported this before; it is re-opened and back with the Akoro team."
+          : `You already reported this${when ? ` on ${when}` : ""}; it is still ${String(request.status).replace(/_/g, " ")}.`,
+      };
     }
     default: {
       // A tool the learner's agent built (self-tooling) — read-only, re-checked every call.
