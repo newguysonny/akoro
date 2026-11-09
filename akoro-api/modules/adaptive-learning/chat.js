@@ -399,7 +399,7 @@ export const CHAT_TOOLS = [
         repeat: { type: "string", enum: ["daily", "weekdays", "hourly", "interval"], description: "Repeat: 'daily' (every day), 'weekdays' (Mon–Fri), 'hourly' (every hour), or 'interval' (every N seconds/minutes/hours/days/weeks/months/years — set repeatEvery + repeatUnit). Use interval for 'every 15 minutes', 'every 2 hours', 'every 3 days'. The first send is scheduledAt; each later one goes into the same chat." },
         repeatDays: { type: "number", description: "With repeat: how many days the series runs. Daily/weekdays default 30 (max 90); hourly default 1 (max 7); interval default 7." },
         repeatEvery: { type: "number", description: "With repeat=interval: the count — e.g. 15 for 'every 15 minutes'." },
-        repeatUnit: { type: "string", enum: ["second", "minute", "hour", "day", "week", "month", "year"], description: "With repeat=interval: the unit. Minimum 1 minute." },
+        repeatUnit: { type: "string", enum: ["second", "minute", "hour", "day", "week", "month", "year"], description: "With repeat=interval: the unit. A reminder cannot repeat more often than every 10 minutes (Redis cost); tell the learner so if they ask for more frequent." },
         runTool: { type: "string", description: "Optional: the name of one of the learner's OWN read tools (from Settings → Agent → My tools / their tool list) to run fresh at each send; its answer is added under the message — e.g. a 'subjects I haven't studied' tool for a daily reminder." },
       },
       required: ["message"],

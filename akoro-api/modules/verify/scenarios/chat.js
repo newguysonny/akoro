@@ -266,6 +266,9 @@ export const intervalFollowUp = {
     const me = await ctx.as(p.learner);
     const out = await ctx.agent.tool({ as: p.learner, tool: "schedule_chat_follow_up", mode: "live", input: { message: `${ctx.marker} every 90 min`, inMinutes: 60, repeat: "interval", repeatEvery: 90, repeatUnit: "minute", where: "new" } });
     ctx.expect.ok("scheduled at an interval (everySeconds 5400)", out?.scheduled === true && out?.everySeconds === 5400, out);
+    // Sub-10-minute reminders would become live Redis jobs every interval — refuse them.
+    const tooOften = await ctx.agent.tool({ as: p.learner, tool: "schedule_chat_follow_up", mode: "live", input: { message: `${ctx.marker} too often`, inMinutes: 60, repeat: "interval", repeatEvery: 5, repeatUnit: "minute", where: "new" } });
+    ctx.expect.ok("sub-10-minute reminders are refused (Redis cost)", /10 minutes/.test(String(tooOften?.error || "")), tooOften);
     const rows = await ctx.db.rows("edu.scheduled_chat_follow_ups", { user_id: me.id }, { columns: "id, repeat, every_seconds, scheduled_at, message", limit: 20 });
     const mine = rows.find((r) => String(r.message || "").includes(ctx.marker));
     for (const r of rows.filter((x) => String(x.message || "").includes(ctx.marker))) ctx.cleanup(() => ctx.db.deleteOwned("edu.scheduled_chat_follow_ups", { ownerColumn: "user_id", ownerId: me.id, filters: { id: r.id } }));

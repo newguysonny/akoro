@@ -33,6 +33,15 @@ export function intervalSeconds(every, unit) {
 
 /** One auto-send/spawn cannot be more frequent than this — a 1-second chat ping is spam. */
 export const MIN_INTERVAL_SECONDS = 60;
+/**
+ * Chat REMINDERS have a higher floor: a repeat due within HOLD_MS (10 min,
+ * lib/deferredJobsCore.js) is sent to Redis as a live BullMQ job, chained every
+ * interval — so "every minute" would create ~1,440 Redis jobs/day per series and
+ * burn the Upstash command quota. Flooring reminders at the hold window means
+ * every series defers to Postgres and is released near due (cheap). Tasks are
+ * completion-driven (no per-occurrence Redis job), so they keep MIN_INTERVAL_SECONDS.
+ */
+export const MIN_REMINDER_SECONDS = 600;
 export const MAX_INTERVAL_SECONDS = UNIT_SECONDS.year;
 /** Cap the number of occurrences a single series may queue/regenerate. */
 export const MAX_OCCURRENCES = 1_000;

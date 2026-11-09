@@ -1,5 +1,5 @@
 /** Input validation kept dependency-free so timing/timezone policy is testable. */
-import { intervalSeconds, MIN_INTERVAL_SECONDS, MAX_INTERVAL_SECONDS, seriesSpanMs } from "../../lib/scheduleInterval.js";
+import { intervalSeconds, MIN_REMINDER_SECONDS, MAX_INTERVAL_SECONDS, seriesSpanMs } from "../../lib/scheduleInterval.js";
 
 const MIN_DELAY_MS = 60_000;
 const MAX_DELAY_MS = 180 * 24 * 60 * 60 * 1000;
@@ -57,7 +57,7 @@ export function validateFollowUpInput(input = {}, { defaultTimezone = TIME_ZONE_
     // Any interval the learner names: every N seconds/minutes/hours/days/weeks/months/years.
     everySeconds = intervalSeconds(input.repeatEvery ?? input.every, input.repeatUnit ?? input.unit);
     if (!everySeconds) throw new Error("repeatEvery and repeatUnit are required for an interval repeat");
-    if (everySeconds < MIN_INTERVAL_SECONDS) throw new Error(`an interval repeat must be at least ${MIN_INTERVAL_SECONDS} seconds apart`);
+    if (everySeconds < MIN_REMINDER_SECONDS) throw new Error(`a reminder cannot repeat more often than every ${Math.round(MIN_REMINDER_SECONDS / 60)} minutes`);
     if (everySeconds > MAX_INTERVAL_SECONDS) throw new Error("the interval is too long");
     const days = input.repeatDays == null ? 7 : Number(input.repeatDays);
     if (!Number.isInteger(days) || days < 1 || days > 90) throw new Error("repeatDays must be a whole number from 1 to 90");
@@ -99,7 +99,7 @@ function weekdayIn(date, timeZone) {
  */
 export function nextOccurrence({ scheduledAt, repeat, repeatUntil, everySeconds = null, timezone = TIME_ZONE_FALLBACK, now = Date.now() }) {
   if (!REPEATS.has(repeat)) return null;
-  if (repeat === "interval" && !(Number(everySeconds) >= MIN_INTERVAL_SECONDS)) return null;
+  if (repeat === "interval" && !(Number(everySeconds) >= MIN_REMINDER_SECONDS)) return null;
   const step = repeat === "interval" ? Number(everySeconds) * 1000 : repeat === "hourly" ? HOUR_MS : DAY_MS;
   let t = new Date(scheduledAt).getTime();
   if (!Number.isFinite(t)) return null;

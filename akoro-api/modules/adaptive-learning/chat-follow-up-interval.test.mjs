@@ -12,7 +12,9 @@ test("arbitrary interval: every 15 minutes → everySeconds 900, next +900s", ()
   assert.equal(new Date(next).getTime() - new Date(v.scheduledAt).getTime(), 900_000);
 });
 
-test("sub-minute intervals are rejected; daily still has no everySeconds", () => {
-  assert.throws(() => validateFollowUpInput({ message: "x", scheduledAt: inHours(1), repeat: "interval", repeatEvery: 30, repeatUnit: "second" }), /at least 60 seconds/);
+test("reminders cannot repeat more often than every 10 minutes (Redis cost); daily has no everySeconds", () => {
+  assert.throws(() => validateFollowUpInput({ message: "x", scheduledAt: inHours(1), repeat: "interval", repeatEvery: 30, repeatUnit: "second" }), /10 minutes/);
+  assert.throws(() => validateFollowUpInput({ message: "x", scheduledAt: inHours(1), repeat: "interval", repeatEvery: 5, repeatUnit: "minute" }), /10 minutes/);
+  assert.equal(validateFollowUpInput({ message: "x", scheduledAt: inHours(1), repeat: "interval", repeatEvery: 10, repeatUnit: "minute" }).everySeconds, 600);
   assert.equal(validateFollowUpInput({ message: "x", scheduledAt: inHours(1), repeat: "daily" }).everySeconds, null);
 });
