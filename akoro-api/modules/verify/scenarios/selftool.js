@@ -864,3 +864,53 @@ export const deleteTasks = {
     ctx.expect.ok("3. on the admins' Agent tools page, marked as changing data", !!row && (row.changes || []).length > 0, listed);
   },
 };
+
+/**
+ * The learner asks for a missing learning COMPONENT (a study method) rather than
+ * a tool. The agent files submit_tool_request with kind='component'; it lands in
+ * the admins' Agent requests queue as a component idea (kind=component, not a
+ * tool), is deduped, and the whole conversation transcript is preserved in the
+ * run evidence so it can be reviewed afterwards.
+ */
+export const componentRequest = {
+  name: "selftool.component_request", area: "self-tooling", risk: "write",
+  description: "A learner asks for a missing learning COMPONENT (a study method), not a tool: submit_tool_request stores it with kind='component' in the admins' queue (deduped), and the conversation transcript is kept in the run evidence.",
+  params: { learner: { default: "@tester26" }, prompt: { default: "Please send the admins a feature request for a new learning method — an active-recall component that hides my notes and asks me to recall them from memory. Submit it as a component request." } },
+  async run(ctx, p) {
+    const me = await ctx.as(p.learner);
+    const since = new Date(Date.now() - 5_000).toISOString();
+
+    // 1. A real agent turn — the prompt, tool calls and reply are stored in
+    //    evidence.agent; lay out a readable transcript as evidence notes too.
+    const turn = await ctx.agent.chat({ as: p.learner, mode: "live", model: p.model, prompt: String(p.prompt) });
+    ctx.expect.eq("turn answered", turn.status, 200);
+    ctx.note(`TRANSCRIPT · ${me.username}`);
+    ctx.note(`You: ${String(p.prompt).replace(/\s+/g, " ").slice(0, 480)}`);
+    for (const t of turn.tools || []) ctx.note(`· tool ${t.tool}: ${JSON.stringify(t.input || {}).slice(0, 160)} → ${JSON.stringify(t.result || {}).slice(0, 220)}`);
+    ctx.note(`Agent: ${String(turn.reply || "").replace(/\s+/g, " ").slice(0, 480)}`);
+
+    // 2. Honesty: if the reply says a request was filed, a real component request exists.
+    const claims = /\b(filed|submitted|sent|made|raised|logged)\b[^.]{0,40}\brequest\b|\brequest\b[^.]{0,40}\b(filed|submitted|sent|pending|made)\b/i.test(String(turn.reply || ""));
+    const turnRows = (await ctx.db.rows("edu.agent_tool_requests", { requester_id: me.id, kind: "component" }, { columns: "id, kind, title, description, status, created_at", limit: 50 }))
+      .filter((r) => Date.parse(r.created_at || "") >= Date.parse(since));
+    for (const r of turnRows) ctx.cleanup(() => ctx.db.deleteOwned("edu.agent_tool_requests", { ownerColumn: "requester_id", ownerId: me.id, filters: { id: r.id } }));
+    ctx.expect.ok("if the reply says a request was filed, it exists as a component request", !claims || turnRows.length > 0, { claims, rows: turnRows });
+    for (const r of turnRows) ctx.expect.eq("the agent's request is kind=component (not a tool)", r.kind, "component");
+
+    // 3. Deterministic companion (independent of the model): the tool accepts and
+    //    stores kind='component', and a repeat is deduped.
+    const input = {
+      title: `${ctx.marker} Spaced-review component`,
+      description: "A spaced-review learning component that re-tests a concept after 1, 3 and 7 days.",
+      category: "study_support", kind: "component",
+    };
+    const direct = await ctx.agent.tool({ as: p.learner, tool: "submit_tool_request", mode: "live", input });
+    ctx.expect.ok("submit_tool_request accepts kind=component", direct?.submitted === true || direct?.duplicate === true, direct);
+    const mine = await ctx.db.rows("edu.agent_tool_requests", { requester_id: me.id, kind: "component", title: { like: `${ctx.marker}%` } }, { columns: "id, kind, title, status", limit: 5 });
+    for (const r of mine) ctx.cleanup(() => ctx.db.deleteOwned("edu.agent_tool_requests", { ownerColumn: "requester_id", ownerId: me.id, filters: { id: r.id } }));
+    ctx.expect.ok("the request is stored as a component", mine.length > 0 && mine.every((r) => r.kind === "component"), mine);
+    ctx.note(`component requests filed this run: ${JSON.stringify(mine.map((r) => [r.kind, r.title, r.status]))}`);
+    const again = await ctx.agent.tool({ as: p.learner, tool: "submit_tool_request", mode: "live", input });
+    ctx.expect.ok("asking again returns the same request (deduped)", again?.duplicate === true || again?.submitted === false, again);
+  },
+};
