@@ -49,8 +49,8 @@ To actually compare the **extracted-markdown overlay** against the **pdf.js text
 | Phase | Deliverable | Notes |
 |---|---|---|
 | 1 | Library always-extracts | **Done.** `RecordTeachSession.jsx` `scanned` gate removed. |
-| 2 | Overlay toggle in `PdfPage` | `selectionOverlay` prop; suppress pdf.js text layer, force `BlockTextLayer`. |
-| 3 | Toggle plumbing | `renderPageContent` passes `selectionOverlay`; state + UI (toolbar or `?overlay=1`). |
+| 2 | Overlay toggle in `PdfPage` | **Done.** `selectionOverlay` prop hides the pdf.js layer and mounts `BlockTextLayer` when the page has blocks. |
+| 3 | Toggle plumbing | **Done.** `renderPageContent(i, { selectionOverlay })`; `SessionReaderModal` toolbar button ("PDF text" ↔ "Extracted"), shown once blocks exist. |
 | 4 | A/B harness | Two openers of the same PDF: Pharm.D (pdf.js) vs a library record (markdown). |
 | 5 | Measure + record | Screenshots + drag-select checks + guide replies on the same pages; fill §6 table. |
 | 6 | Decide | Adopt model extraction, keep pdf.js for selection, or both. |

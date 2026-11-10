@@ -538,10 +538,10 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
     downloadName: record.name,
   } : null;
 
-  const renderPageContent = (i) => {
+  const renderPageContent = (i, opts) => {
     if (type === 'pdf' && pdfParts?.pdf) {
       const PdfCanvas = pdfParts.PdfPage;
-      return <PdfCanvas pdf={pdfParts.pdf} pageNumber={i + 1} blocks={pdfBlocks.get(i + 1)}/>;
+      return <PdfCanvas pdf={pdfParts.pdf} pageNumber={i + 1} blocks={pdfBlocks.get(i + 1)} selectionOverlay={!!opts?.selectionOverlay}/>;
     }
     if (type === 'image') {
       return <ImagePage src={fileUrl} alt={record.name} blocks={pdfBlocks.get(1)}/>;
