@@ -64,6 +64,39 @@ export function PdfPage({ pdf, pageNumber, blocks = null }) {
     let unguard = () => {};
     let busy = false;
     let drawnW = 0;
+    let layerGen = 0;
+
+    /* The words only. The canvas is drawn once, supersampled for the reader's
+       MAX zoom (below) — so a zoom or a phone turn changes the page's CSS
+       width without changing a single pixel of the picture. Rebuilding JUST
+       the text layer at the new width keeps every span on its glyphs and is
+       fast enough to stay inside the first drag after the zoom; re-rendering
+       the page canvas took seconds and left the layer empty while it ran, so
+       the words under the mouse were unselectable exactly when the learner
+       tried to highlight them. */
+    const relayTextLayer = async (cssWidth) => {
+      const layer = wrap.querySelector('.pdf-text-layer');
+      if (!layer) return;
+      const gen = ++layerGen;
+      const page = await pdf.getPage(pageNumber);
+      const base = page.getViewport({ scale: 1 });
+      const textContent = await page.getTextContent();
+      if (cancelled || gen !== layerGen) return;   // a newer width won
+      const cssScale = cssWidth / base.width;      // CSS-pixel scale
+      unguard();
+      layer.innerHTML = '';
+      layer.style.setProperty('--scale-factor', String(cssScale));
+      const tl = new pdfjsLib.TextLayer({
+        textContentSource: textContent,
+        container: layer,
+        viewport: page.getViewport({ scale: cssScale }),
+      });
+      await tl.render();
+      if (cancelled || gen !== layerGen) return;
+      // Keeps a drag on the words it is over (lib/textSelection.js).
+      unguard = registerTextLayer(layer);
+      setHasText(textContent.items.some((it) => String(it.str || '').trim()));
+    };
 
     let pending = false;
     const render = async () => {
@@ -78,11 +111,11 @@ export function PdfPage({ pdf, pageNumber, blocks = null }) {
         const base = page.getViewport({ scale: 1 });
         const cssWidth = wrap.clientWidth || 640;
         const cssScale = cssWidth / base.width;               // CSS-pixel scale
-        // Draw at DEVICE resolution for the reader's MAX zoom. The reader
-        // magnifies with transform:scale(zoom ≤ 1.5); a canvas drawn only at the
-        // on-screen width (and dpr capped at 2) was what made pages look blurry —
-        // and much worse as you zoomed in. Supersampling to dpr × maxZoom keeps
-        // the page crisp at every zoom level without re-rendering on each step.
+        // Draw at DEVICE resolution for the reader's MAX zoom. A canvas drawn
+        // only at the on-screen width (and dpr capped at 2) was what made pages
+        // look blurry — and much worse as you zoomed in. Supersampling to
+        // dpr × maxZoom keeps the page crisp at every zoom level, so the
+        // canvas never has to be redrawn when the reader zooms.
         const dpr = Math.min(window.devicePixelRatio || 1, 3);
         const MAX_ZOOM = 1.5;                                 // SessionReaderModal's zoom cap
         let renderScale = cssScale * dpr * MAX_ZOOM;
@@ -102,23 +135,8 @@ export function PdfPage({ pdf, pageNumber, blocks = null }) {
         // Text layer — transparent spans aligned to the glyphs, so selection
         // highlights the real words on the page. pdf.js sizes spans through a
         // --scale-factor custom property on the container (CSS-pixel scale).
-        const layer = wrap.querySelector('.pdf-text-layer');
-        if (layer && !cancelled) {
-          unguard();
-          layer.innerHTML = '';
-          layer.style.setProperty('--scale-factor', String(cssScale));
-          const textContent = await page.getTextContent();
-          const tl = new pdfjsLib.TextLayer({
-            textContentSource: textContent,
-            container: layer,
-            viewport: page.getViewport({ scale: cssScale }),
-          });
-          await tl.render();
-          if (cancelled) return;
-          // Keeps a drag on the words it is over (lib/textSelection.js).
-          unguard = registerTextLayer(layer);
-          setHasText(textContent.items.some((it) => String(it.str || '').trim()));
-        }
+        await relayTextLayer(cssWidth);
+        if (cancelled) return;
         wrap.dataset.drawn = '1';
         drawnW = cssWidth;
       } catch {
@@ -138,9 +156,15 @@ export function PdfPage({ pdf, pageNumber, blocks = null }) {
     // The extraction text layer sizes its type from the laid-out width —
     // keep it honest across container resizes.
     const ro = new ResizeObserver(() => {
-      setWrapW(wrap.clientWidth || 0);
-      // A new width (a phone turned) re-draws so the words stay on the glyphs.
-      if (drawnW && Math.abs((wrap.clientWidth || 0) - drawnW) > 2) { delete wrap.dataset.drawn; render(); }
+      const w = wrap.clientWidth || 0;
+      setWrapW(w);
+      if (!drawnW || Math.abs(w - drawnW) <= 2) return;
+      // A new width (zoom, a phone turned): the canvas is already sharp at
+      // every zoom level, so only the words move — no page re-render, and the
+      // layer is rebuilt before the learner's next drag, not seconds after it.
+      drawnW = w;
+      if (wrap.dataset.drawn === '1') relayTextLayer(w);
+      else render();
     });
     ro.observe(wrap);
     setWrapW(wrap.clientWidth || 0);
