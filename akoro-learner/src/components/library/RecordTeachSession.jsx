@@ -336,18 +336,12 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
               md ? { name: record.name, text: md.slice(0, MAX_REFERENCE_CHARS) } : null);
           };
 
-          // A text layer thinner than ~20 chars/page is a scan — extraction
-          // is the only way this record grounds the session.
-          const scanned = joined.replace(/\s+/g, '').length < 20 * Math.max(1, texts.length);
-          if (!scanned) {
-            // Ask, the tools and the tutor's document search read the
-            // server's copy of this text: an older upload may not have one
-            // yet — ask for it quietly (a no-op once it exists).
-            void extractStoredRecordText(record.contentKey ? { contentKey: record.contentKey } : { recordId: record.id }).catch(() => {});
-            ready(texts.map((tx) => ({ html: '', text: tx })), { pdf, PdfPage },
-              joined ? { name: record.name, text: joined.slice(0, MAX_REFERENCE_CHARS) } : null);
-            return;
-          }
+          // Every PDF extracts with the model now — text PDFs included — so a
+          // library upload gets the same structured markdown (GFM tables,
+          // figure sentinels, reading order) a scan would. The pdf.js text
+          // still grounds the session until the markdown is ready, and the
+          // server's stored-text copy is warmed quietly for Ask/tools citations.
+          void extractStoredRecordText(record.contentKey ? { contentKey: record.contentKey } : { recordId: record.id }).catch(() => {});
 
           const cached = record.contentKey ? await getSharedExtraction(record.contentKey) : await getRecordExtraction(record.id);
           if (cancelled) return;
@@ -364,7 +358,8 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
           }
           applyRef.current = applyExtracted;
           setExtract({ status: 'offer', done: 0, total: texts.length });
-          ready(texts.map((tx) => ({ html: '', text: tx })), { pdf, PdfPage }, null);
+          ready(texts.map((tx) => ({ html: '', text: tx })), { pdf, PdfPage },
+            joined ? { name: record.name, text: joined.slice(0, MAX_REFERENCE_CHARS) } : null);
         } else if (type === 'text') {
           // The server's pages when it has them (or can make them now): the
           // reader's pages then match the citations Ask and the tools give.
