@@ -1235,6 +1235,7 @@ export default function SessionReaderModal({
   const [selection, setSelection] = useState(null);
   const [selPos, setSelPos] = useState(null);
   const selMenuRef = useRef(null);
+  const selectingRef = useRef(false);   // true while a finger/mouse is down, so the popover never pops up mid-drag
   const [redactions, setRedactions] = useState([]);
   const [annotations, setAnnotations] = useState([]);
   const [revealedRedactions, setRevealedRedactions] = useState(() => new Set());
@@ -1704,6 +1705,7 @@ export default function SessionReaderModal({
 
   const showSelectionMenu = useCallback(() => {
     if (activeTabId !== "reader") return setSelection(null);
+    if (selectingRef.current) return;   // mid-drag — wait for pointerup so the menu never covers the drag
     const sel = window.getSelection();
     if (!sel || sel.rangeCount === 0) return setSelection(null);
     const text = sel.toString().trim();
@@ -1726,26 +1728,39 @@ export default function SessionReaderModal({
     if (!selection || !selMenuRef.current) { setSelPos(null); return; }
     const menuRect = selMenuRef.current.getBoundingClientRect();
     const margin = 8;
+    // Keep the menu clear of the finger: a real gap on touch (the selection
+    // handles and the thumb sit right at the selection's edge), tight on
+    // desktop. It follows the selection as it changes, and flips above the
+    // text when it would run off the bottom of the screen.
+    const gap = isMobile ? 40 : 12;
     let left = selection.rect.left + selection.rect.width / 2 - menuRect.width / 2;
     left = Math.max(margin, Math.min(left, window.innerWidth - menuRect.width - margin));
-    let top = selection.rect.bottom + 10;
-    if (top + menuRect.height > window.innerHeight - margin) top = selection.rect.top - menuRect.height - 10;
-    if (top < margin) top = selection.rect.bottom + 10;
+    let top = selection.rect.bottom + gap;
+    if (top + menuRect.height > window.innerHeight - margin) top = selection.rect.top - menuRect.height - gap;
+    if (top < margin) top = selection.rect.bottom + gap;
     setSelPos({ left, top });
-  }, [selection]);
+  }, [selection, isMobile]);
 
   useEffect(() => {
     let t;
     const onSelChange = () => { clearTimeout(t); t = setTimeout(showSelectionMenu, 80); };
     const onMouseDown = (e) => { if (!selMenuRef.current?.contains(e.target) && !closestPage(e.target)) setSelection(null); };
+    const onPointerDown = () => { selectingRef.current = true; };
+    const onPointerUp = () => { selectingRef.current = false; showSelectionMenu(); };
     document.addEventListener("selectionchange", onSelChange);
     document.addEventListener("mousedown", onMouseDown);
     document.addEventListener("touchstart", onMouseDown, { passive: true });
+    document.addEventListener("pointerdown", onPointerDown, { passive: true });
+    document.addEventListener("pointerup", onPointerUp, { passive: true });
+    document.addEventListener("pointercancel", onPointerUp, { passive: true });
     return () => {
       clearTimeout(t);
       document.removeEventListener("selectionchange", onSelChange);
       document.removeEventListener("mousedown", onMouseDown);
       document.removeEventListener("touchstart", onMouseDown);
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("pointerup", onPointerUp);
+      document.removeEventListener("pointercancel", onPointerUp);
     };
   }, [showSelectionMenu]);
 
