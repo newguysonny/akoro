@@ -6,7 +6,7 @@ import { pickNotes, learnerNotesBlock, NOTE_LIMITS } from "./learnerNotesCore.js
 process.env.SUPABASE_URL ||= "http://localhost:1";
 process.env.SUPABASE_SERVICE_KEY ||= "test";
 process.env.OPENAI_API_KEY ||= "test";
-const { guideTeachPrompt } = await import("./guideTeacher.js");
+const { guideTeachPrompt } = await import("./guideTeacherPrompt.js");
 
 const read = (f) => readFile(new URL(f, import.meta.url), "utf8");
 
