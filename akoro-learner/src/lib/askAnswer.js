@@ -29,12 +29,17 @@ export function answerBlocks(answer, citations = []) {
   for (const raw of String(answer || '').split('\n')) {
     const line = raw.trim();
     if (!line) { blocks.push(null); continue; }
+    if (/^-{3,}$/.test(line) || /^\*{3,}$/.test(line)) { blocks.push({ type: 'hr' }); continue; }
+    const heading = line.match(/^(#{1,4})\s+(.*)$/);
+    if (heading) {
+      blocks.push({ type: 'h', level: heading[1].length, pieces: inlinePieces(heading[2], citations) });
+      continue;
+    }
     const bullet = line.match(/^[-*•]\s+(.*)$/);
     const numbered = line.match(/^\d{1,2}[.)]\s+(.*)$/);
-    const heading = line.match(/^#{1,4}\s+(.*)$/);
     const kind = bullet ? 'ul' : numbered ? 'ol' : null;
-    const content = (bullet || numbered || heading)?.[1] ?? line;
-    const pieces = inlinePieces(heading ? `**${content}**` : content, citations);
+    const content = (bullet || numbered)?.[1] ?? line;
+    const pieces = inlinePieces(content, citations);
     const prev = blocks[blocks.length - 1];
     if (kind && prev && prev.type === kind) prev.items.push(pieces);
     else if (kind) blocks.push({ type: kind, items: [pieces] });

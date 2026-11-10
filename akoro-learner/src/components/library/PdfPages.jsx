@@ -65,10 +65,12 @@ export function PdfPage({ pdf, pageNumber, blocks = null }) {
     let busy = false;
     let drawnW = 0;
 
+    let pending = false;
     const render = async () => {
       // Once drawn, a page stays drawn: redrawing (and so rebuilding the
       // text layer) under a live selection would drop it.
-      if (busy || (canvas.width > 0 && wrap.dataset.drawn === '1')) return;
+      if (busy) { pending = true; return; }   // a width change arrived mid-render — redo after it finishes
+      if (canvas.width > 0 && wrap.dataset.drawn === '1') return;
       busy = true;
       try {
         const page = await pdf.getPage(pageNumber);
@@ -123,6 +125,7 @@ export function PdfPage({ pdf, pageNumber, blocks = null }) {
         if (!cancelled) setGone(true);
       } finally {
         busy = false;
+        if (pending) { pending = false; delete wrap.dataset.drawn; render(); }   // width changed mid-render → redo at the new width
       }
     };
 

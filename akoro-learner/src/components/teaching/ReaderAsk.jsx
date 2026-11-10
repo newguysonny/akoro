@@ -61,11 +61,20 @@ export function Answer({ text, citations, onCite }) {
   return (
     <div className="text-sm leading-relaxed" style={{ color: 'var(--ak-text)' }}>
       {blocks.map((b, i) => {
+        if (b.type === 'hr') return <hr key={i} style={{ border: 0, borderTop: '1px solid var(--ak-border2)', margin: '12px 0' }}/>;
+        if (b.type === 'h') {
+          const size = b.level <= 2 ? 15 : b.level === 3 ? 13.5 : 12.5;
+          return (
+            <p key={i} style={{ margin: i === 0 ? '0 0 6px' : '14px 0 6px', fontWeight: 800, fontSize: size, lineHeight: 1.35, color: 'var(--ak-text)' }}>
+              <Pieces pieces={b.pieces} onCite={onCite}/>
+            </p>
+          );
+        }
         if (b.type === 'p') return <p key={i} style={{ margin: '0 0 8px' }}><Pieces pieces={b.pieces} onCite={onCite}/></p>;
         const List = b.type === 'ol' ? 'ol' : 'ul';
         return (
-          <List key={i} style={{ margin: '0 0 8px', paddingLeft: 20, listStyle: b.type === 'ol' ? 'decimal' : 'disc' }}>
-            {b.items.map((it, j) => <li key={j} style={{ marginBottom: 3 }}><Pieces pieces={it} onCite={onCite}/></li>)}
+          <List key={i} style={{ margin: '0 0 10px', paddingLeft: 20, listStyle: b.type === 'ol' ? 'decimal' : 'disc' }}>
+            {b.items.map((it, j) => <li key={j} style={{ marginBottom: 4 }}><Pieces pieces={it} onCite={onCite}/></li>)}
           </List>
         );
       })}

@@ -17,8 +17,8 @@ test('[n] markers become citation chips; unknown markers stay text; **bold** ren
 
 test('answers split into paragraphs and lists', () => {
   const blocks = answerBlocks('## Key points\n- one [1]\n- two\n\n1. first\n2. second\nClosing line.', cites);
-  assert.deepEqual(blocks.map((b) => b.type), ['p', 'ul', 'ol', 'p']);
-  assert.equal(blocks[0].pieces[0].type, 'bold', 'headings read as bold lines');
+  assert.deepEqual(blocks.map((b) => b.type), ['h', 'ul', 'ol', 'p']);
+  assert.equal(blocks[0].level, 2, 'headings carry their level'); assert.equal(blocks[0].pieces[0].text, 'Key points', 'heading text is parsed');
   assert.equal(blocks[1].items.length, 2);
   assert.equal(blocks[1].items[0].find((p) => p.type === 'cite').n, 1);
 });
