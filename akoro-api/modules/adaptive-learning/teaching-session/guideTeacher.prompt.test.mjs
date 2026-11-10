@@ -32,3 +32,11 @@ test("the move, the reference and the recent turns still reach the model", () =>
   assert.match(p, /<reference_material>\nHooke named cells in 1665.\n<\/reference_material>/);
   assert.match(p, /Learner: I think cells are boxes\./);
 });
+
+test("a grounded, numbered reference asks for [n] citations (page chips)", () => {
+  const p = guideTeachPrompt({ ...base, move: "explain", reference: { name: "BIO 111", text: "[1] (page 3) Cell theory has three principles.", cited: true } });
+  assert.match(p, /cite it right after the sentence as \[n\]/);
+  assert.match(p, /never invent page numbers/);
+  const plain = guideTeachPrompt({ ...base, move: "explain", reference: { name: "BIO 111", text: "Cell theory." } });
+  assert.doesNotMatch(plain, /\[n\]/);
+});
