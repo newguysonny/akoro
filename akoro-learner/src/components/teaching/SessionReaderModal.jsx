@@ -1145,6 +1145,48 @@ export default function SessionReaderModal({
   const [pageNumDraft, setPageNumDraft] = useState("1");
   const viewerRef = useRef(null);
 
+  /* Zoom keeps your place. A width change re-lays every page, grows the
+     scroll content and leaves scrollTop where it was — so zooming in threw
+     the line you were reading hundreds of px below the fold, which reads as
+     "the page jumped". Remember which page sits under the middle of the
+     viewport and where on it, then put that same point back after layout. */
+  const zoomAnchor = useRef(null);
+  const zoomTo = useCallback((updater) => {
+    const el = viewerRef.current;
+    if (el) {
+      const c = el.getBoundingClientRect();
+      const cy = c.top + c.height / 2, cx = c.left + c.width / 2;
+      let best = null;
+      el.querySelectorAll("[data-page-index]").forEach((p) => {
+        const r = p.getBoundingClientRect();
+        if (r.bottom < c.top || r.top > c.bottom) return;
+        const dist = Math.abs(r.top + r.height / 2 - cy);
+        if (best && dist >= best.dist) return;
+        best = {
+          dist,
+          index: Number(p.dataset.pageIndex),
+          f: Math.min(1, Math.max(0, (cy - r.top) / Math.max(1, r.height))),
+          hf: Math.min(1, Math.max(0, (cx - r.left) / Math.max(1, r.width))),
+        };
+      });
+      zoomAnchor.current = best;
+    }
+    setZoom((z) => {
+      const next = typeof updater === "function" ? updater(z) : updater;
+      return Math.max(0.7, Math.min(1.5, +Number(next).toFixed(2)));
+    });
+  }, []);
+  useLayoutEffect(() => {
+    const a = zoomAnchor.current, el = viewerRef.current;
+    zoomAnchor.current = null;
+    if (!a || !el) return;
+    const target = el.querySelector(`[data-page-index="${a.index}"]`);
+    if (!target) return;
+    const c = el.getBoundingClientRect(), r = target.getBoundingClientRect();
+    el.scrollTop += (r.top + a.f * r.height) - (c.top + c.height / 2);
+    el.scrollLeft += (r.left + a.hf * r.width) - (c.left + c.width / 2);
+  }, [zoom]);
+
   /* tools: Generate dropdown / forms / result tabs */
   const [formTool, setFormTool] = useState(null);
   const [prefillFocus, setPrefillFocus] = useState("");
@@ -1848,22 +1890,22 @@ export default function SessionReaderModal({
 
             {!isMedia && (
             <div className="hidden md:flex items-center gap-1">
-              <button onClick={() => setZoom((z) => Math.max(0.7, +(z - 0.1).toFixed(2)))} className="folio-btn-outline w-6 h-6 rounded border flex items-center justify-center">
+              <button onClick={() => zoomTo((z) => z - 0.1)} className="folio-btn-outline w-6 h-6 rounded border flex items-center justify-center">
                 <Icon name="ti-minus" size={13}/>
               </button>
               <span className="font-ui-mono text-xs w-9 text-center" style={{ color: "var(--ak-text-sub)" }}>{Math.round(zoom * 100)}%</span>
-              <button onClick={() => setZoom((z) => Math.min(1.5, +(z + 0.1).toFixed(2)))} className="folio-btn-outline w-6 h-6 rounded border flex items-center justify-center">
+              <button onClick={() => zoomTo((z) => z + 0.1)} className="folio-btn-outline w-6 h-6 rounded border flex items-center justify-center">
                 <Icon name="ti-plus" size={13}/>
               </button>
             </div>
             )}
             {!isMedia && isMobile && (
               <div className="flex items-center gap-0.5">
-                <button onClick={() => setZoom((z) => Math.max(0.7, +(z - 0.1).toFixed(2)))} className="folio-btn-outline w-6 h-6 rounded border flex items-center justify-center">
+                <button onClick={() => zoomTo((z) => z - 0.1)} className="folio-btn-outline w-6 h-6 rounded border flex items-center justify-center">
                   <Icon name="ti-minus" size={12}/>
                 </button>
                 <span className="font-ui-mono text-xs w-7 text-center" style={{ color: "var(--ak-text-sub)" }}>{Math.round(zoom * 100)}%</span>
-                <button onClick={() => setZoom((z) => Math.min(1.5, +(z + 0.1).toFixed(2)))} className="folio-btn-outline w-6 h-6 rounded border flex items-center justify-center">
+                <button onClick={() => zoomTo((z) => z + 0.1)} className="folio-btn-outline w-6 h-6 rounded border flex items-center justify-center">
                   <Icon name="ti-plus" size={12}/>
                 </button>
               </div>
