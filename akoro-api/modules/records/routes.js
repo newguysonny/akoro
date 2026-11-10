@@ -64,7 +64,7 @@ import {
 } from "./avTranscribeLib.js";
 import { indexRecord, indexByContentKey, searchRecordChunks } from "./searchLib.js";
 import {
-  ASK_LIMITS, gatherPassages, buildAskMessages, extractCitations, loadAskHistory, saveAskTurn,
+  ASK_LIMITS, gatherPassages, buildAskMessages, extractCitations, loadAskHistory, saveAskTurn, cleanModelOutput,
 } from "./askLib.js";
 import { openai, OPENAI_MODEL } from "../../lib/aiModel.js";
 import { buildGuideMessages, cleanGuideHistory, GUIDE_LIMITS } from "./guideLib.js";
@@ -866,7 +866,7 @@ router.post("/ask", authenticateToken, asyncHandler(async (req, res) => {
       const completion = await openai.chat.completions.create({ model: OPENAI_MODEL, temperature: 0.2, max_tokens: 900, messages });
       answer = completion.choices?.[0]?.message?.content?.trim() || "";
     }
-    answer = answer.trim() || "I couldn't produce an answer from this document — try rephrasing the question.";
+    answer = cleanModelOutput(answer) || "I couldn't produce an answer from this document — try rephrasing the question.";
     const { citations } = extractCitations(answer, passages);
 
     let messageId = null;
@@ -953,7 +953,7 @@ router.post("/guide", authenticateToken, asyncHandler(async (req, res) => {
       const completion = await openai.chat.completions.create({ model: OPENAI_MODEL, temperature: 0.4, max_tokens: GUIDE_LIMITS.MAX_TOKENS, messages });
       answer = completion.choices?.[0]?.message?.content?.trim() || "";
     }
-    answer = answer.trim() || "Sorry — I couldn't put a reply together. Could you say that another way?";
+    answer = cleanModelOutput(answer) || "Sorry — I couldn't put a reply together. Could you say that another way?";
     const { citations } = target ? extractCitations(answer, passages) : { citations: [] };
 
     let messageId = null;

@@ -47,9 +47,17 @@ function Pieces({ pieces, onCite }) {
   });
 }
 
+/** Strip a model's <final>/reasoning sentinel so it never leaks into the bubble. */
+function cleanAnswerText(text) {
+  let s = String(text || '');
+  const i = s.lastIndexOf('</final>');
+  if (i !== -1) s = s.slice(i + '</final>'.length);   // keep the part after the last closing sentinel
+  return s.replace(/<\/?final>/gi, '');
+}
+
 /** An answer with its [n] citations as chips that jump the reader (Ask, and the guide chat). */
 export function Answer({ text, citations, onCite }) {
-  const blocks = answerBlocks(text, citations);
+  const blocks = answerBlocks(cleanAnswerText(text), citations);
   return (
     <div className="text-sm leading-relaxed" style={{ color: 'var(--ak-text)' }}>
       {blocks.map((b, i) => {

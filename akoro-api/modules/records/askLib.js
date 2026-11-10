@@ -174,6 +174,7 @@ export function buildAskMessages({ docName = "this document", passages = [], que
     "If the passages do not contain the answer, say you could not find it in this document and suggest what to search for instead. Never invent facts, page numbers or quotes.",
     "If the learner selected a passage, explain THAT passage first.",
     "Be clear and concise; use short paragraphs or bullet points; use the learner's language.",
+    "Return only the final answer in Markdown: no <final> tags or any XML/HTML wrappers, no reasoning/thinking text, and never repeat the answer or the passage text.",
     "",
     "Passages:",
     sources,
@@ -359,4 +360,43 @@ export async function saveAskTurn({ userId, recordId, question, selection, answe
   if (error && noChannel(error) && channel === "ask") ({ data, error } = await db.schema("edu").from("record_chat_messages").insert(rows(false)).select("id, role"));
   if (error) throw error;
   return { assistantMessageId: (data || []).find((r) => r.role === "assistant")?.id || null };
+}
+
+/**
+ * Clean a model reply for display/saving. Some models stream a reasoning pass
+ * and then wrap the real answer in a <final>…</final> block (and can emit stray
+ * control glyphs). Left raw, the reader showed the answer twice with a literal
+ * "</final>" and junk like "ваҡ" between the copies. This keeps only the last
+ * final block (or the text after the last closing sentinel), strips the tags,
+ * and collapses an exact duplicated answer. Plain Markdown is untouched.
+ */
+export function cleanModelOutput(raw) {
+  let s = String(raw || "").replace(/\r/g, "");
+  const finals = [...s.matchAll(/<final>([\s\S]*?)<\/final>/gi)].filter((m) => m[1].trim());
+  if (finals.length) {
+    s = finals[finals.length - 1][1];
+  } else {
+    const i = s.lastIndexOf("</final>");
+    if (i !== -1) {
+      const after = s.slice(i + "</final>".length);
+      s = after.trim() ? after : s.slice(0, i);
+    }
+  }
+  s = s.replace(/<\/?final>/gi, "");
+  // The model repeating its whole answer: collapse an exact duplicate.
+  const t = s.trim();
+  if (t.length >= 30 && t.length % 2 === 0) {
+    const half = t.length / 2;
+    const a = t.slice(0, half).trim();
+    const b = t.slice(half).trim();
+    if (a && a === b) s = a;
+  } else if (t.length >= 30) {
+    const mid = Math.floor(t.length / 2);
+    const a = t.slice(0, mid).trim();
+    const b = t.slice(mid).trim();
+    if (a && a === b) s = a;
+  }
+  // Strip control / zero-width noise that can slip through a stream.
+  s = s.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u200B-\u200F\uFEFF]/g, "");
+  return s.trim();
 }

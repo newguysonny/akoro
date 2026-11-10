@@ -36,6 +36,7 @@ export function buildGuideMessages({
     "Adapt: if the learner's answer shows a gap, explain that part again a different way; if they got it, build on it and move to the next idea. Praise effort, briefly.",
     "Never just hand over answers to homework-style questions — guide the learner to work it out, step by step.",
     "Use the learner's language. Write maths with Unicode (x², ½, √, π), never LaTeX.",
+    "Return only the final answer in Markdown: no <final> tags or XML/HTML wrappers, no reasoning, no repetition.",
   ];
   if (hasDocument) {
     rules.push(

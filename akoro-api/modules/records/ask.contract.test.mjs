@@ -6,7 +6,7 @@ process.env.SUPABASE_URL ||= "http://localhost:59999";
 process.env.SUPABASE_SERVICE_KEY ||= "test-service-key";
 
 const {
-  ASK_LIMITS, contentWords, selectPassages, buildAskMessages, extractCitations, passageWhere, gatherPassages,
+  ASK_LIMITS, contentWords, selectPassages, buildAskMessages, extractCitations, passageWhere, gatherPassages, cleanModelOutput,
 } = await import("./askLib.js");
 const routesSrc = await readFile(new URL("./routes.js", import.meta.url), "utf8")
   + await readFile(new URL("./access.js", import.meta.url), "utf8");   // the access rule lives in access.js
@@ -130,4 +130,12 @@ test("the thread table is private per learner and per document", () => {
   assert.match(migration, /record_chat_messages_thread_idx\s+ON edu\.record_chat_messages\(user_id, record_id, created_at\)/);
   assert.ok(manifest.indexOf('"2026-record-chat.sql"') > manifest.indexOf('"2026-record-search.sql"'), "runs after the records/search migrations");
   assert.ok(contentWords("The photosynthesis of glucose").has("photosynthesis"));
+});
+
+test("cleanModelOutput: keeps only the final answer, no sentinel or repeat", () => {
+  assert.equal(cleanModelOutput("<final>Hello [1].</final>"), "Hello [1].");
+  assert.equal(cleanModelOutput("reasoning…</final>Final answer [2]."), "Final answer [2].");
+  const twice = "Cells are the unit of life. ".repeat(2).trim();
+  assert.equal(cleanModelOutput(twice), "Cells are the unit of life.");
+  assert.equal(cleanModelOutput("Answer\u200b text<final></final>"), "Answer text");
 });
