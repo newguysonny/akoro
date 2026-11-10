@@ -79,19 +79,25 @@ const FORM_DEFS = {
   },
   summary: {
     title: "Summary", sub: "A quick digest of this page",
-    fields: [{ id: "depth", label: "Depth", type: "select", options: ["Brief", "Detailed"] }],
+    fields: [
+      { id: "focus", label: "Focus (optional)", type: "text", placeholder: "e.g. only the definitions" },
+      { id: "depth", label: "Depth", type: "select", options: ["Brief", "Detailed"] },
+    ],
   },
   quiz: {
     title: "Quiz", sub: "Test yourself on this page",
     fields: [
       { id: "focus", label: "Focus (optional)", type: "text", placeholder: "e.g. the definitions" },
-      { id: "count", label: "Questions", type: "select", options: ["3", "5", "10"] },
+      { id: "count", label: "Questions", type: "number", min: 1, max: 50, default: "5", placeholder: "e.g. 8" },
       { id: "difficulty", label: "Difficulty", type: "select", options: ["Easy", "Medium", "Hard"] },
     ],
   },
   flashcards: {
     title: "Flashcards", sub: "Key terms from this page",
-    fields: [{ id: "count", label: "Number of cards", type: "select", options: ["3", "6", "10"] }],
+    fields: [
+      { id: "focus", label: "Focus (optional)", type: "text", placeholder: "e.g. the vocabulary" },
+      { id: "count", label: "Number of cards", type: "select", options: ["3", "6", "10"] },
+    ],
   },
   notes: {
     title: "Notes", sub: "Start a note for this page",
@@ -322,7 +328,7 @@ export function deriveToolContent(toolId, { pages, createdPage, values = {}, top
     }
     case "quiz": {
       const wanted = parseInt(values.count, 10) || 5;
-      const questions = deriveQuiz(pageText, pageIdx, Math.min(wanted, 10), pageBlocks?.[pageIdx] || null);
+      const questions = deriveQuiz(pageText, pageIdx, Math.min(wanted, 50), pageBlocks?.[pageIdx] || null);
       return {
         quizQuestions: questions,
         quizAnswers: questions.map(() => ({ selected: null, checked: false, dontKnow: false })),
@@ -568,7 +574,11 @@ function CreationForm({ toolId, initialFocus, onBack, onSubmit, withScope = fals
   const def = withScope ? { ...base, fields: [SCOPE_FIELD, ...base.fields] } : base;
   const [values, setValues] = useState(() => {
     const v = {};
-    def.fields.forEach((f) => { v[f.id] = f.type === "select" ? f.options[0] : (f.id === "focus" ? initialFocus || "" : ""); });
+    def.fields.forEach((f) => {
+      v[f.id] = f.type === "select" ? f.options[0]
+        : f.type === "number" ? (f.default ?? "")
+        : (f.id === "focus" ? initialFocus || "" : "");
+    });
     return v;
   });
   const [submitting, setSubmitting] = useState(false);
@@ -588,7 +598,19 @@ function CreationForm({ toolId, initialFocus, onBack, onSubmit, withScope = fals
         {def.fields.map((f) => (
           <label key={f.id} className="flex flex-col gap-1.5">
             <span className="text-xs font-medium" style={{ color: "var(--ak-text-sub)" }}>{f.label}</span>
-            {f.type === "text" ? (
+            {f.type === "number" ? (
+              <input
+                type="number"
+                inputMode="numeric"
+                min={f.min ?? 1}
+                max={f.max ?? 100}
+                value={values[f.id]}
+                placeholder={f.placeholder}
+                onChange={(e) => setValues((v) => ({ ...v, [f.id]: e.target.value.replace(/[^0-9]/g, "") }))}
+                className="folio-form-field border rounded-lg px-2.5 py-2 text-sm focus:outline-none"
+                style={{ color: "var(--ak-text)" }}
+              />
+            ) : f.type === "text" ? (
               <input
                 type="text"
                 value={values[f.id]}

@@ -42,7 +42,7 @@ const usableBlock = (b) => {
 export function toolCount(tool, values = {}) {
   const n = parseInt(values.count, 10);
   if (tool === "summary") return /detailed/i.test(String(values.depth || "")) ? 8 : 4;
-  if (tool === "quiz") return [3, 5, 10].includes(n) ? n : 5;
+  if (tool === "quiz") return Number.isInteger(n) && n > 0 ? Math.min(n, 50) : 5;   // any count the learner types (1–50)
   if (tool === "flashcards") return [3, 6, 10].includes(n) ? n : 6;
   return 0;
 }
