@@ -67,8 +67,14 @@ export async function loadPdfDocument(src) {
    (bbox_2d in normalized 0-1000 [left, top, right, bottom]). When present,
    a small "Layout" chip toggles an overlay that draws what the model read
    on top of the scan: text blocks in the brand tint, figures in amber —
-   the learner can SEE the extraction matched the page. */
-export function PdfPage({ pdf, pageNumber, blocks = null }) {
+   the learner can SEE the extraction matched the page.
+
+   `selectionOverlay` (optional) — render the EXTRACTED MARKDOWN as the
+   selectable layer instead of the pdf.js text layer. Used for the
+   RunPod-markdown vs pdf.js-text A/B: when true the pdf.js layer is not
+   built and BlockTextLayer mounts even on a text PDF. See
+   akoro-pdf-extraction-ab(runpod-markdown-vs-pdfjs-text,library-vs-pharmd).md */
+export function PdfPage({ pdf, pageNumber, blocks = null, selectionOverlay = false }) {
   const wrapRef  = useRef(null);
   const canvasRef = useRef(null);
   const [aspect, setAspect] = useState(1.414);          // A4-ish until measured
@@ -96,6 +102,7 @@ export function PdfPage({ pdf, pageNumber, blocks = null }) {
        the words under the mouse were unselectable exactly when the learner
        tried to highlight them. */
     const relayTextLayer = async (cssWidth) => {
+      if (selectionOverlay) return;   // the extracted-markdown layer is the selectable one
       const layer = wrap.querySelector('.pdf-text-layer');
       if (!layer) return;
       const gen = ++layerGen;
@@ -190,7 +197,7 @@ export function PdfPage({ pdf, pageNumber, blocks = null }) {
     ro.observe(wrap);
     setWrapW(wrap.clientWidth || 0);
     return () => { cancelled = true; io.disconnect(); ro.disconnect(); unguard(); delete wrap.dataset.drawn; };
-  }, [pdf, pageNumber]);
+  }, [pdf, pageNumber, selectionOverlay]);
 
   const blockList = Array.isArray(blocks) ? blocks.filter((b) => Array.isArray(b?.bbox_2d) && b.bbox_2d.length === 4) : [];
   const isFigure = (t) => String(t || '').trim() === '<image>';
@@ -221,9 +228,9 @@ export function PdfPage({ pdf, pageNumber, blocks = null }) {
           over its own bbox, so scans become selectable/searchable exactly
           like pdf.js text pages. Container ignores pointers; the spans
           capture only where text actually is. */}
-      {/* Only for a page with no words of its own (a scan): over a real text
-          page it would be a second selectable copy of the same words. */}
-      {wrapW > 0 && hasText === false && <BlockTextLayer blocks={blockList} height={wrapW * aspect}
+      {/* Only for a page with no words of its own (a scan), OR when the A/B
+          toggle asks for the extracted-markdown layer on a text page. */}
+      {wrapW > 0 && (hasText === false || selectionOverlay) && <BlockTextLayer blocks={blockList} height={wrapW * aspect}
         surface={drawn ? canvasRef.current : null} surfaceKey={drawn}/>}
       {blockList.length > 0 && (
         <button onClick={() => setShowBlocks((v) => !v)}
