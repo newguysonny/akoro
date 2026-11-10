@@ -1102,6 +1102,10 @@ export default function SessionReaderModal({
      citations carry the exact block's bbox, and citeJump flashes THAT
      region on the scanned page — Fortizo's jump-and-flash, grounded. */
   pageBlocks = null,
+  /* overlayToggle — true only when the page content is a PDF, i.e. there are
+     genuinely two selectable layers to choose between (pdf.js text vs the
+     extracted-markdown overlay). Images have no pdf.js layer, so no toggle. */
+  overlayToggle = false,
   /* transcript — { segments:[{kind, startMs, endMs, speaker, text}] } for
      audio/video materials: listed under the player; a click seeks the
      recording to that moment. */
@@ -1970,7 +1974,7 @@ export default function SessionReaderModal({
                 layer (this document's own glyph coordinates) or the extracted
                 markdown overlay (RunPod blocks). Only shown once extraction has
                 produced blocks for this record. */}
-            {!isMedia && Array.isArray(pageBlocks) && pageBlocks.some(Boolean) && (
+            {!isMedia && overlayToggle && Array.isArray(pageBlocks) && pageBlocks.some(Boolean) && (
               <button
                 onClick={() => setExtractedLayer((v) => !v)}
                 className={`folio-btn-outline h-7 rounded border flex items-center justify-center px-2 gap-1 whitespace-nowrap ${extractedLayer ? "bg-black/10" : ""}`}

@@ -1081,6 +1081,7 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
     initialTool: config?.openTool || null,
     initialArtifactId: config?.openArtifact || null,
     pageBlocks: content.pageBlocks || null,
+    overlayToggle: content.overlayToggle || false,
     transcript: content.transcript || null,
     onTranscribe: content.onTranscribe || null,
     transcribeState: content.transcribeState || null,

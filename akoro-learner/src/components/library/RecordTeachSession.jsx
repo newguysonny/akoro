@@ -601,6 +601,9 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
     // Extraction blocks per page — generated summaries/quiz citations carry
     // the exact block bbox, and citeJump flashes that region on the scan.
     pageBlocks: pages.map((_, i) => pdfBlocks.get(i + 1) || null),
+    // Only a PDF has two selectable layers to A/B (pdf.js text vs extracted
+    // markdown). Images/text/office always use one layer, so no toggle.
+    overlayToggle: type === 'pdf',
     // A/V transcript segments — the reader lists them under the player;
     // clicking a segment seeks the recording to that moment.
     transcript: avTranscript,
