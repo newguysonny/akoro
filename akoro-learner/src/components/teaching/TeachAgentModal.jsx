@@ -1073,6 +1073,7 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
   const readerProps = content ? {
     docTitle: content.docTitle || `${subject} — ${topic}`,
     sourceName: content.sourceName || 'Session material',
+    docKey: content.docKey || null,
     pages: content.pages || [],
     media: content.media || null,
     renderPageContent: content.renderPageContent || null,

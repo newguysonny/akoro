@@ -176,6 +176,7 @@ export default function PharmDTopicSession({ topic, course, onClose }) {
     },
     pct: null,
     docTitle: topicTitle,
+    docKey: `pharmd-topic:${topic?.id || topic?.title || topic?.file_url || 'x'}`,
     sourceName: `PHARM.D · ${courseLabel}`,
     media: null,
     pages,

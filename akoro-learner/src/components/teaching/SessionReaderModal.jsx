@@ -1070,6 +1070,7 @@ function CommunityBoard({ title, subtitle, placeholder, actionLabel, emptyText, 
 export default function SessionReaderModal({
   docTitle,
   sourceName = "Session guide",
+  docKey = null,   // stable identity for remembering the reader's place (page + zoom)
   pages = [],
   onClose,
   initialTool = null,   // open on this study tool's form (an Agent Chat link)
@@ -1140,9 +1141,28 @@ export default function SessionReaderModal({
   const isMobile = useIsMobileView();
   const split = !isMobile && !!chatNode;
 
-  const [currentPage, setCurrentPage] = useState(0);
-  const [zoom, setZoom] = useState(1);
-  const [pageNumDraft, setPageNumDraft] = useState("1");
+  /* Remember the reader's place (page + zoom) per document, so closing a
+     topic — or a full refresh that sends the learner back to the course —
+     then re-opening the PDF resumes where they left off instead of page 1.
+     sessionStorage: survives the refresh but is per-tab, never shared. */
+  const readerPosKey = docKey || (docTitle ? `${sourceName}:${docTitle}` : null);
+  const restoredPos = useRef(null);
+  if (restoredPos.current === null) {
+    let page = 0, zoom = 1;
+    if (readerPosKey && typeof window !== "undefined") {
+      try {
+        const raw = JSON.parse(sessionStorage.getItem(`akoro_reader_pos:${readerPosKey}`) || "null");
+        if (raw) {
+          page = Number.isInteger(raw.page) ? Math.max(0, Math.min(pages.length - 1, raw.page)) : 0;
+          zoom = Number.isFinite(raw.zoom) ? Math.max(0.7, Math.min(1.5, raw.zoom)) : 1;
+        }
+      } catch { /* private mode / corrupt entry — start fresh */ }
+    }
+    restoredPos.current = { page, zoom };
+  }
+  const [currentPage, setCurrentPage] = useState(restoredPos.current.page);
+  const [zoom, setZoom] = useState(restoredPos.current.zoom);
+  const [pageNumDraft, setPageNumDraft] = useState(String(restoredPos.current.page + 1));
   const viewerRef = useRef(null);
 
   /* Zoom keeps your place. A width change re-lays every page, grows the
@@ -1248,6 +1268,25 @@ export default function SessionReaderModal({
   }, [activeTabId, pages.length]);
 
   useEffect(() => { setPageNumDraft(String(currentPage + 1)); }, [currentPage]);
+
+  /* Persist the place as the learner reads — cheap, so it follows every
+     page turn and zoom tick without a debounce. */
+  useEffect(() => {
+    if (!readerPosKey) return;
+    try { sessionStorage.setItem(`akoro_reader_pos:${readerPosKey}`, JSON.stringify({ page: currentPage, zoom, at: Date.now() })); }
+    catch { /* private mode — remember nothing */ }
+  }, [readerPosKey, currentPage, zoom]);
+
+  /* On a reopen, jump straight back to the remembered page (no smooth
+     scroll — a fresh open should land there, not animate past it). */
+  useEffect(() => {
+    const page = restoredPos.current?.page;
+    if (!page) return;
+    const raf = requestAnimationFrame(() => {
+      viewerRef.current?.querySelector(`[data-page-index="${page}"]`)?.scrollIntoView({ block: "start" });
+    });
+    return () => cancelAnimationFrame(raf);
+  }, []);
 
   useEffect(() => {
     if (!genMenuOpen) return;

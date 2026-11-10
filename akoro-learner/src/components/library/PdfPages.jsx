@@ -23,8 +23,22 @@ import { BRAND } from '../../constants.js';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
 
+/* Parsed documents stay in memory for the tab's life, keyed by src, so a
+   learner who closes a topic and re-opens it (or goes back to the course
+   and picks the PDF again) skips the re-download and re-parse — the two
+   slowest steps on a multi-page course PDF. Bounded so a long study
+   session over many documents never pins the whole shelf in RAM. */
+const DOC_CACHE_MAX = 6;
+const docCache = new Map();   // src -> { pdf, texts }, oldest-first for eviction
+
 /** Load the document + extract each page's text. `src` is presigned — no auth needed. */
 export async function loadPdfDocument(src) {
+  const cached = docCache.get(src);
+  if (cached) {
+    docCache.delete(src);      // refresh recency so the newest stays put
+    docCache.set(src, cached);
+    return cached;
+  }
   const res = await fetch(src);
   if (!res.ok) throw new Error(`Could not load the file (${res.status}).`);
   const data = new Uint8Array(await res.arrayBuffer());
@@ -35,7 +49,14 @@ export async function loadPdfDocument(src) {
     const tc = await page.getTextContent();
     texts.push(tc.items.map((it) => it.str).join(' '));
   }
-  return { pdf, texts };
+  const doc = { pdf, texts };
+  docCache.set(src, doc);
+  while (docCache.size > DOC_CACHE_MAX) {
+    const oldest = docCache.keys().next().value;
+    docCache.get(oldest)?.pdf.destroy?.().catch(() => {});
+    docCache.delete(oldest);
+  }
+  return doc;
 }
 
 /* One PDF page. Renders lazily (IntersectionObserver from the parent
