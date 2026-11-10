@@ -16,7 +16,7 @@ const passages = [{ n: 1, pageNumber: 2, text: "Mitochondria release energy." },
 test("with a document: the guide teaches from its passages, cites them, one check question", () => {
   const [sys, ...rest] = buildGuideMessages({ guideName: "NaNa Esumai", docName: "Cell biology", topic: "The cell", subject: "Biology", passages, message: "What do ribosomes do?", hasDocument: true });
   assert.equal(sys.role, "system");
-  for (const bit of ["You are NaNa Esumai", "ONE check question", "[1] (page 2)\nMitochondria", "[2] (page 3, quoted by the learner)", "cite the passage number", "doesn't cover", "Subject: Biology · Topic: The cell"]) {
+  for (const bit of ["You are NaNa Esumai", "ONE check question", "ONLY 2–3 short paragraphs", "No headings, no bullet lists", "[1] (page 2)\nMitochondria", "[2] (page 3, quoted by the learner)", "cite the passage number", "doesn't cover", "Subject: Biology · Topic: The cell"]) {
     assert.ok(sys.content.includes(bit), bit);
   }
   assert.deepEqual(rest.at(-1), { role: "user", content: "What do ribosomes do?" });
