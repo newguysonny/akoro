@@ -185,3 +185,13 @@ test("an honest failure is not a claim; a Teach me button backs 'I've set up'", 
   assert.equal(actionClaimCorrection("I've set up a Teach me button for Mole concept.", [{ tool: "ask_to_be_taught", success: true, teach: { topic: "Mole concept" } }]), null);
   assert.match(actionClaimCorrection("I've set up a Teach me button for Mole concept.", [{ tool: "ask_to_be_taught", success: true }]), /Correction/);
 });
+
+test("a passive external claim on a read-only turn is not 'corrected'", () => {
+  const read = [{ tool: "list_tasks", success: true }];
+  // "more material has been added" describes someone else — not the agent.
+  assert.equal(actionClaimCorrection("Your Library has 193 documents. More material has been added since.", read), null);
+  // A first-person claim with no write is still corrected.
+  assert.match(actionClaimCorrection("Done! I've created a revision task for Thursday.", []), /didn't actually make that change/);
+  // A failed write is corrected with its REAL error, even for a passive claim.
+  assert.match(actionClaimCorrection("The task has been added.", [{ tool: "create_task", success: false, error: "subject is required" }]), /subject is required/);
+});

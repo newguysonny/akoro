@@ -49,6 +49,12 @@ export function actionClaimCorrection(reply, executions = []) {
   // A tool WAS attempted and failed: correct with its real error, not a guess.
   const failed = xs.find((x) => !x.success && x.error);
   if (failed) return `Correction: that didn't go through — ${String(failed.error).slice(0, 160)} Nothing was saved. Ask me again and I'll retry.`;
+  // No write was attempted. Only correct a claim about the AGENT'S OWN action —
+  // a first-person "I've …". A passive like "more material has been added since"
+  // describes something/someone else, and correcting it on a read-only turn is
+  // wrong (it produced a bogus "I didn't actually make that change" after a count).
+  const firstPerson = claims.some((s) => CLAIM.test(s));
+  if (!firstPerson) return null;
   return "Correction: I didn't actually make that change this time — nothing was saved. Ask me again and I'll do it properly.";
 }
 
