@@ -4295,6 +4295,9 @@ async function runAgentToolLoop({ systemContent, messages, studentId, conversati
         if (finalText) trace.activityPromote(liveId);
         else trace.activityDrop(liveId);
       }
+      // Phase 22: this is the common completion path (the model's final answer,
+      // no more tool calls) — close the run here too, not only at the max-iteration exit.
+      await finishRun(runId, { status: "ok" });
       return { messages: transcript, toolExecutions: executions, ledger: ledgerNow, ...(finalText ? { finalText, promoted: Boolean(liveId) } : {}) };
     }
     // Text written alongside tool calls stays between the steps.
