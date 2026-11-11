@@ -20,7 +20,7 @@ import { proposeWrite, proposePermission } from "./confirmations.js";
 import { codeEnabled } from "./sandbox/index.js";
 import { basisColumns, currentActionBasis } from "../agent-runtime/actionBasis.js";
 import { isDocumentGoal, similarGoal } from "./toolSimilarity.js";
-import { DOMAINS, domainForGoal, genericDomain, genericReadGoal, inferAction, verifyDomainActions, byActionForGoal } from "./domains.js";
+import { DOMAINS, domainForGoal, genericDomain, genericReadGoal, inferAction, verifyDomainActions, byActionForGoal, MAX_DOMAIN_ACTIONS } from "./domains.js";
 
 const edu = () => db.schema("edu");
 const NAME = /^[a-z][a-z0-9_]{2,47}$/;
@@ -203,6 +203,7 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
     // by_<field>), then re-verify the WHOLE action set before saving.
     const extra = byActionForGoal(goal, spec.view);
     const actions = Array.from(new Set([...(spec.actions || []), ...(extra ? [extra] : [])]));
+    if (actions.length > MAX_DOMAIN_ACTIONS) return finish("rejected", reject(`This domain would have ${actions.length} actions (max ${MAX_DOMAIN_ACTIONS}) — keep it focused.`));
     const spec2 = { ...spec, actions, params: { ...spec.params, action: { ...spec.params.action, enum: actions } } };
     const { data: existing } = await edu().from("agent_tools").select("id, status, params_schema")
       .eq("owner_id", learnerId).eq("name", spec.name).in("status", ["active", "disabled"]).maybeSingle();

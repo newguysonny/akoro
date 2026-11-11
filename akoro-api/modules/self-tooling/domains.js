@@ -64,6 +64,9 @@ const ACTION_PARAM = (actions, help) => ({
   type: "string", enum: actions, default: actions[0], description: help,
 });
 
+/** One tool stays focused: cap the actions a domain tool can carry. */
+export const MAX_DOMAIN_ACTIONS = 8;
+
 export const DOMAINS = {
   library_documents: {
     name: "library_documents",
