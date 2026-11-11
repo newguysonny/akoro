@@ -104,6 +104,10 @@ router.get("/courses/:code", asyncHandler(async (req, res) => {
       mime: t.file_mime,
       size: t.file_size,
       file_url: publicFileUrl(t.file_bucket, t.file_path),
+      // Shared extraction key: the parse is cached once per file and every
+      // learner reads the same markdown (the workbook is public catalogue
+      // content). null when the row has no stored path.
+      contentKey: t.file_path ? `pharmd:${t.file_path}` : null,
     })),
   });
 }));

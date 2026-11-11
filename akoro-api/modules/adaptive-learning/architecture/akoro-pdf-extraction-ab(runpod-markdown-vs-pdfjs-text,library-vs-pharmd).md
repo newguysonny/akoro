@@ -82,3 +82,31 @@ If both hold, the recommended end-state is **pdf.js text layer for selection + R
 - **Pharm.D extraction.** Pharm.D topics have no `recordId`/`contentKey`, so they can't call `POST /extract` as-is. If the model wins for grounding, do we give Pharm.D topics a `contentKey` (or extract them in a backfill) so the guide also gets markdown?
 - **Two-layer hybrid.** If we keep pdf.js for selection and markdown for grounding, the `reference` swap in `applyExtracted` already does the grounding half — the toggle (§3) is only needed for the *selection* half of the comparison.
 - **Model.** This plan is intentionally model-agnostic; execute the A/B with a capable non-v4-pro model and record results before any further code changes.
+
+---
+
+## 8. Shipped (2026-11-11)
+
+- **PHARM.D extraction (Phase 4 of the port).** Every topic now carries a
+  shared `contentKey` (`pharmd:<stored path>`) from `GET /api/pharmd/courses/:code`.
+  `records/access.js` resolves that key as public shared content (topic row is
+  the authority), so `POST /extract`, its status poll and the cached read all
+  work with no migration. The parse is keyed by `content_key`, so **one run
+  serves every learner** who opens that topic.
+- **Reader.** `PharmDTopicSession.jsx` reuses the Library's `ExtractionCard`
+  (offer → progress → applied/error) and applies the shared markdown as the
+  teaching reference plus `pageBlocks` for citation flashes. It reads the
+  shared cache first; only a miss offers the paid run.
+- **Selection decision (per §6).** pdf.js remains the selectable layer on
+  text PDFs; extraction is grounding + citation bboxes. `RecordTeachSession`
+  no longer passes `selectionOverlay`, so a page can never be left with no
+  selectable layer while its block layer lays out. Scans still use
+  `BlockTextLayer` (their only text).
+- **Heavy PDFs.** `loadPdfDocument` reads text for the first 6 pages, then
+  fills the rest in small yielded batches (`textsReady`); `extractUpload`
+  waits for that full read before scan detection. The document cache is
+  capped at 3 docs / 140 MB, and a page's canvas is capped at 2×–2.5× DPR and
+  3.5 MP (≈12 MB instead of ≈24 MB).
+- **Citation jump.** The pager now tracks the most-visible page (a tall page
+  could never reach the old 0.5 ratio), and `citeJump` selects the target page
+  immediately instead of relying on the smooth scroll.

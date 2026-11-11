@@ -47,6 +47,7 @@ import { officeReaderPages } from '../../lib/officePages.js';
 import { recordDownloadUrl, recordFileSrc, extractStoredRecordText, getRecordExtraction, getSharedExtraction, getRecordTranscript, getSharedTranscript, startRecordTranscription, getRecordTranscriptionStatus, getAskHistory, askRecord, getGuideHistory, guideReply, generateRecordTool, startRecordPodcast, getRecordPodcast, listRecordArtifacts, saveRecordArtifact, updateRecordArtifact, deleteRecordArtifact } from '../../services/recordsApi.js';
 import { Icon } from '../common/Icons.jsx';
 import { BRAND } from '../../constants.js';
+import ExtractionCard from './ExtractionCard.jsx';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 import { rasterizePdfPages, rasterizeImageFile, runRecordExtraction } from './extractPages.js';
 import { fetchFileWithRetry } from '../../lib/fetchFile.js';
@@ -637,92 +638,15 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
   const priorSid = readStoredSid(record.id);
 
   /* ── AI extraction overlay — offer / progress / result ─────────────────── */
-  const extractPct = extract?.total ? Math.round(((extract.done || 0) / extract.total) * 100) : 0;
-  const btnPrimary = { flex: 1, border: 'none', borderRadius: 100, padding: '11px 0', fontSize: 12.5,
-    fontWeight: 800, color: '#fff', background: `linear-gradient(135deg, ${BRAND}, #4C1DCC)`,
-    cursor: 'pointer', fontFamily: "'Nunito',sans-serif" };
-  const btnGhost = { border: '1px solid var(--ak-border2, #E5E7EB)', borderRadius: 100, padding: '11px 16px',
-    fontSize: 12.5, fontWeight: 800, color: 'var(--ak-text-sub)', background: 'transparent',
-    cursor: 'pointer', fontFamily: "'Nunito',sans-serif" };
-  const extractOverlay = extract ? (
-    <div role="dialog" aria-label="AI text extraction" style={{ position: 'fixed', inset: 0, zIndex: 3400,
-      background: 'rgba(10,12,24,.55)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center',
-      justifyContent: 'center', padding: 20, fontFamily: "'Nunito',sans-serif" }}>
-      <div style={{ width: 'min(400px, 100%)', background: 'var(--ak-surface)', borderRadius: 22,
-        padding: '22px 20px 18px', border: '1px solid var(--ak-border2, #E5E7EB)',
-        boxShadow: '0 18px 48px rgba(15,23,42,.28)' }}>
-        {extract.status === 'running' ? (
-          <>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-              <span className="ti ti-loader-2" style={{ fontSize: 18, color: BRAND, animation: 'rteach-spin 1s linear infinite' }}/>
-              <strong style={{ fontSize: 14.5, fontWeight: 900, color: 'var(--ak-text)' }}>Extracting the text…</strong>
-            </div>
-            <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--ak-text-sub)', margin: '0 0 12px' }}>
-              {extract.av
-                ? `Transcribing${extract.elapsed ? ` — ${extract.elapsed}s` : ''}. Long recordings take a minute or two; this stays open until it's done.`
-                : extract.total > 1 ? `Page ${Math.min(extract.done + 1, extract.total)} of ${extract.total}` : 'Reading the page'}
-            </p>
-            <div style={{ height: 8, borderRadius: 5, background: 'var(--ak-tag-bg, #EEF0F5)', overflow: 'hidden' }}>
-              <div style={{ width: `${Math.max(6, extractPct)}%`, height: '100%', borderRadius: 5,
-                background: `linear-gradient(90deg, ${BRAND}, #4C1DCC)`, transition: 'width .4s ease' }}/>
-            </div>
-          </>
-        ) : extract.status === 'error' ? (
-          <>
-            <strong style={{ fontSize: 14.5, fontWeight: 900, color: 'var(--ak-text)' }}>Extraction didn't finish</strong>
-            <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--ak-text-sub)', margin: '8px 0 14px', lineHeight: 1.5 }}>
-              {extract.error}{extract.done ? ` ${extract.done} page${extract.done === 1 ? '' : 's'} were saved — a retry only parses the rest.` : ''}
-            </p>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={startExtraction} style={btnPrimary}>Try again</button>
-              <button onClick={() => setExtract(null)} style={btnGhost}>Read as-is</button>
-            </div>
-          </>
-        ) : extract.status === 'applied' ? (
-          <>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span style={{ width: 34, height: 34, borderRadius: 12, background: 'rgba(16,185,129,.12)',
-                border: '1px solid rgba(16,185,129,.35)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Icon name="ti-check" size={18} color="#10B981"/>
-              </span>
-              <strong style={{ fontSize: 14.5, fontWeight: 900, color: 'var(--ak-text)' }}>Text extracted</strong>
-            </div>
-            <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--ak-text-sub)', margin: '8px 0 0', lineHeight: 1.5 }}>
-              {extract.done} page{extract.done === 1 ? '' : 's'} now read like a text document — the agent teaches from the real words.
-              {extract.error ? ` (${extract.error})` : ''}
-            </p>
-            {extract.error && (
-              <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-                <button onClick={startExtraction} style={btnPrimary}>Retry the missing pages</button>
-                <button onClick={() => setExtract(null)} style={btnGhost}>Dismiss</button>
-              </div>
-            )}
-          </>
-        ) : (
-          <>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-              <span style={{ width: 34, height: 34, borderRadius: 12, background: `${BRAND}15`,
-                border: `1px solid ${BRAND}38`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Icon name="ti-sparkles" size={17} color={BRAND}/>
-              </span>
-              <strong style={{ fontSize: 14.5, fontWeight: 900, color: 'var(--ak-text)' }}>
-                {extract.av ? 'Transcribe this recording?' : type === 'image' ? 'Extract the text from this image?' : 'Scanned document detected'}
-              </strong>
-            </div>
-            <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--ak-text-sub)', margin: '6px 0 14px', lineHeight: 1.55 }}>
-              {extract.av
-                ? 'Turn the speech into a timestamped transcript (with speakers). The agent teaches from the real words, and every line jumps the player to that moment.'
-                : `This ${type === 'image' ? 'image has no readable text layer' : "PDF has no readable text layer — it's a scan"}. Extract the text with AI and it reads like a normal document: the agent can teach from it, quote it and quiz you on it.`}
-            </p>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={extract.av ? startTranscription : startExtraction} style={btnPrimary}>{extract.av ? 'Transcribe' : 'Extract text'}</button>
-              <button onClick={() => setExtract(null)} style={btnGhost}>Read as-is</button>
-            </div>
-          </>
-        )}
-      </div>
-    </div>
-  ) : null;
+  const extractOverlay = (
+    <ExtractionCard
+      extract={extract}
+      onExtract={startExtraction}
+      onTranscribe={startTranscription}
+      onDismiss={() => setExtract(null)}
+      type={extract?.av ? 'av' : type === 'image' ? 'image' : 'pdf'}
+    />
+  );
 
   return (
     <>

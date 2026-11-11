@@ -22,7 +22,7 @@ import { test } from "node:test";
 const here = dirname(fileURLToPath(import.meta.url));
 const read = (p) => readFileSync(join(here, p), "utf8");
 
-const [routesSrc, libSrc, appSrc, manifest, recordsMigration, teachSessionSrc, extractPagesSrc, recordsApiSrc, workerSrc, pdfPagesSrc, readerSrc, teachModalSrc] = await Promise.all([
+const [routesSrc, libSrc, appSrc, manifest, recordsMigration, teachSessionSrc, extractPagesSrc, recordsApiSrc, workerSrc, pdfPagesSrc, readerSrc, teachModalSrc, extractionCardSrc, pharmdReaderSrc] = await Promise.all([
   read("routes.js") + read("access.js"),   // the access rule lives in access.js
   read("extractLib.js"),
   read("../../app.js"),
@@ -36,6 +36,8 @@ const [routesSrc, libSrc, appSrc, manifest, recordsMigration, teachSessionSrc, e
   read("../../../akoro-learner/src/components/library/PdfPages.jsx"),
   read("../../../akoro-learner/src/components/teaching/SessionReaderModal.jsx"),
   read("../../../akoro-learner/src/components/teaching/TeachAgentModal.jsx"),
+  read("../../../akoro-learner/src/components/library/ExtractionCard.jsx"),
+  read("../../../akoro-learner/src/components/pharmd/PharmDTopicSession.jsx"),
 ]);
 
 const { parseBlocks, sortBlocks, blocksToMarkdown, parsePageOnRunpod, recordsExtractionEnabled, runpodEndpointHealth } =
@@ -173,7 +175,9 @@ test("the reader rasterizes client-side and offers extraction for scans & images
   assert.match(extractPagesSrc, /from 'pdfjs-dist'/, "PDF pages rasterize with the already-loaded pdf.js");
   assert.match(extractPagesSrc, /TARGET_PIXELS\s*=\s*1_600_000/, "rendered a bit under the model's 2MP cap");
   assert.match(extractPagesSrc, /BATCH = 8/, "pages go up in ≤8-page batches");
-  assert.match(teachSessionSrc, /Scanned document detected/, "the offer overlay exists");
+  assert.match(extractionCardSrc, /Extract text/, "the shared offer overlay exists");
+  assert.match(teachSessionSrc, /<ExtractionCard/, "the Library reader reuses the shared card");
+  assert.match(pharmdReaderSrc, /<ExtractionCard/, "the PHARM.D reader reuses the shared card");
   assert.match(teachSessionSrc, /getSharedExtraction\(record\.contentKey\)/, "shared files read the shared cache before spending");
   assert.match(recordsApiSrc, /export async function getSharedExtraction/, "the shared-cache seam exists");
   assert.match(teachSessionSrc, /runRecordExtraction/, "the reader drives the batched run");
@@ -181,7 +185,7 @@ test("the reader rasterizes client-side and offers extraction for scans & images
   // The layout overlay — stored bboxes become visible on the page
   assert.match(routesSrc, /saved\.push\(\{ pageNumber: entry\.pageNumber, markdown: settled\.markdown, model: settled\.model, blocks: settled\.blocks/, "the status poll carries blocks back");
   assert.match(teachSessionSrc, /blocks=\{pdfBlocks\.get\(i \+ 1\)\}/, "the reader hands each page its blocks");
-  assert.match(pdfPagesSrc, /export function PdfPage\(\{ pdf, pageNumber, blocks = null \}\)/, "PdfPage accepts blocks");
+  assert.match(pdfPagesSrc, /export function PdfPage\(\{ pdf, pageNumber, blocks = null/, "PdfPage accepts blocks");
   assert.match(pdfPagesSrc, /x1 \/ 10/, "bbox 0-1000 → percent math (value/10)");
   assert.match(pdfPagesSrc, /Layout/, "the per-page Layout toggle chip exists");
   // Citations: generated tools carry the block bbox, citeJump flashes that region
@@ -343,4 +347,28 @@ test("page sizes ride the extraction: real points/pixels stored, 0-1000 boxes ma
   const migration = read("../../migrations/2026-content-page-size.sql");
   assert.match(migration, /ADD COLUMN IF NOT EXISTS width\s+NUMERIC/);
   assert.match(migration, /unit IN \('pt', 'px'\)/);
+});
+
+test("PHARM.D topics share one extraction key and pass the access rule", () => {
+  const pharmd = read("../pharmd/routes.js");
+  assert.match(pharmd, /contentKey: t\.file_path \? `pharmd:\$\{t\.file_path\}` : null/, "topics hand back a shared key");
+  assert.match(routesSrc, /const PHARMD_PREFIX = "pharmd:"/, "access knows the PHARM.D key space");
+  assert.match(routesSrc, /contentKey\.startsWith\(PHARMD_PREFIX\)\) return resolvePharmdContent/, "pharmd keys resolve as shared content");
+  assert.match(routesSrc, /from\("pharmd_topics"\)/, "the topic row is the authority for the file");
+  assert.match(pharmdReaderSrc, /getSharedExtraction\(contentKey\)/, "the PHARM.D reader reads the shared cache");
+  assert.match(pharmdReaderSrc, /pageBlocks: pages\.map/, "blocks feed the citation flash as an array");
+});
+
+test("a heavy PDF opens before every page is read; selection stays on the PDF layer", () => {
+  const addRecord = read("../../../akoro-learner/src/components/dashboard/AddRecordModal.jsx");
+  assert.match(pdfPagesSrc, /EAGER_TEXT_PAGES/, "text is read for the opening pages first");
+  assert.match(pdfPagesSrc, /textsReady/, "the full read finishes in the background");
+  assert.match(pdfPagesSrc, /new Array\(pdf\.numPages\)\.fill\(''\)/, "page indexes are stable while text fills in");
+  assert.match(pdfPagesSrc, /DOC_CACHE_BYTES_MAX/, "the document cache is bounded by bytes");
+  assert.match(extractPagesSrc, /await textsReady/, "scan detection waits for the full text instead of guessing");
+  assert.doesNotMatch(teachSessionSrc, /selectionOverlay\/>/, "text PDFs keep the pdf.js selectable layer");
+  assert.match(readerSrc, /bestRatio = 0\.12/, "a tall page still selects in the pager");
+  assert.match(readerSrc, /setCurrentPage\(targetPage\)/, "a citation jump selects its page at once");
+  assert.doesNotMatch(addRecord, /records\.mine/, "the upload sheet no longer lists My records");
+  assert.doesNotMatch(addRecord, /deleteRecord|setRecordProgress/, "the removed history took its handlers with it");
 });

@@ -14,6 +14,21 @@
 const dbLazy = async () => (await import("../../db.js")).default;
 const edu = async () => (await dbLazy()).schema("edu");
 
+/** PHARM.D catalogue content is keyed by the topic's stored file path, so one
+ *  parse is shared by every learner who opens that topic. */
+const PHARMD_PREFIX = "pharmd:";
+export const pharmdContentKey = (path) => (path ? `${PHARMD_PREFIX}${path}` : null);
+
+async function resolvePharmdContent(contentKey) {
+  const path = contentKey.slice(PHARMD_PREFIX.length);
+  if (!path) return { status: 400, message: "A PHARM.D content key is required." };
+  const { data: topic, error } = await (await edu()).from("pharmd_topics")
+    .select("title, file_path, file_mime").eq("file_path", path).maybeSingle();
+  if (error) throw error;
+  if (!topic) return { status: 404, message: "Content not found." };
+  return { contentKey, name: topic.title || "PHARM.D topic", mime: topic.file_mime || "application/pdf" };
+}
+
 /** Active Premium learners — their uploads never leave their library. */
 export async function activePremiumUserIds() {
   const { data: tierRows } = await (await edu()).from("tiers")
@@ -39,6 +54,7 @@ export async function resolveContentAccess({ userId, recordId: rawRecordId, cont
     return { contentKey: rec.file_key, name: rec.name, mime: rec.mime };
   }
   if (contentKey) {
+    if (contentKey.startsWith(PHARMD_PREFIX)) return resolvePharmdContent(contentKey);
     // Shared content — the SAME rule the discovery feed opens under. The
     // earliest record holding the key owns it (a key can appear twice).
     const { data: rec, error } = await (await edu()).from("records")

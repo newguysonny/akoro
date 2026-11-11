@@ -28,12 +28,15 @@
  * (sessionStorage, 24h), so reopening a topic continues its thread.
  * Guests get the honest sign-in prompt (same as course videos).
  */
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import TeachAgentModal from '../teaching/TeachAgentModal.jsx';
+import ExtractionCard from '../library/ExtractionCard.jsx';
 import { Icon } from '../common/Icons.jsx';
 import { BRAND } from '../../constants.js';
 import { APP_HOME } from '../../config/target.js';
 import { askPharmd } from '../../services/pharmdApi.js';
+import { getSharedExtraction } from '../../services/recordsApi.js';
+import { rasterizePdfPages, runRecordExtraction } from '../library/extractPages.js';
 
 const MAX_REFERENCE_CHARS = 12_000;   // the server's reference cap
 
@@ -56,6 +59,12 @@ export default function PharmDTopicSession({ topic, course, onClose }) {
   const [pages, setPages] = useState([]);                 // [{ html:'', text }] — text drives the Generate tools
   const [pdfParts, setPdfParts] = useState(null);         // { pdf, PdfPage } — pdf.js loads only when a topic opens
   const [reference, setReference] = useState(null);       // text grounding for the agent
+  const [pageBlocks, setPageBlocks] = useState(null);     // pageNumber → extraction blocks (citation flash)
+  // { status:'offer'|'running'|'error'|'applied', done, total, error }
+  const [extract, setExtract] = useState(null);
+  const extRunRef = useRef(0);
+  const aliveRef = useRef(true);
+  useEffect(() => () => { aliveRef.current = false; }, []);
 
   /* Guests can't run teaching sessions — say so instead of failing dark. */
   const uid = (() => { try { return (JSON.parse(localStorage.getItem('akoro_user')) || {}).id || null; } catch { return null; } })();
@@ -89,6 +98,19 @@ export default function PharmDTopicSession({ topic, course, onClose }) {
         setPdfParts({ pdf, PdfPage });
         setReference(joined ? { name: topic.title, text: joined.slice(0, MAX_REFERENCE_CHARS) } : null);
         setState('ready');
+
+        // The catalogue file's extraction is SHARED: whoever opened this topic
+        // first paid for the pages; everyone after reads the same markdown.
+        const contentKey = topic.contentKey;
+        if (contentKey) {
+          const saved = await getSharedExtraction(contentKey).catch(() => ({ pages: [] }));
+          if (cancelled) return;
+          if ((saved.pages || []).length) {
+            applyExtractedRef.current?.(saved, texts);
+          } else {
+            setExtract({ status: 'offer', done: 0, total: pdf.numPages });
+          }
+        }
       } catch (e) {
         if (!cancelled) { setErr(e?.message || 'Could not open this topic.'); setState('error'); }
       }
@@ -97,6 +119,60 @@ export default function PharmDTopicSession({ topic, course, onClose }) {
     // Keyed on the topic identity — reopening a different topic reloads.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [topic?.id, topic?.file_url]);
+
+  /* Markdown + blocks from the shared cache replace the pdf.js text as the
+     grounding; the PDF stays the picture and the selectable layer. */
+  const applyExtracted = useCallback((saved, fallbackTexts) => {
+    const list = (saved?.pages || []).filter((p) => p && Number.isInteger(p.pageNumber));
+    if (!list.length) return false;
+    const byPage = new Map(list.map((p) => [p.pageNumber, p.markdown || '']));
+    const blocksByPage = new Map(list.filter((p) => Array.isArray(p.blocks) && p.blocks.length).map((p) => [p.pageNumber, p.blocks]));
+    setPages((prev) => {
+      const base = prev.length ? prev : (fallbackTexts || []).map((tx) => ({ html: '', text: tx }));
+      return base.map((p, i) => ({ html: '', text: byPage.get(i + 1) || p.text || '' }));
+    });
+    setPageBlocks(blocksByPage);
+    const md = list.map((p) => p.markdown || '').filter(Boolean).join('\n\n').trim();
+    if (md) setReference({ name: topic?.title || 'Topic', text: md.slice(0, MAX_REFERENCE_CHARS) });
+    return true;
+  }, [topic?.title]);
+  const applyExtractedRef = useRef(applyExtracted);
+  useEffect(() => { applyExtractedRef.current = applyExtracted; }, [applyExtracted]);
+
+  /* Paid extraction — the SAME card and shared cache as the Library reader. */
+  const startExtraction = async () => {
+    const pdf = pdfParts?.pdf;
+    const contentKey = topic?.contentKey;
+    if (!pdf || !contentKey) return;
+    const run = ++extRunRef.current;
+    const mine = () => aliveRef.current && run === extRunRef.current;
+    setExtract((s) => ({ ...s, status: 'running', done: 0, error: null }));
+    try {
+      const rendered = await rasterizePdfPages(pdf);
+      const savedBefore = await getSharedExtraction(contentKey).catch(() => ({ pages: [] }));
+      const have = new Set((savedBefore.pages || []).map((p) => p.pageNumber));
+      const toSend = rendered.filter((p) => !have.has(p.pageNumber));
+      const res = toSend.length ? await runRecordExtraction({
+        contentKey,
+        pages: toSend,
+        onProgress: (done, total) => { if (mine()) setExtract((s) => ({ ...s, done, total })); },
+        isCancelled: () => !mine(),
+        readSaved: () => getSharedExtraction(contentKey),
+      }) : { pages: [], error: null };
+      if (!mine()) return;
+      const allPages = [
+        ...(savedBefore.pages || []).filter((p) => !res.pages.some((r) => r.pageNumber === p.pageNumber)),
+        ...res.pages,
+      ];
+      if (!allPages.length) throw new Error(res.error || 'Extraction returned no text — try again.');
+      applyExtracted({ pages: allPages });
+      setExtract({ status: 'applied', done: allPages.length, total: rendered.length, error: res.error || null });
+      if (!res.error) setTimeout(() => { if (mine()) setExtract((s) => (s?.status === 'applied' ? null : s)); }, 6000);
+    } catch (e) {
+      if (!mine()) return;
+      setExtract((s) => ({ ...s, status: 'error', error: e?.message || 'Extraction failed.' }));
+    }
+  };
 
   const topicTitle = topic?.title || 'Topic';
   const courseLabel = course?.title || course?.code || 'PHARM.D';
@@ -183,6 +259,10 @@ export default function PharmDTopicSession({ topic, course, onClose }) {
     pages,
     renderPageContent,
     rawPages: true,            // pdf.js canvases carry their own margins
+    // The extraction's layout blocks ride along so a citation jump flashes the
+    // exact paragraph; selection stays on the PDF's own text layer.
+    // SessionReaderModal expects an ARRAY indexed by 0-based page.
+    pageBlocks: pages.map((_, i) => pageBlocks?.get(i + 1) || null),
     // "Ask about this" + the Ask tool, exactly like the Library reader. The
     // topic PDFs aren't indexed, so the reader sends the text it already has.
     ask: {
@@ -200,6 +280,7 @@ export default function PharmDTopicSession({ topic, course, onClose }) {
   const priorSid = readStoredSid(topic?.id);
 
   return (
+    <>
     <TeachAgentModal
       config={{
         topic: topicTitle,
@@ -213,5 +294,12 @@ export default function PharmDTopicSession({ topic, course, onClose }) {
       onMinimize={onClose}
       onSessionSaved={(sid) => storeSid(topic?.id, sid)}
     />
+      <ExtractionCard
+        extract={extract}
+        onExtract={startExtraction}
+        onDismiss={() => setExtract(null)}
+        type="pdf"
+      />
+    </>
   );
 }
