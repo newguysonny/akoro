@@ -265,6 +265,25 @@ router.post("/cleanup-domain-tools", guard, asyncHandler(async (req, res) => {
   res.json({ success: true, data: { all: true, dry, owners: byOwner.size, archived: archived.length, tools: archived.slice(0, 200) } });
 }));
 
+/* GET /agent-console/learner-tools?learner=@x&status=active
+   Read-only inspection of a learner's saved tools (name, view/domain, actions,
+   capabilities, params) — the console can otherwise only see built-in tools. */
+router.get("/learner-tools", guard, asyncHandler(async (req, res) => {
+  let learner;
+  try { learner = await resolveLearner(req.query?.learner); } catch (e) { return fail(res, e); }
+  const status = String(req.query?.status || "active");
+  const q = db.schema("edu").from("agent_tools")
+    .select("name, label, goal, mode, status, views, domain, actions, capabilities, params_schema, created_at, last_used_at, usage_count")
+    .eq("owner_id", learner.id).order("created_at", { ascending: true });
+  if (["active", "disabled", "archived"].includes(status)) q.eq("status", status);
+  const { data: tools, error } = await q;
+  if (error) return bad(res, error.message, 500);
+  res.json({ success: true, data: { learner: learner.username, status, count: (tools || []).length,
+    tools: (tools || []).map((t) => ({ name: t.name, label: t.label, goal: t.goal, mode: t.mode, status: t.status,
+      view: t.domain || (t.views || [])[0] || null, actions: t.actions || t.params_schema?.action?.enum || null,
+      capabilities: t.capabilities || [], params: Object.keys(t.params_schema || {}), createdAt: t.created_at, lastUsedAt: t.last_used_at, uses: t.usage_count })) } });
+}));
+
 router.get("/runs", guard, (_req, res) => {
   res.json({ success: true, data: runs.map((r) => ({ id: r.id, kind: r.kind, at: r.at, mode: r.mode, prompt: r.prompt, tool: r.tool, ms: r.ms, ok: !r.error && !(r.result?.error || r.result?.threw) })) });
 });

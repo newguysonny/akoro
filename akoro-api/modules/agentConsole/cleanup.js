@@ -10,9 +10,14 @@
  * generic count/list/by_<field> actions can't reproduce it.
  */
 
+import { CAPABILITIES } from "../self-tooling/capabilities.js";
+
 const isDomainTool = (t) => t?.mode === "code" && Array.isArray(t?.params_schema?.action?.enum);
+/** A tool that can change data must never be swept. Read capabilities (e.g.
+ *  library.read) are not writes; an unknown capability is treated as a write. */
+const isWriteTool = (t) => (t?.capabilities || []).some((c) => CAPABILITIES[c] ? CAPABILITIES[c].kind !== "read" : true);
 const SIMPLE_READ = /\b(count|counts|list|listing|show|how many|number of|search|find|breakdown|grouped by|total)\b/i;
-const RICH_READ = /\b(week|weekly|month|monthly|last \d+|over the|compare|trend|streak|top|most|highest per|lowest per|rank|average|accuracy|percentage|score|per day|per week|by .* and)\b/i;
+const RICH_READ = /\b(week|weekly|month|monthly|last \d+|over the|compare|trend|streak|top|most|highest per|lowest per|rank|average|accuracy|percentage|score|per day|per week|time|duration|how long|hours|minutes|pending|completed|overdue|due today|due this|active|by .* and)\b/i;
 
 /** A read tool whose intent the domain actions can reproduce. */
 export function isSimpleRead(t) {
@@ -25,7 +30,7 @@ export function isSimpleRead(t) {
 export function cleanupPlan(tools) {
   const byDomain = new Map();
   for (const t of tools || []) {
-    if ((t.capabilities || []).length) continue;                     // write tool
+    if (isWriteTool(t)) continue;                                     // write tool
     const domain = t.domain || (Array.isArray(t.views) && t.views[0]);
     if (!domain) continue;
     if (!byDomain.has(domain)) byDomain.set(domain, []);

@@ -49,3 +49,17 @@ test("a duplicate domain tool is archived", () => {
   assert.equal(plan.kept.my_library, "library_documents");
   assert.deepEqual(plan.archive.map((t) => t.name), ["library_documents_total"]);
 });
+
+test("a read-capability tool is a read when superseded; a filtered one is kept", () => {
+  const lib = domain("my_library", "library_documents", ["count", "list", "search"]);
+  const search = tool({ name: "search_my_library", label: "Search my library",
+    goal: "Find matching documents in my library", mode: "code", views: ["my_library"], domain: "my_library",
+    capabilities: ["tasks.list_mine"] });
+  assert.deepEqual(cleanupPlan([lib, search]).archive.map((t) => t.name), ["search_my_library"], "a read capability doesn't protect a duplicate");
+
+  const tasks = domain("my_tasks", "my_tasks", ["count", "list", "by_status"]);
+  const pending = tool({ name: "my_pending_tasks", label: "My pending tasks",
+    goal: "Show my pending tasks", mode: "code", views: ["my_tasks"], domain: "my_tasks",
+    capabilities: ["tasks.list_mine"] });
+  assert.deepEqual(cleanupPlan([tasks, pending]).archive, [], "a filtered reader is kept");
+});
