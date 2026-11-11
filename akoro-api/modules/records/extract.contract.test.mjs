@@ -370,6 +370,10 @@ test("a heavy PDF opens before every page is read; selection stays on the PDF la
   assert.doesNotMatch(teachSessionSrc, /selectionOverlay\/>/, "text PDFs keep the pdf.js selectable layer");
   assert.match(readerSrc, /bestRatio = 0\.12/, "a tall page still selects in the pager");
   assert.match(readerSrc, /setCurrentPage\(targetPage\)/, "a citation jump selects its page at once");
+  assert.match(pdfPagesSrc, /akoro:reader-textlayer/, "a page can build its text layer without painting");
+  assert.match(pdfPagesSrc, /const buildLayer = async/, "layer building is width-aware and on demand");
+  assert.match(readerSrc, /buildSkippedLayers\(\)/, "a citation jump builds the layers it skipped");
+  assert.match(readerSrc, /Math\.min\(currentPage, targetPage\)/, "only the skipped range is built");
   assert.doesNotMatch(addRecord, /records\.mine/, "the upload sheet no longer lists My records");
   assert.doesNotMatch(addRecord, /deleteRecord|setRecordProgress/, "the removed history took its handlers with it");
 });

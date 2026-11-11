@@ -156,6 +156,18 @@ export function PdfPage({ pdf, pageNumber, blocks = null, selectionOverlay = fal
 
     let pending = false;
     let layerBuilt = false;
+    let layerWidth = 0;
+    /* Build (or rebuild at a new width) this page's selectable text layer —
+       WITHOUT drawing the canvas. A page's layer used to exist only after the
+       page painted, so a citation jump that skipped pages left the pages above
+       it with no selectable words at all. */
+    const buildLayer = async (width) => {
+      const cssWidth = width || wrap.clientWidth || 640;
+      if (layerBuilt && Math.abs(cssWidth - layerWidth) <= 2) return;
+      await relayTextLayer(cssWidth);
+      layerBuilt = true;
+      layerWidth = cssWidth;
+    };
 
     /* Draw the page PICTURE only, at device resolution for the reader's MAX
        zoom. Split out from the text layer so a re-draw after memory eviction
@@ -196,9 +208,9 @@ export function PdfPage({ pdf, pageNumber, blocks = null, selectionOverlay = fal
         await paintCanvas();
         if (cancelled) return;
         const cssWidth = wrap.clientWidth || 640;
-        // Build the text layer ONCE. A re-draw after eviction keeps it intact,
-        // so an in-progress selection is never disturbed.
-        if (!layerBuilt) { await relayTextLayer(cssWidth); layerBuilt = true; }
+        // Build the text layer ONCE per width. A re-draw after eviction keeps
+        // it intact, so an in-progress selection is never disturbed.
+        await buildLayer(cssWidth);
         if (cancelled) return;
         wrap.dataset.drawn = '1';
         drawnW = cssWidth;
@@ -226,7 +238,7 @@ export function PdfPage({ pdf, pageNumber, blocks = null, selectionOverlay = fal
       // every zoom level, so only the words move — no page re-render, and the
       // layer is rebuilt before the learner's next drag, not seconds after it.
       drawnW = w;
-      if (wrap.dataset.drawn === '1') relayTextLayer(w);
+      if (wrap.dataset.drawn === '1') buildLayer(w);
       else render();
     });
     ro.observe(wrap);
@@ -247,13 +259,27 @@ export function PdfPage({ pdf, pageNumber, blocks = null, selectionOverlay = fal
       }
     }, { root: wrap.closest('.pdf-scroll') || null, rootMargin: '700px 0px' });
     evict.observe(wrap);
+    // The reader asks for a layer explicitly when a citation jump bypasses a
+    // page (see SessionReaderModal.citeJump) — selection must not depend on
+    // having scrolled past the page first.
+    const onBuildLayer = (e) => {
+      const idx = e?.detail?.index;
+      if (idx != null && idx !== pageNumber - 1) return;
+      buildLayer().catch(() => {});
+    };
+    window.addEventListener('akoro:reader-textlayer', onBuildLayer);
     // Eager-render the opener pages. A restored reading position jumps the
     // reader past them before the observer ever sees them intersect, which
     // left the first pages with NO text layer — unselectable until a refresh.
     // Rendering them up front is cheap and additive: render() returns at once
     // for a page that is already drawn, so a working page is never touched.
     if (pageNumber <= 2) render();
-    return () => { cancelled = true; io.disconnect(); ro.disconnect(); evict.disconnect(); unguard(); delete wrap.dataset.drawn; };
+    return () => {
+      cancelled = true;
+      io.disconnect(); ro.disconnect(); evict.disconnect();
+      window.removeEventListener('akoro:reader-textlayer', onBuildLayer);
+      unguard(); delete wrap.dataset.drawn;
+    };
   }, [pdf, pageNumber]);
 
   const blockList = Array.isArray(blocks) ? blocks.filter((b) => Array.isArray(b?.bbox_2d) && b.bbox_2d.length === 4) : [];

@@ -1658,8 +1658,22 @@ export default function SessionReaderModal({
     // Select the page in the pager/thumbnails immediately: the scroll alone
     // left it unselected when the cited page was taller than the pane.
     setCurrentPage(targetPage);
+    // Pages the jump passes over never paint, and a page's selectable text
+    // layer was only built when it painted — that is why the pages above a
+    // citation target became unselectable. Ask those pages to build their
+    // layers once the reader pane is actually mounted (the dispatch runs in
+    // the frame below, not now: on mobile the reader may not be mounted yet).
+    const buildSkippedLayers = () => {
+      const from = Math.max(0, Math.min(currentPage, targetPage));
+      const to = Math.min(pages.length - 1, targetPage + 1);
+      for (let i = from; i <= to; i += 1) {
+        window.dispatchEvent(new CustomEvent("akoro:reader-textlayer", { detail: { index: i } }));
+      }
+    };
     requestAnimationFrame(() => {
       goToPage(targetPage);
+      buildSkippedLayers();
+      setTimeout(buildSkippedLayers, 350);   // catches a pane that mounted late
       setTimeout(() => {
         // Word / PowerPoint pages: the citation's box is [0, i, 1000, i+1] —
         // i names the paragraph the page rendered with data-block="i".
