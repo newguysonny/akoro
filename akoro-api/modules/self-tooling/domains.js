@@ -245,7 +245,8 @@ export function genericDomain(view) {
   if (!fields.length) return null;
   const isText = (f) => ["text", "string"].includes(v.fields[f]?.type);
   const textField = ["name", "title", "topic", "subject"].find((f) => fields.includes(f) && isText(f)) || fields.find(isText);
-  const groupField = fields.includes("subject") ? "subject" : (fields.includes("kind") ? "kind" : (textField || null));
+  // Group by a meaningful category, never by a title (one row per row is useless).
+  const groupField = ["subject", "kind", "status", "priority", "category"].find((f) => fields.includes(f)) || null;
   const actions = ["count", "list", ...(groupField ? [`by_${groupField}`] : []), ...(textField ? ["search"] : [])];
   const listFields = fields.slice(0, 6);
   return {

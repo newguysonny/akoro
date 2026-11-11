@@ -238,3 +238,10 @@ test("search is a scripted action on curated and dynamic domains", async () => {
   assert.deepEqual((await run(courses, { action: "search", query: "alg" })).rows, [{ name: "Algebra II" }]);
   assert.equal(inferAction("search my library for cell", ["count", "list", "by_kind", "search"], "my_library"), "search");
 });
+
+test("dynamic grouping prefers a category, never a title", async () => {
+  const { genericDomain } = await import("./domains.js");
+  assert.ok(!genericDomain("my_chats").actions.includes("by_title"), "chats don't group by title");
+  assert.ok(genericDomain("my_tasks").actions.includes("by_status"), "tasks group by status");
+  assert.ok(genericDomain("my_buddies").actions.includes("by_status"), "buddies group by status");
+});
