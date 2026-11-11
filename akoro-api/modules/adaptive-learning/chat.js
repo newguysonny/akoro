@@ -385,14 +385,14 @@ export const CHAT_TOOLS = [
   },
   {
     name: "schedule_chat_follow_up",
-    description: "Schedule the agent to SEND THE LEARNER A MESSAGE later — 'message me in 10 minutes', 'remind me here at 5pm', 'check on me tomorrow at 9', 'remind me EVERY DAY at 4:30pm' (repeat='daily'). Use this (not create_task) whenever they want to receive a message. Delivery: where='here' posts it into THIS chat (use when they say 'here' / 'in this chat'), where='chat' posts into the chat given by chatId (from list_chats), where='new' (default) opens a new chat. Timing: inMinutes for relative times ('in 10 minutes' = 10, 'in 2 hours' = 120), or scheduledAt for a clock time (call get_learner_context first; ISO 8601 with offset, e.g. 2026-09-08T14:00:00+01:00). At least 1 minute ahead.",
+    description: "Schedule the agent to SEND THE LEARNER A MESSAGE later — 'message me in 10 minutes', 'remind me here at 5pm', 'check on me tomorrow at 9', 'remind me EVERY DAY at 4:30pm' (repeat='daily'). Use this (not create_task) whenever they want to receive a message. Delivery: where='here' (the DEFAULT) posts it into THIS chat — where the learner will see it; where='chat' posts into the chat given by chatId (from list_chats); use where='new' ONLY when they explicitly ask for a separate/named new chat. Timing: inMinutes for relative times ('in 10 minutes' = 10, 'in 2 hours' = 120), or scheduledAt for a clock time (call get_learner_context first; ISO 8601 with offset, e.g. 2026-09-08T14:00:00+01:00). At least 1 minute ahead. ALWAYS report back where and when it will send, copied from the result (deliversTo, localScheduledAt) — never say a reminder is set without that result.",
     input_schema: {
       type: "object",
       properties: {
         message: { type: "string", description: "The exact helpful message the agent will send." },
         inMinutes: { type: "number", description: "Send this many minutes from now (relative requests). Use this OR scheduledAt." },
         scheduledAt: { type: "string", description: "Future ISO 8601 timestamp including timezone offset (clock-time requests)." },
-        where: { type: "string", enum: ["here", "chat", "new"], description: "here = this chat; chat = the chat in chatId; new = a new chat (default)." },
+        where: { type: "string", enum: ["here", "chat", "new"], description: "here = this chat (DEFAULT — where the learner sees it); chat = the chat in chatId; new = a separate new chat (ONLY when they explicitly ask for one)." },
         chatId: { type: "string", description: "With where='chat': the chatId from list_chats." },
         timezone: { type: "string", description: "Optional IANA timezone for display, for example Africa/Lagos. Defaults to the account timezone returned by get_learner_context." },
         title: { type: "string", description: "Optional title for the new chat, for example 'Biology revision check-in'." },
@@ -2325,7 +2325,13 @@ async function runChatTool(name, input, studentId, { conversationId = null, role
         return clarify("scheduledAt", "When should it be sent? Say e.g. 'in 10 minutes' or give the date and time.", { action: "schedule_chat_follow_up" });
       }
       try {
-        const where = input.where === "here" || input.where === "chat" ? input.where : (input.chatId ? "chat" : "new");
+        // "remind me" with no destination → THIS chat, where the learner will
+        // actually see it. Defaulting to a new chat hid reminders in a separate
+        // thread ("Scheduled check-in") the learner never opened. A separate
+        // chat must be asked for explicitly (where='new').
+        const where = (input.where === "here" || input.where === "chat" || input.where === "new")
+          ? input.where
+          : (input.chatId ? "chat" : (conversationId ? "here" : "new"));
         let targetSessionId = null;
         if (where === "here") {
           if (!conversationId) return { error: "This chat is not saved yet, so a message can't be scheduled into it — send it to a new chat instead (where='new')." };
@@ -4374,10 +4380,15 @@ async function runAgentToolLoop({ systemContent, messages, studentId, conversati
       // data" is undiagnosable from server logs — zero lines means the model
       // never called a tool; a failed line points at the tool's backend.
       console.log(`[agent-chat] tool ${tool} → ${observation.success ? "ok" : "FAILED"} (request ${observation.request_id})`);
+      const failNote = observation.success ? null
+        : (String(toolResult?.error || toolResult?.message || "").trim().slice(0, 160) || null);
       executions.push({
         tool,
         success: observation.success,
         requestId: observation.request_id,
+        // The real failure reason, so the end-of-turn correction can quote the
+        // API response instead of a generic "nothing was saved".
+        ...(failNote ? { error: failNote } : {}),
         sideEffecting: SIDE_EFFECT_TOOLS.includes(tool)
           || isSideEffectingAction(tool, input),
         // Asked or inferred, on every change (Phase 18 item 6) — shown in developer mode.
@@ -4929,7 +4940,8 @@ router.post("/agent", async (req, res) => {
     });
     const CURRENT_TIME_CONTEXT =
       `\n\nCurrent date and time: ${nowLagos} (Africa/Lagos). ` +
-      `Use it to resolve relative dates — "tomorrow at 8pm" becomes an exact due_at ISO instant in +01:00. Never state a due date you could not compute from this.`;
+      `Use it to resolve relative dates — "tomorrow at 8pm" becomes an exact due_at ISO instant in +01:00. Never state a due date you could not compute from this.` +
+      `\n\nReminders / scheduled messages — verify from the tool result, never assume. When you schedule, cancel or list one, call the tool and report exactly what its RESULT says: where it will send (deliversTo — "this chat", "the chosen chat" or "a new chat") and when (localScheduledAt). A reminder with no stated destination belongs in THIS chat (where='here', the default); use where='new' only if the learner explicitly asks for a separate chat. Never say a reminder is set unless the tool returned success this turn; if it returned an error, say the actual error. When asked whether a reminder sent, read it back with list_scheduled_chat_follow_ups (status / deliveredAt / missed) and answer from that, not from memory.`;
     const selfToolCtx = selfToolOn && role === "instructor"
       ? "\n\n## Building tools (preview)\nWhen the instructor asks for something none of your tools gives directly — a total, average, count, ranking or breakdown over THEIR OWN classes and activities (average grade per activity, who hasn't started, completion by class, students below a mark) — call create_tool (schema_lookup first if unsure what it can use) and answer from its result; don't say you don't have the data. check_activity_outcomes is for ONE activity's summary — a question across several activities (each activity's average, who hasn't started anything) is a create_tool question. Tools only ever see this instructor's own classes and the work set in them — students by name only, never another teacher's class or a learner's private chats or notes. Only say it can't be done after create_tool is rejected, and say why."
       : selfToolOn

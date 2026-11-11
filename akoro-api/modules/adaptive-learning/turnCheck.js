@@ -46,6 +46,9 @@ export function actionClaimCorrection(reply, executions = []) {
   if (xs.some((x) => x.confirm)) return "Note: nothing has changed yet — it happens when you tap **Confirm** on the card above.";
   // Admin requests are requestClaims.js's to judge; a failed change is the honest-failure path's.
   if (xs.some((x) => x.adminRequest)) return null;
+  // A tool WAS attempted and failed: correct with its real error, not a guess.
+  const failed = xs.find((x) => !x.success && x.error);
+  if (failed) return `Correction: that didn't go through — ${String(failed.error).slice(0, 160)} Nothing was saved. Ask me again and I'll retry.`;
   return "Correction: I didn't actually make that change this time — nothing was saved. Ask me again and I'll do it properly.";
 }
 
