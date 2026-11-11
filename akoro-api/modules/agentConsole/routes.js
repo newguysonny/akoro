@@ -273,7 +273,7 @@ router.get("/learner-tools", guard, asyncHandler(async (req, res) => {
   try { learner = await resolveLearner(req.query?.learner); } catch (e) { return fail(res, e); }
   const status = String(req.query?.status || "active");
   const q = db.schema("edu").from("agent_tools")
-    .select("name, label, goal, mode, status, views, domain, actions, capabilities, params_schema, created_at, last_used_at, usage_count")
+    .select("name, label, goal, mode, status, views, domain, actions, capabilities, params_schema, verification, created_at, last_used_at, usage_count")
     .eq("owner_id", learner.id).order("created_at", { ascending: true });
   if (["active", "disabled", "archived"].includes(status)) q.eq("status", status);
   const { data: tools, error } = await q;
@@ -281,7 +281,9 @@ router.get("/learner-tools", guard, asyncHandler(async (req, res) => {
   res.json({ success: true, data: { learner: learner.username, status, count: (tools || []).length,
     tools: (tools || []).map((t) => ({ name: t.name, label: t.label, goal: t.goal, mode: t.mode, status: t.status,
       view: t.domain || (t.views || [])[0] || null, actions: t.actions || t.params_schema?.action?.enum || null,
-      capabilities: t.capabilities || [], params: Object.keys(t.params_schema || {}), createdAt: t.created_at, lastUsedAt: t.last_used_at, uses: t.usage_count })) } });
+      capabilities: t.capabilities || [], params: Object.keys(t.params_schema || {}),
+      verification: t.verification ? { verdict: t.verification.verdict, at: t.verification.at, assertions: t.verification.assertions || [] } : null,
+      createdAt: t.created_at, lastUsedAt: t.last_used_at, uses: t.usage_count })) } });
 }));
 
 router.get("/runs", guard, (_req, res) => {

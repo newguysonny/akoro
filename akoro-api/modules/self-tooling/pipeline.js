@@ -249,7 +249,7 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
     const covered = actions.every((a) => have.has(a));
     if (existing?.status === "active" && !replaceRaw && covered) {
       return finish("reused", { status: "reused", tool: spec.name, label: spec.label, actions,
-        note: `You already have "${spec.label}" — it IS available in this chat: call ${spec.name} with action=(${actions.join("|")}) to answer. Never tell the learner to open Settings.` });
+        note: `You already have "${spec.label}" — it IS available in this chat: call ${spec.name} with action=(${actions.join("|")}) to answer. Nothing was added or changed and every answer it had still works. Never tell the learner to open Settings.` });
     }
     const def = { kind: "code", steps: [{ id: spec.step, view: spec.view }], source: spec.source };
     const ctxD = { learnerId, callCapability: undefined };
@@ -281,9 +281,19 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
     const action = inferAction(goal, actions, spec.view);
     const out = await tryRun(def, spec2.params, { action }, ctxD);
     await finish("created", {});
-    return { status: "created", tool: spec.name, label: spec.label, mode: "code", actions,
+    // Say what changed and that nothing regressed — the model repeats this to the
+    // learner in plain words instead of a bare "Saved".
+    const added = actions.filter((a) => !have.has(a));
+    const kept = actions.filter((a) => have.has(a));
+    const summary = [
+      added.length ? `Added ${added.length === 1 ? "the answer" : "the answers"} ${added.join(", ")}.` : "No new answer was needed.",
+      kept.length ? `Still available: ${kept.join(", ")}.` : "This is its first version.",
+      `All ${actions.length} answers were checked before saving, so nothing that worked before has broken.`,
+    ].join(" ");
+    return { status: "created", tool: spec.name, label: spec.label, mode: "code", actions, added, kept,
+      verified: checks.filter((c) => c.ok).map((c) => c.action),
       result: out.ok ? { rows: out.rows, total: out.total } : { error: out.error },
-      note: `Saved "${spec.label}". It answers ${actions.join(", ")}; next time call ${spec.name} with action=.... The answer for this request is in result.` };
+      note: `Saved "${spec.label}". ${summary} Tell the learner in plain words what was added and that the existing answers still work. Next time call ${spec.name} with action=.... The answer for this request is in result.` };
   }
 
   // 1) A curated domain; 2) a per-learner DYNAMIC domain for a read goal over one
@@ -347,7 +357,7 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
         const usable = docGoal ? dupes.find((d) => (d.t.views || []).includes("my_library"))?.t : dupes[0].t;
         if (usable) return finish("reused", {
           status: "reused", tool: usable.name, label: usable.label,
-          note: `You already have a tool for this — "${usable.label}" (${usable.name}). It IS available in this chat: CALL ${usable.name} now to answer. Never tell the learner to open Settings to run it, and never build a near-duplicate — if it can't do exactly this, extend that tool instead.`,
+          note: `You already have a tool for this — "${usable.label}" (${usable.name}). Nothing was added or changed. It IS available in this chat: CALL ${usable.name} now to answer. Never tell the learner to open Settings to run it, and never build a near-duplicate — if it can't do exactly this, extend that tool instead.`,
         });
         for (const { t } of dupes) {
           if (t.id) await edu().from("agent_tools").update({ status: "archived", updated_at: new Date().toISOString() })

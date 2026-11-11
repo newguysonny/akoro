@@ -64,3 +64,12 @@ test("replace captures actions before archiving, so a rebuild keeps them", () =>
   assert.ok(replaceBlock.indexOf("params_schema") < replaceBlock.indexOf('status: "archived"'), "captured before the archive update");
   assert.match(pipe, /carriedActions\(spec\.view\)/, "buildDomain unions carried actions");
 });
+
+test("a domain build reports what was added and that the rest still works", () => {
+  const pipe = read("./pipeline.js");
+  assert.match(pipe, /const added = actions\.filter\(\(a\) => !have\.has\(a\)\)/, "computes what was added");
+  assert.match(pipe, /const kept = actions\.filter\(\(a\) => have\.has\(a\)\)/, "computes what was kept");
+  assert.match(pipe, /nothing that worked before has broken/i, "reassures no regression");
+  assert.match(pipe, /verified: checks\.filter\(\(c\) => c\.ok\)/, "reports the checks that ran");
+  assert.match(read("../agentConsole/routes.js"), /verification: t\.verification/, "console exposes the assertions");
+});
