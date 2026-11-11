@@ -22,6 +22,29 @@ function groupSource(stepId, field, listFields) {
   var rows = data.${stepId} || [];
   var action = String(input.action || "count");
   if (action === "count") return [{ count: rows.length }];
+  var agg = /^(sum|avg|min|max)_([a-z_]+)$/.exec(action);
+  if (agg) {
+    var op = agg[1], f = agg[2], vals = [];
+    for (var i = 0; i < rows.length; i++) {
+      var raw = rows[i][f];
+      if (raw === null || raw === undefined || raw === "") continue;
+      var v = Number(raw);
+      if (isFinite(v)) vals.push(v);
+    }
+    if (!vals.length) return [{ op: op, field: f, value: op === "sum" ? 0 : null, n: 0 }];
+    var s = 0, mn = vals[0], mx = vals[0];
+    for (var z = 0; z < vals.length; z++) { s += vals[z]; if (vals[z] < mn) mn = vals[z]; if (vals[z] > mx) mx = vals[z]; }
+    var value = op === "sum" ? s : (op === "avg" ? s / vals.length : (op === "min" ? mn : mx));
+    return [{ op: op, field: f, value: value, n: vals.length }];
+  }
+  if (action === "accuracy") {
+    var att = 0, cor = 0;
+    for (var a = 0; a < rows.length; a++) {
+      att += Number(rows[a].attempted) || 0;
+      cor += Number(rows[a].correct) || 0;
+    }
+    return [{ attempted: att, correct: cor, accuracy: att ? Math.round((cor / att) * 1000) / 10 : null }];
+  }
   if (action.indexOf("by_") === 0) {
     var f = action.slice(3);
     var m = {};
@@ -42,6 +65,21 @@ function librarySource() {
   var rows = data.lib || [];
   var action = String(input.action || "count");
   if (action === "count") return [{ count: rows.length }];
+  var agg = /^(sum|avg|min|max)_([a-z_]+)$/.exec(action);
+  if (agg) {
+    var op = agg[1], f = agg[2], vals = [];
+    for (var i = 0; i < rows.length; i++) {
+      var raw = rows[i][f];
+      if (raw === null || raw === undefined || raw === "") continue;
+      var v = Number(raw);
+      if (isFinite(v)) vals.push(v);
+    }
+    if (!vals.length) return [{ op: op, field: f, value: op === "sum" ? 0 : null, n: 0 }];
+    var s = 0, mn = vals[0], mx = vals[0];
+    for (var z = 0; z < vals.length; z++) { s += vals[z]; if (vals[z] < mn) mn = vals[z]; if (vals[z] > mx) mx = vals[z]; }
+    var value = op === "sum" ? s : (op === "avg" ? s / vals.length : (op === "min" ? mn : mx));
+    return [{ op: op, field: f, value: value, n: vals.length }];
+  }
   if (action === "search") {
     var q = String(input.query || "").toLowerCase();
     var out = [];
@@ -98,9 +136,9 @@ export const DOMAINS = {
     label: "Past questions",
     view: "my_past_questions",
     step: "p",
-    actions: ["count", "list", "by_subject"],
+    actions: ["count", "list", "by_subject", "accuracy"],
     params: {
-      action: ACTION_PARAM(["count", "list", "by_subject"], "count = attempts; list = attempts; by_subject = attempts per subject"),
+      action: ACTION_PARAM(["count", "list", "by_subject", "accuracy"], "count = attempts; list = attempts; by_subject = attempts per subject; accuracy = correct ÷ attempted"),
       limit: { type: "integer", description: "Max rows for list (default 100)" },
     },
     source: groupSource("p", "subject", ["exam", "subject", "year", "attempted", "correct"]),
@@ -156,6 +194,21 @@ function listOnlySource(listFields) {
   var rows = data.v || [];
   var action = String(input.action || "count");
   if (action === "count") return [{ count: rows.length }];
+  var agg = /^(sum|avg|min|max)_([a-z_]+)$/.exec(action);
+  if (agg) {
+    var op = agg[1], f = agg[2], vals = [];
+    for (var i = 0; i < rows.length; i++) {
+      var raw = rows[i][f];
+      if (raw === null || raw === undefined || raw === "") continue;
+      var v = Number(raw);
+      if (isFinite(v)) vals.push(v);
+    }
+    if (!vals.length) return [{ op: op, field: f, value: op === "sum" ? 0 : null, n: 0 }];
+    var s = 0, mn = vals[0], mx = vals[0];
+    for (var z = 0; z < vals.length; z++) { s += vals[z]; if (vals[z] < mn) mn = vals[z]; if (vals[z] > mx) mx = vals[z]; }
+    var value = op === "sum" ? s : (op === "avg" ? s / vals.length : (op === "min" ? mn : mx));
+    return [{ op: op, field: f, value: value, n: vals.length }];
+  }
   var lim = Number(input.limit) || 100;
   return rows.slice(0, lim).map(function (r) { return { ${picks} }; });
 }`;
@@ -181,8 +234,9 @@ export function genericDomain(view) {
   };
 }
 
-/** Does this goal read/aggregate the learner's own data (safe for a view domain)?
- *  Value aggregates (sum/average/accuracy/score) are left to the generic builder. */
+/** Does this goal plainly read/count/list the learner's own data (safe for a
+ *  view domain)? Value aggregates are handled deterministically by
+ *  aggregateForGoal instead. */
 export function genericReadGoal(goal) {
   const g = String(goal || "");
   if (!g.trim()) return false;
@@ -190,9 +244,59 @@ export function genericReadGoal(goal) {
   return /\b(how many|count|counts|list|listing|show|what are|which|by\s|breakdown|per\s)\b/i.test(g);
 }
 
-/** Which action to run for this request, from the actions the tool declares. */
-export function inferAction(goal, actions = []) {
+/* ── Deterministic aggregates ────────────────────────────────────────────────
+   sum/avg/min/max over a numeric field of a view, plus accuracy for past
+   questions, are script actions — no LLM builder. They are added to a domain
+   tool at runtime exactly like by_<field>. */
+
+const NUMERIC_TYPES = new Set(["int", "integer", "num", "number", "float", "decimal"]);
+const numericFields = (view) => Object.entries(DATA_VIEWS[view]?.fields || {})
+  .filter(([, f]) => NUMERIC_TYPES.has(String(f?.type))).map(([k]) => k);
+// Goal words that name a metric differently from its field.
+const METRIC_ALIAS = { xp: "amount", points: "amount", point: "amount", earned: "amount", score: "score", progress: "progress", size: "size", confidence: "confidence", rank: "final_rank" };
+
+/** The scripted aggregate action a goal asks for on this view (or null):
+ *  "total XP" → sum_amount, "average score" → avg_score, "WAEC accuracy" →
+ *  accuracy. Requires a real numeric field, so "total documents" is NOT an
+ *  aggregate (it's a count). */
+export function aggregateForGoal(goal, view) {
   const g = String(goal || "").toLowerCase();
+  if (!view || !DATA_VIEWS[view]) return null;
+  if (view === "my_past_questions" && /\b(accuracy|percentage|percent|score)\b/.test(g)) return "accuracy";
+  const m = g.match(/\b(total|sum|combined|add up|average|avg|mean|highest|largest|biggest|max|lowest|smallest|min)\b(?:\s+(?:of|my|the))?\s*([a-z_]+)?/);
+  if (!m) return null;
+  const nums = numericFields(view);
+  if (!nums.length) return null;
+  const metric = m[2];
+  const field = metric && nums.includes(metric) ? metric
+    : metric && METRIC_ALIAS[metric] && nums.includes(METRIC_ALIAS[metric]) ? METRIC_ALIAS[metric]
+    : !metric && nums.length === 1 ? nums[0] : null;
+  if (!field) return null;
+  const op = /^(average|avg|mean)$/.test(m[1]) ? "avg"
+    : /^(highest|largest|biggest|max)$/.test(m[1]) ? "max"
+    : /^(lowest|smallest|min)$/.test(m[1]) ? "min" : "sum";
+  return `${op}_${field}`;
+}
+
+/** The own-data view a goal is about, from the views' own keywords (cheap,
+ *  pure). Used to make tool reuse domain-based instead of goal-text fuzzy. */
+export function bestSelfView(goal) {
+  const g = ` ${String(goal || "").toLowerCase()} `;
+  let best = null, bestScore = 0;
+  for (const [name, v] of Object.entries(DATA_VIEWS)) {
+    if (v.scope !== "self") continue;
+    let s = 0;
+    for (const k of v.keywords || []) if (g.includes(k)) s += k.includes(" ") ? 3 : 2;
+    if (s > bestScore) { best = name; bestScore = s; }
+  }
+  return best;
+}
+
+/** Which action to run for this request, from the actions the tool declares. */
+export function inferAction(goal, actions = [], view = null) {
+  const g = String(goal || "").toLowerCase();
+  const agg = aggregateForGoal(goal, view);
+  if (agg && actions.includes(agg)) return agg;
   const by = g.match(/\bby\s+([a-z_]+)/);
   if (by && actions.includes(`by_${by[1]}`)) return `by_${by[1]}`;
   if (actions.includes("search") && /\b(search|find|matching)\b/.test(g)) return "search";
@@ -203,11 +307,14 @@ export function inferAction(goal, actions = []) {
 
 const isObj = (r) => !!r && typeof r === "object" && !Array.isArray(r);
 const finiteNum = (n) => typeof n === "number" && Number.isFinite(n);
+const AGG_ACTION = /^(sum|avg|min|max)_([a-z_]+)$/;
 
 /** Output contract for ONE action, checked by script only (no LLM). Returns an
  *  error string, or null when the result has the right shape. Actions:
  *  count → one numeric row; list → objects; by_<field> → { field, positive count }
- *  whose counts add up to `total`; search → rows with a string name. */
+ *  whose counts add up to `total`; search → rows with a string name;
+ *  sum/avg/min/max_<field> → one numeric (or null) value with n; accuracy → one
+ *  row with attempted/correct and a 0–100 accuracy. */
 export function actionContract(action, r) {
   if (!r || !r.ok) return null; // the run's own error is reported separately
   const rows = r.rows;
@@ -217,6 +324,22 @@ export function actionContract(action, r) {
     const n = rows[0]?.count;
     if (!finiteNum(n) || n < 0) return "count row must have a numeric count ≥ 0";
     if (finiteNum(r.total) && r.total !== n) return `total (${r.total}) disagrees with count (${n})`;
+    return null;
+  }
+  if (AGG_ACTION.test(action)) {
+    if (rows.length !== 1) return `${action} should return exactly one row (got ${rows.length})`;
+    const row = rows[0];
+    if (!finiteNum(row?.n)) return `${action} must report a numeric n`;
+    if (!(row?.value === null || finiteNum(row?.value))) return `${action} value must be numeric or null`;
+    if (row?.op !== AGG_ACTION.exec(action)[1]) return `${action} reported op "${row?.op}"`;
+    if (row?.field !== AGG_ACTION.exec(action)[2]) return `${action} reported field "${row?.field}"`;
+    return null;
+  }
+  if (action === "accuracy") {
+    if (rows.length !== 1) return `accuracy should return exactly one row (got ${rows.length})`;
+    const row = rows[0];
+    if (!finiteNum(row?.attempted) || !finiteNum(row?.correct)) return "accuracy needs numeric attempted and correct";
+    if (!(row?.accuracy === null || (finiteNum(row?.accuracy) && row.accuracy >= 0 && row.accuracy <= 100))) return "accuracy must be a percentage 0–100, or null";
     return null;
   }
   if (action === "search") {

@@ -20,10 +20,33 @@ import { proposeWrite, proposePermission } from "./confirmations.js";
 import { codeEnabled } from "./sandbox/index.js";
 import { basisColumns, currentActionBasis } from "../agent-runtime/actionBasis.js";
 import { isDocumentGoal, similarGoal } from "./toolSimilarity.js";
-import { DOMAINS, domainForGoal, genericDomain, genericReadGoal, inferAction, verifyDomainActions, byActionForGoal, MAX_DOMAIN_ACTIONS } from "./domains.js";
+import { DOMAINS, domainForGoal, genericDomain, genericReadGoal, inferAction, verifyDomainActions, byActionForGoal, aggregateForGoal, bestSelfView, MAX_DOMAIN_ACTIONS } from "./domains.js";
 
 const edu = () => db.schema("edu");
 const NAME = /^[a-z][a-z0-9_]{2,47}$/;
+
+/** A domain tool: one code tool per view with an `action` enum. */
+const isDomainTool = (t) => t?.mode === "code" && Array.isArray(t?.params_schema?.action?.enum);
+
+/** Archive the owner's OTHER domain tools over the same data view — one tool per
+ *  domain. Write tools (no `action` enum) are never touched: the split keeps
+ *  them separate and Confirm-gated. */
+async function retireSameView(learnerId, view, keepName) {
+  if (!view) return [];
+  const { data } = await edu().from("agent_tools").select("id, name, views, domain, mode, params_schema")
+    .eq("owner_id", learnerId).eq("status", "active");
+  const archived = [];
+  for (const t of data || []) {
+    if (t.name === keepName || !isDomainTool(t)) continue;
+    const domain = t.domain || (Array.isArray(t.views) && t.views[0]);
+    if (domain === view || (Array.isArray(t.views) && t.views.includes(view))) {
+      await edu().from("agent_tools").update({ status: "archived", updated_at: new Date().toISOString() })
+        .eq("id", t.id).eq("owner_id", learnerId);
+      archived.push(t.name);
+    }
+  }
+  return archived;
+}
 export const LIMITS = {
   // Per-learner tool builds per day. Env-overridable (SELF_TOOLING_DAILY_CREATES);
   // default raised from 5 to 20 to match the total-tool cap, since the
@@ -217,7 +240,7 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
     const { data: existing } = await edu().from("agent_tools").select("id, status, params_schema")
       .eq("owner_id", learnerId).eq("name", spec.name).in("status", ["active", "disabled"]).maybeSingle();
     const have = new Set([...(existing?.params_schema?.action?.enum || []), ...carriedActions(spec.view)]);
-    const extra = byActionForGoal(goal, spec.view);
+    const extra = byActionForGoal(goal, spec.view) || aggregateForGoal(goal, spec.view);
     // Carry forward actions the tool already has, so a rebuild never loses a
     // previously-added breakdown (e.g. by_size) while adding another (by_name).
     const actions = Array.from(new Set([...(spec.actions || []), ...have, ...(extra ? [extra] : [])]));
@@ -243,15 +266,9 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
     if (existing?.id && !replaceRaw) {
       await edu().from("agent_tools").update({ status: "archived", updated_at: new Date().toISOString() }).eq("id", existing.id).eq("owner_id", learnerId);
     }
-    // One tool per domain: retire other saved tools over the same view.
-    {
-      const { data: others } = await edu().from("agent_tools").select("id, name, views, domain").eq("owner_id", learnerId).eq("status", "active");
-      for (const t of others || []) {
-        if (t.name !== spec.name && (t.domain === spec.view || (Array.isArray(t.views) && t.views.includes(spec.view)))) {
-          await edu().from("agent_tools").update({ status: "archived", updated_at: new Date().toISOString() }).eq("id", t.id).eq("owner_id", learnerId);
-        }
-      }
-    }
+    // One tool per domain: retire other saved domain tools over the same view
+    // (never the learner's Confirm-gated write tools).
+    await retireSameView(learnerId, spec.view, spec.name);
     const { data: row, error } = await edu().from("agent_tools").insert({
       owner_id: learnerId, scope: "learner", audience, name: spec.name, label: spec.label,
       goal: `${spec.label}: ${actions.join(", ")}`, mode: "code", definition: def, params_schema: spec2.params,
@@ -261,7 +278,7 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
     }).select("id").single();
     if (error) return finish("failed", reject(`Couldn't save the tool: ${error.message}`));
     ev.tool_id = row.id; ev.mode = "code"; ev.capabilities = [];
-    const action = inferAction(goal, actions);
+    const action = inferAction(goal, actions, spec.view);
     const out = await tryRun(def, spec2.params, { action }, ctxD);
     await finish("created", {});
     return { status: "created", tool: spec.name, label: spec.label, mode: "code", actions,
@@ -273,26 +290,43 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
   // of the learner's own-data views (the agent "fills" its own domain tools).
   const dkey = audience === "learner" ? domainForGoal(goal) : null;
   if (dkey) return await buildDomain(DOMAINS[dkey]);
-  if (audience === "learner" && genericReadGoal(goal)) {
+  if (audience === "learner") {
     try {
       const lookupD = await schemaLookup(goal, { audience, learnerId });
       const top = (lookupD.views || []).find((x) => DATA_VIEWS[x?.name] && DATA_VIEWS[x.name].scope === "self");
-      if (top?.name) {
+      // A plain read OR a scripted aggregate over that view (no LLM builder).
+      if (top?.name && (genericReadGoal(goal) || aggregateForGoal(goal, top.name))) {
         const spec = genericDomain(top.name);
         if (spec) return await buildDomain(spec);
       }
     } catch { /* fall through to the generic builder */ }
   }
 
-  // Reuse, don't flood. The model kept building a fresh tool for near-identical
-  // goals ("Delete my earliest chat", "…(by position)", "Delete a chat titled
-  // X", "Library count", "Library count (correct total)"). If an active tool
-  // already covers this goal, point at it instead of adding a duplicate.
+  // Reuse, don't flood — BY DOMAIN first. A goal that names a data view reuses
+  // (or extends) that domain's tool; goal-text fuzzy matching is only a fallback
+  // when no view can be identified, and a tool over a DIFFERENT known domain is
+  // never reused for this goal. That removes the near-duplicate path.
   if (!dry && !resumed) {
     try {
-      const { data: mine } = await edu().from("agent_tools").select("id, name, label, goal, views")
+      const { data: mine } = await edu().from("agent_tools").select("id, name, label, goal, views, domain, mode, params_schema")
         .eq("owner_id", learnerId).eq("status", "active").limit(200);
-      const dupes = (mine || []).filter((t) => similarGoal(t.goal || t.label || "", goal));
+      const goalView = docGoal ? "my_library" : (dkey ? DOMAINS[dkey].view : bestSelfView(goal));
+      const domainOf = (t) => t.domain || (Array.isArray(t.views) && t.views[0]) || null;
+      const readGoal = !asksForChange(goal) && (genericReadGoal(goal) || !!aggregateForGoal(goal, goalView));
+      // A read/aggregate goal over a view that already has a domain tool EXTENDS
+      // that tool (the action is added); it never builds a near-duplicate.
+      if (goalView && readGoal) {
+        const hasDomainTool = (mine || []).some((t) => domainOf(t) === goalView && isDomainTool(t));
+        if (hasDomainTool) {
+          const spec = Object.values(DOMAINS).find((d) => d.view === goalView) || genericDomain(goalView);
+          if (spec) return await buildDomain(spec);
+        }
+      }
+      // Same-domain candidates only (when the view is known). A read domain tool
+      // can't serve a write goal — the split keeps writes on their own tools.
+      const sameDomain = goalView ? (mine || []).filter((t) => domainOf(t) === goalView) : (mine || []);
+      const candidates = sameDomain.filter((t) => !asksForChange(goal) || !isDomainTool(t));
+      const dupes = candidates.filter((t) => similarGoal(t.goal || t.label || "", goal));
       if (dupes.length) {
         // A document goal may reuse a duplicate ONLY if it reads my_library.
         // Otherwise every wrong-view duplicate (counted sessions by subject) is
@@ -501,6 +535,9 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
     const { data: row, error } = await edu().from("agent_tools").insert({ owner_id: learnerId, scope: "learner", audience, ...def, domain: (def.views || [])[0] || null, actions: def.params_schema?.action?.enum || null, usage_count: runNow.ok ? 1 : 0, last_used_at: new Date().toISOString() }).select("id").single();
     if (error) return finish("failed", reject(`Couldn't save the tool: ${error.message}`));
     ev.tool_id = row.id;
+    // One tool per domain: a newly saved action tool retires older action tools
+    // over the same view (write tools are untouched — they have no `action`).
+    if (def.params_schema?.action?.enum && def.views?.[0]) await retireSameView(learnerId, def.views[0], name);
     await finish("created", {});
     return {
       status: "created", tool: name, label, mode: stage, verified: true,

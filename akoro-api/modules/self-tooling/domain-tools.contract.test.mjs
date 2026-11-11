@@ -10,11 +10,28 @@ const read = (p) => readFileSync(join(here, p), "utf8");
 test("split domain tools: one per view, action cap, cleanup + builder guidance", () => {
   const pipe = read("./pipeline.js");
   assert.match(pipe, /MAX_DOMAIN_ACTIONS/, "action cap enforced");
-  assert.match(pipe, /t\.views\.includes\(spec\.view\)/, "retires other tools over the same view");
+  assert.match(pipe, /retireSameView\(learnerId, spec\.view, spec\.name\)/, "retires other domain tools over the same view");
+  assert.match(pipe, /isDomainTool/, "writes (no action enum) are never retired with read domains");
   assert.match(read("../adaptive-learning/chat.js"), /Prefer ONE tool per data domain/, "builder guidance");
   const consoleSrc = read("../agentConsole/routes.js");
   assert.match(consoleSrc, /router\.post\("\/cleanup-domain-tools"/, "cleanup endpoint");
   assert.match(consoleSrc, /router\.post\("\/repair-library-tools"/, "repair endpoint");
+});
+
+test("reuse is domain-based, not goal-text fuzzy", () => {
+  const pipe = read("./pipeline.js");
+  assert.match(pipe, /const goalView = docGoal \? "my_library"/, "resolves the goal's data view");
+  assert.match(pipe, /bestSelfView\(goal\)/, "falls back to the views' own keywords");
+  assert.match(pipe, /domainOf\(t\) === goalView/, "only same-domain tools are candidates");
+  assert.match(pipe, /hasDomainTool[\s\S]{0,220}buildDomain\(spec\)/, "a same-view domain tool is extended, not duplicated");
+  assert.match(pipe, /!asksForChange\(goal\) \|\| !isDomainTool\(t\)/, "a read domain tool never serves a write goal");
+});
+
+test("stale cleanup is per-learner and global, and never archives write tools", () => {
+  const src = read("../agentConsole/routes.js");
+  assert.match(src, /req\.body\?\.all === true/, "all-learner sweep");
+  assert.match(src, /confirm:true/, "global archive needs confirmation");
+  assert.match(src, /\(t\.capabilities \|\| \[\]\)\.length\) continue/, "write tools are skipped");
 });
 
 test("agent_tools carries domain/actions and the migration is registered", () => {

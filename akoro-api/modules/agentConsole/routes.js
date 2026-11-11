@@ -223,37 +223,74 @@ router.post("/repair-library-tools", guard, asyncHandler(async (req, res) => {
   } });
 }));
 
-/* POST /agent-console/cleanup-domain-tools { learner, dry? }
-   One tool per DOMAIN (view): if a learner has several active tools over the same
-   view (left over from before domain tools), keep the best domain tool and archive
-   the rest. dry:true reports without changing anything. */
-router.post("/cleanup-domain-tools", guard, asyncHandler(async (req, res) => {
-  let learner;
-  try { learner = await resolveLearner(req.body?.learner); } catch (e) { return fail(res, e); }
-  const dry = req.body?.dry === true;
-  const { data: tools } = await db.schema("edu").from("agent_tools")
-    .select("id, name, label, mode, views, domain, params_schema, created_at").eq("owner_id", learner.id).eq("status", "active");
+/** Group active tools by data view, keep the best READ tool per view, and list
+ *  the rest for archiving. Write tools (anything with capabilities) and tools
+ *  with no view are left alone — the split keeps writes separate. */
+function cleanupPlan(tools) {
   const byDomain = new Map();
   for (const t of tools || []) {
-    const domain = t.domain || (Array.isArray(t.views) && t.views[0]) || t.name;
+    if ((t.capabilities || []).length) continue;
+    const domain = t.domain || (Array.isArray(t.views) && t.views[0]);
+    if (!domain) continue;
     if (!byDomain.has(domain)) byDomain.set(domain, []);
     byDomain.get(domain).push(t);
   }
-  const archived = [], kept = {};
+  const kept = {}, archive = [];
   for (const [domain, list] of byDomain) {
     list.sort((a, b) => {
-      const ad = a.mode === "code" && a.params_schema?.action?.enum ? 1 : 0;   // prefer a domain tool
+      const ad = a.mode === "code" && a.params_schema?.action?.enum ? 1 : 0;
       const bd = b.mode === "code" && b.params_schema?.action?.enum ? 1 : 0;
-      if (bd !== ad) return bd - ad;
+      if (bd !== ad) return bd - ad;                                // prefer a domain tool
+      const al = (a.params_schema?.action?.enum || []).length;
+      const bl = (b.params_schema?.action?.enum || []).length;
+      if (bl !== al) return bl - al;                                // then the richer one
       return String(b.created_at).localeCompare(String(a.created_at));
     });
     kept[domain] = list[0].name;
-    for (const t of list.slice(1)) {
-      archived.push(t.name);
+    archive.push(...list.slice(1));
+  }
+  return { kept, archive };
+}
+
+/* POST /agent-console/cleanup-domain-tools { learner, dry? } | { all: true, dry?, confirm? }
+   One tool per DOMAIN (view): keep the best READ tool over a view and archive the
+   rest. Write tools (anything with capabilities) are never touched — the split
+   keeps them separate and Confirm-gated. `all:true` sweeps every learner
+   (dry by default; archiving needs confirm:true). */
+router.post("/cleanup-domain-tools", guard, asyncHandler(async (req, res) => {
+  const dry = req.body?.dry === true;
+  const all = req.body?.all === true;
+  if (!all) {
+    let learner;
+    try { learner = await resolveLearner(req.body?.learner); } catch (e) { return fail(res, e); }
+    const { data: tools } = await db.schema("edu").from("agent_tools")
+      .select("id, name, label, mode, views, domain, params_schema, capabilities, created_at").eq("owner_id", learner.id).eq("status", "active");
+    const plan = cleanupPlan(tools || []);
+    for (const t of plan.archive) {
       if (!dry) await db.schema("edu").from("agent_tools").update({ status: "archived", updated_at: new Date().toISOString() }).eq("id", t.id).eq("owner_id", learner.id);
     }
+    return res.json({ success: true, data: { learner: learner.username, dry, kept: plan.kept, archived: plan.archive.map((t) => t.name) } });
   }
-  res.json({ success: true, data: { learner: learner.username, dry, kept, archived } });
+  if (!dry && req.body?.confirm !== true) {
+    return bad(res, "Sweeping every learner needs confirm:true (or dry:true to preview).");
+  }
+  const { data: tools } = await db.schema("edu").from("agent_tools")
+    .select("id, owner_id, name, label, mode, views, domain, params_schema, capabilities, created_at")
+    .eq("scope", "learner").eq("status", "active").limit(10000);
+  const byOwner = new Map();
+  for (const t of tools || []) {
+    if (!byOwner.has(t.owner_id)) byOwner.set(t.owner_id, []);
+    byOwner.get(t.owner_id).push(t);
+  }
+  const archived = [];
+  for (const [ownerId, list] of byOwner) {
+    const plan = cleanupPlan(list);
+    for (const t of plan.archive) {
+      archived.push({ owner: ownerId, tool: t.name });
+      if (!dry) await db.schema("edu").from("agent_tools").update({ status: "archived", updated_at: new Date().toISOString() }).eq("id", t.id).eq("owner_id", ownerId);
+    }
+  }
+  res.json({ success: true, data: { all: true, dry, owners: byOwner.size, archived: archived.length, tools: archived.slice(0, 200) } });
 }));
 
 router.get("/runs", guard, (_req, res) => {

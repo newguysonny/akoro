@@ -26,9 +26,9 @@ const fixtureRun = (spec, data) => async (_s, input) => {
 
 const LIB_FIXTURE = {
   lib: [
-    { name: "Mitochondria notes", kind: "paste", created_at: "2026-01-01" },
-    { name: "Cell Structure.pdf", kind: "upload", created_at: "2026-01-02" },
-    { name: "BIO 111 notes", kind: "upload", created_at: "2026-01-03" },
+    { name: "Mitochondria notes", kind: "paste", size: 100, created_at: "2026-01-01" },
+    { name: "Cell Structure.pdf", kind: "upload", size: 200, created_at: "2026-01-02" },
+    { name: "BIO 111 notes", kind: "upload", size: 300, created_at: "2026-01-03" },
   ],
 };
 
@@ -191,4 +191,41 @@ test("scripted regression: fixtures give exact outputs and a broken action is ca
   const bad = await verifyDomainActions(spec, skewed);
   assert.equal(bad.find((c) => c.action === "by_kind").ok, false);
   assert.match(bad.find((c) => c.action === "by_kind").error, /adds up to 2 but count is 3/);
+});
+
+test("aggregates are scripted actions: inferred, run, and contract-checked", async () => {
+  const { aggregateForGoal, inferAction, actionContract } = await import("./domains.js");
+  assert.equal(aggregateForGoal("Total XP I've earned", "my_xp"), "sum_amount");
+  assert.equal(aggregateForGoal("average score in battles", "my_battles"), "avg_score");
+  assert.equal(aggregateForGoal("WAEC accuracy", "my_past_questions"), "accuracy");
+  assert.equal(aggregateForGoal("total size of my documents", "my_library"), "sum_size");
+  assert.equal(aggregateForGoal("highest progress", "my_courses"), "max_progress");
+  assert.equal(aggregateForGoal("total documents", "my_library"), null, "a count is not an aggregate");
+
+  const spec = DOMAINS.library_documents;
+  const run = fixtureRun(spec, LIB_FIXTURE);
+  const sum = await run(spec, { action: "sum_size" });
+  assert.deepEqual(sum.rows, [{ op: "sum", field: "size", value: 600, n: 3 }]);
+  assert.equal(actionContract("sum_size", sum), null);
+  assert.match(actionContract("sum_size", { ok: true, rows: [{ op: "sum", field: "size", value: "600", n: 3 }], total: 1 }), /numeric or null/);
+  assert.match(actionContract("avg_size", { ok: true, rows: [{ op: "sum", field: "size", value: 2, n: 1 }], total: 1 }), /reported op/);
+
+  const pq = DOMAINS.my_past_questions;
+  const pqRun = fixtureRun(pq, { p: [{ attempted: 10, correct: 7 }, { attempted: 10, correct: 9 }] });
+  const acc = await pqRun(pq, { action: "accuracy" });
+  assert.deepEqual(acc.rows, [{ attempted: 20, correct: 16, accuracy: 80 }]);
+  assert.equal(actionContract("accuracy", acc), null);
+  assert.match(actionContract("accuracy", { ok: true, rows: [{ attempted: 1, correct: 1, accuracy: 120 }], total: 1 }), /0–100/);
+
+  assert.equal(inferAction("total XP I've earned", ["count", "sum_amount"], "my_xp"), "sum_amount");
+  assert.equal(inferAction("WAEC accuracy", ["count", "accuracy"], "my_past_questions"), "accuracy");
+  assert.equal(inferAction("total documents by kind", ["count", "by_kind", "sum_size"], "my_library"), "by_kind");
+});
+
+test("bestSelfView picks the data domain from the goal's own words", async () => {
+  const { bestSelfView } = await import("./domains.js");
+  assert.equal(bestSelfView("delete my chat titled hey"), "my_chats");
+  assert.equal(bestSelfView("how many tasks are due"), "my_tasks");
+  assert.equal(bestSelfView("my XP this week"), "my_xp");
+  assert.equal(bestSelfView("hello there"), null);
 });
