@@ -99,3 +99,40 @@ Foundations already shipped: similar‑goal dedupe (`toolSimilarity.js`), wrong�
 - **Domain identity:** an explicit `domain` column on `agent_tools` vs deriving it from `views`.
 - **Migration of existing duplicates:** archive automatically on the first domain build, or leave them and let dedupe/replace converge.
 - **Verification cost:** running every action on each build is more model/data work — gate by action count and skip unchanged actions when safe.
+
+## 9. When is it a new domain vs a new action?
+The fork is the **data view/table**, not the verb. At `create_tool`, `schema_lookup` names the view the request needs:
+- **View already owned by a domain tool** → **add/refine an action** (rebuild via `replace`). Re-run that tool's existing actions (regression) before saving.
+- **View not owned by any domain tool** → **create a new domain tool** (with its own `action` set).
+- **Same verb, different view → different domains.** `delete` a chat is `my_chats.delete`; `delete` a task is `my_tasks.delete` — never one generic "delete" tool.
+
+Examples:
+| Request | Decision |
+|---|---|
+| "List my document titles" (after `library_documents.count`) | add `action:"list"` to `library_documents` (same `my_library`) |
+| "Show documents by kind" | add `action:"by_kind"` |
+| "Delete the chat 'hey'" | add write `action:"delete"` to `my_chats` |
+| "Which courses am I enrolled in?" | **new** domain `my_courses` (`my_courses` view) |
+| "Who are my study buddies?" | **new** domain `my_study_buddies` |
+| "How accurate am I in WAEC Chemistry?" | **new** `my_past_questions` if not yet a domain |
+
+## 10. Who approves — self-service vs admin
+Adding a domain over the learner's **own data** is self-service; admin is the exception.
+
+| The domain/action needs… | Who approves | Example |
+|---|---|---|
+| Learner's own **read** data (`available` view) | **nobody** — built for them | `my_xp` total, `library_documents` count |
+| A change to their **own** data (`needs_your_ok`) | **learner**: Allow to build, Confirm per change | `my_tasks.complete`, `my_chats.delete` |
+| **Other learners' data / network scope** (`needs_approval`) | **admin** | "how did my classmates score" |
+| A **capability nothing exposes** | **admin** via a request (answer later) | a weather/calendar integration |
+| Forbidden (passwords, others' private data) | **nobody** — declined | "read my bank balance" |
+
+Also admin-only by design: **platform tools** (shared with everyone) and any domain that serves *other* learners. Everything over the learner's own data — including **adding a write action to an existing domain** — stays learner-side (Allow + Confirm), never admin.
+
+## 11. When the request isn't in the schema
+If no view/capability can express the request, the agent must not fabricate. Order of response:
+1. **Do the possible part** and say plainly what it can't.
+2. **Offer to file a request** (missing tool / capability / component / integration) via `submit_tool_request` → admins' Agent‑requests page; the answer comes later in the chat.
+3. **If it's learner-allowable** (`needs_your_ok`), draft the tool and show an **Allow** card instead of escalating.
+4. **If forbidden**, decline and explain.
+5. **Never a fake answer** — no invented numbers or claimed results outside the schema.

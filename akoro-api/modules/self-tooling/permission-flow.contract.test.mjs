@@ -84,3 +84,10 @@ test("create_tool can rebuild a saved tool in place (replace)", () => {
   assert.match(src, /const replaceRaw = String\(input\?\.replace/, "reads the replace target");
   assert.match(src, /status: "archived"[\s\S]{0,140}eq\("id", old\.id\)/, "archives the replaced tool");
 });
+
+test("createTool builds deterministic domain tools and verifies every action", () => {
+  const src = read("./pipeline.js");
+  assert.match(src, /domainForGoal\(goal\)/, "routes to curated domains");
+  assert.match(src, /for \(const action of spec\.actions\)/, "verifies every action before saving");
+  assert.match(src, /status: "archived"[\s\S]{0,120}eq\("id", existing\.id\)/, "retires an older tool for the domain");
+});

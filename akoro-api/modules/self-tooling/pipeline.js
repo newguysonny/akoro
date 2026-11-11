@@ -20,6 +20,7 @@ import { proposeWrite, proposePermission } from "./confirmations.js";
 import { codeEnabled } from "./sandbox/index.js";
 import { basisColumns, currentActionBasis } from "../agent-runtime/actionBasis.js";
 import { isDocumentGoal, similarGoal } from "./toolSimilarity.js";
+import { DOMAINS, domainForGoal, actionForGoal } from "./domains.js";
 
 const edu = () => db.schema("edu");
 const NAME = /^[a-z][a-z0-9_]{2,47}$/;
@@ -192,6 +193,64 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
         if (!String(input?.name || "").trim()) name = old.name;
       }
     } catch { /* best-effort */ }
+  }
+
+  // Curated DOMAIN tool: one tool per domain with { action } sub-params, read-only.
+  // Built deterministically (no LLM); EVERY action is verified before saving, then
+  // the tool is saved and run. Document goals resolve to library_documents, which
+  // reads my_library (documents have no subject).
+  const dkey = audience === "learner" ? domainForGoal(goal) : null;
+  if (dkey) {
+    const spec = DOMAINS[dkey];
+    const { data: existing } = await edu().from("agent_tools").select("id, status")
+      .eq("owner_id", learnerId).eq("name", spec.name).in("status", ["active", "disabled"]).maybeSingle();
+    if (existing?.status === "active" && !replaceRaw) {
+      return finish("reused", { status: "reused", tool: spec.name, label: spec.label, actions: spec.actions,
+        note: `You already have "${spec.label}" — it IS available in this chat: call ${spec.name} with action=(${spec.actions.join("|")}) to answer. Never tell the learner to open Settings.` });
+    }
+    if (!dry && existing?.id && !replaceRaw) {
+      await edu().from("agent_tools").update({ status: "archived", updated_at: new Date().toISOString() }).eq("id", existing.id).eq("owner_id", learnerId);
+    }
+    // One tool per domain: retire other saved tools for the same domain goal.
+    if (!dry && dkey === "library_documents") {
+      const { data: others } = await edu().from("agent_tools").select("id, name, goal").eq("owner_id", learnerId).eq("status", "active");
+      for (const t of others || []) {
+        if (t.name !== spec.name && /\b(documents?|files?|uploads?|pdfs?)\b/i.test(t.goal || t.name || "")) {
+          await edu().from("agent_tools").update({ status: "archived", updated_at: new Date().toISOString() }).eq("id", t.id).eq("owner_id", learnerId);
+        }
+      }
+    }
+    const def = { kind: "code", steps: [{ id: spec.step, view: spec.view }], source: spec.source };
+    const ctxD = { learnerId, callCapability: undefined };
+    // Domain regression: run every action before saving; any failure blocks the save.
+    const checks = [];
+    for (const action of spec.actions) {
+      const sample = action === "search" ? { action, query: "a" } : { action };
+      const r = await tryRun(def, spec.params, sample, ctxD);
+      checks.push({ action, ok: r.ok && Array.isArray(r.rows), error: r.error });
+    }
+    const bad = checks.filter((c) => !c.ok);
+    if (bad.length) return finish("rejected", reject(`The ${spec.label} tool failed its own checks for: ${bad.map((b) => b.action).join(", ")}${bad[0]?.error ? ` (${bad[0].error})` : ""}. Nothing was saved.`));
+    if (dry) {
+      await finish("dry", {});
+      return { status: "created", dryRun: true, tool: spec.name, label: spec.label, mode: "code", actions: spec.actions, verified: true,
+        note: `DRY RUN — verified every action (${spec.actions.join(", ")}) but did not save.` };
+    }
+    const { data: row, error } = await edu().from("agent_tools").insert({
+      owner_id: learnerId, scope: "learner", audience, name: spec.name, label: spec.label,
+      goal: `${spec.label}: ${spec.actions.join(", ")}`, mode: "code", definition: def, params_schema: spec.params,
+      capabilities: [], views: [spec.view],
+      verification: { verdict: "pass", at: new Date().toISOString(), assertions: checks.map((c) => ({ name: `action:${c.action}`, passed: c.ok })), samples: [] },
+      status: "active", usage_count: 1, last_used_at: new Date().toISOString(),
+    }).select("id").single();
+    if (error) return finish("failed", reject(`Couldn't save the tool: ${error.message}`));
+    ev.tool_id = row.id; ev.mode = "code"; ev.capabilities = [];
+    const action = actionForGoal(goal);
+    const out = await tryRun(def, spec.params, { action }, ctxD);
+    await finish("created", {});
+    return { status: "created", tool: spec.name, label: spec.label, mode: "code", actions: spec.actions,
+      result: out.ok ? { rows: out.rows, total: out.total } : { error: out.error },
+      note: `Saved "${spec.label}". It answers ${spec.actions.join(", ")}; next time call ${spec.name} with action=.... The answer for this request is in result.` };
   }
 
   // Reuse, don't flood. The model kept building a fresh tool for near-identical
