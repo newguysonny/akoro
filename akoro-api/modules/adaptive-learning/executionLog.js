@@ -78,6 +78,16 @@ export async function getAgentRun(runId) {
   } catch { return null; }
 }
 
+/** Recent runs, newest first (ops). */
+export async function listRuns({ limit = 20 } = {}) {
+  try {
+    const n = Math.min(Math.max(Number(limit) || 20, 1), 100);
+    const { data } = await edu().from("agent_runs").select("*")
+      .order("started_at", { ascending: false }).limit(n);
+    return data || [];
+  } catch { return []; }
+}
+
 /** Failed steps in a window — the failure digest's input. */
 export async function recentFailures({ sinceMs = 24 * 60 * 60_000, limit = 500 } = {}) {
   try {
