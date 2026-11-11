@@ -12,45 +12,48 @@
  * architecture/akoro-domain-tools(one-tool-per-domain,action-subparams,domain-regression).md
  */
 
-/** Group/count source over a view's rows. Server-side template: the GENERATED
- *  source contains no `${...}` (only literal ids/fields), so it passes the
- *  sandbox's ES2020 rules. */
+/** Group/count source over a view's rows. Groups by ANY field named in
+ *  action="by_<field>", so ADDING AN ACTION is just adding an enum value — the
+ *  code already handles it (and every action is re-verified before saving).
+ *  Server-side template: the GENERATED source contains no `${...}`. */
 function groupSource(stepId, field, listFields) {
   const picks = listFields.map((f) => `${f}: r.${f}`).join(", ");
   return `function run(input, data, akoro) {
   var rows = data.${stepId} || [];
   var action = String(input.action || "count");
   if (action === "count") return [{ count: rows.length }];
-  if (action === "by_${field}") {
+  if (action.indexOf("by_") === 0) {
+    var f = action.slice(3);
     var m = {};
     for (var i = 0; i < rows.length; i++) {
-      var k = rows[i].${field} == null ? "unknown" : String(rows[i].${field});
+      var k = rows[i][f] == null ? "unknown" : String(rows[i][f]);
       m[k] = (m[k] || 0) + 1;
     }
-    return Object.keys(m).map(function (k) { var o = {}; o.${field} = k; o.count = m[k]; return o; });
+    return Object.keys(m).map(function (k) { var o = {}; o[f] = k; o.count = m[k]; return o; });
   }
   var lim = Number(input.limit) || 100;
   return rows.slice(0, lim).map(function (r) { return { ${picks} }; });
 }`;
 }
 
-/** Library documents: count / list / by_kind / search titles. */
+/** Library documents: count / list / by_<field> / search titles. */
 function librarySource() {
   return `function run(input, data, akoro) {
   var rows = data.lib || [];
   var action = String(input.action || "count");
   if (action === "count") return [{ count: rows.length }];
-  if (action === "by_kind") {
-    var m = {};
-    for (var i = 0; i < rows.length; i++) { var k = rows[i].kind || "unknown"; m[k] = (m[k] || 0) + 1; }
-    return Object.keys(m).map(function (k) { return { kind: k, count: m[k] }; });
-  }
   if (action === "search") {
     var q = String(input.query || "").toLowerCase();
     var out = [];
     if (!q) return out;
     for (var j = 0; j < rows.length; j++) { if (String(rows[j].name || "").toLowerCase().indexOf(q) >= 0) out.push({ name: rows[j].name, kind: rows[j].kind }); }
     return out;
+  }
+  if (action.indexOf("by_") === 0) {
+    var f = action.slice(3);
+    var m = {};
+    for (var i = 0; i < rows.length; i++) { var k = rows[i][f] == null ? "unknown" : String(rows[i][f]); m[k] = (m[k] || 0) + 1; }
+    return Object.keys(m).map(function (k) { var o = {}; o[f] = k; o.count = m[k]; return o; });
   }
   var lim = Number(input.limit) || 100;
   return rows.slice(0, lim).map(function (r) { return { name: r.name, kind: r.kind, added: r.created_at }; });
@@ -206,4 +209,17 @@ export async function verifyDomainActions(spec, run) {
     checks.push({ action, ok: !!(r && r.ok && Array.isArray(r.rows)), error: r && r.error });
   }
   return checks;
+}
+
+/** A requested "by <field>" action for this view, when the field exists:
+ *  "documents by size" → "by_size". Null when no breakdown is asked or the field
+ *  isn't in the view. */
+export function byActionForGoal(goal, view) {
+  const g = String(goal || "").toLowerCase();
+  const m = g.match(/\b(?:by|per|breakdown by|grouped by)\s+([a-z][a-z_]*)/);
+  if (!m) return null;
+  const field = m[1].replace(/[^a-z_]/g, "");
+  const v = DATA_VIEWS[view];
+  if (!v || !v.fields || !v.fields[field]) return null;
+  return `by_${field}`;
 }

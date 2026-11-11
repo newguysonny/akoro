@@ -72,3 +72,18 @@ test("verifyDomainActions flags a regressed action (would block the save)", asyn
   const allOk = await verifyDomainActions(spec, async () => ({ ok: true, rows: [] }));
   assert.equal(allOk.every((c) => c.ok), true);
 });
+
+test("byActionForGoal maps a requested breakdown to a valid view field", async () => {
+  const { byActionForGoal } = await import("./domains.js");
+  assert.equal(byActionForGoal("documents by size", "my_library"), "by_size");
+  assert.equal(byActionForGoal("past questions by exam", "my_past_questions"), "by_exam");
+  assert.equal(byActionForGoal("documents by colour", "my_library"), null); // not a field
+  assert.equal(byActionForGoal("list my documents", "my_library"), null);
+});
+
+test("verifyDomainActions covers a newly added action", async () => {
+  const { verifyDomainActions } = await import("./domains.js");
+  const spec = { actions: ["count", "list", "by_subject", "by_exam"] };
+  const checks = await verifyDomainActions(spec, async () => ({ ok: true, rows: [] }));
+  assert.deepEqual(checks.map((c) => c.action), ["count", "list", "by_subject", "by_exam"]);
+});
