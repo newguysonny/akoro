@@ -231,7 +231,7 @@ export function actionContract(action, r) {
       if (!(f in row)) return `by_${f} rows must carry the '${f}' key`;
       if (!finiteNum(row.count) || row.count <= 0) return `by_${f} rows must have a positive numeric count`;
     }
-    if (finiteNum(r.total)) {
+    if (finiteNum(r.total) && !r.truncated) {
       const sum = rows.reduce((n, x) => n + x.count, 0);
       if (sum !== r.total) return `by_${f} counts sum to ${sum} but total is ${r.total}`;
     }
@@ -272,6 +272,7 @@ export async function verifyDomainActions(spec, run, { budgetMs = 12000, now = D
       action, ok: ok && !contractError,
       error: ok ? (contractError || undefined) : (r && r.error),
       ...(finiteNum(r?.total) ? { total: r.total } : {}),
+      ...(r?.truncated ? { truncated: true } : {}),
     });
   }
 
@@ -280,7 +281,7 @@ export async function verifyDomainActions(spec, run, { budgetMs = 12000, now = D
   const countCheck = checks.find((c) => c.action === "count" && c.ok && finiteNum(c.total));
   if (countCheck) {
     for (const c of checks) {
-      if (!c.ok || c.action === "count" || !finiteNum(c.total)) continue;
+      if (!c.ok || c.truncated || c.action === "count" || !finiteNum(c.total)) continue;
       if (c.action.startsWith("by_") && c.total !== countCheck.total) {
         c.ok = false;
         c.error = `by_${c.action.slice(3)} adds up to ${c.total} but count is ${countCheck.total}`;

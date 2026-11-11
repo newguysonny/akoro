@@ -149,6 +149,19 @@ test("verifyDomainActions retries a transient sandbox start, not a real failure"
   assert.equal(always.every((c) => !c.ok), true, "a real timeout still blocks the save");
 });
 
+test("a truncated breakdown passes (rows are capped, total is full)", async () => {
+  const { verifyDomainActions } = await import("./domains.js");
+  const spec = DOMAINS.library_documents;
+  const run = async (_s, input) => {
+    if (input.action === "count") return { ok: true, rows: [{ count: 193 }], total: 193 };
+    if (input.action === "by_kind") return { ok: true, rows: [{ kind: "upload", count: 100 }], total: 193, truncated: true };
+    if (input.action === "list") return { ok: true, rows: [{ name: "a", kind: "upload" }], total: 1 };
+    return { ok: true, rows: [], total: 0 };
+  };
+  const checks = await verifyDomainActions(spec, run);
+  assert.equal(checks.find((c) => c.action === "by_kind").ok, true, "capped output is not called a regression");
+});
+
 test("scripted regression: fixtures give exact outputs and a broken action is caught", async () => {
   const { verifyDomainActions, actionContract } = await import("./domains.js");
   const spec = DOMAINS.library_documents;
