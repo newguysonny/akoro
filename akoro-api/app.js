@@ -865,6 +865,13 @@ if (process.env.REDIS_URL && !skipJob("deferred jobs")) {
       .catch((e) => console.warn("[background-migrate] failed:", e.message));
   }, 30_000).unref?.();
 }
+// Phase 22: execution-log upkeep — the stale-run sweep (crash visibility) and
+// the hourly failure digest. DB-only (no Redis), so it runs regardless.
+if (!skipJob("execution log")) {
+  import("./modules/adaptive-learning/executionLog.js")
+    .then((m) => { m.startExecutionLogMaintenance(); console.log("[execution-log] maintenance started (sweep + digest)"); })
+    .catch((e) => console.warn("[execution-log] maintenance failed to start:", e.message));
+}
 app.use("/api/student",  standardLimit, studentFeedRouter);
 app.use("/api/tasks",      aiLimit,       tasksModule);
 // Only /plan calls a model; the rest is ordinary CRUD. Putting the whole module

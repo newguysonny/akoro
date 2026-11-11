@@ -4192,6 +4192,61 @@ flag-by-flag rollout; old paths removed only after a release with flags on.
 
 ---
 
+### Phase 22 — Durable execution trace, crash recovery and self-improvement (2026-11-11)
+
+- **Why.** Agent Chat logs each tool call to the console and keeps a bounded,
+  *learner-safe* trace on the reply, but nothing durable records the full path a
+  turn took — model decision → tool call → backend/DB error → retry. A failed
+  send or a wrong destination became invisible after the fact (live case: a daily
+  reminder "silently" missed for two days; the tool had defaulted delivery to a
+  new chat, and no log showed it). "Agent logs that stop at tool calls leave you
+  debugging blind," and the learning loop had nothing to learn from.
+- **Already built (the primitives):** per-call console lines; a bounded
+  learner-safe trace (`chat-trace.js` → `chat_messages.trace`, never raw args or
+  results); `agent_episodes` (anonymised trajectories, consent-gated);
+  `toolRecovery.js` (one retry + fallback hints); `toolLimits.js`; loop guard;
+  end-of-turn `turnCheck.js`; durable queues/sweeps for background jobs;
+  `quietLearning.js` (conversation → memory). **Missing:** a durable, queryable,
+  per-step execution log; turn-level crash visibility/recovery; failure → memory/
+  prompt learning.
+- **Design.**
+  1. **`edu.agent_runs`** — one row per Agent Chat turn: `session_id`,
+     `user_id`, `started_at`, `finished_at`, `status`
+     (`running | ok | failed | incomplete`), `error_class`, `step_count`,
+     `model`. Service-role only (RLS on), like `agent_episodes`.
+  2. **`edu.agent_run_steps`** — one row per tool call: `run_id`, `iteration`,
+     `tool`, `input_redacted` (jsonb), `status`, `error_class`,
+     `error_message` (redacted, ≤500), `duration_ms`, `retries`, `request_id`,
+     `created_at`. Raw args/results and reasoning are **never** stored; secrets
+     and keys are scrubbed (`redact()`).
+  3. **Write path** — best-effort, non-blocking inserts from the tool loop; a log
+     failure never breaks a turn. A run row opens at turn start and closes at
+     end; a crash leaves `status='running'`, surfaced by a sweep as `incomplete`.
+  4. **Recovery** — a sweep (like the follow-up sweep) marks stale `running`
+     runs `incomplete` with their last step, so a crashed turn is visible; an
+     ops read (`getAgentRun`) returns one run plus its full step path (the
+     LLM → tool → DB trace).
+  5. **Self-improvement** — a periodic digest clusters failed steps by
+     (`tool`, `error_class`) and (a) writes a short lesson into the agent's
+     memory, (b) proposes a prompt/rule change into the existing
+     `agent_prompt_overrides` admin surface for approval — never auto-applied.
+  6. **Privacy** — redaction before write; service-role only; no learner reads.
+- **Steps:** (1) migration `2026-agent-execution-log.sql`; (2) pure core
+  `executionLog.js` (redact, classify, step/run shapes) + tests; (3) wire the
+  tool loop (open run → per-step insert → close run); (4) stale-run sweep +
+  `getAgentRun`; (5) `failureDigest.js` (cluster → lesson + proposal) + tests;
+  (6) contract test that every tool call produces a step.
+- **Acceptance:** a turn whose tool fails leaves one `agent_run_steps` row with
+  the real `error_class` and message; a crashed turn shows `incomplete` after
+  the sweep; the digest turns a seeded set of failures into one lesson + one
+  proposed override; no raw args, secrets or reasoning in any stored row.
+- **Status (2026-11-11):** built — migration `2026-agent-execution-log.sql`,
+  `executionLog.js` (+ tests), tool-loop wiring, stale-run sweep, and
+  `failureDigest.js` (+ tests). See "Status" notes under the phase for the
+  sandbox verification result.
+
+---
+
 ## 18. Acceptance tests
 
 **A — Direct teaching:** Dashboard → Teach Agent → Start Session → Teaching

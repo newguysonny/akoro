@@ -105,6 +105,7 @@ import { adminRequestOf, requestClaimCorrection } from "./requestClaims.js";
 // Phase 16: the task ledger, the end-of-turn check, recovery, the context budget and the intent step.
 import { UPDATE_PLAN_TOOL, applyPlanUpdate, nextLedger, renderLedger, renderDraftPlan, summaryMarkOf } from "./taskLedger.js";
 import { turnCorrections } from "./turnCheck.js";
+import { startRun, recordStep, finishRun, stepRow } from "./executionLog.js";
 import { failed as toolFailed, shouldRetry, recoveryHint } from "./toolRecovery.js";
 import { runWithinLimit } from "./toolLimits.js";
 import { createLoopGuard } from "../agent-runtime/loopGuard.js";
@@ -4212,6 +4213,9 @@ async function runAgentToolLoop({ systemContent, messages, studentId, conversati
   // The unified endpoint serves instructor/school tutoring too, but learner
   // account tools are never authorised for those roles.
   if (!tools.length) return { messages: transcript, toolExecutions: executions, ledger: ledgerNow };
+  // Phase 22: the durable execution trace. One run per turn; a step per tool
+  // call below. Best-effort — startRun never throws, so logging can't break a turn.
+  const runId = await startRun({ sessionId: conversationId, userId: studentId, model });
   // Think mode decides every step on the reasoning model; if that model is
   // unavailable the rest of the turn decides on the standard model.
   let reasonDecisions = think;
@@ -4301,6 +4305,7 @@ async function runAgentToolLoop({ systemContent, messages, studentId, conversati
     transcript.push(assistant);
     for (const call of calls) {
       if (isAborted()) return { messages: transcript, toolExecutions: executions, ledger: ledgerNow, aborted: true };
+      const callStarted = Date.now();
       const tool = call?.function?.name;
       let input = {};
       try { input = JSON.parse(call?.function?.arguments || "{}"); } catch { input = {}; }
@@ -4435,9 +4440,16 @@ async function runAgentToolLoop({ systemContent, messages, studentId, conversati
       // A card the learner must act on goes out NOW, not with "done": it used to
       // appear only after the whole reply had been written (2026-11-06).
       if (executions.at(-1)?.confirm) trace?.card?.({ tool, confirm: executions.at(-1).confirm });
+      // Phase 22: persist this step (redacted, capped) so the full path — tool,
+      // real error class/message, duration, retry — survives the turn.
+      await recordStep(runId, stepRow({ runId, iteration, tool, input, success: observation.success,
+        result: toolResult, durationMs: Date.now() - callStarted, retries: toolResult?.retried ? 1 : 0, requestId: observation.request_id }));
       transcript.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify(observation) });
     }
   }
+  // Phase 22: close the run. An aborted/excepted turn never reaches here, so it
+  // stays 'running' and the stale sweep marks it 'incomplete' (a visible crash).
+  await finishRun(runId, { status: "ok" });
   return { messages: transcript, toolExecutions: executions, ledger: ledgerNow };
 }
 
