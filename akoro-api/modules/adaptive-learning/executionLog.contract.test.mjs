@@ -31,6 +31,14 @@ test("Phase 22: the migration defines the trace + digest tables, service-role on
   assert.match(sql, /REVOKE ALL ON edu\.agent_runs FROM anon, authenticated/, "no learner reads");
 });
 
+test("Phase 22: crash recovery posts one interrupt notice for a stale run", () => {
+  const src = read("modules/adaptive-learning/executionLog.js");
+  assert.match(src, /export async function recoverInterruptedRuns/);
+  assert.match(src, /postIntoChat\(/, "posts into the chat");
+  assert.match(src, /agent_interrupted/, "notice kind");
+  assert.match(src, /recoverInterruptedRuns\(\)/, "maintenance calls it");
+});
+
 test("Phase 22: a failed step stores a real error class and message, never raw args", () => {
   const row = stepRow({
     runId: "r", iteration: 4, tool: "schedule_chat_follow_up",

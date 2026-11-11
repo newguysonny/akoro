@@ -56,15 +56,45 @@ export async function finishRun(runId, { status = "ok", errorClass = null } = {}
   } catch { return false; }
 }
 
-/** Mark runs that never finished (a crash mid-turn) so they are visible. → count. */
+/** Mark runs that never finished (a crash mid-turn) so they are visible. → the affected rows. */
 export async function sweepStaleRuns({ olderThanMs = 10 * 60_000 } = {}) {
   try {
     const cutoff = new Date(Date.now() - olderThanMs).toISOString();
     const { data } = await edu().from("agent_runs")
       .update({ status: "incomplete", error_class: "crashed", finished_at: new Date().toISOString() })
-      .eq("status", "running").lt("started_at", cutoff).select("id");
-    return (data || []).length;
-  } catch { return 0; }
+      .eq("status", "running").lt("started_at", cutoff)
+      .select("id, session_id, user_id, step_count");
+    return data || [];
+  } catch { return []; }
+}
+
+/**
+ * Crash recovery (Phase 22): a turn that died mid-flight left the learner with
+ * no reply and no explanation. Sweep stale runs, then post ONE interrupt notice
+ * into the affected chat so the learner knows to retry (the sweep's
+ * running→incomplete update returns each row only once, so this never repeats).
+ * Best-effort; never throws.
+ */
+export async function recoverInterruptedRuns({ limit = 20, olderThanMs = 10 * 60_000 } = {}) {
+  const stale = await sweepStaleRuns({ olderThanMs });
+  if (!stale.length) return { swept: 0, notified: 0 };
+  let postIntoChat = null;
+  try { ({ postIntoChat } = await import("../self-tooling/escalation.js")); } catch { /* chat unavailable */ }
+  let notified = 0;
+  for (const r of stale.slice(0, limit)) {
+    if (!r?.session_id || !r?.user_id || !postIntoChat) continue;
+    try {
+      await postIntoChat({
+        userId: r.user_id,
+        conversationId: r.session_id,
+        title: "Your agent",
+        text: "That reply was interrupted before it finished. Ask me again and I'll pick it up from there.",
+        kind: "agent_interrupted",
+      });
+      notified += 1;
+    } catch { /* best-effort */ }
+  }
+  return { swept: stale.length, notified };
 }
 
 /** One run plus its step path (the LLM → tool → DB trace). */
@@ -112,7 +142,7 @@ export function startExecutionLogMaintenance({ sweepMs = 5 * 60_000, digestMs = 
   if (maintenance) return maintenance;
   let digestAt = 0;
   const tick = async () => {
-    try { await sweepStaleRuns(); } catch { /* best-effort */ }
+    try { await recoverInterruptedRuns(); } catch { /* best-effort */ }
     if (Date.now() - digestAt >= digestMs) {
       digestAt = Date.now();
       try {
