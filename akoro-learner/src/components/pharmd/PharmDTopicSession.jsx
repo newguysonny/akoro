@@ -187,7 +187,11 @@ export default function PharmDTopicSession({ topic, course, onClose }) {
     // topic PDFs aren't indexed, so the reader sends the text it already has.
     ask: {
       load: async () => [],
-      send: (opts) => askPharmd({ ...opts, documentText: reference?.text || '', docName: topicTitle }),
+      send: (opts) => askPharmd({
+        ...opts,
+        pages: pages.map((p, i) => ({ pageNumber: i + 1, text: p.text || '' })).filter((p) => p.text.trim()),
+        docName: topicTitle,
+      }),
     },
   };
 

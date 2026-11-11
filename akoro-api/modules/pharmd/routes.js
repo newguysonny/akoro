@@ -253,15 +253,38 @@ router.post("/ask", asyncHandler(async (req, res) => {
     ? { text: String(req.body.selection.text).trim().slice(0, 4000),
         pageNumber: Number.isInteger(req.body.selection.pageNumber) ? req.body.selection.pageNumber : null }
     : null;
-  const docText = String(req.body?.documentText || "").slice(0, 12000);
   const docName = String(req.body?.docName || "this topic").slice(0, 120);
+  // Prefer PER-PAGE text so citations carry a page number (and jump). The
+  // reader sends the pdf.js text per page; a flat documentText is a fallback.
+  const rawPages = Array.isArray(req.body?.pages)
+    ? req.body.pages.filter((p) => Number.isInteger(p?.pageNumber) && p.pageNumber > 0 && typeof p?.text === "string" && p.text.trim()).slice(0, 200)
+    : [];
+  const docText = String(req.body?.documentText || "");
+
+  // Candidate chunks (≈1200 chars each), each tagged with its page when known.
+  const candidates = [];
+  const addChunks = (text, pageNumber) => {
+    for (const chunk of (String(text).replace(/\s+/g, " ").match(/[\s\S]{1,1200}(?=\s|$)/g) || [])) {
+      const t = chunk.trim();
+      if (t) candidates.push({ pageNumber, text: t });
+    }
+  };
+  if (rawPages.length) for (const p of rawPages) addChunks(p.text, p.pageNumber);
+  else if (docText) addChunks(docText.slice(0, 80_000), null);
+
+  // Pick the chunks most overlapping the question; if none overlap, the opening pages.
+  const qWords = [...new Set(String(question).toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length > 3))];
+  const scored = candidates.map((c, i) => {
+    const low = c.text.toLowerCase();
+    return { ...c, i, score: qWords.reduce((n, w) => n + (low.includes(w) ? 1 : 0), 0) };
+  });
+  const overlapping = scored.filter((c) => c.score > 0);
+  const picked = (overlapping.length ? overlapping : scored)
+    .slice().sort((a, b) => b.score - a.score || a.i - b.i).slice(0, 10).sort((a, b) => a.i - b.i);
 
   const passages = [];
   if (sel?.text) passages.push({ n: 1, pageNumber: sel.pageNumber, text: sel.text, quote: sel.text.slice(0, 160) });
-  for (const chunk of (docText.match(/[\s\S]{1,1200}(?=\s|$)/g) || []).slice(0, 10)) {
-    const text = chunk.trim();
-    if (text) passages.push({ n: passages.length + 1, pageNumber: null, text, quote: text.slice(0, 160) });
-  }
+  for (const c of picked) passages.push({ n: passages.length + 1, pageNumber: c.pageNumber, text: c.text, quote: c.text.slice(0, 160) });
   if (!passages.length) return res.status(409).json({ success: false, error: "This topic isn't readable yet — try again in a moment." });
 
   try {
