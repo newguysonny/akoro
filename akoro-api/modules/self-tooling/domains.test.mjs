@@ -243,5 +243,5 @@ test("dynamic grouping prefers a category, never a title", async () => {
   const { genericDomain } = await import("./domains.js");
   assert.ok(!genericDomain("my_chats").actions.includes("by_title"), "chats don't group by title");
   assert.ok(genericDomain("my_tasks").actions.includes("by_status"), "tasks group by status");
-  assert.ok(genericDomain("my_buddies").actions.includes("by_status"), "buddies group by status");
+  assert.ok(genericDomain("my_buddies").actions.includes("by_subject"), "buddies group by subject");
 });
