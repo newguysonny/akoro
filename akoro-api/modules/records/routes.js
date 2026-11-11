@@ -1134,6 +1134,11 @@ router.patch("/:id", authenticateToken, asyncHandler(async (req, res) => {
     patch.progress = p;
   }
   if (req.body?.lastOpened) patch.last_opened_at = new Date().toISOString();
+  if (req.body?.name !== undefined) {
+    const name = String(req.body.name || "").trim().slice(0, 255);
+    if (!name) return res400(res, "A file name is required.");
+    patch.name = name;
+  }
 
   const { data, error } = await edu().from("records").update(patch).eq("id", req.params.id).select().single();
   if (error) throw error;

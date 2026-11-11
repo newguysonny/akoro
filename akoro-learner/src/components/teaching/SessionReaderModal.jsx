@@ -1102,10 +1102,6 @@ export default function SessionReaderModal({
      citations carry the exact block's bbox, and citeJump flashes THAT
      region on the scanned page — Fortizo's jump-and-flash, grounded. */
   pageBlocks = null,
-  /* overlayToggle — true only when the page content is a PDF, i.e. there are
-     genuinely two selectable layers to choose between (pdf.js text vs the
-     extracted-markdown overlay). Images have no pdf.js layer, so no toggle. */
-  overlayToggle = false,
   /* transcript — { segments:[{kind, startMs, endMs, speaker, text}] } for
      audio/video materials: listed under the player; a click seeks the
      recording to that moment. */
@@ -1166,7 +1162,6 @@ export default function SessionReaderModal({
   }
   const [currentPage, setCurrentPage] = useState(restoredPos.current.page);
   const [zoom, setZoom] = useState(restoredPos.current.zoom);
-  const [extractedLayer, setExtractedLayer] = useState(false);   // A/B: select with the extracted-markdown layer instead of pdf.js text
   const [pageNumDraft, setPageNumDraft] = useState(String(restoredPos.current.page + 1));
   const viewerRef = useRef(null);
 
@@ -1970,24 +1965,6 @@ export default function SessionReaderModal({
               </div>
             )}
 
-            {/* A/B: which invisible layer selects the page — the pdf.js text
-                layer (this document's own glyph coordinates) or the extracted
-                markdown overlay (RunPod blocks). Only shown once extraction has
-                produced blocks for this record. */}
-            {!isMedia && overlayToggle && Array.isArray(pageBlocks) && pageBlocks.some(Boolean) && (
-              <button
-                onClick={() => setExtractedLayer((v) => !v)}
-                className={`folio-btn-outline h-7 rounded border flex items-center justify-center px-2 gap-1 whitespace-nowrap ${extractedLayer ? "bg-black/10" : ""}`}
-                title={extractedLayer
-                  ? "Selecting with the extracted markdown layer — tap for the PDF text layer"
-                  : "Selecting with the PDF text layer — tap for the extracted markdown layer"}
-                aria-pressed={extractedLayer}
-              >
-                <Icon name={extractedLayer ? "ti-text-recognition" : "ti-file-text"} size={13}/>
-                <span className="text-xs font-bold" style={{ color: "var(--ak-text)" }}>{extractedLayer ? "Extracted" : "PDF text"}</span>
-              </button>
-            )}
-
             <button
               onClick={() => (isMedia ? playerApi?.toggle() : setIsPlaying((p) => !p))}
               className="folio-icon-btn w-7 h-7 rounded flex items-center justify-center"
@@ -2109,7 +2086,7 @@ export default function SessionReaderModal({
                       Drawn pages (canvases, images) get their annotations
                       and hidden passages as boxes over the selection. */}
                   {(() => {
-                    const drawn = renderPageContent && renderPageContent(i, { selectionOverlay: extractedLayer });
+                    const drawn = renderPageContent && renderPageContent(i);
                     if (!drawn) return <div data-page-content="" dangerouslySetInnerHTML={{ __html: buildPageHtml(p.html, i) }}/>;
                     return (
                       <div data-page-content="" style={{ position: "relative" }}>

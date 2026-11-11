@@ -143,6 +143,12 @@ export async function deleteRecord(id) {
   return true;
 }
 
+/** Rename a library file (the record's display name). */
+export async function renameRecord(id, { name }) {
+  const d = await apiPatch(`/api/records/${id}`, { name });
+  return d?.data ?? d ?? true;
+}
+
 /* ── AI text extraction (hanji-parse-4b on RunPod) ────────────────────────
    The reader rasterizes a record's pages; the API runs each page through
    the parse worker and caches the result. Scanned PDFs and images come

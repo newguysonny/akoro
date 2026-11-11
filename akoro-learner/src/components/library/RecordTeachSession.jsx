@@ -538,10 +538,13 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
     downloadName: record.name,
   } : null;
 
-  const renderPageContent = (i, opts) => {
+  const renderPageContent = (i) => {
     if (type === 'pdf' && pdfParts?.pdf) {
       const PdfCanvas = pdfParts.PdfPage;
-      return <PdfCanvas pdf={pdfParts.pdf} pageNumber={i + 1} blocks={pdfBlocks.get(i + 1)} selectionOverlay={!!opts?.selectionOverlay}/>;
+      // Library content selects over the EXTRACTED markdown layer (not the
+      // pdf.js layer). Before extraction finishes, PdfPage falls back to the
+      // pdf.js layer for that page so selection is never dead.
+      return <PdfCanvas pdf={pdfParts.pdf} pageNumber={i + 1} blocks={pdfBlocks.get(i + 1)} selectionOverlay/>;
     }
     if (type === 'image') {
       return <ImagePage src={fileUrl} alt={record.name} blocks={pdfBlocks.get(1)}/>;
@@ -601,9 +604,6 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
     // Extraction blocks per page — generated summaries/quiz citations carry
     // the exact block bbox, and citeJump flashes that region on the scan.
     pageBlocks: pages.map((_, i) => pdfBlocks.get(i + 1) || null),
-    // Only a PDF has two selectable layers to A/B (pdf.js text vs extracted
-    // markdown). Images/text/office always use one layer, so no toggle.
-    overlayToggle: type === 'pdf',
     // A/V transcript segments — the reader lists them under the player;
     // clicking a segment seeks the recording to that moment.
     transcript: avTranscript,

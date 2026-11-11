@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { fetchMyLibrary } from '../services/libraryApi.js';
-import { listRecords, listFolders, setRecordProgress, touchRecordOpened, searchRecords } from '../services/recordsApi.js';
+import { listRecords, listFolders, setRecordProgress, touchRecordOpened, searchRecords, renameRecord, deleteRecord } from '../services/recordsApi.js';
 import { Icon, XIcon } from '../components/common/Icons.jsx';
 import { BRAND, RED, GREEN, GOLD, STUDENT_ID } from '../constants.js';
 import { useLang } from '../contexts/LanguageContext.jsx';
@@ -839,6 +839,16 @@ export default function LibraryPage() {
           onClose={() => setAddTarget(null)}
           onPickFolder={(snap) => { setAddToFolder(snap); setAddTarget(null); }}
           onPickCommunity={(snap) => { setAddToCommunity(snap); setAddTarget(null); }}
+          onRename={async (item, name) => {
+            await renameRecord(item.itemRef, { name });
+            setToast('File renamed');
+            await load();
+          }}
+          onDelete={async (item) => {
+            await deleteRecord(item.itemRef);
+            setToast('File deleted');
+            await load();
+          }}
         />
       )}
       {addToFolder && (
