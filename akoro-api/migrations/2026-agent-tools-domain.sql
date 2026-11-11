@@ -10,11 +10,11 @@
 ALTER TABLE edu.agent_tools ADD COLUMN IF NOT EXISTS domain text;
 ALTER TABLE edu.agent_tools ADD COLUMN IF NOT EXISTS actions jsonb;
 
+-- `views` is text[] (1-based), not jsonb — use array indexing.
 UPDATE edu.agent_tools
-   SET domain = views->>0
+   SET domain = views[1]
  WHERE domain IS NULL
-   AND jsonb_typeof(views) = 'array'
-   AND jsonb_array_length(views) > 0;
+   AND array_length(views, 1) >= 1;
 
 UPDATE edu.agent_tools
    SET actions = params_schema->'action'->'enum'
