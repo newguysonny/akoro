@@ -253,7 +253,8 @@
     "2026-battle-question-tags.sql",
     "2026-confusion-pair-reviews.sql",
     "2026-agent-outreach.sql",
-    "2026-study-prep-topic-states.sql"
+    "2026-study-prep-topic-states.sql",
+    "2026-agent-execution-log.sql"
   ],
   "demo": [
     "2026-seed-school-passwords.sql",
