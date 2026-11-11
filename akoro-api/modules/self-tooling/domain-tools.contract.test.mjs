@@ -25,6 +25,8 @@ test("reuse is domain-based, not goal-text fuzzy", () => {
   assert.match(pipe, /domainOf\(t\) === goalView/, "only same-domain tools are candidates");
   assert.match(pipe, /hasDomainTool[\s\S]{0,220}buildDomain\(spec\)/, "a same-view domain tool is extended, not duplicated");
   assert.match(pipe, /!asksForChange\(goal\) \|\| !isDomainTool\(t\)/, "a read domain tool never serves a write goal");
+  assert.match(pipe, /const dkey = audience === "learner" && !asksForChange\(goal\)/, "curated domains skip change goals");
+  assert.match(pipe, /audience === "learner" && !asksForChange\(goal\)\) \{\n    try \{\n      const lookupD = await schemaLookup/, "dynamic domains skip change goals");
 });
 
 test("stale cleanup is per-learner and global, and never archives write tools", () => {

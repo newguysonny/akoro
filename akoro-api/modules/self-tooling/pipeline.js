@@ -288,9 +288,12 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
 
   // 1) A curated domain; 2) a per-learner DYNAMIC domain for a read goal over one
   // of the learner's own-data views (the agent "fills" its own domain tools).
-  const dkey = audience === "learner" ? domainForGoal(goal) : null;
+  // Never route a CHANGE goal to a read domain: "delete a task by position"
+  // matched the "by <field>" read regex and answered with a count instead of
+  // reaching the learner's write tool.
+  const dkey = audience === "learner" && !asksForChange(goal) ? domainForGoal(goal) : null;
   if (dkey) return await buildDomain(DOMAINS[dkey]);
-  if (audience === "learner") {
+  if (audience === "learner" && !asksForChange(goal)) {
     try {
       const lookupD = await schemaLookup(goal, { audience, learnerId });
       const top = (lookupD.views || []).find((x) => DATA_VIEWS[x?.name] && DATA_VIEWS[x.name].scope === "self");
