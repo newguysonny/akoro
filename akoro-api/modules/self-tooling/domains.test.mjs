@@ -200,6 +200,9 @@ test("aggregates are scripted actions: inferred, run, and contract-checked", asy
   assert.equal(aggregateForGoal("WAEC accuracy", "my_past_questions"), "accuracy");
   assert.equal(aggregateForGoal("total size of my documents", "my_library"), "sum_size");
   assert.equal(aggregateForGoal("highest progress", "my_courses"), "max_progress");
+  assert.equal(aggregateForGoal("How much XP have I earned?", "my_xp"), "sum_amount");
+  assert.equal(aggregateForGoal("What is my biggest single XP award?", "my_xp"), "max_amount");
+  assert.equal(aggregateForGoal("How much space do my documents take up?", "my_library"), "sum_size");
   assert.equal(aggregateForGoal("total documents", "my_library"), null, "a count is not an aggregate");
 
   const spec = DOMAINS.library_documents;

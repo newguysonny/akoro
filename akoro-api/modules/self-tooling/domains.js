@@ -279,7 +279,7 @@ const NUMERIC_TYPES = new Set(["int", "integer", "num", "number", "float", "deci
 const numericFields = (view) => Object.entries(DATA_VIEWS[view]?.fields || {})
   .filter(([, f]) => NUMERIC_TYPES.has(String(f?.type))).map(([k]) => k);
 // Goal words that name a metric differently from its field.
-const METRIC_ALIAS = { xp: "amount", points: "amount", point: "amount", earned: "amount", score: "score", progress: "progress", size: "size", confidence: "confidence", rank: "final_rank" };
+const METRIC_ALIAS = { xp: "amount", points: "amount", point: "amount", earned: "amount", score: "score", progress: "progress", size: "size", space: "size", storage: "size", bytes: "size", confidence: "confidence", rank: "final_rank" };
 
 /** The scripted aggregate action a goal asks for on this view (or null):
  *  "total XP" → sum_amount, "average score" → avg_score, "WAEC accuracy" →
@@ -289,14 +289,21 @@ export function aggregateForGoal(goal, view) {
   const g = String(goal || "").toLowerCase();
   if (!view || !DATA_VIEWS[view]) return null;
   if (view === "my_past_questions" && /\b(accuracy|percentage|percent|score)\b/.test(g)) return "accuracy";
-  const m = g.match(/\b(total|sum|combined|add up|average|avg|mean|highest|largest|biggest|max|lowest|smallest|min)\b(?:\s+(?:of|my|the))?\s*([a-z_]+)?/);
+  const m = g.match(/\b(total|sum|combined|add up|how much|average|avg|mean|highest|largest|biggest|max|lowest|smallest|min)\b(?:\s+(?:of|my|the))?\s*([a-z_]+)?/);
   if (!m) return null;
   const nums = numericFields(view);
   if (!nums.length) return null;
-  const metric = m[2];
-  const field = metric && nums.includes(metric) ? metric
-    : metric && METRIC_ALIAS[metric] && nums.includes(METRIC_ALIAS[metric]) ? METRIC_ALIAS[metric]
-    : !metric && nums.length === 1 ? nums[0] : null;
+  // Find the metric anywhere in the sentence, not just right after the op word:
+  // "biggest single XP award" → xp → amount.
+  const tokens = g.split(/[^a-z0-9_]+/).filter(Boolean);
+  const aliasField = Object.keys(METRIC_ALIAS).find((k) => tokens.includes(k) && nums.includes(METRIC_ALIAS[k]));
+  const fieldExact = nums.find((f) => tokens.includes(f));
+  let field = null;
+  if (m[2] && nums.includes(m[2])) field = m[2];
+  else if (m[2] && METRIC_ALIAS[m[2]] && nums.includes(METRIC_ALIAS[m[2]])) field = METRIC_ALIAS[m[2]];
+  else if (fieldExact) field = fieldExact;
+  else if (aliasField) field = METRIC_ALIAS[aliasField];
+  else if (!m[2] && nums.length === 1) field = nums[0];
   if (!field) return null;
   const op = /^(average|avg|mean)$/.test(m[1]) ? "avg"
     : /^(highest|largest|biggest|max)$/.test(m[1]) ? "max"
