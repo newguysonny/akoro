@@ -32,14 +32,14 @@ const DOC_CACHE_MAX = 6;
 const docCache = new Map();   // src -> { pdf, texts }, oldest-first for eviction
 
 /** Load the document + extract each page's text. `src` is presigned — no auth needed. */
-export async function loadPdfDocument(src) {
+export async function loadPdfDocument(src, { credentials } = {}) {
   const cached = docCache.get(src);
   if (cached) {
     docCache.delete(src);      // refresh recency so the newest stays put
     docCache.set(src, cached);
     return cached;
   }
-  const res = await fetch(src);
+  const res = await fetch(src, credentials ? { credentials } : undefined);
   if (!res.ok) throw new Error(`Could not load the file (${res.status}).`);
   const data = new Uint8Array(await res.arrayBuffer());
   const pdf = await pdfjsLib.getDocument({ data }).promise;
@@ -196,6 +196,12 @@ export function PdfPage({ pdf, pageNumber, blocks = null, selectionOverlay = fal
     });
     ro.observe(wrap);
     setWrapW(wrap.clientWidth || 0);
+    // Eager-render the opener pages. A restored reading position jumps the
+    // reader past them before the observer ever sees them intersect, which
+    // left the first pages with NO text layer — unselectable until a refresh.
+    // Rendering them up front is cheap and additive: render() returns at once
+    // for a page that is already drawn, so a working page is never touched.
+    if (pageNumber <= 2) render();
     return () => { cancelled = true; io.disconnect(); ro.disconnect(); unguard(); delete wrap.dataset.drawn; };
   }, [pdf, pageNumber]);
 

@@ -351,3 +351,8 @@ export async function getRecordTranscriptionStatus({ recordId, contentKey }) {
 
 /** Stable "save a copy" link — cookies auth it, R2 serves the bytes. */
 export const recordDownloadUrl = (id) => `${API}/api/records/${id}/file`;
+
+/** The reader's same-API URL for an upload's bytes — streamed by the API so the
+    browser never fetches the storage URL directly (R2 presigned URLs send no
+    CORS headers, which blocked library PDFs/images). Fetch with credentials. */
+export const recordFileSrc = (id) => `${API}/api/records/${id}/file?inline=1`;

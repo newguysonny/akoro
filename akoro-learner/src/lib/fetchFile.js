@@ -28,6 +28,7 @@ async function probeOpaque(url) {
 
 export async function fetchFileWithRetry(url, {
   tries = FETCH_FILE_TRIES,
+  credentials,
   sleep = (ms) => new Promise((r) => setTimeout(r, ms)),
 } = {}) {
   let lastErr = null;
@@ -35,7 +36,7 @@ export async function fetchFileWithRetry(url, {
   for (let attempt = 1; attempt <= tries; attempt += 1) {
     let res;
     try {
-      res = await fetch(url);
+      res = await fetch(url, credentials ? { credentials } : undefined);
     } catch (e) {
       lastErr = e;
       if (attempt < tries) { await sleep(1500 * attempt); continue; }

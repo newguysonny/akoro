@@ -44,7 +44,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import TeachAgentModal from '../teaching/TeachAgentModal.jsx';
 import { buildSessionReaderPages } from '../teaching/SessionReaderModal.jsx';
 import { officeReaderPages } from '../../lib/officePages.js';
-import { recordDownloadUrl, extractStoredRecordText, getRecordExtraction, getSharedExtraction, getRecordTranscript, getSharedTranscript, startRecordTranscription, getRecordTranscriptionStatus, getAskHistory, askRecord, getGuideHistory, guideReply, generateRecordTool, startRecordPodcast, getRecordPodcast, listRecordArtifacts, saveRecordArtifact, updateRecordArtifact, deleteRecordArtifact } from '../../services/recordsApi.js';
+import { recordDownloadUrl, recordFileSrc, extractStoredRecordText, getRecordExtraction, getSharedExtraction, getRecordTranscript, getSharedTranscript, startRecordTranscription, getRecordTranscriptionStatus, getAskHistory, askRecord, getGuideHistory, guideReply, generateRecordTool, startRecordPodcast, getRecordPodcast, listRecordArtifacts, saveRecordArtifact, updateRecordArtifact, deleteRecordArtifact } from '../../services/recordsApi.js';
 import { Icon } from '../common/Icons.jsx';
 import { BRAND } from '../../constants.js';
 import { useLang } from '../../contexts/LanguageContext.jsx';
@@ -268,6 +268,11 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
   const type   = record?.kind === 'upload' && record.fileMissing ? 'missing' : recordFileType(record);
   const isMedia = type === 'audio' || type === 'video';
   const fileUrl = record?.fileUrl || null;
+  // Uploads are read through the API proxy for the byte-reading paths (PDF /
+  // text) — R2 presigned URLs send no CORS headers, so a direct browser fetch
+  // is blocked. Media keeps the storage URL so the player can range-request.
+  const proxiedBytes = record?.kind === 'upload' && !!record?.id && (type === 'pdf' || type === 'text');
+  const fileSrc = proxiedBytes ? recordFileSrc(record.id) : fileUrl;
 
   /* Load what the mode needs — pages, pdf parts and the reference — then
      hand the teaching session its material. */
@@ -318,7 +323,7 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
         if (type === 'pdf') {
           // pdf.js is a big dependency — it loads only when a PDF opens.
           const { loadPdfDocument, PdfPage } = await import('./PdfPages.jsx');
-          const { pdf, texts } = await loadPdfDocument(fileUrl);
+          const { pdf, texts } = await loadPdfDocument(fileSrc, { credentials: 'include' });
           // The pages ARE the PDF's pages — text kept beside each so the
           // Generate tools work on the document's real sentences. The same
           // text grounds the teaching session.
@@ -373,7 +378,7 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
             ready(docPages, null, md ? { name: record.name, text: md.slice(0, MAX_REFERENCE_CHARS) } : null);
             return;
           }
-          const res = await fetchFileWithRetry(fileUrl);
+          const res = await fetchFileWithRetry(fileSrc, { credentials: 'include' });
           if (!res.ok) throw new Error(`Could not load the file (${res.status}).`);
           const raw = await res.text();
           const text = raw.length > MAX_TEXT_CHARS ? raw.slice(0, MAX_TEXT_CHARS) : raw;

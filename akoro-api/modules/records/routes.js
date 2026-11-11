@@ -1302,6 +1302,21 @@ router.get("/:id/file", authenticateToken, asyncHandler(async (req, res) => {
   if (existing.user_id !== req.user.id) return res403(res, "Not your record.");
   if (!existing.file_key) return res400(res, "This record has no saved file — only its details were captured.");
   const url = await createPresignedDownload(existing.file_key, { downloadName: existing.name });
+  // `?inline=1` streams the bytes THROUGH the API. The reader uses this instead
+  // of the storage URL because R2 presigned URLs send no CORS headers, so a
+  // browser fetch there is blocked ("Failed to fetch") — the library PDF never
+  // loaded. A server-side fetch has no CORS; we pipe it out same-API.
+  if (req.query.inline === "1") {
+    const upstream = await fetch(url);
+    if (!upstream.ok || !upstream.body) return res.status(502).json({ success: false, error: "Couldn't load the file." });
+    res.setHeader("Content-Type", upstream.headers.get("content-type") || "application/octet-stream");
+    const len = upstream.headers.get("content-length");
+    if (len) res.setHeader("Content-Length", len);
+    res.setHeader("Cache-Control", "private, max-age=0, no-store");
+    const { Readable } = await import("node:stream");
+    Readable.fromWeb(upstream.body).pipe(res);
+    return;
+  }
   res.redirect(302, url);
 }));
 
