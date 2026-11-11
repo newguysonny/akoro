@@ -35,6 +35,7 @@ import { readLogs, logSeq } from "../../lib/logTap.js";
 import { runDry } from "../../lib/dryRunContext.js";
 import { signInternalAccess } from "../auth/routes.js";
 import { safeCompare } from "../../lib/safeCompare.js";
+import { isDocumentGoal } from "../self-tooling/toolSimilarity.js";
 
 const router = express.Router();
 const asyncHandler = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
@@ -185,6 +186,36 @@ router.post("/tool", guard, asyncHandler(async (req, res) => {
 router.get("/logs", guard, (req, res) => {
   res.json({ success: true, data: readLogs({ since: req.query.since, filter: req.query.filter, level: req.query.level, limit: req.query.limit }) });
 });
+
+/* POST /agent-console/repair-library-tools { learner, build? }
+   Production repair for a learner whose saved "library count" reads a
+   subject-bearing view (sessions/XP) and reports the wrong total. Archives
+   every active document-goal tool that does NOT read my_library, then (unless
+   build:false) builds the correct my_library count tool and returns its total. */
+router.post("/repair-library-tools", guard, asyncHandler(async (req, res) => {
+  let learner;
+  try { learner = await resolveLearner(req.body?.learner); } catch (e) { return fail(res, e); }
+  const { data: tools } = await db.schema("edu").from("agent_tools")
+    .select("id, name, label, goal, views").eq("owner_id", learner.id).eq("status", "active");
+  const wrong = (tools || []).filter((t) => isDocumentGoal(t.goal || t.label || "") && !(t.views || []).includes("my_library"));
+  for (const t of wrong) {
+    await db.schema("edu").from("agent_tools")
+      .update({ status: "archived", updated_at: new Date().toISOString() })
+      .eq("id", t.id).eq("owner_id", learner.id);
+  }
+  let built = null;
+  if (req.body?.build !== false) {
+    const { executeChatTool } = await chat();
+    built = await executeChatTool("create_tool",
+      { goal: "Count the documents in my library", name: "library_documents_count", label: "Count my library documents" },
+      learner.id, { role: "student", channel: "agent-console" });
+  }
+  res.json({ success: true, data: {
+    learner: learner.username,
+    archived: wrong.map((t) => t.name),
+    built: built ? { status: built.status, tool: built.tool, mode: built.mode, total: built.result?.total ?? null } : null,
+  } });
+}));
 
 router.get("/runs", guard, (_req, res) => {
   res.json({ success: true, data: runs.map((r) => ({ id: r.id, kind: r.kind, at: r.at, mode: r.mode, prompt: r.prompt, tool: r.tool, ms: r.ms, ok: !r.error && !(r.result?.error || r.result?.threw) })) });
