@@ -78,6 +78,9 @@ export default function PharmDTopicSession({ topic, course, onClose }) {
     setPages([]);
     setPdfParts(null);
     setReference(null);
+    setPageBlocks(null);
+    setExtract(null);
+    extRunRef.current += 1;   // a run for the previous topic must not apply here
 
     (async () => {
       if (!topic?.id) return;
