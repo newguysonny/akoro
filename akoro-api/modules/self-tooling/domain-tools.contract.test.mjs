@@ -31,7 +31,9 @@ test("stale cleanup is per-learner and global, and never archives write tools", 
   const src = read("../agentConsole/routes.js");
   assert.match(src, /req\.body\?\.all === true/, "all-learner sweep");
   assert.match(src, /confirm:true/, "global archive needs confirmation");
-  assert.match(src, /\(t\.capabilities \|\| \[\]\)\.length\) continue/, "write tools are skipped");
+  const cleanupSrc = read("../agentConsole/cleanup.js");
+  assert.match(cleanupSrc, /\(t\.capabilities \|\| \[\]\)\.length\) continue/, "write tools are skipped");
+  assert.match(cleanupSrc, /isSimpleRead/, "bespoke readers are kept beside the domain tool");
 });
 
 test("agent_tools carries domain/actions and the migration is registered", () => {
@@ -39,7 +41,7 @@ test("agent_tools carries domain/actions and the migration is registered", () =>
   assert.match(pipe, /domain: spec\.view, actions/, "domain tool writes domain + actions");
   const manifest = JSON.parse(read("../../migrations/manifest.json"));
   assert.ok(manifest.schema.includes("2026-agent-tools-domain.sql"), "migration registered");
-  assert.match(read("../agentConsole/routes.js"), /t\.domain \|\|/, "cleanup reads the domain column");
+  assert.match(read("../agentConsole/cleanup.js"), /t\.domain \|\|/, "cleanup reads the domain column");
 });
 
 test("a rejected rebuild never archives the working domain tool", () => {

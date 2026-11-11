@@ -36,6 +36,7 @@ import { runDry } from "../../lib/dryRunContext.js";
 import { signInternalAccess } from "../auth/routes.js";
 import { safeCompare } from "../../lib/safeCompare.js";
 import { isDocumentGoal } from "../self-tooling/toolSimilarity.js";
+import { cleanupPlan } from "./cleanup.js";
 
 const router = express.Router();
 const asyncHandler = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
@@ -222,35 +223,6 @@ router.post("/repair-library-tools", guard, asyncHandler(async (req, res) => {
     built: built ? { status: built.status, tool: built.tool, mode: built.mode, total: built.result?.total ?? null } : null,
   } });
 }));
-
-/** Group active tools by data view, keep the best READ tool per view, and list
- *  the rest for archiving. Write tools (anything with capabilities) and tools
- *  with no view are left alone — the split keeps writes separate. */
-function cleanupPlan(tools) {
-  const byDomain = new Map();
-  for (const t of tools || []) {
-    if ((t.capabilities || []).length) continue;
-    const domain = t.domain || (Array.isArray(t.views) && t.views[0]);
-    if (!domain) continue;
-    if (!byDomain.has(domain)) byDomain.set(domain, []);
-    byDomain.get(domain).push(t);
-  }
-  const kept = {}, archive = [];
-  for (const [domain, list] of byDomain) {
-    list.sort((a, b) => {
-      const ad = a.mode === "code" && a.params_schema?.action?.enum ? 1 : 0;
-      const bd = b.mode === "code" && b.params_schema?.action?.enum ? 1 : 0;
-      if (bd !== ad) return bd - ad;                                // prefer a domain tool
-      const al = (a.params_schema?.action?.enum || []).length;
-      const bl = (b.params_schema?.action?.enum || []).length;
-      if (bl !== al) return bl - al;                                // then the richer one
-      return String(b.created_at).localeCompare(String(a.created_at));
-    });
-    kept[domain] = list[0].name;
-    archive.push(...list.slice(1));
-  }
-  return { kept, archive };
-}
 
 /* POST /agent-console/cleanup-domain-tools { learner, dry? } | { all: true, dry?, confirm? }
    One tool per DOMAIN (view): keep the best READ tool over a view and archive the

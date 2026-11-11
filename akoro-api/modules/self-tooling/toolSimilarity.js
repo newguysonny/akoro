@@ -14,11 +14,22 @@ const STOP = new Set([
   "you", "i", "do", "does", "into", "about", "give", "show", "get", "make", "so",
 ]);
 
+/** Words that mean the same change/object, so a rephrase is still one intent. */
+const SYN = {
+  remove: "delete", removes: "delete", removing: "delete", removed: "delete",
+  deleted: "delete", deleting: "delete", erase: "delete", drop: "delete",
+  conversation: "chat", conversations: "chat", discussion: "chat", discussions: "chat",
+  talk: "chat", talks: "chat", thread: "chat", threads: "chat",
+  oldest: "earliest", first: "earliest", latest: "newest", last: "newest",
+  todo: "task", todos: "task",
+};
+
 /** PURE: meaningful lowercase tokens of a goal/label. */
 export function goalTokens(text) {
   return new Set(
     String(text || "").toLowerCase().split(/[^a-z0-9]+/)
-      .filter((w) => w.length > 2 && !STOP.has(w)),
+      .filter((w) => w.length > 2 && !STOP.has(w))
+      .map((w) => SYN[w] || w),
   );
 }
 

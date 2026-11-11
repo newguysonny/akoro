@@ -75,8 +75,8 @@ test("document goals read my_library only, and replace a wrong-view duplicate", 
   assert.match(src, /isDocumentGoal\(goal\)/, "detects document goals");
   assert.match(src, /docGoal\s*=\s*audience === "learner" && isDocumentGoal\(goal\)/);
   assert.match(src, /registrySlice\(\{ views: \[\], capabilities: \[\] \}, \{ views: \["my_library"\] \}/, "offers ONLY my_library (ignoring model hints)");
-  assert.match(src, /dupes\.find\(\(t\) => \(t\.views \|\| \[\]\)\.includes\("my_library"\)\)/, "reuses a correct-view duplicate");
-  assert.match(src, /for \(const d of dupes\)[\s\S]{0,160}eq\("id", d\.id\)/, "archives wrong-view duplicates");
+  assert.match(src, /dupes\.find\(\(d\) => \(d\.t\.views \|\| \[\]\)\.includes\("my_library"\)\)/, "reuses a correct-view duplicate");
+  assert.match(src, /for \(const \{ t \} of dupes\)[\s\S]{0,160}eq\("id", t\.id\)/, "archives wrong-view duplicates");
 });
 
 test("create_tool can rebuild a saved tool in place (replace)", () => {

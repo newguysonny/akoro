@@ -44,3 +44,10 @@ test("isDocumentGoal: library documents/uploads, not subject data", async () => 
   assert.equal(isDocumentGoal("Weekly XP by subject"), false);
   assert.equal(isDocumentGoal("Set Chemistry tasks to high priority"), false);
 });
+
+test("a rephrase with synonyms is the same intent", () => {
+  assert.equal(similarGoal("Delete my earliest chat", "Remove my earliest conversation"), true);
+  assert.equal(similarGoal("Delete my earliest chat (by position)", "delete my oldest chat by position"), true);
+  assert.equal(similarGoal("Delete my earliest chat", "Delete my empty chats"), false);
+  assert.equal(similarGoal("Delete my earliest chat", "Delete my oldest task"), false);
+});

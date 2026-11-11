@@ -19,7 +19,7 @@ import { escalate } from "./escalation.js";
 import { proposeWrite, proposePermission } from "./confirmations.js";
 import { codeEnabled } from "./sandbox/index.js";
 import { basisColumns, currentActionBasis } from "../agent-runtime/actionBasis.js";
-import { isDocumentGoal, similarGoal } from "./toolSimilarity.js";
+import { isDocumentGoal, similarGoal, goalTokens } from "./toolSimilarity.js";
 import { DOMAINS, domainForGoal, genericDomain, genericReadGoal, inferAction, verifyDomainActions, byActionForGoal, aggregateForGoal, bestSelfView, MAX_DOMAIN_ACTIONS } from "./domains.js";
 
 const edu = () => db.schema("edu");
@@ -326,19 +326,25 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
       // can't serve a write goal — the split keeps writes on their own tools.
       const sameDomain = goalView ? (mine || []).filter((t) => domainOf(t) === goalView) : (mine || []);
       const candidates = sameDomain.filter((t) => !asksForChange(goal) || !isDomainTool(t));
-      const dupes = candidates.filter((t) => similarGoal(t.goal || t.label || "", goal));
+      // Rank near-duplicates by shared intent words, so "delete a task by
+      // position" reuses the by-position tool and not "delete my tasks".
+      const overlap = (a, b) => { const B = goalTokens(b); let n = 0; for (const x of goalTokens(a)) if (B.has(x)) n += 1; return n; };
+      const dupes = candidates
+        .filter((t) => similarGoal(t.goal || t.label || "", goal))
+        .map((t) => ({ t, s: overlap(t.goal || t.label || "", goal) }))
+        .sort((a, b) => b.s - a.s);
       if (dupes.length) {
         // A document goal may reuse a duplicate ONLY if it reads my_library.
         // Otherwise every wrong-view duplicate (counted sessions by subject) is
         // archived so the corrected build replaces them in one go.
-        const usable = docGoal ? dupes.find((t) => (t.views || []).includes("my_library")) : dupes[0];
+        const usable = docGoal ? dupes.find((d) => (d.t.views || []).includes("my_library"))?.t : dupes[0].t;
         if (usable) return finish("reused", {
           status: "reused", tool: usable.name, label: usable.label,
           note: `You already have a tool for this — "${usable.label}" (${usable.name}). It IS available in this chat: CALL ${usable.name} now to answer. Never tell the learner to open Settings to run it, and never build a near-duplicate — if it can't do exactly this, extend that tool instead.`,
         });
-        for (const d of dupes) {
-          if (d.id) await edu().from("agent_tools").update({ status: "archived", updated_at: new Date().toISOString() })
-            .eq("id", d.id).eq("owner_id", learnerId);
+        for (const { t } of dupes) {
+          if (t.id) await edu().from("agent_tools").update({ status: "archived", updated_at: new Date().toISOString() })
+            .eq("id", t.id).eq("owner_id", learnerId);
         }
       }
     } catch { /* best-effort: never block a build on the duplicate check */ }
