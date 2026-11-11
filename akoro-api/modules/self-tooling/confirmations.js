@@ -196,7 +196,9 @@ export async function confirmWrite({ id, userId, callTool, buildTool = null, pos
     await postIntoChat({ userId, conversationId, title: "Your change", text, kind: "agent_change_done",
       messageId: `00000000-0000-4000-8000-${createHash("sha256").update(id).digest("hex").slice(0, 12)}` }).catch(() => {});
     // Then the agent sees the decision and continues (read-only) in its own turn.
-    kickDecisionFollowUp({ userId, conversationId, outcomeText: `I approved this change. The app applied it: ${text}`, confirmationId: id });
+    // Name WHAT changed so the follow-up turn can verify the right thing.
+    const changed = (claimed.preview?.items || []).slice(0, 5).join("; ");
+    kickDecisionFollowUp({ userId, conversationId, outcomeText: `I approved this change. The app applied it: ${text}${changed ? ` — ${changed}` : ""}`, confirmationId: id });
   }
   return { ...publicConfirmation({ ...claimed, preview: { ...claimed.preview, result } }) };
 }

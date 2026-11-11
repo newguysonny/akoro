@@ -18,9 +18,10 @@ import { createHash } from "node:crypto";
 export async function runDecisionFollowUp({ userId, conversationId = null, outcomeText, confirmationId }) {
   if (!userId || !confirmationId) return null;
   try {
-    const [{ runAgentToolLoop, getLearnerChatTools, SIDE_EFFECT_TOOLS }, { postIntoChat }] = await Promise.all([
+    const [{ runAgentToolLoop, getLearnerChatTools, SIDE_EFFECT_TOOLS }, { postIntoChat }, { readChat }] = await Promise.all([
       import("../adaptive-learning/chat.js"),
       import("./escalation.js"),
+      import("../adaptive-learning/chat-history-tools.js"),
     ]);
 
     // Read-only tool set: no create/delete/send tools reach the model here.
@@ -28,12 +29,28 @@ export async function runDecisionFollowUp({ userId, conversationId = null, outco
       .filter((t) => !SIDE_EFFECT_TOOLS.includes(t.name))
       .map((t) => ({ type: "function", function: { name: t.name, description: t.description, parameters: t.input_schema } }));
 
-    const systemContent = "You are the learner's study agent. The learner just made a decision in the app and the app has already applied (or undone) it. Continue helping them: acknowledge the decision in one short line, and if a next step is obvious — something you were waiting on, like checking a reply — use a READ tool and report the result. You may only READ right now; never claim to change, create, delete or send anything. Do not re-propose the same change or repeat its change card.";
+    // The decision arrives as a SEPARATE request, so this turn has no memory of
+    // the conversation that set the change up. Without that history the model
+    // can only say "I'll take a look" — it has no idea what it promised to
+    // verify or what changed. Load the recent transcript so it can actually
+    // follow through (e.g. list the chats after deleting one).
+    let history = [];
+    if (conversationId) {
+      try {
+        const h = await readChat(userId, conversationId, { limit: 12 });
+        history = (h?.messages || []).map((m) => ({
+          role: m.from === "agent" ? "assistant" : "user",
+          content: String(m.text || "").slice(0, 1000),
+        })).filter((m) => m.content);
+      } catch { /* history is best-effort */ }
+    }
+
+    const systemContent = "You are the learner's study agent. The learner just made a decision in the app and the app has ALREADY applied (or undone) it — do not ask them to confirm it again. Your job now is to VERIFY the result and report it, not to promise you'll look later: use a READ tool to check the change actually took effect (if something was deleted or created, list that item and confirm it is gone/present — e.g. list_chats, list_my_tasks). Reply in one or two short lines: a brief acknowledgement, then what you actually read back. If no read tool fits, say plainly what was applied. You may only READ right now; never claim to change, create, delete or send anything. Do not re-propose the same change or repeat its change card.";
     const timed = new Promise((_, reject) => { const t = setTimeout(() => reject(new Error("decision follow-up timed out")), 25_000); t.unref?.(); });
     const run = await Promise.race([
       runAgentToolLoop({
         systemContent,
-        messages: [{ role: "user", content: String(outcomeText || "").slice(0, 600) }],
+        messages: [...history, { role: "user", content: String(outcomeText || "").slice(0, 600) }],
         studentId: userId,
         conversationId: conversationId || null,
         tools,
