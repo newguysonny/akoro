@@ -78,3 +78,9 @@ test("document goals read my_library only, and replace a wrong-view duplicate", 
   assert.match(src, /dupes\.find\(\(t\) => \(t\.views \|\| \[\]\)\.includes\("my_library"\)\)/, "reuses a correct-view duplicate");
   assert.match(src, /for \(const d of dupes\)[\s\S]{0,160}eq\("id", d\.id\)/, "archives wrong-view duplicates");
 });
+
+test("create_tool can rebuild a saved tool in place (replace)", () => {
+  const src = read("./pipeline.js");
+  assert.match(src, /const replaceRaw = String\(input\?\.replace/, "reads the replace target");
+  assert.match(src, /status: "archived"[\s\S]{0,140}eq\("id", old\.id\)/, "archives the replaced tool");
+});

@@ -177,6 +177,23 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
   const forbidden = forbiddenFor(goal);
   if (forbidden.length) return finish("rejected", reject(`Not allowed: ${forbidden.map((f) => f.description).join(" ")}`));
 
+  // Self-repair: rebuild a saved tool in place — archive the named/ided tool
+  // first, so the build below replaces it instead of being deduped back to it.
+  const replaceRaw = String(input?.replace || "").trim();
+  if (replaceRaw && !dry && !resumed) {
+    try {
+      const q = /^[0-9a-f-]{36}$/i.test(replaceRaw)
+        ? edu().from("agent_tools").select("id, name").eq("owner_id", learnerId).eq("id", replaceRaw)
+        : edu().from("agent_tools").select("id, name").eq("owner_id", learnerId).eq("name", replaceRaw);
+      const { data: old } = await q.in("status", ["active", "disabled"]).maybeSingle();
+      if (old?.id) {
+        await edu().from("agent_tools").update({ status: "archived", updated_at: new Date().toISOString() })
+          .eq("id", old.id).eq("owner_id", learnerId);
+        if (!String(input?.name || "").trim()) name = old.name;
+      }
+    } catch { /* best-effort */ }
+  }
+
   // Reuse, don't flood. The model kept building a fresh tool for near-identical
   // goals ("Delete my earliest chat", "…(by position)", "Delete a chat titled
   // X", "Library count", "Library count (correct total)"). If an active tool
