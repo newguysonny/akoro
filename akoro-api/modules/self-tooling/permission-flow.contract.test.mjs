@@ -66,7 +66,7 @@ test("a write capability always asks — locked to build, Confirm to apply", asy
 
 test("create_tool reuses an existing tool for the same goal (no flooding)", () => {
   const src = read("./pipeline.js");
-  assert.match(src, /similarGoal\(t\.goal \|\| t\.label \|\| "", goal\)/, "checks existing tools for a near-duplicate goal");
+  assert.match(src, /textsOf\(t\)\.some\(\(x\) => similarGoal\(x, goal\)\)/, "checks goal, label and name for a near-duplicate");
   assert.match(src, /status: "reused"/, "returns the existing tool instead of building another");
 });
 

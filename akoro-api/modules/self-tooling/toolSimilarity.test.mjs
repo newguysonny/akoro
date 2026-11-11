@@ -45,6 +45,12 @@ test("isDocumentGoal: library documents/uploads, not subject data", async () => 
   assert.equal(isDocumentGoal("Set Chemistry tasks to high priority"), false);
 });
 
+test("a short label matches a verbose goal", () => {
+  assert.equal(similarGoal("Delete empty chats", "delete my empty chats"), true);
+  assert.equal(similarGoal("Move my tasks to today", "move my pending tasks to today"), true);
+  assert.equal(similarGoal("Inbox check", "delete my empty chats"), false);
+});
+
 test("a rephrase with synonyms is the same intent", () => {
   assert.equal(similarGoal("Delete my earliest chat", "Remove my earliest conversation"), true);
   assert.equal(similarGoal("Delete my earliest chat (by position)", "delete my oldest chat by position"), true);

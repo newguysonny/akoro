@@ -332,9 +332,13 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
       // Rank near-duplicates by shared intent words, so "delete a task by
       // position" reuses the by-position tool and not "delete my tasks".
       const overlap = (a, b) => { const B = goalTokens(b); let n = 0; for (const x of goalTokens(a)) if (B.has(x)) n += 1; return n; };
+      // Compare the stored goal, its label AND its name: the goal text can be a
+      // long sentence ("Delete the learner's chat conversations that contain no
+      // messages") while the label ("Delete empty chats") is what the new ask echoes.
+      const textsOf = (t) => [t.goal, t.label, String(t.name || "").replace(/_/g, " ")].filter(Boolean);
       const dupes = candidates
-        .filter((t) => similarGoal(t.goal || t.label || "", goal))
-        .map((t) => ({ t, s: overlap(t.goal || t.label || "", goal) }))
+        .filter((t) => textsOf(t).some((x) => similarGoal(x, goal)))
+        .map((t) => ({ t, s: Math.max(...textsOf(t).map((x) => overlap(x, goal))) }))
         .sort((a, b) => b.s - a.s);
       if (dupes.length) {
         // A document goal may reuse a duplicate ONLY if it reads my_library.
