@@ -201,13 +201,15 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
   async function buildDomain(spec) {
     // Add the requested breakdown as a NEW action (the generic source handles any
     // by_<field>), then re-verify the WHOLE action set before saving.
-    const extra = byActionForGoal(goal, spec.view);
-    const actions = Array.from(new Set([...(spec.actions || []), ...(extra ? [extra] : [])]));
-    if (actions.length > MAX_DOMAIN_ACTIONS) return finish("rejected", reject(`This domain would have ${actions.length} actions (max ${MAX_DOMAIN_ACTIONS}) — keep it focused.`));
-    const spec2 = { ...spec, actions, params: { ...spec.params, action: { ...spec.params.action, enum: actions } } };
     const { data: existing } = await edu().from("agent_tools").select("id, status, params_schema")
       .eq("owner_id", learnerId).eq("name", spec.name).in("status", ["active", "disabled"]).maybeSingle();
     const have = new Set(existing?.params_schema?.action?.enum || []);
+    const extra = byActionForGoal(goal, spec.view);
+    // Carry forward actions the tool already has, so a rebuild never loses a
+    // previously-added breakdown (e.g. by_size) while adding another (by_name).
+    const actions = Array.from(new Set([...(spec.actions || []), ...have, ...(extra ? [extra] : [])]));
+    if (actions.length > MAX_DOMAIN_ACTIONS) return finish("rejected", reject(`This domain would have ${actions.length} actions (max ${MAX_DOMAIN_ACTIONS}) — keep it focused.`));
+    const spec2 = { ...spec, actions, params: { ...spec.params, action: { ...spec.params.action, enum: actions } } };
     const covered = actions.every((a) => have.has(a));
     if (existing?.status === "active" && !replaceRaw && covered) {
       return finish("reused", { status: "reused", tool: spec.name, label: spec.label, actions,
