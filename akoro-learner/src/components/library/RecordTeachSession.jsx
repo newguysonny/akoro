@@ -727,6 +727,12 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
         topic: record.name,
         subject: 'General',
         reference,
+        // The CONTENT READER is the main display, exactly like the Pharm.D
+        // topic flow — mobile included. Without this, mobile defaulted to the
+        // teaching chat, so opening a library PDF showed "Preparing your
+        // teaching session…" (and stalled if the teach socket struggled)
+        // instead of the document. The chat opens from the reader's icon.
+        readerFirst: true,
         ...(openTool ? { openTool } : {}),
         ...(openArtifact ? { openArtifact } : {}),
         // The whole document: the session searches it every turn and the
