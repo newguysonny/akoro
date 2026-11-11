@@ -54,7 +54,11 @@ export async function runDecisionFollowUp({ userId, conversationId = null, outco
         studentId: userId,
         conversationId: conversationId || null,
         tools,
-        streamText: false,
+        // Keep streaming on: the loop only exposes the final answer as
+        // `finalText` when streaming is enabled (the last assistant turn is not
+        // pushed to `messages` on the no-tool-call path), so turning it off
+        // dropped the reply and this follow-up posted nothing.
+        streamText: true,
         think: false,
         status: () => {},
         toolLimitMs: 18_000,
@@ -62,8 +66,12 @@ export async function runDecisionFollowUp({ userId, conversationId = null, outco
       timed,
     ]);
 
+    // The answer lives in `finalText` on the common no-tool-call path; fall back
+    // to the transcript for the tool-call path.
     const transcript = run?.messages || [];
-    const reply = [...transcript].reverse().find((m) => m.role === "assistant" && String(m.content || "").trim())?.content?.trim();
+    const reply = String(run?.finalText || "").trim()
+      || [...transcript].reverse().find((m) => m.role === "assistant" && String(m.content || "").trim())?.content?.trim()
+      || "";
     if (!reply) return null;
 
     await postIntoChat({
