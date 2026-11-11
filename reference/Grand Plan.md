@@ -4240,10 +4240,28 @@ flag-by-flag rollout; old paths removed only after a release with flags on.
   the real `error_class` and message; a crashed turn shows `incomplete` after
   the sweep; the digest turns a seeded set of failures into one lesson + one
   proposed override; no raw args, secrets or reasoning in any stored row.
-- **Status (2026-11-11):** built — migration `2026-agent-execution-log.sql`,
-  `executionLog.js` (+ tests), tool-loop wiring, stale-run sweep, and
-  `failureDigest.js` (+ tests). See "Status" notes under the phase for the
-  sandbox verification result.
+- **Status (2026-11-11):** built and verified on the sandbox (API `90973f32`+):
+  migration `2026-agent-execution-log.sql` (registered in the manifest), `executionLog.js`
+  (+ tests), tool-loop wiring (a run per turn, a redacted step per tool call, closed on
+  both exits), stale-run sweep, `failureDigest.js` (+ tests), and key-guarded ops reads
+  (`/api/agent-console/execution/runs[/:id]`, `/digests`). Live proof: a real dry turn →
+  run `status ok`, `step_count 1`, `finished`, step `list_tasks ok`; the earlier stranded
+  run was swept to `incomplete`; 17 Phase 22 tests + 21 adjacent pass.
+- **Decision (2026-11-11) — build #1, hold #2.**
+  - **Built — turn-boundary crash recovery (#1).** The learner's message is now persisted
+    at **turn start** (idempotent per `turnId`), so a crash no longer loses it. The stale
+    sweep marks the run `incomplete`, then — only when the chat+turn ids are known, it has
+    not already been retried, and **no side-effecting step succeeded** — **re-runs the same
+    turn once** in-process (the user message is reused, not duplicated; a write cannot
+    double-apply). Otherwise it posts one interrupt notice so the learner can retry. Full
+    state-replay is deliberately *not* built: it needs the raw tool results/args and
+    re-runs side effects, which breaks the privacy posture.
+  - **Held — learner-scoped failure memories (#2).** Deferred on purpose: most tool
+    failures are transient/infra (503, timeout), so writing them into a learner's memory is
+    permanent noise; memory is semantically retrieved (a lesson rarely surfaces when
+    relevant); and it is global ops knowledge, not learner knowledge. Revisit only for
+    deterministic, learner-actionable classes (validation/not_found/auth), with expiry, and
+    only after the failure digest shows a real recurring pattern. Data first.
 
 ---
 

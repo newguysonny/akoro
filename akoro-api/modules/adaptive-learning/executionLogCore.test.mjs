@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { redactInput, redactValue, classifyError, errorMessage, stepRow } from "./executionLogCore.js";
+import { redactInput, redactValue, classifyError, errorMessage, stepRow, canAutoRetry } from "./executionLogCore.js";
 
 test("redactInput scrubs secrets and caps long values", () => {
   const out = redactInput({
@@ -64,4 +64,17 @@ test("stepRow marks ok vs failed and only records error fields on failure", () =
   assert.equal(bad.error_class, "unavailable");
   assert.match(bad.error_message, /503 unavailable/);
   assert.equal(bad.retries, 1);
+});
+
+test("stepRow records side_effecting; canAutoRetry is guarded and once-only", () => {
+  const write = stepRow({ runId: "r", tool: "create_task", input: {}, success: true, sideEffecting: true });
+  const read = stepRow({ runId: "r", tool: "list_tasks", input: {}, success: true });
+  assert.equal(write.side_effecting, true);
+  assert.equal(read.side_effecting, false);
+
+  assert.equal(canAutoRetry({ run: { session_id: "s", turn_id: "t", auto_retried_at: null }, steps: [read] }), true);
+  assert.equal(canAutoRetry({ run: { session_id: "s", turn_id: "t", auto_retried_at: "2026-01-01" }, steps: [read] }), false, "already retried");
+  assert.equal(canAutoRetry({ run: { session_id: "s", turn_id: "t" }, steps: [write] }), false, "a change already landed");
+  assert.equal(canAutoRetry({ run: { session_id: "s" }, steps: [read] }), false, "no turn id");
+  assert.equal(canAutoRetry({ run: null, steps: [] }), false);
 });

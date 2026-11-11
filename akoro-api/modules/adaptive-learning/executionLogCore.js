@@ -62,7 +62,7 @@ export function errorMessage(result) {
 }
 
 /** PURE: shape one completed tool call into a step row (no db). */
-export function stepRow({ runId, iteration = 0, tool, input = {}, success = true, result = null, durationMs = null, retries = 0, requestId = null }) {
+export function stepRow({ runId, iteration = 0, tool, input = {}, success = true, result = null, durationMs = null, retries = 0, requestId = null, sideEffecting = false }) {
   const failed = !success;
   return {
     run_id: runId,
@@ -75,5 +75,16 @@ export function stepRow({ runId, iteration = 0, tool, input = {}, success = true
     duration_ms: Number.isFinite(durationMs) ? Math.max(0, Math.round(durationMs)) : null,
     retries: Math.max(0, Number(retries) || 0),
     request_id: requestId ? String(requestId).slice(0, 80) : null,
+    side_effecting: !!sideEffecting,
   };
+}
+
+/**
+ * PURE: is a crashed turn safe to re-run automatically? Only when we have the
+ * chat + turn ids (to re-run idempotently), it has not already been retried, and
+ * NO change succeeded before the crash (so a retry cannot double-apply a write).
+ */
+export function canAutoRetry({ run, steps = [] } = {}) {
+  if (!run?.session_id || !run?.turn_id || run?.auto_retried_at) return false;
+  return !(steps || []).some((s) => s && s.status === "ok" && s.side_effecting);
 }

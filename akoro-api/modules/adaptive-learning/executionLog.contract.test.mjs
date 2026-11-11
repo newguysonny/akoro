@@ -55,3 +55,14 @@ test("Phase 22: a failed step stores a real error class and message, never raw a
   assert.equal(row.retries, 1);
   assert.equal(classifyError({ error: "503 unavailable" }), "unavailable");
 });
+
+test("Phase 22 #1: user message persisted at turn start; a crashed turn re-runs once, safely", () => {
+  const chat = read("modules/adaptive-learning/chat.js");
+  assert.match(chat, /persistLearnerAgentUserTurnMessage\(/, "persists the user message at turn start");
+  assert.match(chat, /startRun\(\{ sessionId: conversationId, userId: studentId, model, turnId \}\)/, "run carries the turn id");
+  assert.match(chat, /sideEffecting: changes/, "steps mark side-effecting calls");
+  const log = read("modules/adaptive-learning/executionLog.js");
+  assert.match(log, /canAutoRetry\(\{ run, steps \}\)/, "guarded by the pure check");
+  assert.match(log, /reRunCrashedTurn\(/, "re-runs the same turn");
+  assert.match(log, /auto_retried_at/, "once-only");
+});

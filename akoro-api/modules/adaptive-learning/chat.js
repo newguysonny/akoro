@@ -147,6 +147,7 @@ import {
   savedTurnReplyId,
   loadLearnerAgentConversationContext,
   persistLearnerAgentConversationTurn,
+  persistLearnerAgentUserTurnMessage,
   retrieveLearnerAgentMemory,
 } from "../agent-tools/conversation-context-routes.js";
 
@@ -4195,7 +4196,7 @@ export const shouldPlanFirst = (intent) => !!(intent?.multiStep && intent.next =
 // `basis` (Phase 18 item 6): a turn a person's message started is explicit; a turn
 // started for them (a proactive kind, a workflow) passes { basis: "inferred", rule }.
 // `toolLimitMs`: one time limit for every call (tests, the benchmark); else each tool's own (toolLimits.js).
-async function runAgentToolLoop({ systemContent, messages, studentId, conversationId = null, status, tools = openAiChatTools(), requiredTool = null, role = "student", trace = null, isAborted = () => false, think = false, streamText = true, model = null, teacherWords = null, ledger = null, callTool = null, recorder = null, meta = null, basis = "explicit", toolLimitMs = null, planFirst = false }) {
+async function runAgentToolLoop({ systemContent, messages, studentId, conversationId = null, turnId = null, status, tools = openAiChatTools(), requiredTool = null, role = "student", trace = null, isAborted = () => false, think = false, streamText = true, model = null, teacherWords = null, ledger = null, callTool = null, recorder = null, meta = null, basis = "explicit", toolLimitMs = null, planFirst = false }) {
   const turnBasis = actionBasis(basis, { basis: "explicit" });
   const runTool = callTool || ((name, input) => executeChatTool(name, input, studentId, { conversationId, role, basis: turnBasis }));
   // The loop guard (loopGuard.js): the same call again in a row gets a reminder in its observation.
@@ -4215,7 +4216,7 @@ async function runAgentToolLoop({ systemContent, messages, studentId, conversati
   if (!tools.length) return { messages: transcript, toolExecutions: executions, ledger: ledgerNow };
   // Phase 22: the durable execution trace. One run per turn; a step per tool
   // call below. Best-effort — startRun never throws, so logging can't break a turn.
-  const runId = await startRun({ sessionId: conversationId, userId: studentId, model });
+  const runId = await startRun({ sessionId: conversationId, userId: studentId, model, turnId });
   // Think mode decides every step on the reasoning model; if that model is
   // unavailable the rest of the turn decides on the standard model.
   let reasonDecisions = think;
@@ -4446,7 +4447,8 @@ async function runAgentToolLoop({ systemContent, messages, studentId, conversati
       // Phase 22: persist this step (redacted, capped) so the full path — tool,
       // real error class/message, duration, retry — survives the turn.
       await recordStep(runId, stepRow({ runId, iteration, tool, input, success: observation.success,
-        result: toolResult, durationMs: Date.now() - callStarted, retries: toolResult?.retried ? 1 : 0, requestId: observation.request_id }));
+        result: toolResult, durationMs: Date.now() - callStarted, retries: toolResult?.retried ? 1 : 0, requestId: observation.request_id,
+        sideEffecting: changes }));
       transcript.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify(observation) });
     }
   }
@@ -4814,6 +4816,9 @@ router.post("/agent", async (req, res) => {
           send("done", { reply: completedReply, thinking: "", syllabus: [], pastQuestions: [], curriculum: [], mode, metadata, toolExecutions: [] });
           return res.end();
         }
+        // Phase 22: keep the learner's message even if the turn crashes below.
+        // Idempotent per turnId — the end-of-turn persist reuses this row.
+        await persistLearnerAgentUserTurnMessage({ conversationId, userId: req.user.id, sessionId: agentSessionId(conversationId), turnId, userMessage }).catch(() => {});
       } catch (durableError) {
         console.error("[/chat/agent] durable context unavailable — continuing with basic transcript:", durableError.message);
         durable = false;
@@ -5042,6 +5047,7 @@ router.post("/agent", async (req, res) => {
       messages: [...fit.kept, { role: "user", content: userContent }],
       studentId: req.user.id,
       conversationId,
+      turnId,
       status: wantsStream ? status : null,
       tools: role === "student" ? openAiChatTools({
         allowToolRequest: hasExplicitToolRequestConsent(userMessage, { previousAgentText: lastAgentText(fit.kept) }),

@@ -495,12 +495,27 @@ export async function retrieveLearnerAgentMemory({ query, subject = null, userId
 }
 
 /** The agent message already saved for this turn (any status), or null — the route checks before a fallback append. */
-export async function savedTurnReplyId({ conversationId, userId, turnId }) {
-  if (!CONVERSATION_ID.test(conversationId) || !TURN_ID.test(String(turnId || ""))) return null;
+export async function savedTurnReplyId({ conversationId, userId, turnId }) {  if (!CONVERSATION_ID.test(conversationId) || !TURN_ID.test(String(turnId || ""))) return null;
   const { data } = await db.from("chat_messages").select("id")
     .eq("session_id", conversationId).eq("user_id", userId).eq("agent_turn_id", turnId).eq("role", "agent")
     .limit(1).maybeSingle();
   return data?.id || null;
+}
+
+/**
+ * Persist just the user's message for a turn, at turn start, so a crash mid-turn
+ * does not lose it (Phase 22, build #1). Idempotent per turnId — the
+ * end-of-turn persist reuses the same row (messageForTurn), never duplicating.
+ * Best-effort: returns null on any validation/conflict/DB error.
+ */
+export async function persistLearnerAgentUserTurnMessage({ conversationId, userId, sessionId, turnId, userMessage }) {
+  if (!CONVERSATION_ID.test(conversationId) || !AGENT_ID.test(sessionId) || !TURN_ID.test(turnId)) return null;
+  const text = boundedText(userMessage, 12_000);
+  if (!text) return null;
+  try {
+    const msg = await messageForTurn({ conversationId, userId, sessionId, turnId, role: "user", text, createdAt: new Date().toISOString() });
+    return msg?.id || null;
+  } catch { return null; }
 }
 
 export async function completedLearnerAgentConversationTurn({ conversationId, userId, sessionId, turnId }) {

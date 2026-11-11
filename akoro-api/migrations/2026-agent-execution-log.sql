@@ -48,6 +48,14 @@ ALTER TABLE edu.agent_run_steps ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON edu.agent_runs FROM anon, authenticated;
 REVOKE ALL ON edu.agent_run_steps FROM anon, authenticated;
 
+-- Phase 22 recovery (build #1): the turn id lets the sweep find the user's
+-- message and re-run the turn idempotently; `auto_retried_at` makes the guarded
+-- auto-retry once-only. `side_effecting` lets the sweep refuse to retry a turn
+-- where a change already landed. Idempotent for an already-deployed table.
+ALTER TABLE edu.agent_runs ADD COLUMN IF NOT EXISTS turn_id text;
+ALTER TABLE edu.agent_runs ADD COLUMN IF NOT EXISTS auto_retried_at timestamptz;
+ALTER TABLE edu.agent_run_steps ADD COLUMN IF NOT EXISTS side_effecting boolean NOT NULL DEFAULT false;
+
 -- The failure digest (Phase 22, step 5): recurring failures clustered from the
 -- execution log, turned into reusable lessons. Service role only; an admin reads
 -- it and can turn a lesson into a prompt override (never auto-applied).
