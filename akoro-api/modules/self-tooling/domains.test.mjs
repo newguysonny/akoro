@@ -1,6 +1,36 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { DOMAINS, domainForGoal, actionForGoal } from "./domains.js";
+import { asRows } from "./sandbox/index.js";
+
+/** resolveTotal's rule for code tools: sum `count` rows, else row count. */
+const totalOf = (rows) => (
+  rows.length && rows.every((r) => typeof r?.count === "number" && Number.isFinite(r.count))
+    ? rows.reduce((n, r) => n + r.count, 0)
+    : rows.length
+);
+
+/** Run a domain source in-process (our own trusted script, test only: the
+ *  sandbox needs quickjs-emscripten, which CI has but a bare checkout may not). */
+const evalRun = (source) => new Function(`${source}\nreturn run;`)();
+
+/** Run a domain spec's real script against fixture data — no LLM. */
+const fixtureRun = (spec, data) => async (_s, input) => {
+  try {
+    const rows = asRows(evalRun(spec.source)(input, data, { today: "2026-01-01", now: "2026-01-01T00:00:00Z", timezone: "Africa/Lagos" }));
+    return { ok: true, rows, total: totalOf(rows) };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+};
+
+const LIB_FIXTURE = {
+  lib: [
+    { name: "Mitochondria notes", kind: "paste", created_at: "2026-01-01" },
+    { name: "Cell Structure.pdf", kind: "upload", created_at: "2026-01-02" },
+    { name: "BIO 111 notes", kind: "upload", created_at: "2026-01-03" },
+  ],
+};
 
 test("domainForGoal routes documents first, then subject domains", () => {
   assert.equal(domainForGoal("How many documents are in my library?"), "library_documents");
@@ -59,18 +89,19 @@ test("genericReadGoal and inferAction", async () => {
 });
 
 test("verifyDomainActions flags a regressed action (would block the save)", async () => {
-  const { verifyDomainActions, DOMAINS } = await import("./domains.js");
+  const { verifyDomainActions } = await import("./domains.js");
   const spec = DOMAINS.library_documents;
+  const good = fixtureRun(spec, LIB_FIXTURE);
   // A runner where 'list' regresses; everything else still passes.
-  const run = async (_s, sample) => (sample.action === "list" ? { ok: false, error: "boom" } : { ok: true, rows: [] });
+  const run = async (s, sample) => (sample.action === "list" ? { ok: false, error: "boom" } : good(s, sample));
   const checks = await verifyDomainActions(spec, run);
   const list = checks.find((c) => c.action === "list");
   assert.equal(list.ok, false);
   assert.equal(list.error, "boom");
   assert.equal(checks.filter((c) => !c.ok).length, 1, "only the regressed action is flagged");
-  // All-pass runner → nothing flagged.
-  const allOk = await verifyDomainActions(spec, async () => ({ ok: true, rows: [] }));
-  assert.equal(allOk.every((c) => c.ok), true);
+  // All-pass fixture runner → nothing flagged.
+  const allOk = await verifyDomainActions(spec, good);
+  assert.deepEqual(allOk.filter((c) => !c.ok), []);
 });
 
 test("byActionForGoal maps a requested breakdown to a valid view field", async () => {
@@ -83,17 +114,50 @@ test("byActionForGoal maps a requested breakdown to a valid view field", async (
 
 test("verifyDomainActions covers a newly added action", async () => {
   const { verifyDomainActions } = await import("./domains.js");
-  const spec = { actions: ["count", "list", "by_subject", "by_exam"] };
-  const checks = await verifyDomainActions(spec, async () => ({ ok: true, rows: [] }));
+  const spec = { actions: ["count", "list", "by_subject", "by_exam"], source: DOMAINS.library_documents.source };
+  const checks = await verifyDomainActions(spec, fixtureRun(spec, { v: [] }));
   assert.deepEqual(checks.map((c) => c.action), ["count", "list", "by_subject", "by_exam"]);
+  assert.equal(checks.every((c) => c.ok), true);
 });
 
 test("verifyDomainActions respects the budget (flags actions past it, blocking the save)", async () => {
   const { verifyDomainActions } = await import("./domains.js");
   let t = 0;
   const now = () => (t += 5000);
-  const spec = { actions: ["count", "list", "by_subject"] };
-  const checks = await verifyDomainActions(spec, async () => ({ ok: true, rows: [] }), { budgetMs: 6000, now });
+  const spec = { actions: ["count", "list", "by_subject"], source: DOMAINS.library_documents.source };
+  const run = fixtureRun(spec, LIB_FIXTURE);
+  const checks = await verifyDomainActions(spec, run, { budgetMs: 6000, now });
   assert.equal(checks[0].ok, true);
   assert.ok(checks.some((c) => c.error === "verification budget exceeded"));
+});
+
+test("scripted regression: fixtures give exact outputs and a broken action is caught", async () => {
+  const { verifyDomainActions, actionContract } = await import("./domains.js");
+  const spec = DOMAINS.library_documents;
+  const run = fixtureRun(spec, LIB_FIXTURE);
+
+  // Exact, deterministic values from the real script (no LLM):
+  assert.deepEqual((await run(spec, { action: "count" })).rows, [{ count: 3 }]);
+  assert.deepEqual((await run(spec, { action: "by_kind" })).rows, [
+    { kind: "paste", count: 1 }, { kind: "upload", count: 2 },
+  ]);
+  assert.deepEqual((await run(spec, { action: "search", query: "cell" })).rows, [
+    { name: "Cell Structure.pdf", kind: "upload" },
+  ]);
+  const list = await run(spec, { action: "list" });
+  assert.equal(list.rows.length, 3);
+  assert.deepEqual(list.rows[1], { name: "Cell Structure.pdf", kind: "upload", added: "2026-01-02" });
+  assert.equal((await verifyDomainActions(spec, run)).every((c) => c.ok), true);
+
+  // A count that isn't a number breaks its contract.
+  assert.match(actionContract("count", { ok: true, rows: [{ count: "lots" }], total: 1 }), /numeric count/);
+  // A breakdown declaring a different total breaks the cross-action check.
+  const skewed = async (_s, input) => (input.action === "count"
+    ? { ok: true, rows: [{ count: 3 }], total: 3 }
+    : input.action === "by_kind"
+      ? { ok: true, rows: [{ kind: "upload", count: 2 }], total: 2 }
+      : { ok: true, rows: [], total: 0 });
+  const bad = await verifyDomainActions(spec, skewed);
+  assert.equal(bad.find((c) => c.action === "by_kind").ok, false);
+  assert.match(bad.find((c) => c.action === "by_kind").error, /adds up to 2 but count is 3/);
 });

@@ -201,9 +201,54 @@ export function inferAction(goal, actions = []) {
   return actions[0];
 }
 
+const isObj = (r) => !!r && typeof r === "object" && !Array.isArray(r);
+const finiteNum = (n) => typeof n === "number" && Number.isFinite(n);
+
+/** Output contract for ONE action, checked by script only (no LLM). Returns an
+ *  error string, or null when the result has the right shape. Actions:
+ *  count → one numeric row; list → objects; by_<field> → { field, positive count }
+ *  whose counts add up to `total`; search → rows with a string name. */
+export function actionContract(action, r) {
+  if (!r || !r.ok) return null; // the run's own error is reported separately
+  const rows = r.rows;
+  if (!Array.isArray(rows)) return "did not return a list of rows";
+  if (action === "count") {
+    if (rows.length !== 1) return `count should return exactly one row (got ${rows.length})`;
+    const n = rows[0]?.count;
+    if (!finiteNum(n) || n < 0) return "count row must have a numeric count ≥ 0";
+    if (finiteNum(r.total) && r.total !== n) return `total (${r.total}) disagrees with count (${n})`;
+    return null;
+  }
+  if (action === "search") {
+    if (rows.some((x) => !isObj(x) || typeof x.name !== "string")) return "search rows must carry a string name";
+    if (finiteNum(r.total) && rows.length > r.total) return `search returned ${rows.length} rows for a total of ${r.total}`;
+    return null;
+  }
+  if (action.startsWith("by_")) {
+    const f = action.slice(3);
+    for (const row of rows) {
+      if (!isObj(row)) return `by_${f} rows must be objects`;
+      if (!(f in row)) return `by_${f} rows must carry the '${f}' key`;
+      if (!finiteNum(row.count) || row.count <= 0) return `by_${f} rows must have a positive numeric count`;
+    }
+    if (finiteNum(r.total)) {
+      const sum = rows.reduce((n, x) => n + x.count, 0);
+      if (sum !== r.total) return `by_${f} counts sum to ${sum} but total is ${r.total}`;
+    }
+    return null;
+  }
+  // list
+  if (rows.some((x) => !isObj(x))) return "list rows must be objects";
+  if (finiteNum(r.total) && rows.length > r.total) return `list returned ${rows.length} rows for a total of ${r.total}`;
+  return null;
+}
+
 /** Run EVERY action of a domain spec through `run(spec, sample)` and return a
  *  per-action check. Any `ok:false` blocks the save (domain regression). Pure
- *  orchestration — the caller supplies the runner, so this is unit-testable. */
+ *  orchestration — the caller supplies the runner, so this is unit-testable.
+ *  Each action is checked against its output contract, then the actions are
+ *  cross-checked: every breakdown must add up to the count, and a list can't
+ *  exceed it. Script only — deterministic, no LLM, no cost. */
 export async function verifyDomainActions(spec, run, { budgetMs = 12000, now = Date.now } = {}) {
   const checks = [];
   const start = now();
@@ -213,7 +258,29 @@ export async function verifyDomainActions(spec, run, { budgetMs = 12000, now = D
     if (now() - start > budgetMs) { checks.push({ action, ok: false, error: "verification budget exceeded" }); continue; }
     const sample = action === "search" ? { action, query: "a" } : { action };
     const r = await run(spec, sample);
-    checks.push({ action, ok: !!(r && r.ok && Array.isArray(r.rows)), error: r && r.error });
+    const ok = !!(r && r.ok && Array.isArray(r.rows));
+    const contractError = ok ? actionContract(action, r) : null;
+    checks.push({
+      action, ok: ok && !contractError,
+      error: ok ? (contractError || undefined) : (r && r.error),
+      ...(finiteNum(r?.total) ? { total: r.total } : {}),
+    });
+  }
+
+  // Cross-action invariants over the same data: a breakdown that doesn't add up
+  // to the count (or a list longer than it) means the definition regressed.
+  const countCheck = checks.find((c) => c.action === "count" && c.ok && finiteNum(c.total));
+  if (countCheck) {
+    for (const c of checks) {
+      if (!c.ok || c.action === "count" || !finiteNum(c.total)) continue;
+      if (c.action.startsWith("by_") && c.total !== countCheck.total) {
+        c.ok = false;
+        c.error = `by_${c.action.slice(3)} adds up to ${c.total} but count is ${countCheck.total}`;
+      } else if (c.action === "list" && c.total > countCheck.total) {
+        c.ok = false;
+        c.error = `list has ${c.total} rows but count is only ${countCheck.total}`;
+      }
+    }
   }
   return checks;
 }

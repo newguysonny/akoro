@@ -139,6 +139,7 @@ If no view/capability can express the request, the agent must not fabricate. Ord
 
 ## 12. Implementation status (2026-11-11)
 - **Built:** read domain tools (curated + per-learner dynamic over own-data views), one tool per view with `action` params; per-action regression verification (budget-capped) that blocks the save; runtime add-action (`by_<field>`); one-tool-per-view retirement; `replace`.
+- **Scripted regression (no LLM):** verification runs the domain's own `code` source per action and asserts a **contract** — `count` → one numeric row equal to `total`; `list` → objects not exceeding `total`; `by_<field>` → `{ field, positive count }` that **adds up to `total`**; `search` → rows with a string `name`. A cross-action pass then rejects a breakdown that doesn't sum to the count or a list longer than it. Fixtures assert exact values in tests (`domains.test.mjs`); live data only gets invariants (counts change).
 - **Split decided and in effect:** reads run as domain tools; writes stay capability-gated with **Allow + Confirm**.
 - **Metadata:** explicit `domain` + `actions` columns on `edu.agent_tools` (migration `2026-agent-tools-domain.sql` + backfill from `views`/`params_schema`).
 - **Hygiene:** action cap (8), builder guidance ("one tool per domain; add via `by <field>`"), admin `cleanup-domain-tools`, wrong-view repair.
