@@ -43,3 +43,19 @@ export function findDuplicateTool(goal, tools = []) {
   if (!g.trim()) return null;
   return (tools || []).find((t) => similarGoal(t?.goal || t?.label || "", g)) || null;
 }
+
+const DOC_NOUN = /\b(documents?|files?|uploads?|pdfs?|papers?|material)\b/i;
+const LIBRARY = /\blibrary\b/i;
+const COUNT_OR_LIST = /\b(count|counts|counting|list|listing|how many|total|titles?|names?)\b/i;
+
+/**
+ * PURE: does this goal ask about the learner's LIBRARY DOCUMENTS (uploads/files)?
+ * Such a goal must read `my_library` — never a subject-bearing view (your
+ * documents have no subject). "library count" returned 51 study-sessions by
+ * subject instead of the 12 uploads because the builder picked a subject view.
+ */
+export function isDocumentGoal(goal) {
+  const g = String(goal || "");
+  if (DOC_NOUN.test(g)) return true;
+  return LIBRARY.test(g) && COUNT_OR_LIST.test(g);
+}

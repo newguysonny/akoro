@@ -32,3 +32,15 @@ test("findDuplicateTool returns the matching existing tool", () => {
   assert.equal(findDuplicateTool("Library count correct total", tools)?.name, "library_count");
   assert.equal(findDuplicateTool("Set Chemistry to high priority", tools), null);
 });
+
+test("isDocumentGoal: library documents/uploads, not subject data", async () => {
+  const { isDocumentGoal } = await import("./toolSimilarity.js");
+  assert.equal(isDocumentGoal("Library count (correct total)"), true);
+  assert.equal(isDocumentGoal("List the documents in my library by title"), true);
+  assert.equal(isDocumentGoal("How many documents are in my library?"), true);
+  assert.equal(isDocumentGoal("count my uploaded files"), true);
+  // Not documents: subject-bearing data must NOT be forced to my_library.
+  assert.equal(isDocumentGoal("Count my teaching sessions by subject"), false);
+  assert.equal(isDocumentGoal("Weekly XP by subject"), false);
+  assert.equal(isDocumentGoal("Set Chemistry tasks to high priority"), false);
+});

@@ -19,7 +19,7 @@ import { escalate } from "./escalation.js";
 import { proposeWrite, proposePermission } from "./confirmations.js";
 import { codeEnabled } from "./sandbox/index.js";
 import { basisColumns, currentActionBasis } from "../agent-runtime/actionBasis.js";
-import { findDuplicateTool } from "./toolSimilarity.js";
+import { findDuplicateTool, isDocumentGoal } from "./toolSimilarity.js";
 
 const edu = () => db.schema("edu");
 const NAME = /^[a-z][a-z0-9_]{2,47}$/;
@@ -151,6 +151,10 @@ async function verifyTool(def, params, samples, ctx) {
 export async function createTool({ learnerId, input, dry = false, builtIn = new Set(), callCapability, conversationId = null, resumed = false, audience = "learner" }) {
   const t0 = Date.now();
   const goal = String(input?.goal || "").trim().slice(0, 300);
+  // A goal about the learner's library DOCUMENTS must read `my_library` (uploads
+  // have no subject). "library count" once counted study sessions by subject
+  // (51) instead of the 12 uploads because the builder picked a subject view.
+  const docGoal = audience === "learner" && isDocumentGoal(goal);
   let name = String(input?.name || "").trim();
   const label = String(input?.label || "").trim().slice(0, 60);
   const given = input?.params && typeof input.params === "object" && !Array.isArray(input.params) ? paramProps(input.params) : {};
@@ -179,13 +183,22 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
   // already covers this goal, point at it instead of adding a duplicate.
   if (!dry && !resumed) {
     try {
-      const { data: mine } = await edu().from("agent_tools").select("name, label, goal")
+      const { data: mine } = await edu().from("agent_tools").select("id, name, label, goal, views")
         .eq("owner_id", learnerId).eq("status", "active").limit(200);
       const dupe = findDuplicateTool(goal, mine || []);
-      if (dupe) return finish("reused", {
-        status: "reused", tool: dupe.name, label: dupe.label,
-        note: `You already have a tool for this — "${dupe.label}" (${dupe.name}). It IS available in this chat: CALL ${dupe.name} now to answer. Never tell the learner to open Settings to run it, and never build a near-duplicate — if it can't do exactly this, extend that tool instead.`,
-      });
+      if (dupe) {
+        // A document goal must read my_library. If the "duplicate" reads
+        // something else (it counted sessions by subject), replace it rather
+        // than reuse a wrong answer.
+        const wrongView = docGoal && !(dupe.views || []).includes("my_library");
+        if (!wrongView) return finish("reused", {
+          status: "reused", tool: dupe.name, label: dupe.label,
+          note: `You already have a tool for this — "${dupe.label}" (${dupe.name}). It IS available in this chat: CALL ${dupe.name} now to answer. Never tell the learner to open Settings to run it, and never build a near-duplicate — if it can't do exactly this, extend that tool instead.`,
+        });
+        // Drop the wrong-view tool so the corrected build takes its place.
+        if (dupe.id) await edu().from("agent_tools").update({ status: "archived", updated_at: new Date().toISOString() })
+          .eq("id", dupe.id).eq("owner_id", learnerId);
+      }
     } catch { /* best-effort: never block a build on the duplicate check */ }
   }
 
@@ -211,7 +224,11 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
   // What could it use?
   // learnerId is the OWNER: a learner, or an instructor for instructor tools (S7).
   const lookup = await schemaLookup(goal, { audience, learnerId });
-  const slice = registrySlice(lookup, hint, audience);
+  // For a document goal, offer ONLY `my_library` — never the subject-bearing
+  // views, so the builder cannot count sessions/XP and call them "documents".
+  const slice = docGoal
+    ? registrySlice({ views: [], capabilities: [] }, { ...hint, views: [...new Set([...(Array.isArray(hint.views) ? hint.views : []), "my_library"])] }, audience)
+    : registrySlice(lookup, hint, audience);
   // A resume after an approval must USE what was approved — a gate run once
   // 'resumed' into a tool that answered from an unrelated view instead.
   let mustUse = resumed ? [].concat(hint.capabilities || []).filter((c) => c in CAPABILITIES) : [];

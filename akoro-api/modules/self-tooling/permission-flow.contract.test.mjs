@@ -69,3 +69,12 @@ test("create_tool reuses an existing tool for the same goal (no flooding)", () =
   assert.match(src, /findDuplicateTool\(goal, mine/, "checks existing tools for a near-duplicate goal");
   assert.match(src, /status: "reused"/, "returns the existing tool instead of building another");
 });
+
+test("document goals read my_library only, and replace a wrong-view duplicate", () => {
+  const src = read("./pipeline.js");
+  assert.match(src, /isDocumentGoal\(goal\)/, "detects document goals");
+  assert.match(src, /docGoal\s*=\s*audience === "learner" && isDocumentGoal\(goal\)/);
+  assert.match(src, /"my_library"\]\)\]/, "forces the my_library view for document goals");
+  assert.match(src, /wrongView = docGoal && !\(dupe\.views \|\| \[\]\)\.includes\("my_library"\)/, "spots a wrong-view duplicate");
+  assert.match(src, /status: "archived"[\s\S]{0,80}eq\("id", dupe\.id\)/, "replaces it instead of reusing it");
+});
