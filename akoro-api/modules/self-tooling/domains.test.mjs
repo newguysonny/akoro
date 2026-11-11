@@ -57,3 +57,18 @@ test("genericReadGoal and inferAction", async () => {
   assert.equal(inferAction("list my courses", ["count", "list", "by_subject"]), "list");
   assert.equal(inferAction("how many courses", ["count", "list", "by_subject"]), "count");
 });
+
+test("verifyDomainActions flags a regressed action (would block the save)", async () => {
+  const { verifyDomainActions, DOMAINS } = await import("./domains.js");
+  const spec = DOMAINS.library_documents;
+  // A runner where 'list' regresses; everything else still passes.
+  const run = async (_s, sample) => (sample.action === "list" ? { ok: false, error: "boom" } : { ok: true, rows: [] });
+  const checks = await verifyDomainActions(spec, run);
+  const list = checks.find((c) => c.action === "list");
+  assert.equal(list.ok, false);
+  assert.equal(list.error, "boom");
+  assert.equal(checks.filter((c) => !c.ok).length, 1, "only the regressed action is flagged");
+  // All-pass runner → nothing flagged.
+  const allOk = await verifyDomainActions(spec, async () => ({ ok: true, rows: [] }));
+  assert.equal(allOk.every((c) => c.ok), true);
+});

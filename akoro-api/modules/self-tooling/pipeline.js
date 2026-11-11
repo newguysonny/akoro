@@ -20,7 +20,7 @@ import { proposeWrite, proposePermission } from "./confirmations.js";
 import { codeEnabled } from "./sandbox/index.js";
 import { basisColumns, currentActionBasis } from "../agent-runtime/actionBasis.js";
 import { isDocumentGoal, similarGoal } from "./toolSimilarity.js";
-import { DOMAINS, domainForGoal, genericDomain, genericReadGoal, inferAction } from "./domains.js";
+import { DOMAINS, domainForGoal, genericDomain, genericReadGoal, inferAction, verifyDomainActions } from "./domains.js";
 
 const edu = () => db.schema("edu");
 const NAME = /^[a-z][a-z0-9_]{2,47}$/;
@@ -219,12 +219,7 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
     }
     const def = { kind: "code", steps: [{ id: spec.step, view: spec.view }], source: spec.source };
     const ctxD = { learnerId, callCapability: undefined };
-    const checks = [];
-    for (const action of spec.actions) {
-      const sample = action === "search" ? { action, query: "a" } : { action };
-      const r = await tryRun(def, spec.params, sample, ctxD);
-      checks.push({ action, ok: r.ok && Array.isArray(r.rows), error: r.error });
-    }
+    const checks = await verifyDomainActions(spec, (_spec, sample) => tryRun(def, spec.params, sample, ctxD));
     const bad = checks.filter((c) => !c.ok);
     if (bad.length) return finish("rejected", reject(`The ${spec.label} tool failed its own checks for: ${bad.map((b) => b.action).join(", ")}${bad[0]?.error ? ` (${bad[0].error})` : ""}. Nothing was saved.`));
     if (dry) {

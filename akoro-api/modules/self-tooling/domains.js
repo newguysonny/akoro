@@ -194,3 +194,16 @@ export function inferAction(goal, actions = []) {
   if (actions.includes("count")) return "count";
   return actions[0];
 }
+
+/** Run EVERY action of a domain spec through `run(spec, sample)` and return a
+ *  per-action check. Any `ok:false` blocks the save (domain regression). Pure
+ *  orchestration — the caller supplies the runner, so this is unit-testable. */
+export async function verifyDomainActions(spec, run) {
+  const checks = [];
+  for (const action of spec.actions) {
+    const sample = action === "search" ? { action, query: "a" } : { action };
+    const r = await run(spec, sample);
+    checks.push({ action, ok: !!(r && r.ok && Array.isArray(r.rows)), error: r && r.error });
+  }
+  return checks;
+}
