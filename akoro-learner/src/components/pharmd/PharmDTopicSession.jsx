@@ -36,9 +36,23 @@ import { BRAND } from '../../constants.js';
 import { APP_HOME } from '../../config/target.js';
 import { askPharmd } from '../../services/pharmdApi.js';
 import { getSharedExtraction } from '../../services/recordsApi.js';
-import { rasterizePdfPages, runRecordExtraction } from '../library/extractPages.js';
 
 const MAX_REFERENCE_CHARS = 12_000;   // the server's reference cap
+
+/* The Ask gateway tags a citation with its page; the extraction knows the exact
+   block. Match the quoted passage to a block so the jump flashes that paragraph
+   on the page instead of the whole sheet. */
+function bboxForQuote(blocks, pageNumber, quote) {
+  const list = blocks?.get?.(pageNumber) || [];
+  const norm = (x) => String(x || '').toLowerCase().replace(/\s+/g, ' ').trim();
+  const q = norm(quote);
+  if (!q || !list.length) return null;
+  for (const probe of [q.slice(0, 80), q.slice(0, 40)]) {
+    const hit = list.find((b) => norm(b?.text_content).includes(probe));
+    if (Array.isArray(hit?.bbox_2d) && hit.bbox_2d.length === 4) return hit.bbox_2d;
+  }
+  return null;
+}
 
 /* sessionStorage continuation — one teaching thread per topic, 24h. */
 const sidKey = (tid) => `akoro_teach_sid_pharmd_${tid || 'x'}`;
@@ -151,6 +165,8 @@ export default function PharmDTopicSession({ topic, course, onClose }) {
     const mine = () => aliveRef.current && run === extRunRef.current;
     setExtract((s) => ({ ...s, status: 'running', done: 0, error: null }));
     try {
+      // Loaded on demand: pdf.js stays out of the catalogue's initial bundle.
+      const { rasterizePdfPages, runRecordExtraction } = await import('../library/extractPages.js');
       const rendered = await rasterizePdfPages(pdf);
       const savedBefore = await getSharedExtraction(contentKey).catch(() => ({ pages: [] }));
       const have = new Set((savedBefore.pages || []).map((p) => p.pageNumber));
@@ -270,11 +286,22 @@ export default function PharmDTopicSession({ topic, course, onClose }) {
     // topic PDFs aren't indexed, so the reader sends the text it already has.
     ask: {
       load: async () => [],
-      send: (opts) => askPharmd({
-        ...opts,
-        pages: pages.map((p, i) => ({ pageNumber: i + 1, text: p.text || '' })).filter((p) => p.text.trim()),
-        docName: topicTitle,
-      }),
+      send: async (opts) => {
+        const res = await askPharmd({
+          ...opts,
+          pages: pages.map((p, i) => ({ pageNumber: i + 1, text: p.text || '' })).filter((p) => p.text.trim()),
+          docName: topicTitle,
+        });
+        // Exact-paragraph citation jumps once the model extraction is applied.
+        return {
+          ...res,
+          citations: (res?.citations || []).map((c) => {
+            if (Array.isArray(c?.bbox) || !Number.isInteger(c?.pageNumber)) return c;
+            const bbox = bboxForQuote(pageBlocks, c.pageNumber, c.quote);
+            return bbox ? { ...c, bbox } : c;
+          }),
+        };
+      },
     },
   };
 
