@@ -24,3 +24,11 @@ test("agent_tools carries domain/actions and the migration is registered", () =>
   assert.ok(manifest.schema.includes("2026-agent-tools-domain.sql"), "migration registered");
   assert.match(read("../agentConsole/routes.js"), /t\.domain \|\|/, "cleanup reads the domain column");
 });
+
+test("replace captures actions before archiving, so a rebuild keeps them", () => {
+  const pipe = read("./pipeline.js");
+  const replaceBlock = pipe.slice(pipe.indexOf("const replaceRaw"), pipe.indexOf("// Build a domain tool"));
+  assert.match(replaceBlock, /select\("id, name, views, domain, params_schema"\)/, "reads the old params_schema before archiving");
+  assert.ok(replaceBlock.indexOf("params_schema") < replaceBlock.indexOf('status: "archived"'), "captured before the archive update");
+  assert.match(pipe, /carriedActions\(spec\.view\)/, "buildDomain unions carried actions");
+});

@@ -180,20 +180,33 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
 
   // Self-repair: rebuild a saved tool in place — archive the named/ided tool
   // first, so the build below replaces it instead of being deduped back to it.
+  // Capture its identity + actions BEFORE archiving: a domain rebuild must carry
+  // forward the actions the old tool already had (e.g. by_size while adding by_name).
   const replaceRaw = String(input?.replace || "").trim();
+  let replaced = null;
   if (replaceRaw && !dry && !resumed) {
     try {
       const q = /^[0-9a-f-]{36}$/i.test(replaceRaw)
-        ? edu().from("agent_tools").select("id, name").eq("owner_id", learnerId).eq("id", replaceRaw)
-        : edu().from("agent_tools").select("id, name").eq("owner_id", learnerId).eq("name", replaceRaw);
+        ? edu().from("agent_tools").select("id, name, views, domain, params_schema").eq("owner_id", learnerId).eq("id", replaceRaw)
+        : edu().from("agent_tools").select("id, name, views, domain, params_schema").eq("owner_id", learnerId).eq("name", replaceRaw);
       const { data: old } = await q.in("status", ["active", "disabled"]).maybeSingle();
       if (old?.id) {
         await edu().from("agent_tools").update({ status: "archived", updated_at: new Date().toISOString() })
           .eq("id", old.id).eq("owner_id", learnerId);
         if (!String(input?.name || "").trim()) name = old.name;
+        replaced = old;
       }
     } catch { /* best-effort */ }
   }
+
+  /** Actions a replaced tool had, when it belongs to the domain being rebuilt. */
+  const carriedActions = (view) => {
+    if (!replaced) return [];
+    const sameView = (Array.isArray(replaced.views) && replaced.views.includes(view)) || replaced.domain === view;
+    if (!sameView && replaced.name !== name) return [];
+    const enumv = replaced.params_schema?.action?.enum;
+    return Array.isArray(enumv) ? enumv : [];
+  };
 
   // Build a domain tool: one tool per domain with { action } sub-params, read-only.
   // EVERY action is verified before saving (domain regression); the tool is saved
@@ -203,7 +216,7 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
     // by_<field>), then re-verify the WHOLE action set before saving.
     const { data: existing } = await edu().from("agent_tools").select("id, status, params_schema")
       .eq("owner_id", learnerId).eq("name", spec.name).in("status", ["active", "disabled"]).maybeSingle();
-    const have = new Set(existing?.params_schema?.action?.enum || []);
+    const have = new Set([...(existing?.params_schema?.action?.enum || []), ...carriedActions(spec.view)]);
     const extra = byActionForGoal(goal, spec.view);
     // Carry forward actions the tool already has, so a rebuild never loses a
     // previously-added breakdown (e.g. by_size) while adding another (by_name).
