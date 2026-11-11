@@ -134,3 +134,63 @@ export function actionForGoal(goal) {
   if (/\b(list|titles?|names?|show|what are)\b/.test(g)) return "list";
   return "count";
 }
+
+/* ── Per-learner dynamic domains ─────────────────────────────────────────────
+   A read goal over the learner's OWN data view (scope "self") that isn't in the
+   curated registry becomes ONE domain tool for that view, with count/list/by_<field>.
+   The tool is verified action-by-action before it is saved, and reused/extended
+   (via replace) rather than duplicated. */
+import { DATA_VIEWS } from "./views.js";
+
+const humanize = (v) => String(v || "").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+
+function listOnlySource(listFields) {
+  const picks = listFields.map((f) => `${f}: r.${f}`).join(", ");
+  return `function run(input, data, akoro) {
+  var rows = data.v || [];
+  var action = String(input.action || "count");
+  if (action === "count") return [{ count: rows.length }];
+  var lim = Number(input.limit) || 100;
+  return rows.slice(0, lim).map(function (r) { return { ${picks} }; });
+}`;
+}
+
+/** Build a dynamic domain spec for one own-data view (or null). */
+export function genericDomain(view) {
+  const v = DATA_VIEWS[view];
+  if (!v || v.scope !== "self" || !v.fields) return null;
+  const fields = Object.keys(v.fields);
+  if (!fields.length) return null;
+  const textField = fields.find((f) => v.fields[f]?.type === "text");
+  const groupField = fields.includes("subject") ? "subject" : (fields.includes("kind") ? "kind" : (textField || null));
+  const actions = ["count", "list", ...(groupField ? [`by_${groupField}`] : [])];
+  const listFields = fields.slice(0, 6);
+  return {
+    name: view, label: humanize(view), view, step: "v", actions,
+    params: {
+      action: { type: "string", enum: actions, default: "count", description: `count = how many; list = rows;${groupField ? ` by_${groupField} = count per ${groupField};` : ""}` },
+      limit: { type: "integer", description: "Max rows for list (default 100)" },
+    },
+    source: groupField ? groupSource("v", groupField, listFields) : listOnlySource(listFields),
+  };
+}
+
+/** Does this goal read/aggregate the learner's own data (safe for a view domain)?
+ *  Value aggregates (sum/average/accuracy/score) are left to the generic builder. */
+export function genericReadGoal(goal) {
+  const g = String(goal || "");
+  if (!g.trim()) return false;
+  if (/\b(sum|average|mean|accuracy|score|percentage|percent)\b/i.test(g)) return false;
+  return /\b(how many|count|counts|list|listing|show|what are|which|by\s|breakdown|per\s)\b/i.test(g);
+}
+
+/** Which action to run for this request, from the actions the tool declares. */
+export function inferAction(goal, actions = []) {
+  const g = String(goal || "").toLowerCase();
+  const by = g.match(/\bby\s+([a-z_]+)/);
+  if (by && actions.includes(`by_${by[1]}`)) return `by_${by[1]}`;
+  if (actions.includes("search") && /\b(search|find|matching)\b/.test(g)) return "search";
+  if (actions.includes("list") && /\b(list|titles?|names?|show|what are)\b/.test(g)) return "list";
+  if (actions.includes("count")) return "count";
+  return actions[0];
+}

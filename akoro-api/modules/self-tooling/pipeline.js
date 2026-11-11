@@ -20,7 +20,7 @@ import { proposeWrite, proposePermission } from "./confirmations.js";
 import { codeEnabled } from "./sandbox/index.js";
 import { basisColumns, currentActionBasis } from "../agent-runtime/actionBasis.js";
 import { isDocumentGoal, similarGoal } from "./toolSimilarity.js";
-import { DOMAINS, domainForGoal, actionForGoal } from "./domains.js";
+import { DOMAINS, domainForGoal, genericDomain, genericReadGoal, inferAction } from "./domains.js";
 
 const edu = () => db.schema("edu");
 const NAME = /^[a-z][a-z0-9_]{2,47}$/;
@@ -195,13 +195,10 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
     } catch { /* best-effort */ }
   }
 
-  // Curated DOMAIN tool: one tool per domain with { action } sub-params, read-only.
-  // Built deterministically (no LLM); EVERY action is verified before saving, then
-  // the tool is saved and run. Document goals resolve to library_documents, which
-  // reads my_library (documents have no subject).
-  const dkey = audience === "learner" ? domainForGoal(goal) : null;
-  if (dkey) {
-    const spec = DOMAINS[dkey];
+  // Build a domain tool: one tool per domain with { action } sub-params, read-only.
+  // EVERY action is verified before saving (domain regression); the tool is saved
+  // and run. Used for the curated registry AND per-learner dynamic domains.
+  async function buildDomain(spec) {
     const { data: existing } = await edu().from("agent_tools").select("id, status")
       .eq("owner_id", learnerId).eq("name", spec.name).in("status", ["active", "disabled"]).maybeSingle();
     if (existing?.status === "active" && !replaceRaw) {
@@ -211,18 +208,17 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
     if (!dry && existing?.id && !replaceRaw) {
       await edu().from("agent_tools").update({ status: "archived", updated_at: new Date().toISOString() }).eq("id", existing.id).eq("owner_id", learnerId);
     }
-    // One tool per domain: retire other saved tools for the same domain goal.
-    if (!dry && dkey === "library_documents") {
-      const { data: others } = await edu().from("agent_tools").select("id, name, goal").eq("owner_id", learnerId).eq("status", "active");
+    // One tool per domain: retire other saved tools over the same view.
+    if (!dry) {
+      const { data: others } = await edu().from("agent_tools").select("id, name, views").eq("owner_id", learnerId).eq("status", "active");
       for (const t of others || []) {
-        if (t.name !== spec.name && /\b(documents?|files?|uploads?|pdfs?)\b/i.test(t.goal || t.name || "")) {
+        if (t.name !== spec.name && Array.isArray(t.views) && t.views.includes(spec.view)) {
           await edu().from("agent_tools").update({ status: "archived", updated_at: new Date().toISOString() }).eq("id", t.id).eq("owner_id", learnerId);
         }
       }
     }
     const def = { kind: "code", steps: [{ id: spec.step, view: spec.view }], source: spec.source };
     const ctxD = { learnerId, callCapability: undefined };
-    // Domain regression: run every action before saving; any failure blocks the save.
     const checks = [];
     for (const action of spec.actions) {
       const sample = action === "search" ? { action, query: "a" } : { action };
@@ -245,12 +241,27 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
     }).select("id").single();
     if (error) return finish("failed", reject(`Couldn't save the tool: ${error.message}`));
     ev.tool_id = row.id; ev.mode = "code"; ev.capabilities = [];
-    const action = actionForGoal(goal);
+    const action = inferAction(goal, spec.actions);
     const out = await tryRun(def, spec.params, { action }, ctxD);
     await finish("created", {});
     return { status: "created", tool: spec.name, label: spec.label, mode: "code", actions: spec.actions,
       result: out.ok ? { rows: out.rows, total: out.total } : { error: out.error },
       note: `Saved "${spec.label}". It answers ${spec.actions.join(", ")}; next time call ${spec.name} with action=.... The answer for this request is in result.` };
+  }
+
+  // 1) A curated domain; 2) a per-learner DYNAMIC domain for a read goal over one
+  // of the learner's own-data views (the agent "fills" its own domain tools).
+  const dkey = audience === "learner" ? domainForGoal(goal) : null;
+  if (dkey) return await buildDomain(DOMAINS[dkey]);
+  if (audience === "learner" && genericReadGoal(goal)) {
+    try {
+      const lookupD = await schemaLookup(goal, { audience, learnerId });
+      const top = (lookupD.views || []).find((x) => DATA_VIEWS[x?.name] && DATA_VIEWS[x.name].scope === "self");
+      if (top?.name) {
+        const spec = genericDomain(top.name);
+        if (spec) return await buildDomain(spec);
+      }
+    } catch { /* fall through to the generic builder */ }
   }
 
   // Reuse, don't flood. The model kept building a fresh tool for near-identical

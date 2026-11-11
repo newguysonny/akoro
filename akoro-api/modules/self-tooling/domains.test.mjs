@@ -35,3 +35,25 @@ test("every domain definition is a valid, sandbox-safe code tool", () => {
     assert.ok(!/\b(async|await|this|globalThis|eval|Function|require|import)\b/.test(src), `${key} uses no banned syntax`);
   }
 });
+
+test("genericDomain builds a per-view action tool (own-data views only)", async () => {
+  const { genericDomain } = await import("./domains.js");
+  const d = genericDomain("my_courses");
+  assert.equal(d?.name, "my_courses");
+  assert.deepEqual(d?.params.action.enum, d?.actions);
+  assert.ok(d.actions.includes("count") && d.actions.includes("list"));
+  assert.ok(d.actions.includes("by_subject"));
+  assert.ok(d.source && !d.source.includes("${"));
+  assert.equal(genericDomain("does_not_exist"), null);
+});
+
+test("genericReadGoal and inferAction", async () => {
+  const { genericReadGoal, inferAction } = await import("./domains.js");
+  assert.equal(genericReadGoal("List my enrolled courses"), true);
+  assert.equal(genericReadGoal("How many XP transactions do I have?"), true);
+  assert.equal(genericReadGoal("Total XP I've earned"), false);       // value aggregate → builder
+  assert.equal(genericReadGoal("Average accuracy by subject"), false);
+  assert.equal(inferAction("courses by subject", ["count", "list", "by_subject"]), "by_subject");
+  assert.equal(inferAction("list my courses", ["count", "list", "by_subject"]), "list");
+  assert.equal(inferAction("how many courses", ["count", "list", "by_subject"]), "count");
+});
