@@ -229,3 +229,12 @@ test("bestSelfView picks the data domain from the goal's own words", async () =>
   assert.equal(bestSelfView("my XP this week"), "my_xp");
   assert.equal(bestSelfView("hello there"), null);
 });
+
+test("search is a scripted action on curated and dynamic domains", async () => {
+  const { genericDomain, inferAction } = await import("./domains.js");
+  const courses = genericDomain("my_courses");
+  assert.ok(courses.actions.includes("search"), "a view with a text field gets search");
+  const run = fixtureRun(courses, { v: [{ title: "Algebra II", progress: 40 }, { title: "Biology", progress: 10 }] });
+  assert.deepEqual((await run(courses, { action: "search", query: "alg" })).rows, [{ name: "Algebra II" }]);
+  assert.equal(inferAction("search my library for cell", ["count", "list", "by_kind", "search"], "my_library"), "search");
+});

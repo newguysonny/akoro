@@ -16,7 +16,7 @@
  *  action="by_<field>", so ADDING AN ACTION is just adding an enum value — the
  *  code already handles it (and every action is re-verified before saving).
  *  Server-side template: the GENERATED source contains no `${...}`. */
-function groupSource(stepId, field, listFields) {
+function groupSource(stepId, field, listFields, searchField = "name") {
   const picks = listFields.map((f) => `${f}: r.${f}`).join(", ");
   return `function run(input, data, akoro) {
   var rows = data.${stepId} || [];
@@ -44,6 +44,16 @@ function groupSource(stepId, field, listFields) {
       cor += Number(rows[a].correct) || 0;
     }
     return [{ attempted: att, correct: cor, accuracy: att ? Math.round((cor / att) * 1000) / 10 : null }];
+  }
+  if (action === "search") {
+    var q = String(input.query || "").toLowerCase();
+    var out = [];
+    if (!q) return out;
+    for (var j = 0; j < rows.length; j++) {
+      var nm = rows[j].${searchField};
+      if (nm != null && String(nm).toLowerCase().indexOf(q) >= 0) out.push({ name: String(nm) });
+    }
+    return out;
   }
   if (action.indexOf("by_") === 0) {
     var f = action.slice(3);
@@ -124,36 +134,39 @@ export const DOMAINS = {
     label: "Study sessions",
     view: "my_learning_sessions",
     step: "s",
-    actions: ["count", "list", "by_subject"],
+    actions: ["count", "list", "by_subject", "search"],
     params: {
-      action: ACTION_PARAM(["count", "list", "by_subject"], "count = sessions; list = sessions; by_subject = sessions per subject"),
+      action: ACTION_PARAM(["count", "list", "by_subject", "search"], "count = sessions; list = sessions; by_subject = sessions per subject; search = sessions whose topic matches query"),
+      query: { type: "string", description: "Search words (used by action=search)" },
       limit: { type: "integer", description: "Max rows for list (default 100)" },
     },
-    source: groupSource("s", "subject", ["subject", "topic", "status", "started_at"]),
+    source: groupSource("s", "subject", ["subject", "topic", "status", "started_at"], "topic"),
   },
   my_past_questions: {
     name: "my_past_questions",
     label: "Past questions",
     view: "my_past_questions",
     step: "p",
-    actions: ["count", "list", "by_subject", "accuracy"],
+    actions: ["count", "list", "by_subject", "accuracy", "search"],
     params: {
-      action: ACTION_PARAM(["count", "list", "by_subject", "accuracy"], "count = attempts; list = attempts; by_subject = attempts per subject; accuracy = correct ÷ attempted"),
+      action: ACTION_PARAM(["count", "list", "by_subject", "accuracy", "search"], "count = attempts; list = attempts; by_subject = attempts per subject; accuracy = correct ÷ attempted; search = attempts whose subject matches query"),
+      query: { type: "string", description: "Search words (used by action=search)" },
       limit: { type: "integer", description: "Max rows for list (default 100)" },
     },
-    source: groupSource("p", "subject", ["exam", "subject", "year", "attempted", "correct"]),
+    source: groupSource("p", "subject", ["exam", "subject", "year", "attempted", "correct"], "subject"),
   },
   my_study_notes: {
     name: "my_study_notes",
     label: "Study notes",
     view: "my_study_notes",
     step: "n",
-    actions: ["count", "list", "by_subject"],
+    actions: ["count", "list", "by_subject", "search"],
     params: {
-      action: ACTION_PARAM(["count", "list", "by_subject"], "count = notes; list = notes; by_subject = notes per subject"),
+      action: ACTION_PARAM(["count", "list", "by_subject", "search"], "count = notes; list = notes; by_subject = notes per subject; search = notes whose topic matches query"),
+      query: { type: "string", description: "Search words (used by action=search)" },
       limit: { type: "integer", description: "Max rows for list (default 100)" },
     },
-    source: groupSource("n", "subject", ["subject", "topic", "confidence"]),
+    source: groupSource("n", "subject", ["subject", "topic", "confidence"], "topic"),
   },
 };
 
@@ -188,7 +201,7 @@ import { DATA_VIEWS } from "./views.js";
 
 const humanize = (v) => String(v || "").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 
-function listOnlySource(listFields) {
+function listOnlySource(listFields, searchField = "name") {
   const picks = listFields.map((f) => `${f}: r.${f}`).join(", ");
   return `function run(input, data, akoro) {
   var rows = data.v || [];
@@ -209,6 +222,16 @@ function listOnlySource(listFields) {
     var value = op === "sum" ? s : (op === "avg" ? s / vals.length : (op === "min" ? mn : mx));
     return [{ op: op, field: f, value: value, n: vals.length }];
   }
+  if (action === "search") {
+    var q = String(input.query || "").toLowerCase();
+    var out = [];
+    if (!q) return out;
+    for (var j = 0; j < rows.length; j++) {
+      var nm = rows[j].${searchField};
+      if (nm != null && String(nm).toLowerCase().indexOf(q) >= 0) out.push({ name: String(nm) });
+    }
+    return out;
+  }
   var lim = Number(input.limit) || 100;
   return rows.slice(0, lim).map(function (r) { return { ${picks} }; });
 }`;
@@ -220,17 +243,19 @@ export function genericDomain(view) {
   if (!v || v.scope !== "self" || !v.fields) return null;
   const fields = Object.keys(v.fields);
   if (!fields.length) return null;
-  const textField = fields.find((f) => v.fields[f]?.type === "text");
+  const isText = (f) => ["text", "string"].includes(v.fields[f]?.type);
+  const textField = ["name", "title", "topic", "subject"].find((f) => fields.includes(f) && isText(f)) || fields.find(isText);
   const groupField = fields.includes("subject") ? "subject" : (fields.includes("kind") ? "kind" : (textField || null));
-  const actions = ["count", "list", ...(groupField ? [`by_${groupField}`] : [])];
+  const actions = ["count", "list", ...(groupField ? [`by_${groupField}`] : []), ...(textField ? ["search"] : [])];
   const listFields = fields.slice(0, 6);
   return {
     name: view, label: humanize(view), view, step: "v", actions,
     params: {
-      action: { type: "string", enum: actions, default: "count", description: `count = how many; list = rows;${groupField ? ` by_${groupField} = count per ${groupField};` : ""}` },
+      action: { type: "string", enum: actions, default: "count", description: `count = how many; list = rows;${groupField ? ` by_${groupField} = count per ${groupField};` : ""}${textField ? ` search = rows whose ${textField} matches query;` : ""}` },
+      ...(textField ? { query: { type: "string", description: "Search words (used by action=search)" } } : {}),
       limit: { type: "integer", description: "Max rows for list (default 100)" },
     },
-    source: groupField ? groupSource("v", groupField, listFields) : listOnlySource(listFields),
+    source: groupField ? groupSource("v", groupField, listFields, textField || "name") : listOnlySource(listFields, textField || "name"),
   };
 }
 
@@ -241,7 +266,7 @@ export function genericReadGoal(goal) {
   const g = String(goal || "");
   if (!g.trim()) return false;
   if (/\b(sum|average|mean|accuracy|score|percentage|percent)\b/i.test(g)) return false;
-  return /\b(how many|count|counts|list|listing|show|what are|which|by\s|breakdown|per\s)\b/i.test(g);
+  return /\b(how many|count|counts|list|listing|show|what are|which|search|find|matching|look for|by\s|breakdown|per\s)\b/i.test(g);
 }
 
 /* ── Deterministic aggregates ────────────────────────────────────────────────

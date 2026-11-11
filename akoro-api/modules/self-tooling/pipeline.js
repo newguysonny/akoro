@@ -296,7 +296,7 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
       const top = (lookupD.views || []).find((x) => DATA_VIEWS[x?.name] && DATA_VIEWS[x.name].scope === "self");
       // A plain read OR a scripted aggregate over that view (no LLM builder).
       if (top?.name && (genericReadGoal(goal) || aggregateForGoal(goal, top.name))) {
-        const spec = genericDomain(top.name);
+        const spec = Object.values(DOMAINS).find((d) => d.view === top.name) || genericDomain(top.name);
         if (spec) return await buildDomain(spec);
       }
     } catch { /* fall through to the generic builder */ }
