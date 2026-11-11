@@ -33,6 +33,7 @@ import TeachAgentModal from '../teaching/TeachAgentModal.jsx';
 import { Icon } from '../common/Icons.jsx';
 import { BRAND } from '../../constants.js';
 import { APP_HOME } from '../../config/target.js';
+import { askPharmd } from '../../services/pharmdApi.js';
 
 const MAX_REFERENCE_CHARS = 12_000;   // the server's reference cap
 
@@ -182,6 +183,12 @@ export default function PharmDTopicSession({ topic, course, onClose }) {
     pages,
     renderPageContent,
     rawPages: true,            // pdf.js canvases carry their own margins
+    // "Ask about this" + the Ask tool, exactly like the Library reader. The
+    // topic PDFs aren't indexed, so the reader sends the text it already has.
+    ask: {
+      load: async () => [],
+      send: (opts) => askPharmd({ ...opts, documentText: reference?.text || '', docName: topicTitle }),
+    },
   };
 
   /* A remembered session id (24h) makes reopening a topic CONTINUE its

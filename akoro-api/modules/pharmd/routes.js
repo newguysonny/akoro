@@ -32,6 +32,8 @@ import db                     from "../../db.js";
 import { authenticateToken }  from "../auth/routes.js";
 import { runPharmdUpload }    from "./uploader.js";
 import { safeCompare } from "../../lib/safeCompare.js";
+import { openai, OPENAI_MODEL } from "../../lib/aiModel.js";
+import { buildAskMessages, extractCitations, cleanModelOutput } from "../records/askLib.js";
 
 const edu = () => db.schema("edu");
 
@@ -236,6 +238,44 @@ setInterval(refresh, 1500);
 
 /* ── Learner state — everything below needs a signed-in learner ── */
 router.use(authenticateToken);
+
+/* POST /api/pharmd/ask — "Ask about this" for a Pharm.D topic.
+   { question, selection?, documentText?, docName? }
+   The programme PDFs are not indexed like Library records, so the reader (which
+   already extracts the page text with pdf.js) sends that text + any selected
+   passage, and this answers from it with the SAME ask prompt/citations as the
+   Library reader. No document-level thread is stored. */
+router.post("/ask", asyncHandler(async (req, res) => {
+  const question = typeof req.body?.question === "string" ? req.body.question.trim() : "";
+  if (!question) return bad(res, "Ask a question.");
+  if (question.length > 1000) return bad(res, "Keep the question short.");
+  const sel = req.body?.selection && typeof req.body.selection.text === "string" && req.body.selection.text.trim()
+    ? { text: String(req.body.selection.text).trim().slice(0, 4000),
+        pageNumber: Number.isInteger(req.body.selection.pageNumber) ? req.body.selection.pageNumber : null }
+    : null;
+  const docText = String(req.body?.documentText || "").slice(0, 12000);
+  const docName = String(req.body?.docName || "this topic").slice(0, 120);
+
+  const passages = [];
+  if (sel?.text) passages.push({ n: 1, pageNumber: sel.pageNumber, text: sel.text, quote: sel.text.slice(0, 160) });
+  for (const chunk of (docText.match(/[\s\S]{1,1200}(?=\s|$)/g) || []).slice(0, 10)) {
+    const text = chunk.trim();
+    if (text) passages.push({ n: passages.length + 1, pageNumber: null, text, quote: text.slice(0, 160) });
+  }
+  if (!passages.length) return res.status(409).json({ success: false, error: "This topic isn't readable yet — try again in a moment." });
+
+  try {
+    const messages = buildAskMessages({ docName, passages, question, history: [] });
+    const completion = await openai.chat.completions.create({ model: OPENAI_MODEL, temperature: 0.2, max_tokens: 800, messages });
+    const answer = cleanModelOutput(completion.choices?.[0]?.message?.content?.trim() || "")
+      || "I couldn't answer from this topic — try rephrasing the question.";
+    const { citations } = extractCitations(answer, passages);
+    return ok(res, { answer, citations });
+  } catch (err) {
+    console.warn("[pharmd-ask] failed:", String(err?.message || err).slice(0, 200));
+    return res.status(502).json({ success: false, error: "Couldn't answer right now — try again in a moment." });
+  }
+}));
 
 router.get("/progress", asyncHandler(async (req, res) => {
   const { data } = await edu().from("pharmd_topic_progress")

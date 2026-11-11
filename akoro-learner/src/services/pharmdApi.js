@@ -35,3 +35,17 @@ export async function completePharmdTopic(topicId, done) {
   const d = await apiPost(`/api/pharmd/topics/${topicId}/complete`, { done });
   return d?.data ?? null;
 }
+
+/* Ask about the open topic. Pharm.D PDFs aren't indexed like Library
+   records, so the reader sends the page text it already extracted (pdf.js)
+   plus any selected passage; the answer cites those passages. Mirrors the
+   Library reader's Ask. Returns { answer, citations }. */
+export async function askPharmd({ question, selection = null, documentText = '', docName = '' }) {
+  const d = await apiPost('/api/pharmd/ask', {
+    question,
+    ...(selection ? { selection } : {}),
+    ...(documentText ? { documentText } : {}),
+    ...(docName ? { docName } : {}),
+  });
+  return d?.data ?? { answer: '', citations: [] };
+}
