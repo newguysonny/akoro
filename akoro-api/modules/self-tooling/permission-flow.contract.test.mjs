@@ -17,12 +17,11 @@ test("no 'shall I build it?' round: a change the learner can allow is drafted wi
   assert.match(read("../adaptive-learning/chat.js"), /in this same turn — don't ask 'shall I build it\?' first/);
 });
 
-test("Approve with continueInChat turns the tool on and leaves the run (and its one card) to the agent's turn", () => {
+test("after Approve/Confirm the SERVER posts the outcome and runs the agent's follow-up turn", () => {
   const src = read("./confirmations.js");
-  assert.match(src, /if \(continueInChat\) out = \{ status: "created", tool: t\.name, label: t\.label, result: \{\} \};/);
-  assert.match(src, /if \(continueInChat && next\?\.confirmationId\) \{/);
-  assert.match(src, /if \(postIntoChat && conversationId && !continueInChat\) \{/);
-  assert.match(read("./routes.js"), /continueInChat: req\.body\?\.continueInChat === true/);
+  assert.match(src, /kind: "agent_change_done"/, "posts what changed");
+  assert.match(src, /kind: "agent_tool_built"/, "posts the permission outcome");
+  assert.match(src, /kickDecisionFollowUp\(/, "runs the agent's follow-up turn server-side");
 });
 
 test("the trace says 'Drafted', not 'Built', for a tool waiting for Approve", () => {
@@ -34,11 +33,13 @@ test("the trace says 'Drafted', not 'Built', for a tool waiting for Approve", ()
 test("the app: one card, compact once decided, and the chat carries on after a tap", () => {
   const card = read("../../../akoro-learner/src/components/tabs/agentChat/ConfirmChangeCard.jsx");
   assert.doesNotMatch(card, /state\.next\?\.confirmationId && <ConfirmChangeCard/);
-  assert.match(card, /\{ continueInChat: true \}/);
-  assert.match(card, /onDone\(state\.kind === 'permission' \? 'approved' : 'confirmed'/);
-  const tab = read("../../../akoro-learner/src/components/tabs/AgentChatTab.jsx");
-  assert.match(tab, /Approved "\$\{name\}" — go ahead\./);
-  assert.match(tab, /check it went through and tell me if anything is left/);
+  // Server-driven continuation: the card just calls the confirm endpoint; the
+  // server applies the change and posts the follow-up (no client continueInChat).
+  assert.match(card, /\/api\/self-tooling\/confirmations\/\$\{state\.confirmationId\}\/\$\{what\}/);
+  assert.match(card, /onDone\(.*'approved' : 'confirmed'/);
+  // Continuation is server-driven now (the follow-up test above); the card no
+  // longer sends continueInChat or injects a client "Approved…" turn.
+  assert.doesNotMatch(card, /continueInChat/);
 });
 
 test("an admin's approval: the tool is turned on, no background run or stray card, and Run it now starts the agent's turn", () => {
@@ -50,4 +51,21 @@ test("an admin's approval: the tool is turned on, no background run or stray car
   const tab = read("../../../akoro-learner/src/components/tabs/AgentChatTab.jsx");
   assert.match(tab, /m\.meta\?\.runTool\?\.label \? \{ runTool: m\.meta\.runTool \}/);
   assert.match(tab, /sendMessage\(`Run "\$\{msg\.runTool\.label\}" now\.`\)/);
+});
+
+test("a write capability always asks — locked to build, Confirm to apply", async () => {
+  const { CAPABILITIES } = await import("./capabilities.js");
+  const writes = Object.entries(CAPABILITIES).filter(([, c]) => c.kind === "write");
+  assert.ok(writes.length > 0, "there are write capabilities");
+  for (const [name, c] of writes) assert.equal(c.status, "locked", `${name} must be locked so building always asks`);
+  const src = read("./pipeline.js");
+  assert.match(src, /if \(r\.write\) return writeOutcome\(/, "every run of a write tool goes through writeOutcome");
+  assert.match(src, /await proposeWrite\(\{ learnerId, conversationId, tool, write \}\)/, "a write proposes a Confirm card (never applies directly)");
+  assert.match(src, /await proposePermission\(\{ learnerId, conversationId, capability: draftCap/, "building a write tool asks Allow");
+});
+
+test("create_tool reuses an existing tool for the same goal (no flooding)", () => {
+  const src = read("./pipeline.js");
+  assert.match(src, /findDuplicateTool\(goal, mine/, "checks existing tools for a near-duplicate goal");
+  assert.match(src, /status: "reused"/, "returns the existing tool instead of building another");
 });

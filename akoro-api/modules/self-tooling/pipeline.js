@@ -19,6 +19,7 @@ import { escalate } from "./escalation.js";
 import { proposeWrite, proposePermission } from "./confirmations.js";
 import { codeEnabled } from "./sandbox/index.js";
 import { basisColumns, currentActionBasis } from "../agent-runtime/actionBasis.js";
+import { findDuplicateTool } from "./toolSimilarity.js";
 
 const edu = () => db.schema("edu");
 const NAME = /^[a-z][a-z0-9_]{2,47}$/;
@@ -164,6 +165,22 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
   if (pErr.length) return reject(`params: ${pErr.join("; ")}`);
   const forbidden = forbiddenFor(goal);
   if (forbidden.length) return finish("rejected", reject(`Not allowed: ${forbidden.map((f) => f.description).join(" ")}`));
+
+  // Reuse, don't flood. The model kept building a fresh tool for near-identical
+  // goals ("Delete my earliest chat", "…(by position)", "Delete a chat titled
+  // X", "Library count", "Library count (correct total)"). If an active tool
+  // already covers this goal, point at it instead of adding a duplicate.
+  if (!dry && !resumed) {
+    try {
+      const { data: mine } = await edu().from("agent_tools").select("name, label, goal")
+        .eq("owner_id", learnerId).eq("status", "active").limit(200);
+      const dupe = findDuplicateTool(goal, mine || []);
+      if (dupe) return finish("reused", {
+        status: "reused", tool: dupe.name, label: dupe.label,
+        note: `You already have a tool for this — "${dupe.label}" (${dupe.name}). CALL it instead of building a near-duplicate; if it can't do exactly this, extend that tool rather than add another.`,
+      });
+    } catch { /* best-effort: never block a build on the duplicate check */ }
+  }
 
   if (!dry && resumed) {
     const { data: taken } = await edu().from("agent_tools").select("name").eq("owner_id", learnerId).in("status", ["active", "disabled"]).like("name", `${name}%`);
