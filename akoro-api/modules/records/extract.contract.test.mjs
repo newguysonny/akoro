@@ -22,7 +22,7 @@ import { test } from "node:test";
 const here = dirname(fileURLToPath(import.meta.url));
 const read = (p) => readFileSync(join(here, p), "utf8");
 
-const [routesSrc, libSrc, appSrc, manifest, recordsMigration, teachSessionSrc, extractPagesSrc, recordsApiSrc, workerSrc, pdfPagesSrc, readerSrc, teachModalSrc, extractionCardSrc, pharmdReaderSrc] = await Promise.all([
+const [routesSrc, libSrc, appSrc, manifest, recordsMigration, teachSessionSrc, extractPagesSrc, recordsApiSrc, workerSrc, pdfPagesSrc, readerSrc, teachModalSrc, extractionCardSrc, pharmdReaderSrc, blockLayerSrc] = await Promise.all([
   read("routes.js") + read("access.js"),   // the access rule lives in access.js
   read("extractLib.js"),
   read("../../app.js"),
@@ -38,6 +38,7 @@ const [routesSrc, libSrc, appSrc, manifest, recordsMigration, teachSessionSrc, e
   read("../../../akoro-learner/src/components/teaching/TeachAgentModal.jsx"),
   read("../../../akoro-learner/src/components/library/ExtractionCard.jsx"),
   read("../../../akoro-learner/src/components/pharmd/PharmDTopicSession.jsx"),
+  read("../../../akoro-learner/src/components/library/BlockTextLayer.jsx"),
 ]);
 
 const { parseBlocks, sortBlocks, blocksToMarkdown, parsePageOnRunpod, recordsExtractionEnabled, runpodEndpointHealth } =
@@ -347,6 +348,17 @@ test("page sizes ride the extraction: real points/pixels stored, 0-1000 boxes ma
   const migration = read("../../migrations/2026-content-page-size.sql");
   assert.match(migration, /ADD COLUMN IF NOT EXISTS width\s+NUMERIC/);
   assert.match(migration, /unit IN \('pt', 'px'\)/);
+});
+
+test("the extracted-markdown layer is safe to enable on large files", () => {
+  assert.match(blockLayerSrc, /const inkCache = new WeakMap/, "ink line detection is cached per extraction");
+  assert.match(blockLayerSrc, /const layoutCache = new WeakMap/, "line layout is cached per extraction");
+  assert.match(blockLayerSrc, /surface\.width \|\| surface\.naturalWidth/, "an evicted canvas never poisons the cache");
+  assert.match(blockLayerSrc, /bySize\.has\(sizeKey\)/, "a repaint reuses the stored ink lines");
+  assert.match(pdfPagesSrc, /\{near && wrapW > 0 && \(hasText === false/, "the markdown layer mounts only near the viewport");
+  assert.match(pdfPagesSrc, /setNear\(false\);\s+\/\/ the extracted text layer unmounts with the canvas/, "distant pages unmount it");
+  assert.match(pdfPagesSrc, /const blockList = useMemo\(/, "the block array is stable across scroll renders");
+  assert.doesNotMatch(pdfPagesSrc, /selectionOverlay\/>/, "pdf.js stays the default selectable layer");
 });
 
 test("PHARM.D topics share one extraction key and pass the access rule", () => {

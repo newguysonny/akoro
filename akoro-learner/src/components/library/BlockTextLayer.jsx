@@ -25,6 +25,12 @@ const isFigure = (t) => String(t || '').trim() === '<image>';
 const FAMILY = 'sans-serif';   // the spans and the measurements must agree
 
 let ctx = null;
+
+/* Layout survives a mount/unmount cycle. Pages are mounted only near the
+   viewport now, so scrolling back re-mounts this layer — remeasuring every
+   word and re-scanning the page pixels each time would bring the hang back. */
+const inkCache = new WeakMap();      // blocks → Map("WxH" → per-block ink lines)
+const layoutCache = new WeakMap();   // blocks → Map("WxH:ink?" → laid spans)
 function measure(text, fontPx) {
   if (!ctx) ctx = document.createElement('canvas').getContext('2d');
   ctx.font = `${fontPx}px ${FAMILY}`;
@@ -76,6 +82,9 @@ export default function BlockTextLayer({ blocks, height, surface = null, surface
     return () => ro.disconnect();
   }, []);
 
+  // The extraction's array is the cache key (it is stable while the parse is);
+  // the filtered list is derived from it, not the other way round.
+  const cacheKey = Array.isArray(blocks) ? blocks : null;
   const list = useMemo(() => (Array.isArray(blocks) ? blocks : []).filter((b) =>
     Array.isArray(b?.bbox_2d) && b.bbox_2d.length === 4 && !isFigure(b.text_content) && String(b.text_content || '').trim()), [blocks]);
 
@@ -84,12 +93,33 @@ export default function BlockTextLayer({ blocks, height, surface = null, surface
   useEffect(() => (hasList ? registerTextLayer(rootRef.current) : undefined), [hasList]);
 
   useEffect(() => {
-    setInk(list.length ? readInk(surface, width, height, list) : null);
-  }, [surface, surfaceKey, width, height, list]);
+    if (!list.length) { setInk(null); return; }
+    // The page pixels only matter once, at a given size: a repaint (surfaceKey)
+    // or a re-mount after scrolling reuses the stored lines instead of copying
+    // the canvas and scanning it again.
+    if (!cacheKey) { setInk(null); return; }
+    const sizeKey = `${Math.round(width)}x${Math.round(height)}`;
+    let bySize = inkCache.get(cacheKey);
+    if (!bySize) { bySize = new Map(); inkCache.set(cacheKey, bySize); }
+    if (bySize.has(sizeKey)) { setInk(bySize.get(sizeKey)); return; }
+    // An evicted canvas has width 0 — never cache that as "no ink", or the
+    // repaint would reuse it forever.
+    const pixels = surface && (surface.width || surface.naturalWidth || 0) > 0;
+    if (!pixels || !(width > 0) || !(height > 0)) { setInk(null); return; }
+    const value = readInk(surface, width, height, list);
+    bySize.set(sizeKey, value);
+    setInk(value);
+  }, [surface, surfaceKey, width, height, list, cacheKey]);
 
   const laid = useMemo(() => {
     if (!(width > 0) || !(height > 0)) return [];
-    return list.map((b, i) => {
+    const sizeKey = `${Math.round(width)}x${Math.round(height)}:${ink ? 'ink' : 'est'}`;
+    if (!cacheKey) return [];
+    let bySize = layoutCache.get(cacheKey);
+    if (!bySize) { bySize = new Map(); layoutCache.set(cacheKey, bySize); }
+    const cached = bySize.get(sizeKey);
+    if (cached) return cached;
+    const out = list.map((b, i) => {
       const [x1, y1, x2, y2] = b.bbox_2d.map(Number);
       const w = (Math.max(0, x2 - x1) / 1000) * width;
       const h = (Math.max(0, y2 - y1) / 1000) * height;
@@ -98,7 +128,9 @@ export default function BlockTextLayer({ blocks, height, surface = null, surface
       const singleLine = !text.includes('\n') && h < 48;
       return { x1, y1, x2, y2, ...layoutBlockLines(text, w, h, measure, { singleLine, ink: ink?.[i] || null }) };
     });
-  }, [list, width, height, ink]);
+    bySize.set(sizeKey, out);
+    return out;
+  }, [list, width, height, ink, cacheKey]);
 
   if (!list.length) return null;
   return (

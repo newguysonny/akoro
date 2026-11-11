@@ -13,7 +13,7 @@
  * document's actual sentences.
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import BlockTextLayer from './BlockTextLayer.jsx';
@@ -112,6 +112,10 @@ export function PdfPage({ pdf, pageNumber, blocks = null, selectionOverlay = fal
   const [wrapW, setWrapW]   = useState(0);              // measured CSS width — sizes the extraction text layer
   const [drawn, setDrawn]   = useState(0);              // bumps after each paint — the text layer reads the pixels
   const [hasText, setHasText] = useState(null);         // the PDF's own words on this page (null = not read yet)
+  // The extracted text layer is only worth mounting near the page the learner
+  // is looking at — a 60-page scan used to mount every block layer at once.
+  // Distant pages unmount and re-mount from the cached layout (BlockTextLayer).
+  const [near, setNear] = useState(pageNumber <= 2);
 
   useEffect(() => {
     let cancelled = false;
@@ -225,7 +229,11 @@ export function PdfPage({ pdf, pageNumber, blocks = null, selectionOverlay = fal
     // Render when the page is near the viewport — a 200-page PDF must not
     // render all at once.
     const io = new IntersectionObserver((entries) => {
-      entries.forEach((en) => { if (en.isIntersecting) render(); });
+      entries.forEach((en) => {
+        if (!en.isIntersecting) return;
+        setNear(true);
+        render();
+      });
     }, { root: wrap.closest('.pdf-scroll') || null, rootMargin: '400px 0px' });
     io.observe(wrap);
     // The extraction text layer sizes its type from the laid-out width —
@@ -251,6 +259,7 @@ export function PdfPage({ pdf, pageNumber, blocks = null, selectionOverlay = fal
     const evict = new IntersectionObserver((entries) => {
       for (const en of entries) {
         if (en.isIntersecting || busy) continue;
+        setNear(false);   // the extracted text layer unmounts with the canvas
         if (canvas.width > 0) {
           canvas.width = 0; canvas.height = 0;
           delete wrap.dataset.drawn;
@@ -282,7 +291,12 @@ export function PdfPage({ pdf, pageNumber, blocks = null, selectionOverlay = fal
     };
   }, [pdf, pageNumber]);
 
-  const blockList = Array.isArray(blocks) ? blocks.filter((b) => Array.isArray(b?.bbox_2d) && b.bbox_2d.length === 4) : [];
+  // Stable across parent re-renders: the page re-renders on every scroll tick,
+  // and a fresh array here would re-run ink/layout work in the text layer.
+  const blockList = useMemo(
+    () => (Array.isArray(blocks) ? blocks.filter((b) => Array.isArray(b?.bbox_2d) && b.bbox_2d.length === 4) : []),
+    [blocks],
+  );
   const hasBlocks = blockList.length > 0;
   const isFigure = (t) => String(t || '').trim() === '<image>';
 
@@ -316,7 +330,7 @@ export function PdfPage({ pdf, pageNumber, blocks = null, selectionOverlay = fal
           capture only where text actually is. */}
       {/* Only for a page with no words of its own (a scan), OR when the A/B
           toggle asks for the extracted-markdown layer on a text page. */}
-      {wrapW > 0 && (hasText === false || (selectionOverlay && hasBlocks)) && <BlockTextLayer blocks={blockList} height={wrapW * aspect}
+      {near && wrapW > 0 && (hasText === false || (selectionOverlay && hasBlocks)) && <BlockTextLayer blocks={blockList} height={wrapW * aspect}
         surface={drawn ? canvasRef.current : null} surfaceKey={drawn}/>}
       {blockList.length > 0 && (
         <button onClick={() => setShowBlocks((v) => !v)}

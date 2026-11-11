@@ -110,3 +110,25 @@ If both hold, the recommended end-state is **pdf.js text layer for selection + R
 - **Citation jump.** The pager now tracks the most-visible page (a tall page
   could never reach the old 0.5 ratio), and `citeJump` selects the target page
   immediately instead of relying on the smooth scroll.
+
+## 9. Extracted-markdown layer, safe at scale (2026-11-11)
+
+pdf.js stays the default selectable layer. The extracted `BlockTextLayer` is
+kept (scans need it) and is now safe to enable for any document:
+
+- **Viewport-gated**: it mounts only for pages within one page of the
+  viewport and unmounts with the canvas — a 60-page scan no longer builds
+  every layer at once.
+- **Precomputed and cached**: line layout (`layoutBlockLines`) and printed-ink
+  detection (`readInk`) are cached per extraction block array and page size.
+  A repaint, a resize, or scrolling back re-mounts from cache — no re-measure,
+  no canvas copy, no pixel scan.
+- **Stable inputs**: the page's block array is memoised, so a scroll tick no
+  longer re-runs the layer's effects.
+- **No cache poisoning**: an evicted (0-width) canvas is never stored as
+  "no ink"; the repaint fills it.
+- **One layer per page**: text PDFs keep pdf.js only; markdown selection is
+  opt-in via `selectionOverlay`, currently off.
+
+This is the foundation for switching Library documents to markdown selection
+later without reintroducing the hang; large files and scans benefit today.
