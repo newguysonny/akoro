@@ -127,43 +127,46 @@ export function PdfPage({ pdf, pageNumber, blocks = null, selectionOverlay = fal
     };
 
     let pending = false;
+    let layerBuilt = false;
+
+    /* Draw the page PICTURE only, at device resolution for the reader's MAX
+       zoom. Split out from the text layer so a re-draw after memory eviction
+       (below) never rebuilds the text layer under a live selection. The CSS
+       height comes from the canvas' aspect-ratio, so freeing/redrawing the
+       backing store never shifts the page's layout. */
+    const paintCanvas = async () => {
+      const page = await pdf.getPage(pageNumber);
+      const base = page.getViewport({ scale: 1 });
+      const cssWidth = wrap.clientWidth || 640;
+      const cssScale = cssWidth / base.width;
+      const dpr = Math.min(window.devicePixelRatio || 1, 3);
+      const MAX_ZOOM = 1.5;
+      let renderScale = cssScale * dpr * MAX_ZOOM;
+      const MAX_PIXELS = 6_000_000;
+      if (base.width * renderScale * base.height * renderScale > MAX_PIXELS) {
+        renderScale = Math.sqrt(MAX_PIXELS / (base.width * base.height));
+      }
+      const viewport = page.getViewport({ scale: renderScale });
+      canvas.width = Math.round(viewport.width);
+      canvas.height = Math.round(viewport.height);
+      canvas.style.width = '100%';
+      canvas.style.height = 'auto';
+      setAspect(base.height / base.width);
+      await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+      if (!cancelled) setDrawn((n) => n + 1);
+    };
+
     const render = async () => {
-      // Once drawn, a page stays drawn: redrawing (and so rebuilding the
-      // text layer) under a live selection would drop it.
       if (busy) { pending = true; return; }   // a width change arrived mid-render — redo after it finishes
       if (canvas.width > 0 && wrap.dataset.drawn === '1') return;
       busy = true;
       try {
-        const page = await pdf.getPage(pageNumber);
+        await paintCanvas();
         if (cancelled) return;
-        const base = page.getViewport({ scale: 1 });
         const cssWidth = wrap.clientWidth || 640;
-        const cssScale = cssWidth / base.width;               // CSS-pixel scale
-        // Draw at DEVICE resolution for the reader's MAX zoom. A canvas drawn
-        // only at the on-screen width (and dpr capped at 2) was what made pages
-        // look blurry — and much worse as you zoomed in. Supersampling to
-        // dpr × maxZoom keeps the page crisp at every zoom level, so the
-        // canvas never has to be redrawn when the reader zooms.
-        const dpr = Math.min(window.devicePixelRatio || 1, 3);
-        const MAX_ZOOM = 1.5;                                 // SessionReaderModal's zoom cap
-        let renderScale = cssScale * dpr * MAX_ZOOM;
-        const MAX_PIXELS = 6_000_000;                         // keep a page's backing store < ~6 MP
-        if (base.width * renderScale * base.height * renderScale > MAX_PIXELS) {
-          renderScale = Math.sqrt(MAX_PIXELS / (base.width * base.height));
-        }
-        const viewport = page.getViewport({ scale: renderScale });
-        canvas.width = Math.round(viewport.width);
-        canvas.height = Math.round(viewport.height);
-        canvas.style.width = '100%';
-        canvas.style.height = 'auto';
-        setAspect(base.height / base.width);
-        await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
-        if (!cancelled) setDrawn((n) => n + 1);
-
-        // Text layer — transparent spans aligned to the glyphs, so selection
-        // highlights the real words on the page. pdf.js sizes spans through a
-        // --scale-factor custom property on the container (CSS-pixel scale).
-        await relayTextLayer(cssWidth);
+        // Build the text layer ONCE. A re-draw after eviction keeps it intact,
+        // so an in-progress selection is never disturbed.
+        if (!layerBuilt) { await relayTextLayer(cssWidth); layerBuilt = true; }
         if (cancelled) return;
         wrap.dataset.drawn = '1';
         drawnW = cssWidth;
@@ -196,13 +199,29 @@ export function PdfPage({ pdf, pageNumber, blocks = null, selectionOverlay = fal
     });
     ro.observe(wrap);
     setWrapW(wrap.clientWidth || 0);
+    // Memory windowing: each drawn page is up to ~24 MB of canvas and it was
+    // never freed, so scrolling a 27-page doc climbed to ~600 MB and crashed
+    // the tab. When a page is well outside the viewport, free its canvas
+    // backing store — the text layer (light) stays, so selection is untouched —
+    // and it is re-drawn if the learner scrolls back to it.
+    const evict = new IntersectionObserver((entries) => {
+      for (const en of entries) {
+        if (en.isIntersecting || busy) continue;
+        if (canvas.width > 0) {
+          canvas.width = 0; canvas.height = 0;
+          delete wrap.dataset.drawn;
+          drawnW = 0;
+        }
+      }
+    }, { root: wrap.closest('.pdf-scroll') || null, rootMargin: '700px 0px' });
+    evict.observe(wrap);
     // Eager-render the opener pages. A restored reading position jumps the
     // reader past them before the observer ever sees them intersect, which
     // left the first pages with NO text layer — unselectable until a refresh.
     // Rendering them up front is cheap and additive: render() returns at once
     // for a page that is already drawn, so a working page is never touched.
     if (pageNumber <= 2) render();
-    return () => { cancelled = true; io.disconnect(); ro.disconnect(); unguard(); delete wrap.dataset.drawn; };
+    return () => { cancelled = true; io.disconnect(); ro.disconnect(); evict.disconnect(); unguard(); delete wrap.dataset.drawn; };
   }, [pdf, pageNumber]);
 
   const blockList = Array.isArray(blocks) ? blocks.filter((b) => Array.isArray(b?.bbox_2d) && b.bbox_2d.length === 4) : [];
