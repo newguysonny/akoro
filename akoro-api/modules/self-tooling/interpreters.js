@@ -308,6 +308,22 @@ export function dropUnsetFilters(value, input) {
   return value;
 }
 
+/**
+ * The tool's `total`. For a `spec` run we know the source records that matched.
+ * For a code/steps run we don't — and a count tool returns ONE aggregate row
+ * (e.g. [{ kind: "upload", count: 12 }]), so `rows.length` said "total 1" while
+ * the row said 12. When every result row carries a numeric `count`, the total is
+ * their sum (the records they count); otherwise it is the row count.
+ */
+export function resolveTotal(rows, matched = null) {
+  if (matched != null) return matched;
+  const out = Array.isArray(rows) ? rows : [];
+  if (out.length && out.every((r) => r && typeof r.count === "number" && Number.isFinite(r.count))) {
+    return Math.round(out.reduce((n, r) => n + r.count, 0));
+  }
+  return out.length;
+}
+
 export async function runDefinition(def, input, { learnerId, callCapability }) {
   const d = bind(dropUnsetFilters(normalizeDefinition(def), input), input);
   let rows;
@@ -359,7 +375,7 @@ export async function runDefinition(def, input, { learnerId, callCapability }) {
   // `total` is the number of records that matched — NOT the number of rows a
   // group produced. A "group by subject" must still total the records, not the
   // subjects; rebuilt tools reported "total 6" for 51 rows because of this.
-  const total = matched == null ? outRows.length : matched;
+  const total = resolveTotal(outRows, matched);
   // The private _ref never leaves the server.
   return { rows: O.stripRefs(outRows.slice(0, O.MAX_OUT)), total, truncated: outRows.length > O.MAX_OUT, ...(write ? { write } : {}) };
 }

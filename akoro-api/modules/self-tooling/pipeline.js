@@ -26,7 +26,11 @@ const NAME = /^[a-z][a-z0-9_]{2,47}$/;
 export const LIMITS = {
   dailyCreates: Math.max(1, Number(process.env.SELF_TOOLING_DAILY_CREATES) || 5),
   maxTools: Math.max(1, Number(process.env.SELF_TOOLING_MAX_TOOLS) || 20),
-  inCatalogue: 8,
+  // Every ACTIVE tool a learner owns must be callable in chat — a tool the model
+  // can't see is a tool it says it "can't run from here". This used to be 8, so
+  // once a learner had more tools the older ones silently fell out of the chat's
+  // tool list (a saved "Library count" was unreachable, and the agent rebuilt it).
+  inCatalogue: Math.max(24, Number(process.env.SELF_TOOLING_CATALOGUE) || 24),
   runMs: 3_000,
   builderCalls: 5,
 };
@@ -177,7 +181,7 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
       const dupe = findDuplicateTool(goal, mine || []);
       if (dupe) return finish("reused", {
         status: "reused", tool: dupe.name, label: dupe.label,
-        note: `You already have a tool for this — "${dupe.label}" (${dupe.name}). CALL it instead of building a near-duplicate; if it can't do exactly this, extend that tool rather than add another.`,
+        note: `You already have a tool for this — "${dupe.label}" (${dupe.name}). It IS available in this chat: CALL ${dupe.name} now to answer. Never tell the learner to open Settings to run it, and never build a near-duplicate — if it can't do exactly this, extend that tool instead.`,
       });
     } catch { /* best-effort: never block a build on the duplicate check */ }
   }

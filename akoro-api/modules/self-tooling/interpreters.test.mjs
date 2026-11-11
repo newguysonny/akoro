@@ -166,3 +166,13 @@ test("params that carry data are dropped, simple ones kept", async () => {
   assert.deepEqual(Object.keys(r.params), ["year"]);
   assert.deepEqual(r.dropped, ["sessions", "blob"]);
 });
+
+test("resolveTotal: an aggregate count row totals its count, not the row count", async () => {
+  const { resolveTotal } = await import("./interpreters.js");
+  assert.equal(resolveTotal([{ kind: "upload", count: 12 }]), 12);
+  assert.equal(resolveTotal([{ subject: "Math", count: 3 }, { subject: "Bio", count: 2 }]), 5);
+  // Per-record rows (no count field) → row count.
+  assert.equal(resolveTotal([{ title: "a" }, { title: "b" }]), 2);
+  // A known matched count always wins (spec runs / group-by must use records).
+  assert.equal(resolveTotal([{ subject: "Math", count: 3 }], 51), 51);
+});
