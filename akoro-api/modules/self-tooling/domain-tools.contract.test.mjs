@@ -16,3 +16,11 @@ test("split domain tools: one per view, action cap, cleanup + builder guidance",
   assert.match(consoleSrc, /router\.post\("\/cleanup-domain-tools"/, "cleanup endpoint");
   assert.match(consoleSrc, /router\.post\("\/repair-library-tools"/, "repair endpoint");
 });
+
+test("agent_tools carries domain/actions and the migration is registered", () => {
+  const pipe = read("./pipeline.js");
+  assert.match(pipe, /domain: spec\.view, actions/, "domain tool writes domain + actions");
+  const manifest = JSON.parse(read("../../migrations/manifest.json"));
+  assert.ok(manifest.schema.includes("2026-agent-tools-domain.sql"), "migration registered");
+  assert.match(read("../agentConsole/routes.js"), /t\.domain \|\|/, "cleanup reads the domain column");
+});

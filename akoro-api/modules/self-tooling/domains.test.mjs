@@ -87,3 +87,13 @@ test("verifyDomainActions covers a newly added action", async () => {
   const checks = await verifyDomainActions(spec, async () => ({ ok: true, rows: [] }));
   assert.deepEqual(checks.map((c) => c.action), ["count", "list", "by_subject", "by_exam"]);
 });
+
+test("verifyDomainActions respects the budget (flags actions past it, blocking the save)", async () => {
+  const { verifyDomainActions } = await import("./domains.js");
+  let t = 0;
+  const now = () => (t += 5000);
+  const spec = { actions: ["count", "list", "by_subject"] };
+  const checks = await verifyDomainActions(spec, async () => ({ ok: true, rows: [] }), { budgetMs: 6000, now });
+  assert.equal(checks[0].ok, true);
+  assert.ok(checks.some((c) => c.error === "verification budget exceeded"));
+});

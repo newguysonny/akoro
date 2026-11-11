@@ -218,9 +218,9 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
     }
     // One tool per domain: retire other saved tools over the same view.
     if (!dry) {
-      const { data: others } = await edu().from("agent_tools").select("id, name, views").eq("owner_id", learnerId).eq("status", "active");
+      const { data: others } = await edu().from("agent_tools").select("id, name, views, domain").eq("owner_id", learnerId).eq("status", "active");
       for (const t of others || []) {
-        if (t.name !== spec.name && Array.isArray(t.views) && t.views.includes(spec.view)) {
+        if (t.name !== spec.name && (t.domain === spec.view || (Array.isArray(t.views) && t.views.includes(spec.view)))) {
           await edu().from("agent_tools").update({ status: "archived", updated_at: new Date().toISOString() }).eq("id", t.id).eq("owner_id", learnerId);
         }
       }
@@ -238,7 +238,7 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
     const { data: row, error } = await edu().from("agent_tools").insert({
       owner_id: learnerId, scope: "learner", audience, name: spec.name, label: spec.label,
       goal: `${spec.label}: ${actions.join(", ")}`, mode: "code", definition: def, params_schema: spec2.params,
-      capabilities: [], views: [spec.view],
+      capabilities: [], views: [spec.view], domain: spec.view, actions,
       verification: { verdict: "pass", at: new Date().toISOString(), assertions: checks.map((c) => ({ name: `action:${c.action}`, passed: c.ok })), samples: [] },
       status: "active", usage_count: 1, last_used_at: new Date().toISOString(),
     }).select("id").single();
@@ -481,7 +481,7 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
           : { rows: runNow.rows, total: runNow.total, truncated: runNow.truncated }) : { error: runNow.error },
         note: "DRY RUN — the tool was built and verified but NOT saved. Answer the learner from `result`." + droppedNote };
     }
-    const { data: row, error } = await edu().from("agent_tools").insert({ owner_id: learnerId, scope: "learner", audience, ...def, usage_count: runNow.ok ? 1 : 0, last_used_at: new Date().toISOString() }).select("id").single();
+    const { data: row, error } = await edu().from("agent_tools").insert({ owner_id: learnerId, scope: "learner", audience, ...def, domain: (def.views || [])[0] || null, actions: def.params_schema?.action?.enum || null, usage_count: runNow.ok ? 1 : 0, last_used_at: new Date().toISOString() }).select("id").single();
     if (error) return finish("failed", reject(`Couldn't save the tool: ${error.message}`));
     ev.tool_id = row.id;
     await finish("created", {});

@@ -232,10 +232,10 @@ router.post("/cleanup-domain-tools", guard, asyncHandler(async (req, res) => {
   try { learner = await resolveLearner(req.body?.learner); } catch (e) { return fail(res, e); }
   const dry = req.body?.dry === true;
   const { data: tools } = await db.schema("edu").from("agent_tools")
-    .select("id, name, label, mode, views, params_schema, created_at").eq("owner_id", learner.id).eq("status", "active");
+    .select("id, name, label, mode, views, domain, params_schema, created_at").eq("owner_id", learner.id).eq("status", "active");
   const byDomain = new Map();
   for (const t of tools || []) {
-    const domain = (Array.isArray(t.views) && t.views[0]) || t.name;
+    const domain = t.domain || (Array.isArray(t.views) && t.views[0]) || t.name;
     if (!byDomain.has(domain)) byDomain.set(domain, []);
     byDomain.get(domain).push(t);
   }

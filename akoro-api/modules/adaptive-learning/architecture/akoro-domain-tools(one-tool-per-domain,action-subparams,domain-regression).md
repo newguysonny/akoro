@@ -136,3 +136,10 @@ If no view/capability can express the request, the agent must not fabricate. Ord
 3. **If it's learner-allowable** (`needs_your_ok`), draft the tool and show an **Allow** card instead of escalating.
 4. **If forbidden**, decline and explain.
 5. **Never a fake answer** — no invented numbers or claimed results outside the schema.
+
+## 12. Implementation status (2026-11-11)
+- **Built:** read domain tools (curated + per-learner dynamic over own-data views), one tool per view with `action` params; per-action regression verification (budget-capped) that blocks the save; runtime add-action (`by_<field>`); one-tool-per-view retirement; `replace`.
+- **Split decided and in effect:** reads run as domain tools; writes stay capability-gated with **Allow + Confirm**.
+- **Metadata:** explicit `domain` + `actions` columns on `edu.agent_tools` (migration `2026-agent-tools-domain.sql` + backfill from `views`/`params_schema`).
+- **Hygiene:** action cap (8), builder guidance ("one tool per domain; add via `by <field>`"), admin `cleanup-domain-tools`, wrong-view repair.
+- **Deferred / by decision:** a mixed read+write single tool (needs a safe write-in-tool interpreter feature), value aggregates (sum/average/accuracy) via the builder, and a scheduled global duplicate migration (per-learner cleanup exists).

@@ -204,9 +204,13 @@ export function inferAction(goal, actions = []) {
 /** Run EVERY action of a domain spec through `run(spec, sample)` and return a
  *  per-action check. Any `ok:false` blocks the save (domain regression). Pure
  *  orchestration — the caller supplies the runner, so this is unit-testable. */
-export async function verifyDomainActions(spec, run) {
+export async function verifyDomainActions(spec, run, { budgetMs = 12000, now = Date.now } = {}) {
   const checks = [];
+  const start = now();
   for (const action of spec.actions) {
+    // Budget: a slow/failing action can't make verification run forever — over
+    // budget, the remaining actions are flagged (which blocks the save).
+    if (now() - start > budgetMs) { checks.push({ action, ok: false, error: "verification budget exceeded" }); continue; }
     const sample = action === "search" ? { action, query: "a" } : { action };
     const r = await run(spec, sample);
     checks.push({ action, ok: !!(r && r.ok && Array.isArray(r.rows)), error: r && r.error });
