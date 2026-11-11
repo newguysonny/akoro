@@ -407,7 +407,7 @@ export const CHAT_TOOLS = [
   },
   {
     name: "list_scheduled_chat_follow_ups",
-    description: "List the student's still-pending scheduled Agent Chat messages. Use when they ask what check-ins are scheduled.",
+    description: "List the student's scheduled Agent Chat messages — both the still-pending ones (followUps) and recent delivery history (recent: delivered / failed / missed / cancelled, each with scheduledAt, deliveredAt, lastError and a `missed` flag). Use when they ask what check-ins are scheduled, OR whether a reminder actually sent, arrived, or failed — answer from `status`, `deliveredAt` and `missed`; never guess or claim a send you cannot see in this result.",
     input_schema: { type: "object", properties: {}, required: [] },
   },
   {
