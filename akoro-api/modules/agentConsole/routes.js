@@ -206,9 +206,15 @@ router.post("/repair-library-tools", guard, asyncHandler(async (req, res) => {
   let built = null;
   if (req.body?.build !== false) {
     const { executeChatTool } = await chat();
-    built = await executeChatTool("create_tool",
+    const b = await executeChatTool("create_tool",
       { goal: "Count the documents in my library", name: "library_documents_count", label: "Count my library documents" },
       learner.id, { role: "student", channel: "agent-console" });
+    let total = b?.result?.total ?? null;
+    // A correct tool already existed (reused): run it so the repair reports the real count.
+    if (b?.status === "reused" && b.tool) {
+      try { const r = await executeChatTool(b.tool, {}, learner.id, { role: "student", channel: "agent-console" }); total = r?.total ?? total; } catch { /* best-effort */ }
+    }
+    built = { status: b?.status, tool: b?.tool, mode: b?.mode, total };
   }
   res.json({ success: true, data: {
     learner: learner.username,
