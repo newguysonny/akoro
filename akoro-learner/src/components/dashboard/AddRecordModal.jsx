@@ -16,7 +16,6 @@ import { useLang } from '../../contexts/LanguageContext.jsx';
 import { XIcon, Icon } from '../common/Icons.jsx';
 import {
   listRecords, presignRecordUpload, putFileTo, createRecord,
-  setRecordProgress, deleteRecord,
 } from '../../services/recordsApi.js';
 import { extractUpload } from '../library/extractPages.js';
 
@@ -97,19 +96,11 @@ const saveLegacy = (uid, list) => {
   try { localStorage.setItem(legacyKey(uid), JSON.stringify(list)); } catch { /* private mode */ }
 };
 
-const KIND_ICON = { upload: 'ti-paperclip', link: 'ti-link', paste: 'ti-clipboard' };
 const MEDIA_ICON = { audio: 'ti-music', video: 'ti-video' };
-/* Upload rows show what they are: 🎵 audio, 🎬 video, paperclip for the rest
-   (old records without a stored type simply keep the paperclip). */
-const recordIcon = (r) => (r.kind === 'upload'
-  ? MEDIA_ICON[mediaKindOf(r)] || 'ti-paperclip'
-  : KIND_ICON[r.kind] || 'ti-file-text');
 
 export default function AddRecordModal({ open, onClose, user, onOpenRecord, onRecordsChanged }) {
   const { t } = useLang();
   const [tab, setTab]           = useState('upload');
-  const [records, setRecords]   = useState([]);
-  const [listErr, setListErr]   = useState('');
   const [file, setFile]         = useState(null);   // chosen, not yet saved
   const [dur,  setDur]          = useState(null);   // its length, if audio/video
   const [link, setLink]         = useState('');
@@ -125,16 +116,14 @@ export default function AddRecordModal({ open, onClose, user, onOpenRecord, onRe
   const extRunRef               = useRef(0);
   const uid = user?.id;
 
+  /* The sheet no longer lists history (the Library has it); it only tells the
+     parent that the shelf changed. */
   const reload = useCallback(async () => {
-    setListErr('');
     try {
       const list = await listRecords();
-      setRecords(list);
       onRecordsChanged?.(list);
-    } catch {
-      setListErr(t('records.load_failed'));
-    }
-  }, [onRecordsChanged, t]);
+    } catch { /* the shelf re-syncs on the next open */ }
+  }, [onRecordsChanged]);
 
   useEffect(() => {
     if (!open) return;
@@ -165,15 +154,6 @@ export default function AddRecordModal({ open, onClose, user, onOpenRecord, onRe
   }, [open, uid, reload]);
 
   if (!open) return null;
-
-  const persistDone = async (r, p) => {
-    // Optimistic in the list; the server write is the truth.
-    setRecords((rs) => rs.map(x => x.id === r.id ? { ...x, progress: p, lastOpenedAt: new Date().toISOString() } : x));
-    try {
-      await setRecordProgress(r.id, p);
-      await reload();          // fresh list → parent's copy stays in step
-    } catch { /* keep the optimistic row — next open re-syncs */ }
-  };
 
   const saveUpload = async () => {
     if (!file) { setErr(t('records.no_file')); return; }
@@ -237,13 +217,6 @@ export default function AddRecordModal({ open, onClose, user, onOpenRecord, onRe
   };
 
   const save = tab === 'upload' ? saveUpload : tab === 'link' ? saveLink : savePaste;
-
-  const removeRecord = async (id) => {
-    const before = records;
-    setRecords((rs) => rs.filter(r => r.id !== id));   // optimistic
-    try { await deleteRecord(id); onRecordsChanged?.(before.filter(r => r.id !== id)); }
-    catch { setRecords(before); }                       // roll back on failure
-  };
 
   return (
     <>
@@ -347,35 +320,6 @@ export default function AddRecordModal({ open, onClose, user, onOpenRecord, onRe
           <Icon name="ti-cloud-up" size={12} color="var(--ak-text-muted)"/>{t('records.saved_cloud')}
         </p>
 
-        <div style={{ marginTop:12, borderTop:'1px solid var(--ak-border)', paddingTop:12 }}>
-          <p style={{ fontSize:12, fontWeight:900, color:'var(--ak-text)', margin:'0 0 8px' }}>{t('records.mine')}{records.length > 0 && <span style={{ color:BRAND }}> · {records.length}</span>}</p>
-          {listErr && <p style={{ fontSize:12, color:RED, textAlign:'center', padding:'10px 0', margin:0 }}>{listErr}</p>}
-          {!listErr && records.length === 0 ? (
-            <p style={{ fontSize:12, color:'var(--ak-text-muted)', textAlign:'center', padding:'14px 0 4px' }}>{t('records.empty')}</p>
-          ) : records.map(r => {
-            const done = (r.progress || 0) >= 100;
-            const missing = r.kind === 'upload' && r.fileMissing;
-            return (
-            <div key={r.id} onClick={() => !missing && onOpenRecord?.(r)}
-              style={{ display:'flex', alignItems:'center', gap:9, padding:'9px 10px', borderRadius:11, background:'var(--ak-surface-hover)', border:'1px solid var(--ak-border)', marginBottom:6, cursor:(onOpenRecord && !missing) ? 'pointer':'default', opacity: missing ? .7 : 1 }}>
-              <span style={{ flexShrink:0 }}><Icon name={missing ? 'ti-cloud-off' : recordIcon(r)} size={15}/></span>
-              <div style={{ flex:1, minWidth:0 }}>
-                <p style={{ fontSize:12.5, fontWeight:800, color:done?'var(--ak-text-muted)':'var(--ak-text)', margin:0, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', textDecoration:done?'line-through':'none' }}>{r.name}</p>
-                <p style={{ fontSize:10, color:'var(--ak-text-muted)', margin:'1px 0 0' }}>
-                  {missing ? `${t('records.file_missing_short')} · ` : ''}{done ? `${t('records.done_label')} · ` : ''}{r.duration ? `${fmtDur(r.duration)} · ` : ''}{r.size ? `${fmtSize(r.size)} · ` : ''}{new Date(r.createdAt || Date.now()).toLocaleDateString([], { month:'short', day:'numeric' })}
-                </p>
-              </div>
-              <button onClick={(e) => { e.stopPropagation(); persistDone(r, (r.progress || 0) >= 100 ? 10 : 100); }} title={t('records.mark_done')} aria-label={t('records.mark_done')}
-                style={{ width:24, height:24, borderRadius:'50%', flexShrink:0, border:done?'none':'1.5px solid var(--ak-border2)', background:done?GREEN:'transparent', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>
-                {done && <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>}
-              </button>
-              <button onClick={(e) => { e.stopPropagation(); removeRecord(r.id); }} aria-label={t('records.remove')} style={{ background:'none', border:'none', cursor:'pointer', padding:4, flexShrink:0, opacity:.55 }}>
-                <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke={RED} strokeWidth="2.4" strokeLinecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
-              </button>
-            </div>
-            );
-          })}
-        </div>
       </div>
     </>
   );

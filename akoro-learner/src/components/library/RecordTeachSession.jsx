@@ -549,7 +549,11 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
       // Library content selects over the EXTRACTED markdown layer (not the
       // pdf.js layer). Before extraction finishes, PdfPage falls back to the
       // pdf.js layer for that page so selection is never dead.
-      return <PdfCanvas pdf={pdfParts.pdf} pageNumber={i + 1} blocks={pdfBlocks.get(i + 1)} selectionOverlay/>;
+      // pdf.js keeps the selectable layer (pixel-accurate); the extraction's
+      // blocks ride along for the Layout overlay and citation flash. Selecting
+      // with the extracted layer is opt-in only — it left text PDFs whose
+      // block layer hadn't laid out yet with NO selectable words.
+      return <PdfCanvas pdf={pdfParts.pdf} pageNumber={i + 1} blocks={pdfBlocks.get(i + 1)}/>;
     }
     if (type === 'image') {
       return <ImagePage src={fileUrl} alt={record.name} blocks={pdfBlocks.get(1)}/>;

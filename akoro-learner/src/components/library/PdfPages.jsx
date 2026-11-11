@@ -28,11 +28,26 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
    and picks the PDF again) skips the re-download and re-parse — the two
    slowest steps on a multi-page course PDF. Bounded so a long study
    session over many documents never pins the whole shelf in RAM. */
-const DOC_CACHE_MAX = 6;
-const docCache = new Map();   // src -> { pdf, texts }, oldest-first for eviction
+const DOC_CACHE_MAX = 3;                 // big course PDFs: 3 tabs' worth, not 6
+const DOC_CACHE_BYTES_MAX = 140 * 1024 * 1024;
+const docCache = new Map();   // src -> { pdf, texts, textsReady, bytes }, oldest-first
 
-/** Load the document + extract each page's text. `src` is presigned — no auth needed. */
-export async function loadPdfDocument(src, { credentials } = {}) {
+/* Text for the opening pages is extracted before the reader shows (the
+   session needs SOMETHING to ground on), the rest is filled quietly. A
+   27-page PDF used to run getTextContent for every page before returning —
+   on a 300-page scan that alone froze the reader and held the whole text in
+   memory before a single page was drawn. `texts` is always numPages long;
+   entries fill in as they are read, so page indexes never shift. */
+const EAGER_TEXT_PAGES = 6;
+
+async function readPageText(pdf, pageNumber, texts) {
+  const page = await pdf.getPage(pageNumber);
+  const tc = await page.getTextContent();
+  texts[pageNumber - 1] = tc.items.map((it) => it.str).join(' ');
+}
+
+/** Load the document + start extracting page text. `src` is presigned — no auth needed. */
+export async function loadPdfDocument(src, { credentials, eagerTextPages = EAGER_TEXT_PAGES } = {}) {
   const cached = docCache.get(src);
   if (cached) {
     docCache.delete(src);      // refresh recency so the newest stays put
@@ -41,19 +56,32 @@ export async function loadPdfDocument(src, { credentials } = {}) {
   }
   const res = await fetch(src, credentials ? { credentials } : undefined);
   if (!res.ok) throw new Error(`Could not load the file (${res.status}).`);
-  const data = new Uint8Array(await res.arrayBuffer());
-  const pdf = await pdfjsLib.getDocument({ data }).promise;
-  const texts = [];
-  for (let p = 1; p <= pdf.numPages; p++) {
-    const page = await pdf.getPage(p);
-    const tc = await page.getTextContent();
-    texts.push(tc.items.map((it) => it.str).join(' '));
-  }
-  const doc = { pdf, texts };
+  const buf = await res.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(buf) }).promise;
+  const texts = new Array(pdf.numPages).fill('');
+  let resolveReady = () => {};
+  const textsReady = new Promise((r) => { resolveReady = r; });
+  const doc = { pdf, texts, textsReady, bytes: buf.byteLength };
+
+  const eager = Math.min(pdf.numPages, Math.max(1, eagerTextPages));
+  for (let p = 1; p <= eager; p++) await readPageText(pdf, p, texts).catch(() => {});
+  // The rest, in small batches with a yield between them, so a big document
+  // never blocks paints or the page's own text-layer work.
+  (async () => {
+    for (let p = eager + 1; p <= pdf.numPages; p++) {
+      await readPageText(pdf, p, texts).catch(() => {});
+      if (p % 3 === 0) await new Promise((r) => setTimeout(r, 0));
+    }
+  })().finally(resolveReady);
+
   docCache.set(src, doc);
-  while (docCache.size > DOC_CACHE_MAX) {
+  let total = 0;
+  for (const d of docCache.values()) total += d.bytes || 0;
+  while (docCache.size > DOC_CACHE_MAX || (total > DOC_CACHE_BYTES_MAX && docCache.size > 1)) {
     const oldest = docCache.keys().next().value;
-    docCache.get(oldest)?.pdf.destroy?.().catch(() => {});
+    const gone = docCache.get(oldest);
+    total -= gone?.bytes || 0;
+    gone?.pdf.destroy?.().catch(() => {});
     docCache.delete(oldest);
   }
   return doc;
@@ -139,10 +167,14 @@ export function PdfPage({ pdf, pageNumber, blocks = null, selectionOverlay = fal
       const base = page.getViewport({ scale: 1 });
       const cssWidth = wrap.clientWidth || 640;
       const cssScale = cssWidth / base.width;
-      const dpr = Math.min(window.devicePixelRatio || 1, 3);
+      // Phones with ≤4 GB never need 3× DPR here; capping both the ratio and
+      // the pixel budget keeps a page's canvas ≈12 MB instead of ≈24 MB — the
+      // difference between scrolling a 200-page PDF and crashing the tab.
+      const memory = Number(navigator.deviceMemory) || 4;
+      const dpr = Math.min(window.devicePixelRatio || 1, memory <= 4 ? 2 : 2.5);
       const MAX_ZOOM = 1.5;
       let renderScale = cssScale * dpr * MAX_ZOOM;
-      const MAX_PIXELS = 6_000_000;
+      const MAX_PIXELS = 3_500_000;
       if (base.width * renderScale * base.height * renderScale > MAX_PIXELS) {
         renderScale = Math.sqrt(MAX_PIXELS / (base.width * base.height));
       }

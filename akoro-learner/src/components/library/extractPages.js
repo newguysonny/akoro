@@ -120,7 +120,11 @@ export async function extractUpload(record, { onProgress, isCancelled } = {}) {
       // Loaded the way the reader loads it: PdfPages.jsx also points pdf.js
       // at its worker.
       const { loadPdfDocument } = await import('./PdfPages.jsx');
-      const { pdf, texts } = await loadPdfDocument(record.fileUrl);
+      // The reader loads pages lazily; scan detection needs EVERY page's text,
+      // so wait for the quiet background read to finish here (this runs after
+      // the upload is saved, never in front of the learner).
+      const { pdf, texts, textsReady } = await loadPdfDocument(record.fileUrl);
+      await textsReady.catch(() => {});
       // A PDF with a real text layer is read by the server for free at
       // registration — only a scan needs the paid parse. A watermark repeated
       // on every page is not a text layer (lib/textLayer.js).

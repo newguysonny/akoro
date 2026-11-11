@@ -1253,16 +1253,21 @@ export default function SessionReaderModal({
   useEffect(() => {
     const root = viewerRef.current;
     if (!root || activeTabId !== "reader") return;
+    // A PDF page is often TALLER than the reader pane, so it can never be 50%
+    // visible — the old 0.5 threshold left the pager stuck on an earlier page
+    // after a citation jump. Track every page's ratio and take the most visible.
+    const ratios = new Map();
     const observer = new IntersectionObserver(
       (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting && entry.intersectionRatio >= 0.5) {
-            const idx = parseInt(entry.target.dataset.pageIndex, 10);
-            setCurrentPage((cur) => (cur !== idx ? idx : cur));
-          }
-        });
+        for (const entry of entries) {
+          const idx = parseInt(entry.target.dataset.pageIndex, 10);
+          if (Number.isFinite(idx)) ratios.set(idx, entry.isIntersecting ? entry.intersectionRatio : 0);
+        }
+        let best = -1, bestRatio = 0.12;
+        for (const [idx, ratio] of ratios) if (ratio > bestRatio) { best = idx; bestRatio = ratio; }
+        if (best >= 0) setCurrentPage((cur) => (cur !== best ? best : cur));
       },
-      { root, threshold: [0.5] }
+      { root, threshold: [0, 0.15, 0.3, 0.5, 0.75, 1] }
     );
     root.querySelectorAll("[data-page-index]").forEach((el) => observer.observe(el));
     return () => observer.disconnect();
@@ -1649,8 +1654,12 @@ export default function SessionReaderModal({
       playerApi?.seekTo?.(cite.startMs / 1000);
       return;
     }
+    const targetPage = Math.min(cite.page, pages.length - 1);
+    // Select the page in the pager/thumbnails immediately: the scroll alone
+    // left it unselected when the cited page was taller than the pane.
+    setCurrentPage(targetPage);
     requestAnimationFrame(() => {
-      goToPage(Math.min(cite.page, pages.length - 1));
+      goToPage(targetPage);
       setTimeout(() => {
         // Word / PowerPoint pages: the citation's box is [0, i, 1000, i+1] —
         // i names the paragraph the page rendered with data-block="i".
