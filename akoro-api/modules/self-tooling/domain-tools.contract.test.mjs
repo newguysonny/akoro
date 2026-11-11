@@ -35,7 +35,7 @@ test("stale cleanup is per-learner and global, and never archives write tools", 
   assert.match(src, /req\.body\?\.all === true/, "all-learner sweep");
   assert.match(src, /confirm:true/, "global archive needs confirmation");
   const cleanupSrc = read("../agentConsole/cleanup.js");
-  assert.match(cleanupSrc, /\(t\.capabilities \|\| \[\]\)\.length\) continue/, "write tools are skipped");
+  assert.match(cleanupSrc, /isWriteTool\(t\)\) continue/, "write tools are skipped");
   assert.match(cleanupSrc, /isSimpleRead/, "bespoke readers are kept beside the domain tool");
 });
 
