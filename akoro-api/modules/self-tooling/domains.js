@@ -243,6 +243,11 @@ export function actionContract(action, r) {
   return null;
 }
 
+/** A sandbox worker that failed to start or was stopped is transient; a real
+ *  tool failure is not. Retrying one of these keeps verification honest without
+ *  letting worker-start jitter block a save. */
+const TRANSIENT_RUN = /(ran too long|sandbox stopped|sandbox unavailable)/i;
+
 /** Run EVERY action of a domain spec through `run(spec, sample)` and return a
  *  per-action check. Any `ok:false` blocks the save (domain regression). Pure
  *  orchestration — the caller supplies the runner, so this is unit-testable.
@@ -257,7 +262,10 @@ export async function verifyDomainActions(spec, run, { budgetMs = 12000, now = D
     // budget, the remaining actions are flagged (which blocks the save).
     if (now() - start > budgetMs) { checks.push({ action, ok: false, error: "verification budget exceeded" }); continue; }
     const sample = action === "search" ? { action, query: "a" } : { action };
-    const r = await run(spec, sample);
+    let r = await run(spec, sample);
+    if (!r?.ok && TRANSIENT_RUN.test(String(r?.error || "")) && now() - start <= budgetMs) {
+      r = await run(spec, sample); // one retry: worker start / wall jitter, not a tool bug
+    }
     const ok = !!(r && r.ok && Array.isArray(r.rows));
     const contractError = ok ? actionContract(action, r) : null;
     checks.push({

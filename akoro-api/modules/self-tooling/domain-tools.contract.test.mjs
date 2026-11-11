@@ -25,6 +25,16 @@ test("agent_tools carries domain/actions and the migration is registered", () =>
   assert.match(read("../agentConsole/routes.js"), /t\.domain \|\|/, "cleanup reads the domain column");
 });
 
+test("a rejected rebuild never archives the working domain tool", () => {
+  const pipe = read("./pipeline.js");
+  const verifyAt = pipe.indexOf("await verifyDomainActions(spec2");
+  const rejectAt = pipe.indexOf("if (bad.length)");
+  const archiveAt = pipe.indexOf("Retire ONLY after verification passes");
+  assert.ok(verifyAt > 0, "verification runs");
+  assert.ok(rejectAt > verifyAt, "rejection is decided after verification");
+  assert.ok(archiveAt > rejectAt, "retirement happens only after the rejection check passes");
+});
+
 test("replace captures actions before archiving, so a rebuild keeps them", () => {
   const pipe = read("./pipeline.js");
   const replaceBlock = pipe.slice(pipe.indexOf("const replaceRaw"), pipe.indexOf("// Build a domain tool"));

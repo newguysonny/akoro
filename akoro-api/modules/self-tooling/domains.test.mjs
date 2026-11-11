@@ -131,6 +131,24 @@ test("verifyDomainActions respects the budget (flags actions past it, blocking t
   assert.ok(checks.some((c) => c.error === "verification budget exceeded"));
 });
 
+test("verifyDomainActions retries a transient sandbox start, not a real failure", async () => {
+  const { verifyDomainActions } = await import("./domains.js");
+  const spec = DOMAINS.library_documents;
+  const good = fixtureRun(spec, LIB_FIXTURE);
+  let calls = 0;
+  const flaky = async (s, sample) => {
+    calls += 1;
+    if (sample.action === "by_kind" && calls <= spec.actions.indexOf("by_kind") + 1) {
+      return { ok: false, error: "the code ran too long" }; // worker start jitter
+    }
+    return good(s, sample);
+  };
+  const checks = await verifyDomainActions(spec, flaky);
+  assert.equal(checks.every((c) => c.ok), true, "a transient timeout is retried once");
+  const always = await verifyDomainActions(spec, async () => ({ ok: false, error: "the code ran too long" }));
+  assert.equal(always.every((c) => !c.ok), true, "a real timeout still blocks the save");
+});
+
 test("scripted regression: fixtures give exact outputs and a broken action is caught", async () => {
   const { verifyDomainActions, actionContract } = await import("./domains.js");
   const spec = DOMAINS.library_documents;

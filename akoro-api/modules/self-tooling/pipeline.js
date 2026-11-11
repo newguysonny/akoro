@@ -228,18 +228,6 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
       return finish("reused", { status: "reused", tool: spec.name, label: spec.label, actions,
         note: `You already have "${spec.label}" — it IS available in this chat: call ${spec.name} with action=(${actions.join("|")}) to answer. Never tell the learner to open Settings.` });
     }
-    if (!dry && existing?.id && !replaceRaw) {
-      await edu().from("agent_tools").update({ status: "archived", updated_at: new Date().toISOString() }).eq("id", existing.id).eq("owner_id", learnerId);
-    }
-    // One tool per domain: retire other saved tools over the same view.
-    if (!dry) {
-      const { data: others } = await edu().from("agent_tools").select("id, name, views, domain").eq("owner_id", learnerId).eq("status", "active");
-      for (const t of others || []) {
-        if (t.name !== spec.name && (t.domain === spec.view || (Array.isArray(t.views) && t.views.includes(spec.view)))) {
-          await edu().from("agent_tools").update({ status: "archived", updated_at: new Date().toISOString() }).eq("id", t.id).eq("owner_id", learnerId);
-        }
-      }
-    }
     const def = { kind: "code", steps: [{ id: spec.step, view: spec.view }], source: spec.source };
     const ctxD = { learnerId, callCapability: undefined };
     const checks = await verifyDomainActions(spec2, (_spec, sample) => tryRun(def, spec2.params, sample, ctxD));
@@ -249,6 +237,20 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
       await finish("dry", {});
       return { status: "created", dryRun: true, tool: spec.name, label: spec.label, mode: "code", actions, verified: true,
         note: `DRY RUN — verified every action (${actions.join(", ")}) but did not save.` };
+    }
+    // Retire ONLY after verification passes: a rejected rebuild must never take
+    // the learner's working domain tool away.
+    if (existing?.id && !replaceRaw) {
+      await edu().from("agent_tools").update({ status: "archived", updated_at: new Date().toISOString() }).eq("id", existing.id).eq("owner_id", learnerId);
+    }
+    // One tool per domain: retire other saved tools over the same view.
+    {
+      const { data: others } = await edu().from("agent_tools").select("id, name, views, domain").eq("owner_id", learnerId).eq("status", "active");
+      for (const t of others || []) {
+        if (t.name !== spec.name && (t.domain === spec.view || (Array.isArray(t.views) && t.views.includes(spec.view)))) {
+          await edu().from("agent_tools").update({ status: "archived", updated_at: new Date().toISOString() }).eq("id", t.id).eq("owner_id", learnerId);
+        }
+      }
     }
     const { data: row, error } = await edu().from("agent_tools").insert({
       owner_id: learnerId, scope: "learner", audience, name: spec.name, label: spec.label,
