@@ -24,7 +24,10 @@ import { findDuplicateTool } from "./toolSimilarity.js";
 const edu = () => db.schema("edu");
 const NAME = /^[a-z][a-z0-9_]{2,47}$/;
 export const LIMITS = {
-  dailyCreates: Math.max(1, Number(process.env.SELF_TOOLING_DAILY_CREATES) || 5),
+  // Per-learner tool builds per day. Env-overridable (SELF_TOOLING_DAILY_CREATES);
+  // default raised from 5 to 20 to match the total-tool cap, since the
+  // similar-goal dedupe now prevents wasteful duplicate builds.
+  dailyCreates: Math.max(1, Number(process.env.SELF_TOOLING_DAILY_CREATES) || 20),
   maxTools: Math.max(1, Number(process.env.SELF_TOOLING_MAX_TOOLS) || 20),
   // Every ACTIVE tool a learner owns must be callable in chat — a tool the model
   // can't see is a tool it says it "can't run from here". This used to be 8, so
