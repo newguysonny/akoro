@@ -34,6 +34,7 @@ import { runPharmdUpload }    from "./uploader.js";
 import { safeCompare } from "../../lib/safeCompare.js";
 import { openai, OPENAI_MODEL } from "../../lib/aiModel.js";
 import { buildAskMessages, extractCitations, cleanModelOutput } from "../records/askLib.js";
+import { pharmdContentKey } from "./contentKey.js";
 
 const edu = () => db.schema("edu");
 
@@ -104,10 +105,11 @@ router.get("/courses/:code", asyncHandler(async (req, res) => {
       mime: t.file_mime,
       size: t.file_size,
       file_url: publicFileUrl(t.file_bucket, t.file_path),
+      file_hash: t.file_hash || null,
       // Shared extraction key: the parse is cached once per file and every
       // learner reads the same markdown (the workbook is public catalogue
-      // content). null when the row has no stored path.
-      contentKey: t.file_path ? `pharmd:${t.file_path}` : null,
+      // content). Versioned by the file hash so a replaced PDF is a new key.
+      contentKey: pharmdContentKey(t),
     })),
   });
 }));

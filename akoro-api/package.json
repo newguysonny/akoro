@@ -4,6 +4,7 @@
   "description": "Akoro Learning Platform — Modular Monolith API",
   "type": "module",
   "scripts": {
+    "pharmd:backfill-hash": "node scripts/pharmd-hash-backfill.mjs",
     "postinstall": "patch-package",
     "start": "node app.js",
     "dev": "node --watch app.js",

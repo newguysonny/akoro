@@ -25,6 +25,7 @@ import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import AdmZip from "adm-zip";
+import { createHash } from "node:crypto";
 
 export const PHARMD_BUCKET = "pharmd-courses";
 export const PROGRAMME_CODE = "PHARMD";
@@ -155,6 +156,9 @@ export async function runPharmdUpload({ dryRun = false, only = null, dir = DEFAU
         file_bucket: PHARMD_BUCKET, file_path: path,
         file_name: entry.entryName.split("/").pop(),
         file_size: buffer.length, file_mime: "application/pdf",
+        // Versioned content key input: a re-uploaded file gets a new identity,
+        // so the shared parse cache can never serve the old markdown.
+        file_hash: createHash("sha256").update(buffer).digest("hex").slice(0, 32),
       };
       if (!dryRun) {
         const { error: upErr } = await db.storage.from(PHARMD_BUCKET)

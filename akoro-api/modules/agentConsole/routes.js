@@ -394,6 +394,17 @@ router.post("/debug-token", guard, asyncHandler(async (req, res) => {
   res.json({ success: true, data: { learner: learner.username, token } });
 }));
 
+/* Hash older PHARM.D topics and move their cached parses to the versioned
+   key. Batched: pass { limit } and call again until checked < limit. */
+router.post("/pharmd-hash-backfill", guard, asyncHandler(async (req, res) => {
+  const { runPharmdHashBackfill } = await import("../pharmd/hashBackfill.js");
+  const limit = Math.max(1, Math.min(50, Number(req.body?.limit) || 10));
+  const lines = [];
+  const course = req.body?.course ? String(req.body.course) : null;
+  const out = await runPharmdHashBackfill({ limit, course, onLog: (line) => lines.push(line) });
+  res.json({ success: true, data: { ...out, limit, log: lines } });
+}));
+
 router.get("/learner-tools", guard, asyncHandler(async (req, res) => {
   let learner;
   try { learner = await resolveLearner(req.query?.learner); } catch (e) { return fail(res, e); }

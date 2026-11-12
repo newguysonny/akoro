@@ -363,8 +363,10 @@ test("the extracted-markdown layer is safe to enable on large files", () => {
 
 test("PHARM.D topics share one extraction key and pass the access rule", () => {
   const pharmd = read("../pharmd/routes.js");
-  assert.match(pharmd, /contentKey: t\.file_path \? `pharmd:\$\{t\.file_path\}` : null/, "topics hand back a shared key");
-  assert.match(routesSrc, /const PHARMD_PREFIX = "pharmd:"/, "access knows the PHARM.D key space");
+  assert.match(pharmd, /contentKey: pharmdContentKey\(t\)/, "topics hand back the versioned shared key");
+  assert.match(pharmd, /file_hash: t\.file_hash/, "the client can derive the key");
+  assert.match(read("../pharmd/contentKey.js"), /export const PHARMD_PREFIX = "pharmd:"/, "one definition of the PHARM.D key space");
+  assert.match(routesSrc, /parsePharmdKey\(contentKey\)/, "access parses the versioned key");
   assert.match(routesSrc, /contentKey\.startsWith\(PHARMD_PREFIX\)\) return resolvePharmdContent/, "pharmd keys resolve as shared content");
   assert.match(routesSrc, /from\("pharmd_topics"\)/, "the topic row is the authority for the file");
   assert.match(pharmdReaderSrc, /getSharedExtraction\(contentKey\)/, "the PHARM.D reader reads the shared cache");

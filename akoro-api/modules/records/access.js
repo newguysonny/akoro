@@ -11,22 +11,29 @@
  *
  * The db client loads lazily so importers stay cheap and testable.
  */
+import { PHARMD_PREFIX, parsePharmdKey, pharmdContentKey } from "../pharmd/contentKey.js";
+
 const dbLazy = async () => (await import("../../db.js")).default;
 const edu = async () => (await dbLazy()).schema("edu");
 
-/** PHARM.D catalogue content is keyed by the topic's stored file path, so one
- *  parse is shared by every learner who opens that topic. */
-const PHARMD_PREFIX = "pharmd:";
-export const pharmdContentKey = (path) => (path ? `${PHARMD_PREFIX}${path}` : null);
-
+/** PHARM.D catalogue content is keyed by the topic's stored path + bytes hash,
+ *  so one parse is shared by every learner and a replaced PDF is a NEW key. */
 async function resolvePharmdContent(contentKey) {
-  const path = contentKey.slice(PHARMD_PREFIX.length);
-  if (!path) return { status: 400, message: "A PHARM.D content key is required." };
+  const parsed = parsePharmdKey(contentKey);
+  if (!parsed?.path) return { status: 400, message: "A PHARM.D content key is required." };
   const { data: topic, error } = await (await edu()).from("pharmd_topics")
-    .select("title, file_path, file_mime").eq("file_path", path).maybeSingle();
+    .select("title, file_path, file_mime, file_hash").eq("file_path", parsed.path).maybeSingle();
   if (error) throw error;
   if (!topic) return { status: 404, message: "Content not found." };
-  return { contentKey, name: topic.title || "PHARM.D topic", mime: topic.file_mime || "application/pdf" };
+  // A client holding an old version must reopen the topic and use the new key.
+  if (parsed.hash && topic.file_hash && parsed.hash !== topic.file_hash) {
+    return { status: 409, message: "This file was updated — reopen the topic to read the new version." };
+  }
+  return {
+    contentKey: pharmdContentKey(topic),
+    name: topic.title || "PHARM.D topic",
+    mime: topic.file_mime || "application/pdf",
+  };
 }
 
 /** Active Premium learners — their uploads never leave their library. */
