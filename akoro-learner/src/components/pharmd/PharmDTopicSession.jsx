@@ -36,6 +36,7 @@ import { BRAND } from '../../constants.js';
 import { APP_HOME } from '../../config/target.js';
 import { askPharmd } from '../../services/pharmdApi.js';
 import { getSharedExtraction } from '../../services/recordsApi.js';
+import { looksScanned } from '../../lib/textLayer.js';
 
 const MAX_REFERENCE_CHARS = 12_000;   // the server's reference cap
 
@@ -105,7 +106,7 @@ export default function PharmDTopicSession({ topic, course, onClose }) {
       try {
         // pdf.js is a big dependency — it loads only when a PDF opens.
         const { loadPdfDocument, PdfPage } = await import('../library/PdfPages.jsx');
-        const { pdf, texts } = await loadPdfDocument(topic.file_url);
+        const { pdf, texts, textsReady } = await loadPdfDocument(topic.file_url);
         if (cancelled) return;
         // The pages ARE the PDF's pages — text kept beside each so the
         // Generate tools work on the document's real sentences. The same
@@ -125,7 +126,18 @@ export default function PharmDTopicSession({ topic, course, onClose }) {
           if ((saved.pages || []).length) {
             applyExtractedRef.current?.(saved, texts);
           } else {
-            setExtract({ status: 'offer', done: 0, total: pdf.numPages });
+            // Same rule as the Library upload: a PDF with a real text layer is
+            // grounded for free from its own words — only a scan needs the paid
+            // parse. Decide after the quiet full read; the reader is usable now.
+            void textsReady.then(() => {
+              if (cancelled) return;
+              if (!looksScanned(texts)) {
+                const all = texts.filter(Boolean).join('\n\n');
+                if (all) setReference({ name: topic.title, text: all.slice(0, MAX_REFERENCE_CHARS) });
+                return;
+              }
+              setExtract({ status: 'offer', done: 0, total: pdf.numPages });
+            }).catch(() => {});
           }
         }
       } catch (e) {

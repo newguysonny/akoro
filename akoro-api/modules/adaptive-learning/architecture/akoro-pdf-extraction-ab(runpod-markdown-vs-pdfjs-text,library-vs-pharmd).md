@@ -94,6 +94,9 @@ If both hold, the recommended end-state is **pdf.js text layer for selection + R
   work with no migration. The parse is keyed by `content_key`, so **one run
   serves every learner** who opens that topic.
 - **Reader.** `PharmDTopicSession.jsx` reuses the Library's `ExtractionCard`
+  and follows the same **scan gate**: a topic with a real text layer is grounded from its
+  own words and never sent for a paid parse (the offer appears only after the quiet full
+  text read proves it is a scan).
   (offer → progress → applied/error) and applies the shared markdown as the
   teaching reference plus `pageBlocks` for citation flashes. It reads the
   shared cache first; only a miss offers the paid run.

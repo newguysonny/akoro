@@ -369,6 +369,9 @@ test("PHARM.D topics share one extraction key and pass the access rule", () => {
   assert.match(routesSrc, /from\("pharmd_topics"\)/, "the topic row is the authority for the file");
   assert.match(pharmdReaderSrc, /getSharedExtraction\(contentKey\)/, "the PHARM.D reader reads the shared cache");
   assert.match(pharmdReaderSrc, /pageBlocks: pages\.map/, "blocks feed the citation flash as an array");
+  assert.match(pharmdReaderSrc, /import \{ looksScanned \}/, "the PHARM.D reader uses the same scan gate as upload");
+  assert.match(pharmdReaderSrc, /!looksScanned\(texts\)/, "text PDFs are not sent for a paid parse");
+  assert.match(pharmdReaderSrc, /void textsReady\.then/, "the decision runs after the quiet full text read");
   assert.match(pharmdReaderSrc, /bboxForQuote\(pageBlocks, c\.pageNumber, c\.quote\)/, "Ask citations get the exact block bbox");
 });
 
