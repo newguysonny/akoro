@@ -16,3 +16,11 @@ test("human validation messages pass through", () => {
   assert.equal(userFacingMessage("Code required"), "Code required");
   assert.equal(userFacingMessage(""), "We couldn't complete that request. Please check the details and try again.");
 });
+
+test("the global JSON guard is mounted before the routers", async () => {
+  const { readFileSync } = await import("node:fs");
+  const app = readFileSync(new URL("../app.js", import.meta.url), "utf8");
+  assert.match(app, /res\.json = \(body\) =>/);
+  assert.match(app, /userFacingMessage\(clean\[key\], fallback\)/);
+  assert.ok(app.indexOf("res.json = (body)") < app.indexOf('app.use("/api"'));
+});

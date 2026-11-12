@@ -17,6 +17,7 @@
 import "./lib/logTap.js";          // keeps the last server log lines for the agent console
 import "./lib/outboundMeter.js";
 import { loadRuntimeSettings } from "./lib/modelRuntime.js";
+import { userFacingMessage } from "./lib/userFacingError.js";
 import "dotenv/config";
 import express                    from "express";
 import { createServer }           from "http";
@@ -356,6 +357,35 @@ app.use("/api/parse/console",                 express.json({ limit: "12mb" })); 
 app.use(express.json({ limit: "2mb" }));
 app.use(express.urlencoded({ extended: true }));
 app.use(requestLogger);
+// Last line of defence: no 4xx/5xx JSON body may carry Postgres/PostgREST
+// text (schema, constraint, table or SQL names), whatever a route returned.
+// Deliberate human messages pass through unchanged.
+app.use((req, res, next) => {
+  const send = res.json.bind(res);
+  res.json = (body) => {
+    if (res.statusCode >= 400 && body && typeof body === "object" && !Array.isArray(body)) {
+      const fallback = res.statusCode >= 500
+        ? "Something went wrong. Please try again."
+        : "We couldn't complete that request. Please check the details and try again.";
+      const clean = { ...body };
+      for (const key of ["message", "error"]) {
+        if (typeof clean[key] === "string") clean[key] = userFacingMessage(clean[key], fallback);
+      }
+      if (Array.isArray(clean.errors)) {
+        clean.errors = clean.errors.map((e) => {
+          if (typeof e === "string") return userFacingMessage(e, fallback);
+          if (e && typeof e === "object" && typeof e.message === "string") {
+            return { ...e, message: userFacingMessage(e.message, fallback) };
+          }
+          return e;
+        });
+      }
+      return send(clean);
+    }
+    return send(body);
+  };
+  next();
+});
 // Load shedding (plan §3.5): under extreme load, shed low-priority traffic
 // with an honest 503 + Retry-After instead of collapsing. Auth and health are
 // exempt — sessions must stay refreshable while the server is on its knees.
