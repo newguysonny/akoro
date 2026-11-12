@@ -37,6 +37,8 @@ import { signInternalAccess } from "../auth/routes.js";
 import { safeCompare } from "../../lib/safeCompare.js";
 import { isDocumentGoal } from "../self-tooling/toolSimilarity.js";
 import { cleanupPlan } from "./cleanup.js";
+import { modelRegistry, availabilityOf } from "../../lib/modelRegistry.js";
+import { makeOpenCodeAdapter } from "../../lib/providers/opencode.js";
 
 const router = express.Router();
 const asyncHandler = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
