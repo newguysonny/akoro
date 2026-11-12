@@ -14,6 +14,14 @@ process.env.OPENAI_API_KEY ||= "test";
 process.env.ANTHROPIC_API_KEY ||= "test";
 process.env.AI_TELEMETRY = "on";
 process.env.AI_TELEMETRY_DB = "off";
+process.env.OPENCODE_API_KEY ||= "test";
+// This file exercises call-site mechanics against the fixtures it was written
+// with; the live catalogue (seven Go models, DeepSeek default) is covered by
+// lib/modelRegistry.contract.test.mjs.
+process.env.AI_MODELS = JSON.stringify([
+  { id: "gpt-4o-mini", provider: "openai", apiModel: "gpt-4o-mini", price: { in: 0.15, out: 0.6 }, caps: { tools: true, stream: true, json: true }, selectable: true, enabled: true },
+  { id: "claude-sonnet", provider: "anthropic", apiModel: "claude-sonnet-5-5", price: { in: 2, out: 10 }, caps: { tools: true, stream: true, json: true }, selectable: true, enabled: true },
+]);
 delete process.env.AI_MODEL_PICKER_ENABLED;
 delete process.env.AI_MODEL_LOCKED_ROLES;
 delete process.env.AI_FORCE_MODEL;
@@ -196,13 +204,18 @@ test("…the fallback obeys AI_FORCE_MODEL (a sandbox with OpenAI off retries on
   const { refusalFallbackFor } = await import("./aiModel.js");
   const { createModelRegistry } = await import("./modelRegistry.js");
   const env = { OPENAI_API_KEY: "k", ANTHROPIC_API_KEY: "k", DEEPSEEK_API_KEY: "k", DEEPSEEK_MODEL: "deepseek-chat",
-    AI_MODELS: JSON.stringify([{ id: "deepseek", price: { in: 0.3, out: 1.2 } }]), AI_FORCE_MODEL: "deepseek" };
+    AI_MODELS: JSON.stringify([
+      { id: "deepseek", price: { in: 0.3, out: 1.2 } },
+      { id: "gpt-4o-mini", provider: "openai", apiModel: "gpt-4o-mini", price: { in: 0.15, out: 0.6 }, caps: { tools: true, stream: true }, selectable: true, enabled: true },
+      { id: "gpt-4.1", provider: "openai", apiModel: "gpt-4.1", price: { in: 2, out: 8 }, caps: { tools: true, stream: true }, selectable: true, enabled: true },
+    ]), AI_FORCE_MODEL: "gpt-4.1",
+    AI_MODEL_DEFAULT: "gpt-4o-mini", AI_MODEL_FALLBACK: "gpt-4o-mini" };
   const registry = createModelRegistry(env);
   const sonnet = registry.get("claude-sonnet");
-  assert.equal(refusalFallbackFor(sonnet, { registry, env }).id, "deepseek", "forced like every call");
+  assert.equal(refusalFallbackFor(sonnet, { registry, env }).id, "gpt-4.1", "forced like every call");
   assert.equal(refusalFallbackFor(sonnet, { registry, env, noForce: true }).id, "gpt-4o-mini", "a check's stand-ins see the unforced choice");
   assert.equal(refusalFallbackFor(sonnet, { registry, env: { ...env, AI_FORCE_MODEL: "" } }).id, "gpt-4o-mini", "no force: the default");
-  assert.equal(refusalFallbackFor(registry.get("deepseek"), { registry, env }).id, "gpt-4o-mini", "never back to itself");
+  assert.equal(refusalFallbackFor(registry.get("deepseek"), { registry, env }).id, "gpt-4.1", "forced, never back to itself");
   // A check's stand-ins: noForce reaches the call itself.
   const r2 = recorder();
   await runWithProviders({ ...r2.providers, noForce: true }, () => openai.chat.completions.create({ model: "gpt-4o-mini", messages: [{ role: "user", content: "x" }] }));

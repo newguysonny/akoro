@@ -31,8 +31,8 @@
 export const PLAN_TIER_MODELS = Object.freeze({
   pilot: Object.freeze(["deepseek"]),
   trial: Object.freeze(["claude-haiku", "deepseek"]),
-  freemium: Object.freeze(["claude-haiku", "claude-sonnet", "gpt-4.1", "deepseek"]),
-  premium: Object.freeze(["claude-haiku", "claude-sonnet", "gpt-4.1", "claude-opus", "grok", "deepseek"]),
+  freemium: Object.freeze(["glm-5-3-flash", "qwen3-8-flash", "gpt-6-luna", "gpt-5-6-luna", "deepseek", "claude-haiku"]),
+  premium: Object.freeze(["glm-5-3-flash", "qwen3-8-flash", "gpt-6-luna", "gpt-5-6-luna", "deepseek", "claude-haiku", "grok"]),
 });
 /** A custom tier nobody has set a list for: the one model every tier has. */
 const UNKNOWN_TIER_MODELS = Object.freeze(["deepseek"]);

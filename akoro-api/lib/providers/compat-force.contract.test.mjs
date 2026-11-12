@@ -18,8 +18,8 @@ test("OpenAI-compatible providers: json_schema becomes json_object plus the sche
 
 test("AI_FORCE_MODEL sends OpenAI-bound chat calls to a configured DeepSeek, and only when it is callable", async () => {
   const env = {
-    AI_FORCE_MODEL: "deepseek", DEEPSEEK_API_KEY: "k", DEEPSEEK_MODEL: "deepseek-chat",
-    AI_MODELS: JSON.stringify([{ id: "deepseek", provider: "deepseek", price: { in: 0.28, out: 0.42 } }]),
+    AI_FORCE_MODEL: "deepseek", DEEPSEEK_API_KEY: "k",
+    AI_MODELS: JSON.stringify([{ id: "deepseek", provider: "openai_compatible", baseURL: "https://api.deepseek.com", apiKeyEnv: "DEEPSEEK_API_KEY", apiModel: "deepseek-chat", price: { in: 0.28, out: 0.42 } }]),
   };
   const registry = createModelRegistry(env);
   const mini = registry.get("gpt-4o-mini");

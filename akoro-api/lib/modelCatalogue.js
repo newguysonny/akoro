@@ -21,16 +21,31 @@
  * are locked in the registry, and only the chat's standard mode reads it.
  */
 import { availabilityOf, createModelRegistry, PROVIDERS, pickerFlag } from "./modelRegistry.js";
+import { runtimeDefaultModel } from "./modelRuntime.js";
 
 /** Providers this server can call (lib/aiModel.js adapters). */
 export const SUPPORTED_PROVIDERS = PROVIDERS;
 
 const registryFor = (env) => createModelRegistry(env);
 
+/** The public fields of a catalogue entry — never provider/apiModel/baseURL/apiKeyEnv. */
+export function publicModel(entry) {
+  return {
+    id: entry.id,
+    label: entry.label ?? entry.id,
+    description: entry.description ?? null,
+    price: entry.price ?? null,
+    caps: entry.caps ?? null,
+    selectable: !!entry.selectable,
+    enabled: entry.enabled !== false,
+    tier: entry.tier ?? null,
+  };
+}
+
 /** The pickable catalogue, in the plan's order (AI_MODELS additions after). */
 export function modelCatalogue(env = process.env) {
   const registry = registryFor(env);
-  return registry.catalogue.filter((m) => m.selectable).map((m) => ({ ...m, default: m.id === registry.defaultId }));
+  return registry.catalogue.filter((m) => m.selectable).map((m) => ({ ...publicModel(m), default: m.id === registry.defaultId }));
 }
 
 /** Can this server use the model right now? → { available, reason } */
@@ -55,19 +70,19 @@ export function costHint(entry, defaultEntry) {
 }
 
 /**
- * What the picker gets: no keys, no provider internals beyond the name.
+ * What the picker gets: public fields only — no provider, API model, keys or base URLs.
  * allowedModels: the payer's tier list (§7.11.5a), when known — a model
  * outside it is listed as locked to a plan, not offered.
  */
 export function publicModelList(env = process.env, { allowedModels = null } = {}) {
   const registry = registryFor(env);
   const def = registry.get(registry.defaultId);
-  return modelCatalogue(env).map((m) => {
+  return registry.catalogue.filter((m) => m.selectable).map((m) => {
     const { available, reason } = availabilityOf(m, env);
-    const inPlan = !Array.isArray(allowedModels) || m.default || allowedModels.includes(m.id);
+    const inPlan = !Array.isArray(allowedModels) || m.id === registry.defaultId || allowedModels.includes(m.id);
     const { multiple, hint } = costHint(m, def);
     return {
-      id: m.id, label: m.label, provider: m.provider, description: m.description || "", default: !!m.default,
+      id: m.id, label: m.label, description: m.description || "", default: m.id === registry.defaultId,
       available: available && inPlan, note: reason || (inPlan ? null : "Not in your plan."),
       ...(inPlan ? {} : { locked: "plan" }), costMultiple: multiple, costHint: hint,
     };

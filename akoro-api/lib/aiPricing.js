@@ -25,6 +25,19 @@ const MODEL_PRICES = {
   "gpt-4.1-mini":      { in: 0.40, out: 1.60 },
   "gpt-4o":            { in: 2.50, out: 10.00 },
   "gpt-4.1":           { in: 2.00, out: 8.00 },
+  "deepseek":              { in: 0.30, out: 1.20, cachedIn: 0.006 },
+  "deepseek-v4.1-flash":   { in: 0.30, out: 1.20, cachedIn: 0.006 },
+  "glm-5-3-flash":         { in: 0.15, out: 0.50, cachedIn: 0.03 },
+  "glm-5.3-flash":         { in: 0.15, out: 0.50, cachedIn: 0.03 },
+  "qwen3-8-flash":         { in: 0.15, out: 0.47, cachedIn: 0.016 },
+  "qwen3.8-flash":         { in: 0.15, out: 0.47, cachedIn: 0.016 },
+  "claude-haiku":          { in: 0.10, out: 0.50, cachedIn: 0.01 },
+  "claude-haiku-5-5":      { in: 0.10, out: 0.50, cachedIn: 0.01 },
+  "gpt-6-luna":            { in: 0.10, out: 0.50, cachedIn: 0.01 },
+  "gpt-5-6-luna":          { in: 0.20, out: 1.20, cachedIn: 0.02 },
+  "gpt-5.6-luna":          { in: 0.20, out: 1.20, cachedIn: 0.02 },
+  "grok":                  { in: 2.00, out: 6.00, cachedIn: 0.50 },
+  "grok-4.7":              { in: 2.00, out: 6.00, cachedIn: 0.50 },
   // Reasoning models (Think mode). Reasoning tokens are billed as output.
   "o4-mini":           { in: 1.10, out: 4.40 },
   "o3-mini":           { in: 1.10, out: 4.40 },
@@ -71,6 +84,18 @@ export function usdCost(model, tokensIn = 0, tokensOut = 0, cachedIn = 0) {
 export function coinsForUsage(model, tokensIn = 0, tokensOut = 0, cachedIn = 0) {
   const cost = usdCost(model, tokensIn, tokensOut, cachedIn);
   return Math.max(1, Math.ceil((cost * AI_MARKUP) / COIN_USD));
+}
+
+/** Coins to debit for a provider-reported USD cost (markup, rounded up, min 1). */
+export function coinsForReportedCost(costUsd) {
+  return Math.max(1, Math.ceil((Number(costUsd) || 0) * AI_MARKUP / COIN_USD));
+}
+
+/** Provider-reported cost from a usage object, or null when absent/unusable. */
+export function reportedCostUsd(usage) {
+  const raw = usage?.cost ?? usage?.opencode?.cost;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 ? n : null;
 }
 
 /** Coins to debit given an OpenAI `response.usage` object (cache-aware). */

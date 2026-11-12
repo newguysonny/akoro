@@ -317,3 +317,46 @@ public catalogue — only the route list.
 - Drift threshold and alert destination.
 - Admin authentication to reuse (existing admin guard vs console key).
 - Whether the learner picker shows vendor provider names or friendly aliases only.
+
+---
+
+## 13. Implemented (2026-11-12)
+
+- **Transport:** `lib/providers/opencode.js` — one OpenAI chat-completions adapter per
+  OpenCode lane (`OPENCODE_BASE_URL/<lane>/openai/v1`), `OPENCODE_API_KEY`, the Go headers
+  (`User-Agent`, `x-opencode-session` from the request context), one breaker per base URL, and
+  the gateway's `usage.cost` / `opencode.billing_source|list_cost|allowance` preserved as a
+  non-enumerable `__opencode`.
+- **Registry:** provider `opencode` with `lane` + `family`; the seven Go models are built in as
+  neutral public entries with prices; legacy GPT-4o/4.1 and Sonnet/Opus/Fable rows are retained
+  but disabled/hidden. Default `deepseek`; a disabled default falls back to it.
+- **Resolution:** `defaultId`/`fallbackId` are live getters; the runtime override wins over the
+  env default, per-role envs and locked roles keep their precedence.
+- **Billing (decision A):** `chargeForAI({ costUsd })` debits the provider-reported cost via
+  `coinsForReportedCost` when present, else the static price (DeepSeek's peak rate for the
+  fallback). Telemetry records `provider`, `lane`, `billing_source`, `provider_cost_usd`,
+  `list_cost_usd`, `allowance_usd`, cache read/write.
+- **Failover:** retryable provider failures (429/402/5xx/timeout/auth) retry once on the next
+  model — entry `fallbackModel` → runtime/env fallback → default. Streams fail over only before
+  the first chunk. Refusals keep the existing fallback path. Context-limit errors are not
+  retried (they fall through to the caller's trim/summarise path).
+- **Runtime switch:** `GET/PUT/DELETE /api/admin/ai/model` (admin JWT), persisted in
+  `edu.ai_runtime_settings`, audit-logged, cached with a 30 s refresh so a change reaches every
+  instance without a restart; clearing returns to env.
+- **Picker:** same endpoint/labels for learners; provider/internal fields are stripped
+  (`publicModel`), the seven Go models follow the tier lists, and no "OpenCode" string reaches
+  the browser.
+- **Boot:** `loadRuntimeSettings()` runs before `listen`; a missing table logs and falls back to
+  env (apply the migration).
+- **Tests:** 98 across registry, tiers, picker, callsites, adapters, runtime, pricing — all green.
+
+### Still open
+
+- Console pay-as-you-go lane (for Sonnet/Opus/frontier GPT when activated) and direct
+  Anthropic/OpenAI/xAI routes per model.
+- Native family endpoints (messages/responses) if tool-call fidelity through translation is not
+  enough; the schema (`family`) is ready.
+- Go monthly-allowance enforcement UI/alerts and the cost-drift threshold.
+- `x-opencode-session` is currently the request id; switch to a conversation id for better
+  cache/route stickiness.
+- Admin UI for the switch (the API is live).

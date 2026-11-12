@@ -16,6 +16,7 @@
 // importing this after them would measure nothing.
 import "./lib/logTap.js";          // keeps the last server log lines for the agent console
 import "./lib/outboundMeter.js";
+import { loadRuntimeSettings } from "./lib/modelRuntime.js";
 import "dotenv/config";
 import express                    from "express";
 import { createServer }           from "http";
@@ -1012,6 +1013,8 @@ if (!skipJob("routine scheduler")) startRoutineScheduler();
   if (installPromptOverrides()) console.log("[context-layer] prompt overrides on");
 }
 
+// Persisted admin override for the global default model (survives restarts).
+void loadRuntimeSettings();
 httpServer.listen(config.server.port, config.server.host, () => {
   serverReady = true;
 

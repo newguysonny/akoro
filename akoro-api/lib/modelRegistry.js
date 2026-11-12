@@ -4,14 +4,13 @@
  *   resolveModel({ role, learnerChoice, allowedModels }) → catalogue entry
  *   { id, provider, apiModel, label, price, caps, selectable, enabled, fallbackModel }
  *
- * The catalogue: the plan's models (§7.11.1 — GPT-4o mini, GPT-4.1, Claude
- * Haiku/Sonnet/Opus/Fable, Grok, DeepSeek), then every other model the price
+ * The catalogue: the public models (DeepSeek, GLM, Qwen, Claude Haiku, GPT Luna,
+ * Grok) served through the OpenCode Go transport, then the legacy OpenAI/Claude
+ * rows kept so old ids resolve (disabled), then every other model the price
  * table knows (not pickable). AI_MODELS (JSON array) merges over it by id —
- * a partial entry ({ "id": "gpt-4.1", "enabled": false }) changes just that.
+ * a partial entry ({ "id": "grok", "enabled": false }) changes just that.
  * An AI_MODELS model that is switched on and has no price fails boot, so a
  * learner on an expensive model is never billed at the gpt-4o-mini fallback.
- * Grok and DeepSeek ids and prices change: they come from env (XAI_MODEL /
- * DEEPSEEK_MODEL and an AI_MODELS price) and are unavailable until set.
  *
  * The Agent Chat's model switch lists the pickable models and says which can
  * be used here (lib/modelCatalogue.js reads this registry).
@@ -23,22 +22,30 @@
  *      is enabled and selectable, in the payer's allowed list, and has the
  *      role's required capabilities
  *   3. the role's env default (AI_MODEL_ROLE_<ROLE>)
- *   4. AI_MODEL_DEFAULT (legacy OPENAI_MODEL honoured), else gpt-4o-mini
+ *   4. AI_MODEL_DEFAULT (legacy OPENAI_MODEL honoured), else gpt-4o-mini —
+ *      a disabled choice falls back to DeepSeek
  *
  * API keys stay per provider in env (OPENAI_API_KEY, ANTHROPIC_API_KEY,
- * XAI_API_KEY, DEEPSEEK_API_KEY …), never in the catalogue.
+ * OPENCODE_API_KEY …), never in the catalogue.
  *
  * Example AI_MODELS entry:
- *   { "id": "claude-sonnet", "provider": "anthropic", "apiModel": "claude-sonnet-5-5",
- *     "label": "Claude Sonnet", "price": { "in": 2, "out": 10, "cachedIn": 0.2 },
+ *   { "id": "deepseek", "provider": "opencode", "lane": "go", "family": "chat",
+ *     "apiModel": "deepseek-v4.1-flash", "price": { "in": 0.30, "out": 1.20 },
  *     "caps": { "tools": true, "stream": true, "json": true }, "selectable": true }
  */
 import { DEFAULT_MODEL_PRICES, registerModelPrice } from "./aiPricing.js";
+import { runtimeDefaultModel, runtimeFallbackModel } from "./modelRuntime.js";
 
 /** AI_MODEL_PICKER_ENABLED — on by default (2026-11-07); "false" / "0" / "off" / "no" turns it off. */
 export const pickerFlag = (env = process.env) => !["false", "0", "off", "no"].includes(String(env.AI_MODEL_PICKER_ENABLED ?? "true").trim().toLowerCase());
 
-export const PROVIDERS = Object.freeze(["openai", "openai_compatible", "anthropic"]);
+export const PROVIDERS = Object.freeze(["openai", "openai_compatible", "anthropic", "opencode"]);
+
+/** OpenCode lanes: Go (subscription) and Console (pay as you go). */
+export const LANES = Object.freeze(["go", "console"]);
+/** How a model is served: OpenAI chat, OpenAI responses, Anthropic messages. */
+export const FAMILIES = Object.freeze(["chat", "responses", "messages"]);
+const OPENCODE_BASE = "https://opencode.ai/inference";
 
 /** Older AI_MODELS spelling: Grok / DeepSeek as their own providers → openai_compatible. */
 const COMPAT = Object.freeze({
@@ -47,20 +54,40 @@ const COMPAT = Object.freeze({
 });
 
 /** Where each provider's key lives (never in the catalogue). */
-const KEY_ENV = { openai: ["OPENAI_API_KEY"], anthropic: ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"] };
+const KEY_ENV = { openai: ["OPENAI_API_KEY"], anthropic: ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"], opencode: ["OPENCODE_API_KEY"] };
 
 const ALL = { tools: true, stream: true, json: true };
-/** The plan's catalogue (§7.11.1). Prices are USD / 1M tokens, Anthropic first-party rates as of 2026-10-06 — re-check when a model is added. */
-const PLAN_MODELS = [
-  { id: "gpt-4o-mini", provider: "openai", apiModel: "gpt-4o-mini", label: "GPT-4o mini", description: "Akoro Standard — quick, grounded answers.", price: { in: 0.15, out: 0.60 } },
-  { id: "gpt-4.1", provider: "openai", apiModel: "gpt-4.1", label: "GPT-4.1", description: "Stronger writing and reasoning at a higher price.", price: { in: 2.00, out: 8.00 } },
-  { id: "claude-haiku", provider: "anthropic", apiModel: "claude-haiku-5-5", label: "Claude Haiku", description: "Fast and inexpensive Claude.", price: { in: 0.10, out: 0.50 } },
-  { id: "claude-sonnet", provider: "anthropic", apiModel: "claude-sonnet-5-5", label: "Claude Sonnet", description: "Balanced Claude for most study work.", price: { in: 2.00, out: 10.00, cachedIn: 0.20 } },
-  { id: "claude-opus", provider: "anthropic", apiModel: "claude-opus-5-5", label: "Claude Opus", description: "Claude's strongest everyday model.", price: { in: 4.00, out: 20.00, cachedIn: 0.20 } },
-  { id: "claude-fable", provider: "anthropic", apiModel: "claude-fable-5-1", label: "Claude Fable", description: "Most capable; slower on hard turns.", price: { in: 10.00, out: 50.00, cachedIn: 0.25 } },
-  { id: "grok", provider: "xai", apiModel: null, label: "Grok", description: "xAI's model.", price: null },
-  { id: "deepseek", provider: "deepseek", apiModel: null, label: "DeepSeek", description: "DeepSeek's model.", price: null },
-].map((m) => ({ ...m, caps: ALL, selectable: true }));
+const VISION = { tools: true, stream: true, json: true, vision: true };
+const NO_VISION = { tools: true, stream: true, json: true, vision: false };
+
+/**
+ * The final Go set (2026-11-12): the public models a learner can pick, all
+ * served through the OpenCode Go transport. Prices are USD / 1M tokens; a
+ * DeepSeek static fallback uses its peak rate so a missing reported cost is
+ * never under-billed.
+ */
+const GO_MODELS = [
+  { id: "deepseek", label: "DeepSeek", provider: "opencode", lane: "go", family: "chat", apiModel: "deepseek-v4.1-flash", price: { in: 0.30, out: 1.20, cachedIn: 0.006 }, caps: NO_VISION, selectable: true, tier: "freemium", fallbackModel: null },
+  { id: "glm-5-3-flash", label: "GLM 5.3 Flash", provider: "opencode", lane: "go", family: "chat", apiModel: "glm-5.3-flash", price: { in: 0.15, out: 0.50, cachedIn: 0.03 }, caps: NO_VISION, selectable: true, tier: "freemium", fallbackModel: "deepseek" },
+  { id: "qwen3-8-flash", label: "Qwen3.8 Flash", provider: "opencode", lane: "go", family: "chat", apiModel: "qwen3.8-flash", price: { in: 0.15, out: 0.47, cachedIn: 0.016 }, caps: VISION, selectable: true, tier: "freemium", fallbackModel: "deepseek" },
+  { id: "claude-haiku", label: "Claude Haiku", provider: "opencode", lane: "go", family: "chat", apiModel: "claude-haiku-5-5", price: { in: 0.10, out: 0.50, cachedIn: 0.01 }, caps: VISION, selectable: true, tier: "trial", fallbackModel: "deepseek" },
+  { id: "gpt-6-luna", label: "GPT 6 Luna", provider: "opencode", lane: "go", family: "chat", apiModel: "gpt-6-luna", price: { in: 0.10, out: 0.50, cachedIn: 0.01 }, caps: VISION, selectable: true, tier: "freemium", fallbackModel: "deepseek" },
+  { id: "gpt-5-6-luna", label: "GPT 5.6 Luna", provider: "opencode", lane: "go", family: "chat", apiModel: "gpt-5.6-luna", price: { in: 0.20, out: 1.20, cachedIn: 0.02 }, caps: VISION, selectable: true, tier: "freemium", fallbackModel: "deepseek" },
+  { id: "grok", label: "Grok", provider: "opencode", lane: "go", family: "chat", apiModel: "grok-4.7", price: { in: 2.00, out: 6.00, cachedIn: 0.50 }, caps: NO_VISION, selectable: true, tier: "premium", fallbackModel: "deepseek" },
+];
+
+/** Legacy rows kept (hidden, off) so old wallet/telemetry ids still resolve. */
+const LEGACY_MODELS = [
+  { id: "gpt-4o-mini", provider: "openai", apiModel: "gpt-4o-mini", label: "GPT-4o mini", price: { in: 0.15, out: 0.60 } },
+  { id: "gpt-4.1", provider: "openai", apiModel: "gpt-4.1", label: "GPT-4.1", price: { in: 2.00, out: 8.00 } },
+  { id: "gpt-4.1-mini", provider: "openai", apiModel: "gpt-4.1-mini", label: "GPT-4.1 mini", price: { in: 0.40, out: 1.60 } },
+  { id: "gpt-4o", provider: "openai", apiModel: "gpt-4o", label: "GPT-4o", price: { in: 2.50, out: 10.00 } },
+  { id: "claude-sonnet", provider: "anthropic", apiModel: "claude-sonnet-5-5", label: "Claude Sonnet", price: { in: 2.00, out: 10.00, cachedIn: 0.20 } },
+  { id: "claude-opus", provider: "anthropic", apiModel: "claude-opus-5-5", label: "Claude Opus", price: { in: 4.00, out: 20.00, cachedIn: 0.20 } },
+  { id: "claude-fable", provider: "anthropic", apiModel: "claude-fable-5-1", label: "Claude Fable", price: { in: 10.00, out: 50.00, cachedIn: 0.25 } },
+].map((m) => ({ ...m, caps: ALL, selectable: false, enabled: false }));
+
+const PLAN_MODELS = [...GO_MODELS, ...LEGACY_MODELS];
 
 /** Every role a call can name, and what its model must be able to do. */
 export const ROLES = Object.freeze({
@@ -98,10 +125,17 @@ export function checkEntry(raw, { env = {}, strict = true } = {}) {
   const provider = compat ? "openai_compatible" : raw.provider;
   if (!PROVIDERS.includes(provider)) throw new Error(`${where}: provider must be one of ${PROVIDERS.join(", ")}`);
   const enabled = raw.enabled !== false;
-  const baseURL = raw.baseURL || compat?.baseURL || null;
+  const lane = provider === "opencode" ? String(raw.lane || "go") : null;
+  if (lane && !LANES.includes(lane)) throw new Error(`${where}: lane must be one of ${LANES.join(", ")}`);
+  const family = provider === "opencode" ? String(raw.family || "chat") : null;
+  if (family && !FAMILIES.includes(family)) throw new Error(`${where}: family must be one of ${FAMILIES.join(", ")}`);
+  const baseURL = provider === "opencode"
+    ? raw.baseURL || openCodeBaseURL(lane, env)
+    : raw.baseURL || compat?.baseURL || null;
   if (provider === "openai_compatible" && !baseURL) throw new Error(`${where}: an openai_compatible provider needs a baseURL`);
   const apiModelEnv = raw.apiModelEnv || raw.envModel || compat?.apiModelEnv || null;
-  const apiModel = raw.apiModel ? String(raw.apiModel) : (apiModelEnv && env[apiModelEnv]) || (compat || apiModelEnv ? null : String(raw.id));
+  const apiModel = raw.apiModel ? String(raw.apiModel) : (apiModelEnv && env[apiModelEnv]) || (compat || apiModelEnv || provider === "opencode" ? null : String(raw.id));
+  if (provider === "opencode" && !apiModel) throw new Error(`${where}: an opencode model needs an apiModel (the vendor id; there is no id fallback)`);
   const price = raw.price || null;
   const priced = !!price && Number(price.in) >= 0 && Number(price.out) >= 0 && price.in != null && price.out != null;
   if (!priced && strict && enabled && apiModel) {
@@ -111,12 +145,19 @@ export function checkEntry(raw, { env = {}, strict = true } = {}) {
     id: String(raw.id), provider, apiModel,
     label: String(raw.label || raw.id), description: raw.description || null,
     price: priced ? Object.freeze({ in: Number(price.in), out: Number(price.out), ...(price.cachedIn != null ? { cachedIn: Number(price.cachedIn) } : {}) }) : null,
-    caps: Object.freeze({ tools: !!raw.caps?.tools, stream: !!raw.caps?.stream, json: !!raw.caps?.json }),
+    caps: Object.freeze({ tools: !!raw.caps?.tools, stream: !!raw.caps?.stream, json: !!raw.caps?.json, vision: !!raw.caps?.vision }),
     selectable: !!raw.selectable, enabled, tier: raw.tier || null,
     fallbackModel: raw.fallbackModel || null,
-    baseURL, apiKeyEnv: raw.apiKeyEnv || compat?.apiKeyEnv || null,
+    baseURL, apiKeyEnv: raw.apiKeyEnv || compat?.apiKeyEnv || (provider === "opencode" ? "OPENCODE_API_KEY" : null),
+    lane, family,
     effort: raw.effort || null,
   });
+}
+
+/** OpenCode's provider base for a lane: `OPENCODE_BASE_URL` (default opencode.ai/inference) + `/<lane>`. */
+export function openCodeBaseURL(lane = "go", env = {}) {
+  const root = String(env.OPENCODE_BASE_URL || OPENCODE_BASE).replace(/\/+$/, "");
+  return root.endsWith(`/${lane}`) ? root : `${root}/${lane}`;
 }
 
 /** Can this server call the model right now? → { available, reason } */
@@ -149,13 +190,28 @@ export function createModelRegistry(env = process.env) {
   const byId = new Map(entries.map((e) => [e.id, e]));
   for (const e of entries) if (e.price) registerModelPrice([e.id, e.apiModel], e.price);
 
-  const defaultId = env.AI_MODEL_DEFAULT || env.OPENAI_MODEL || "gpt-4o-mini";
+  let defaultId = env.AI_MODEL_DEFAULT || env.OPENAI_MODEL || "gpt-4o-mini";
   if (!byId.has(defaultId)) {
     // A legacy OPENAI_MODEL the table doesn't price (e.g. a new OpenAI model): run it, billed at the default.
     const legacy = checkEntry({ id: defaultId, provider: "openai", apiModel: defaultId, price: DEFAULT_MODEL_PRICES["gpt-4o-mini"], caps: { tools: true, stream: true, json: true } });
     byId.set(defaultId, legacy);
     entries.push(legacy);
   }
+  // A chosen default that was switched off (the legacy models) is not defaultable:
+  // fall back to the locked global fallback, DeepSeek, when the catalogue defines it.
+  if (!byId.get(defaultId)?.enabled) {
+    const deepseek = byId.get("deepseek");
+    if (deepseek?.enabled) defaultId = deepseek.id;
+  }
+  // The admin override (lib/modelRuntime.js) replaces the env default without a
+  // restart; invalid/disabled overrides are ignored. Per-role envs and locked
+  // roles keep their precedence (§6.3 of the plan).
+  const envDefaultId = defaultId;
+  const activeDefault = () => {
+    const id = runtimeDefaultModel();
+    return id && byId.get(id)?.enabled ? id : envDefaultId;
+  };
+  const activeFallback = () => runtimeFallbackModel() || env.AI_MODEL_FALLBACK || activeDefault();
   const locked = new Set([
     ...Object.entries(ROLES).filter(([, r]) => r.locked).map(([name]) => name),
     ...String(env.AI_MODEL_LOCKED_ROLES || "").split(",").map((s) => s.trim()).filter(Boolean),
@@ -182,15 +238,17 @@ export function createModelRegistry(env = process.env) {
                 : !hasCaps(e, role) ? "that model can't do this step"
                   : null;
       if (!why) return { model: e, source: "learner" };
-      notice = `Using ${(roleModel || byId.get(defaultId)).label}: ${why}.`;
+      notice = `Using ${(roleModel || byId.get(activeDefault())).label}: ${why}.`;
     }
     if (roleModel) return { model: roleModel, source: "role", ...(notice ? { notice } : {}) };
-    return { model: byId.get(defaultId), source: "default", ...(notice ? { notice } : {}) };
+    return { model: byId.get(activeDefault()), source: "default", ...(notice ? { notice } : {}) };
   }
 
   return {
     catalogue: entries,
-    defaultId,
+    get defaultId() { return activeDefault(); },
+    get envDefaultId() { return envDefaultId; },
+    get fallbackId() { return activeFallback(); },
     get: (id) => byId.get(id) || null,
     resolveModel: (opts) => resolve(opts).model,
     resolve,

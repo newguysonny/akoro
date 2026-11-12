@@ -10,7 +10,7 @@
  */
 
 import db from "../db.js";
-import { coinsForResponseUsage, usdCost, cachedTokensOf, WELCOME_GRANT } from "./aiPricing.js";
+import { coinsForResponseUsage, coinsForReportedCost, usdCost, cachedTokensOf, WELCOME_GRANT } from "./aiPricing.js";
 
 export class InsufficientCoins extends Error {
   constructor(needed, balance) {
@@ -128,11 +128,15 @@ export async function hasCoins(userId, minCoins = 1) {
  * Throws InsufficientCoins if the combined balance can't cover it.
  * Returns { charged, model, tokensIn, tokensOut, costUsd, balances }.
  */
-export async function chargeForAI({ userId, feature, model, usage = {}, ref = null, billTo = null }) {
-  const coins = coinsForResponseUsage(model, usage);
+export async function chargeForAI({ userId, feature, model, usage = {}, ref = null, billTo = null, costUsd = null }) {
+  // Provider-reported cost (OpenCode) wins over the static price table; a
+  // missing/blocked report falls back to the model's list price.
+  const reported = Number(costUsd);
+  const useReported = Number.isFinite(reported) && reported >= 0;
+  const coins = useReported ? coinsForReportedCost(reported) : coinsForResponseUsage(model, usage);
   const tokensIn  = usage.prompt_tokens ?? 0;
   const tokensOut = usage.completion_tokens ?? 0;
-  const cost = usdCost(model, tokensIn, tokensOut, cachedTokensOf(usage));
+  const cost = useReported ? reported : usdCost(model, tokensIn, tokensOut, cachedTokensOf(usage));
   return debitCoins({ userId, coins, feature, model, tokensIn, tokensOut, cost, ref, billTo });
 }
 

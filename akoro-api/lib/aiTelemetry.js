@@ -20,8 +20,6 @@
 // Both are best-effort and neither can break a completion: telemetry that can
 // take down the thing it measures is worse than no telemetry.
 
-import db from "../db.js";
-
 const ENABLED = process.env.AI_TELEMETRY !== "off";
 // Persisting a row per call is the part with a real cost. On by default because
 // a dashboard needs it; set AI_TELEMETRY_DB=off to keep only the log line.
@@ -41,6 +39,8 @@ export function recordAiCall({
   feature, model, ms, ttfbMs = null,
   tokensIn = 0, tokensOut = 0, cachedIn = 0, costUsd = null,
   userId = null, ref = null, streamed = false, ok = true, errorKind = null,
+  provider = null, lane = null, billingSource = null, providerCostUsd = null,
+  listCostUsd = null, allowanceUsd = null, cacheRead = null, cacheWrite = null,
 }) {
   if (!ENABLED) return;
 
@@ -65,6 +65,11 @@ export function recordAiCall({
     user_id: userId,
     ref,
   };
+  const optional = {
+    provider, lane, billing_source: billingSource, provider_cost_usd: providerCostUsd,
+    list_cost_usd: listCostUsd, allowance_usd: allowanceUsd, cache_read: cacheRead, cache_write: cacheWrite,
+  };
+  for (const [key, value] of Object.entries(optional)) if (value !== undefined && value !== null) entry[key] = value;
   const line = JSON.stringify(entry) + "\n";
   // A failed call is worth someone's attention; a successful one is not.
   if (ok) process.stdout.write(line);
@@ -73,13 +78,14 @@ export function recordAiCall({
   if (!PERSIST || tableMissing) return;
   // Fire and forget. Awaiting this would put the database on the critical path
   // of every completion, and a slow insert would show up as model latency —
-  // the measurement corrupting the measurement.
-  db.schema("edu").from("ai_call_log").insert({
+  // the measurement corrupting the measurement. db is loaded only when a row
+  // is actually persisted, so log-only deployments never import it.
+  import("../db.js").then(({ default: db }) => db.schema("edu").from("ai_call_log").insert({
     feature: feature ?? null, model, ms, ttfb_ms: ttfbMs,
     tokens_in: tokensIn, tokens_out: tokensOut, cached_in: cachedIn,
     cost_usd: costUsd, streamed, ok, error_kind: errorKind,
     user_id: userId, ref: typeof ref === "string" ? ref : null,
-  }).then(({ error }) => {
+  })).then(({ error }) => {
     if (!error) return;
     // 42P01 = undefined_table. The migration has not run here; stop trying
     // rather than logging the same failure on every subsequent call.

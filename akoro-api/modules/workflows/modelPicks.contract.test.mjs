@@ -23,8 +23,10 @@ const toy = (type) => defineWorkflow({
 });
 const DEFS = { study_prep: toy("study_prep"), teaching: toy("teaching") };
 
-const env = { ANTHROPIC_API_KEY: "k", OPENAI_API_KEY: "k", DEEPSEEK_API_KEY: "k", DEEPSEEK_MODEL: "deepseek-chat",
-  AI_MODELS: JSON.stringify([{ id: "deepseek", provider: "deepseek", price: { in: 0.3, out: 1.2 } }]) };
+const env = { ANTHROPIC_API_KEY: "k", OPENAI_API_KEY: "k", OPENCODE_API_KEY: "k", AI_MODEL_DEFAULT: "deepseek",
+  AI_MODELS: JSON.stringify([
+    { id: "claude-sonnet", provider: "anthropic", apiModel: "claude-sonnet-5-5", price: { in: 2, out: 10 }, caps: { tools: true, stream: true, json: true }, enabled: true, selectable: true },
+  ]) };
 const registry = createModelRegistry(env);
 
 function memoryThreads() {
@@ -106,8 +108,8 @@ test("an unknown or unpickable model is refused; a chat that isn't the learner's
 test("a pick outside the payer's plan is saved with its notice (it falls back at call time)", async () => {
   const { threads, picks } = setup({ allowed: ["deepseek"] });
   threads.add("c1", "L1");
-  const r = await picks.saveThreadPick({ learnerId: "L1", conversationId: "c1", modelId: "claude-opus" });
-  assert.equal(r.selection.modelId, "claude-opus");
+  const r = await picks.saveThreadPick({ learnerId: "L1", conversationId: "c1", modelId: "glm-5-3-flash" });
+  assert.equal(r.selection.modelId, "glm-5-3-flash");
   assert.equal(r.selection.source, "default");
   assert.match(r.selection.notice, /isn't in your plan/);
 });
@@ -115,11 +117,11 @@ test("a pick outside the payer's plan is saved with its notice (it falls back at
 test("call fields: the workflow's own pick, else the learner's; never for a locked role or with the picker off", async () => {
   const { engine, threads, picks } = setup();
   threads.add("c1", "L1");
-  await picks.saveThreadPick({ learnerId: "L1", conversationId: "c1", modelId: "deepseek" });
+  await picks.saveThreadPick({ learnerId: "L1", conversationId: "c1", modelId: "claude-sonnet" });
   const { instance: w } = await engine.create({ workflowType: "teaching", learnerId: "L1", state: "proposed" });
-  assert.deepEqual(await picks.callFields({ learnerId: "L1", workflow: w.id, role: "controller" }), { __learnerChoice: "deepseek", __allowedModels: ["claude-sonnet", "deepseek"] }, "no pick on the workflow: the learner's latest");
-  await picks.saveWorkflowPick({ learnerId: "L1", workflowId: w.id, modelId: "claude-sonnet" });
-  assert.equal((await picks.callFields({ learnerId: "L1", workflow: w.id, role: "persona" })).__learnerChoice, "claude-sonnet", "the workflow's own pick wins");
+  assert.deepEqual(await picks.callFields({ learnerId: "L1", workflow: w.id, role: "controller" }), { __learnerChoice: "claude-sonnet", __allowedModels: ["claude-sonnet", "deepseek"] }, "no pick on the workflow: the learner's latest");
+  await picks.saveWorkflowPick({ learnerId: "L1", workflowId: w.id, modelId: "glm-5-3-flash" });
+  assert.equal((await picks.callFields({ learnerId: "L1", workflow: w.id, role: "persona" })).__learnerChoice, "glm-5-3-flash", "the workflow's own pick wins");
   for (const role of ["assessor", "evidence"]) assert.deepEqual(await picks.callFields({ learnerId: "L1", workflow: w.id, role }), {}, `${role} stays locked`);
   const off = makeModelPicks({ threads, engine, registry, env: { ...env, AI_MODEL_PICKER_ENABLED: "false" }, tiersFor: async () => ({ allowedModels: [] }) });
   assert.deepEqual(await off.callFields({ learnerId: "L1", workflow: w.id }), {}, "picker off: no pick");

@@ -13,22 +13,23 @@ import { usdCost, coinsForUsage } from "./aiPricing.js";
 import { makeAnthropicAdapter, toAnthropicMessages, toAnthropicParams, toChatChunks, toChatCompletion, mapError } from "./providers/anthropic.js";
 import { makeOpenAICompatibleAdapter } from "./providers/openaiCompatible.js";
 
-const CLAUDE = { id: "claude-sonnet", provider: "anthropic", apiModel: "claude-sonnet-5-5", label: "Claude Sonnet", price: { in: 2, out: 10, cachedIn: 0.2 }, caps: { tools: true, stream: true, json: true }, selectable: true };
-const OPUS = { id: "claude-opus", provider: "anthropic", apiModel: "claude-opus-5-5", label: "Claude Opus", price: { in: 4, out: 20 }, caps: { tools: true, stream: true }, selectable: true };
+const CLAUDE = { id: "claude-sonnet", provider: "anthropic", apiModel: "claude-sonnet-5-5", label: "Claude Sonnet", price: { in: 2, out: 10, cachedIn: 0.2 }, caps: { tools: true, stream: true, json: true }, selectable: true, enabled: true };
+const OPUS = { id: "claude-opus", provider: "anthropic", apiModel: "claude-opus-5-5", label: "Claude Opus", price: { in: 4, out: 20 }, caps: { tools: true, stream: true }, selectable: true, enabled: true };
 const NO_TOOLS = { id: "plain", provider: "openai", apiModel: "plain-1", price: { in: 1, out: 1 }, caps: { stream: true }, selectable: true };
 const GROK = { id: "grok", provider: "openai_compatible", apiModel: "grok-x", baseURL: "https://api.x.ai/v1", apiKeyEnv: "XAI_API_KEY", price: { in: 3, out: 15 }, caps: { tools: true, stream: true }, selectable: true };
 const reg = (env = {}) => createModelRegistry({ AI_MODELS: JSON.stringify([CLAUDE, OPUS, NO_TOOLS, GROK]), ...env });
 
-test("unset AI_MODELS: today's catalogue and default — nothing changes", () => {
+test("unset AI_MODELS: the final Go catalogue and the locked default", () => {
   const r = createModelRegistry({});
-  assert.equal(r.defaultId, "gpt-4o-mini");
-  assert.equal(r.resolveModel({ role: "controller" }).id, "gpt-4o-mini");
+  assert.equal(r.defaultId, "deepseek");
+  assert.equal(r.resolveModel({ role: "controller" }).id, "deepseek");
   assert.deepEqual(r.catalogue.filter((e) => e.selectable).map((e) => e.id),
-    ["gpt-4o-mini", "gpt-4.1", "claude-haiku", "claude-sonnet", "claude-opus", "claude-fable", "grok", "deepseek"], "the picker's models live here now");
-  assert.ok(r.catalogue.filter((e) => !e.selectable).every((e) => e.provider === "openai"), "the rest of the price table: OpenAI, not pickable");
+    ["deepseek", "glm-5-3-flash", "qwen3-8-flash", "claude-haiku", "gpt-6-luna", "gpt-5-6-luna", "grok"], "the picker's seven Go models");
+  assert.ok(r.catalogue.filter((e) => !e.selectable).every((e) => ["openai", "anthropic"].includes(e.provider)), "legacy + price-table rows are not pickable");
   assert.ok(!r.get("text-embedding-3-small"), "embeddings are not chat models");
-  assert.equal(createModelRegistry({ OPENAI_MODEL: "gpt-4.1" }).defaultId, "gpt-4.1", "legacy OPENAI_MODEL is honoured");
-  assert.equal(createModelRegistry({ OPENAI_MODEL: "gpt-4.1", AI_MODEL_DEFAULT: "gpt-4o" }).defaultId, "gpt-4o");
+  assert.equal(createModelRegistry({ OPENAI_MODEL: "gpt-4.1" }).defaultId, "deepseek", "a disabled legacy default falls back to DeepSeek");
+  assert.equal(createModelRegistry({ OPENAI_MODEL: "gpt-4o", AI_MODEL_DEFAULT: "gpt-4o" }).defaultId, "deepseek");
+  assert.equal(createModelRegistry({ AI_MODEL_DEFAULT: "glm-5-3-flash" }).defaultId, "glm-5-3-flash");
 });
 
 test("a model without a price (or provider) fails boot", () => {
@@ -52,28 +53,28 @@ test("a catalogue model is billed at its own price, never the gpt-4o-mini fallba
 
 test("resolution: locked role → learner's choice (only when allowed) → role env → default", () => {
   const off = reg({ AI_MODEL_PICKER_ENABLED: "false" });
-  assert.equal(off.resolveModel({ role: "chat", learnerChoice: "claude-sonnet" }).id, "gpt-4o-mini", "picker off: the choice is ignored");
+  assert.equal(off.resolveModel({ role: "chat", learnerChoice: "claude-sonnet" }).id, "deepseek", "picker off: the choice is ignored");
   assert.match(off.resolve({ role: "chat", learnerChoice: "claude-sonnet" }).notice, /model choice is off/);
 
   const KEYS = { OPENAI_API_KEY: "k", ANTHROPIC_API_KEY: "k", XAI_API_KEY: "k" };
-  assert.equal(reg({ AI_MODEL_PICKER_ENABLED: "true" }).resolveModel({ role: "chat", learnerChoice: "claude-sonnet" }).id, "gpt-4o-mini", "no Claude key here: not set up, so not used");
+  assert.equal(reg({ AI_MODEL_PICKER_ENABLED: "true" }).resolveModel({ role: "chat", learnerChoice: "claude-sonnet" }).id, "deepseek", "no Claude key here: not set up, so not used");
   const on = reg({ ...KEYS, AI_MODEL_PICKER_ENABLED: "true", AI_MODEL_ROLE_PERSONA: "claude-opus" });
   assert.equal(on.resolveModel({ role: "chat", learnerChoice: "claude-sonnet" }).id, "claude-sonnet");
   assert.equal(on.resolve({ role: "chat", learnerChoice: "claude-sonnet" }).source, "learner");
-  assert.equal(on.resolveModel({ role: "chat", learnerChoice: "claude-sonnet", allowedModels: ["grok"] }).id, "gpt-4o-mini", "not in the plan's list");
-  assert.equal(on.resolveModel({ role: "controller", learnerChoice: "plain" }).id, "gpt-4o-mini", "a controller needs tool calling");
-  assert.equal(on.resolveModel({ role: "chat", learnerChoice: "gpt-4o" }).id, "gpt-4o-mini", "price-table models aren't selectable");
+  assert.equal(on.resolveModel({ role: "chat", learnerChoice: "claude-sonnet", allowedModels: ["grok"] }).id, "deepseek", "not in the plan's list");
+  assert.equal(on.resolveModel({ role: "controller", learnerChoice: "plain" }).id, "deepseek", "a controller needs tool calling");
+  assert.equal(on.resolveModel({ role: "chat", learnerChoice: "gpt-4o" }).id, "deepseek", "price-table models aren't selectable");
   // Grading is fixed by env, whatever the learner picks.
-  assert.equal(on.resolveModel({ role: "assessor", learnerChoice: "claude-sonnet" }).id, "gpt-4o-mini");
+  assert.equal(on.resolveModel({ role: "assessor", learnerChoice: "claude-sonnet" }).id, "deepseek");
   assert.equal(reg({ AI_MODEL_ROLE_ASSESSOR: "claude-opus" }).resolveModel({ role: "assessor" }).id, "claude-opus");
   // Role env default, and extra locked roles.
   assert.equal(on.resolveModel({ role: "persona" }).id, "claude-opus");
   const locked = reg({ ...KEYS, AI_MODEL_PICKER_ENABLED: "true", AI_MODEL_LOCKED_ROLES: "chat" });
-  assert.equal(locked.resolveModel({ role: "chat", learnerChoice: "claude-sonnet" }).id, "gpt-4o-mini");
+  assert.equal(locked.resolveModel({ role: "chat", learnerChoice: "claude-sonnet" }).id, "deepseek");
   assert.throws(() => on.resolveModel({ role: "boss" }), /Unknown model role/);
   // What the picker may list.
   assert.deepEqual(on.selectable().map((e) => e.id).sort(),
-    ["claude-fable", "claude-haiku", "claude-opus", "claude-sonnet", "gpt-4.1", "gpt-4o-mini", "grok", "plain"], "DeepSeek: no key here");
+    ["claude-opus", "claude-sonnet", "grok", "plain"], "the Go models have no OPENCODE_API_KEY here");
   assert.deepEqual(on.selectable(["grok"]).map((e) => e.id), ["grok"]);
 });
 
@@ -85,7 +86,7 @@ test("no new OPENAI_MODEL imports: new code names a role (§7.11.6 step 3)", () 
     "modules/adaptive-learning/chat.js", "modules/adaptive-learning/draw.js", "modules/adaptive-learning/exam-prep-service.js",
     "modules/adaptive-learning/peerConsult.js", "modules/adaptive-learning/study-prep/syllabus-generator.js",
     "modules/agent-network/messaging.js", "modules/autonomy/cycle.js", "modules/battle/questionSource.js", "modules/battle/routes.js",
-    "modules/instructor/routes.js", "modules/instructor/tools.js", "modules/records/routes.js", "modules/school/aiConcierge.js",
+    "modules/instructor/routes.js", "modules/instructor/tools.js", "modules/records/routes.js", "modules/pharmd/routes.js", "modules/school/aiConcierge.js",
     "modules/school/websiteAiSync.js", "modules/self-study/submissionArtifacts.js", "modules/tasks/lib/agentLoop.js", "modules/tasks/lib/ocr.js",
     "modules/tasks/routes.js", "modules/tasks/tools/_llm.js", "modules/tasks/tools/dynamic.js", "modules/tasks/tools/explain-concept.js",
     "modules/tasks/tools/export-report.js", "modules/tasks/tools/generate-quiz.js", "modules/tasks/tools/grade-submissions.js",

@@ -14,25 +14,46 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { coinsAvailable, chargeForAI, InsufficientCoins } from "./coins.js";
 import { makeAiBreaker } from "./circuitBreaker.js";
 import { aiContext } from "./aiContext.js";
-import { AI_DEFAULT_MAX_TOKENS, usdCost, cachedTokensOf } from "./aiPricing.js";
+import { AI_DEFAULT_MAX_TOKENS, usdCost, cachedTokensOf, reportedCostUsd } from "./aiPricing.js";
 import { recordAiCall, errorKindOf } from "./aiTelemetry.js";
 import { modelRegistry, forcedModelFor } from "./modelRegistry.js";
 import { makeOpenAICompatibleAdapter } from "./providers/openaiCompatible.js";
 import { makeAnthropicAdapter } from "./providers/anthropic.js";
+import { makeOpenCodeAdapter } from "./providers/opencode.js";
 
 // The default model (lib/modelRegistry.js: AI_MODEL_DEFAULT, legacy OPENAI_MODEL,
-// else gpt-4o-mini). New code names a role (`__role`) instead of importing this.
+// else gpt-4o-mini; a disabled choice falls back to DeepSeek). New code names a
+// role (`__role`) instead of importing this.
 export const OPENAI_MODEL = modelRegistry.defaultId;
 
 // Providers other than OpenAI, behind the same call path (§7.11.4).
-const adapters = { openai_compatible: makeOpenAICompatibleAdapter(), anthropic: makeAnthropicAdapter() };
+const adapters = { openai_compatible: makeOpenAICompatibleAdapter(), anthropic: makeAnthropicAdapter(), opencode: makeOpenCodeAdapter() };
 export { InsufficientCoins };
 
 // Stand-in providers for the code that runs inside runWithProviders only (a
 // Verification Gate check forcing a refusal, contract tests). Every other call
 // — the rest of the server's traffic — keeps the real providers.
 const providerOverrides = new AsyncLocalStorage();
-/** Run fn with { openai?, anthropic?, openai_compatible? } adapters ({ create(params, reqOpts, entry) }) in place of the real ones. */
+/** Run fn with { openai?, anthropic?, openai_compatible?, opencode? } adapters ({ create(params, reqOpts, entry) }) in place of the real ones. */
+/** Kinds worth trying on the fallback model (transport/quota, not a bad request). */
+const RETRYABLE = new Set(["rate_limited", "auth", "upstream_5xx", "timeout", "http_402", "http_429", "http_500", "http_502", "http_503", "http_504"]);
+function retryableFailure(err) {
+  const kind = errorKindOf(err);
+  return RETRYABLE.has(kind) || /rate.?limit|quota|balance|capacity|overload|insufficient/i.test(String(err?.message || ""));
+}
+
+/** The next model to try when the provider fails (429/5xx/timeout/balance):
+ *  the entry's fallbackModel, then the runtime/env global fallback, then the
+ *  default — never itself. */
+export function errorFallbackFor(entry, { registry = modelRegistry } = {}) {
+  if (!entry) return null;
+  for (const id of [entry.fallbackModel, registry.fallbackId, registry.defaultId]) {
+    const target = id && registry.get(id);
+    if (target && target.id !== entry.id && target.enabled) return target;
+  }
+  return null;
+}
+
 export function runWithProviders(overrides, fn) {
   return providerOverrides.run(overrides || {}, fn);
 }
@@ -52,7 +73,8 @@ export function refusalOf(res) {
  * OpenAI off retries on the forced model). noForce: a check's stand-ins.
  */
 export function refusalFallbackFor(entry, { registry = modelRegistry, env = process.env, noForce = false } = {}) {
-  const base = (entry?.fallbackModel && registry.get(entry.fallbackModel)) || registry.get(registry.defaultId);
+  const base = (entry?.fallbackModel && registry.get(entry.fallbackModel))
+    || registry.get(registry.fallbackId || registry.defaultId);
   const target = base && entry && base.id !== entry.id && base.enabled ? base : null;
   if (!target || noForce) return target;
   const forced = forcedModelFor(target, target.apiModel, { registry, env });
@@ -123,7 +145,10 @@ async function meteredCreate(params = {}) {
   if (entry) clean.model = entry.apiModel;
   const serve = (e, body, opts) => {
     const provider = e?.provider || "openai";
-    if (overrides?.[provider]) return overrides[provider].create(body, opts, e);
+    // A stand-in for the OpenAI shape also serves the OpenCode transport (both
+    // are chat-completions) — the golden-path and contract tests run keyless.
+    const stub = overrides?.[provider] || (provider === "opencode" ? overrides?.openai : null);
+    if (stub) return stub.create(body, opts, e);
     return provider !== "openai" && adapters[provider] ? adapters[provider].create(body, opts, e) : chatBreaker.fire(body, opts);
   };
   const fire = (body, opts) => serve(entry, body, opts);
@@ -152,22 +177,36 @@ async function meteredCreate(params = {}) {
 
   // Billed and recorded under the catalogue id, priced at its own rate.
   const model = entry?.id || clean.model || OPENAI_MODEL;
-  const charge = (usage, m = model) => chargeForAI({ userId, feature, model: m, usage, ref, billTo })
-    .catch((e) => { if (!(e instanceof InsufficientCoins)) console.warn("[coins] charge failed:", e.message); });
+  const charge = (usage, m = entry?.id || model) => chargeForAI({
+    userId, feature, model: m, usage, ref, billTo,
+    // Decision A: bill the provider's reported cost when it gives one.
+    costUsd: reportedCostUsd(usage),
+  }).catch((e) => { if (!(e instanceof InsufficientCoins)) console.warn("[coins] charge failed:", e.message); });
 
   // Every call is TIMED, whether or not it is billed. Cost and tokens used to
   // be recorded only by the wallet debit, so a system or cron call — no payer,
   // no debit — left no trace at all, and latency was recorded nowhere.
   const started = Date.now();
-  const report = (usage, { ttfbMs = null, streamed = false, ok = true, errorKind = null, as = model } = {}) => {
+  const report = (usage, { ttfbMs = null, streamed = false, ok = true, errorKind = null, as = entry?.id || model } = {}) => {
     const tokensIn  = usage?.prompt_tokens ?? 0;
     const tokensOut = usage?.completion_tokens ?? 0;
     const cachedIn  = usage ? cachedTokensOf(usage) : 0;
+    const entryFor = modelRegistry.get(as) || entry;
+    const oc = usage?.opencode || {};
+    const providerCost = reportedCostUsd(usage);
     recordAiCall({
       feature, model: as, ms: Date.now() - started, ttfbMs,
       tokensIn, tokensOut, cachedIn,
-      costUsd: usage ? usdCost(as, tokensIn, tokensOut, cachedIn) : null,
+      costUsd: providerCost ?? (usage ? usdCost(as, tokensIn, tokensOut, cachedIn) : null),
       userId, ref, streamed, ok, errorKind,
+      provider: entryFor?.provider || null,
+      lane: entryFor?.lane || null,
+      billingSource: oc.billing_source ?? null,
+      providerCostUsd: providerCost,
+      listCostUsd: oc.list_cost ?? null,
+      allowanceUsd: oc.allowance ?? null,
+      cacheRead: usage?.prompt_tokens_details?.cached_tokens ?? oc.cache_read ?? null,
+      cacheWrite: oc.cache_write ?? null,
     });
   };
 
@@ -181,7 +220,17 @@ async function meteredCreate(params = {}) {
         ...clean,
         ...(bills ? { stream_options: { include_usage: true, ...(clean.stream_options || {}) } } : {}),
       }, reqOpts);
-    } catch (e) { report(null, { streamed: true, ok: false, errorKind: errorKindOf(e) }); throw e; }
+    } catch (e) {
+      report(null, { streamed: true, ok: false, errorKind: errorKindOf(e) });
+      const target = retryableFailure(e) ? errorFallbackFor(entry) : null;
+      if (!target) throw e;
+      console.warn(`[ai] ${entry.id} failed (${errorKindOf(e)}) — streaming from ${target.id}`);
+      source = await serve(target, {
+        ...clean, model: target.apiModel,
+        ...(bills ? { stream_options: { include_usage: true, ...(clean.stream_options || {}) } } : {}),
+      }, reqOpts);
+      entry = target;
+    }
 
     const fallback = { prompt_tokens: estimateTokens(clean.messages), completion_tokens: Math.min(clean.max_tokens || 700, 700) };
     const metered = meterStreamUsage(source, (usage, ttfbMs) => {
@@ -205,7 +254,18 @@ async function meteredCreate(params = {}) {
   let res;
   try {
     res = await fire(clean, reqOpts);
-  } catch (e) { report(null, { ok: false, errorKind: errorKindOf(e) }); throw e; }
+  } catch (e) {
+    report(null, { ok: false, errorKind: errorKindOf(e) });
+    const target = retryableFailure(e) ? errorFallbackFor(entry) : null;
+    if (!target) throw e;
+    console.warn(`[ai] ${entry.id} failed (${errorKindOf(e)}) — trying ${target.id}`);
+    let second;
+    try { second = await serve(target, { ...clean, model: target.apiModel }, reqOpts); }
+    catch (e2) { report(null, { ok: false, errorKind: errorKindOf(e2), as: target.id }); throw e2; }
+    report(second?.usage ?? null, { as: target.id });
+    if (bills && second?.usage) charge(second.usage, target.id);
+    return Object.assign(second || {}, { model_fallback: { model: entry.id, fallbackModel: target.id, reason: errorKindOf(e) } });
+  }
 
   report(res?.usage ?? null);
   if (bills && res?.usage) charge(res.usage);

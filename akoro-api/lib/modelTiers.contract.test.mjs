@@ -15,16 +15,18 @@ const T = await import("./modelTiers.js");
 const { publicModelList, resolveChatChoice } = await import("./modelCatalogue.js");
 const { validateTierInput, buildTierPatch } = await import("./tiersModel.js");
 
-const ON = { OPENAI_API_KEY: "k", ANTHROPIC_API_KEY: "k", DEEPSEEK_API_KEY: "k", DEEPSEEK_MODEL: "deepseek-chat",
-  AI_MODELS: JSON.stringify([{ id: "deepseek", price: { in: 0.3, out: 1.2 } }]), AI_MODEL_PICKER_ENABLED: "true" };
+const ON = { OPENCODE_API_KEY: "k", OPENAI_API_KEY: "k", ANTHROPIC_API_KEY: "k",
+  AI_MODEL_DEFAULT: "deepseek", AI_MODEL_PICKER_ENABLED: "true" };
 
-test("the plan's starting lists: DeepSeek everywhere, Fable nowhere, Opus and Grok only on Premium", () => {
+test("the plan's starting lists: the seven Go models, Grok only on Premium", () => {
   const all = Object.values(T.PLAN_TIER_MODELS);
   assert.ok(all.every((l) => l.includes("deepseek")));
-  assert.ok(all.every((l) => !l.includes("claude-fable") && !l.includes("gpt-4o-mini")), "the default is never listed — it is always allowed");
+  assert.ok(all.every((l) => !l.includes("claude-fable") && !l.includes("gpt-4o-mini") && !l.includes("gpt-4.1")), "legacy models are gone");
   assert.deepEqual([...T.PLAN_TIER_MODELS.pilot], ["deepseek"]);
-  assert.deepEqual(Object.keys(T.PLAN_TIER_MODELS).filter((k) => T.PLAN_TIER_MODELS[k].includes("claude-opus")), ["premium"]);
+  assert.deepEqual(Object.keys(T.PLAN_TIER_MODELS).filter((k) => T.PLAN_TIER_MODELS[k].includes("claude-opus")), [], "Opus is hidden until activated");
   assert.deepEqual(Object.keys(T.PLAN_TIER_MODELS).filter((k) => T.PLAN_TIER_MODELS[k].includes("grok")), ["premium"]);
+  assert.ok(!T.PLAN_TIER_MODELS.pilot.includes("claude-haiku"));
+  assert.ok(T.PLAN_TIER_MODELS.freemium.includes("gpt-6-luna"));
 });
 
 test("a tier row: the admin's list wins (even empty); unset uses the plan's list by name", () => {
@@ -76,7 +78,7 @@ test("whose tier: subscription, then the school (pilot learners have no record),
   const r = T.makeTierResolver({ db, schoolIdForUser: async (id) => schools[id] || null });
   const premium = await r.forUser("premium-kid");
   assert.equal(premium.tier.name, "Premium"); assert.equal(premium.source, "subscription");
-  assert.ok(premium.allowedModels.includes("claude-opus"));
+  assert.ok(premium.allowedModels.includes("grok"));
   const pilot = await r.forUser("pilot-kid");
   assert.deepEqual({ tier: pilot.tier.name, platform: pilot.tier.platform, source: pilot.source, models: pilot.allowedModels },
     { tier: "Pilot", platform: "school", source: "school", models: ["deepseek"] });
@@ -95,7 +97,7 @@ test("cached for a minute; a failed read never blocks the message", async (t) =>
   const r = T.makeTierResolver({ db, now: () => clock });
   await r.forUser("premium-kid");
   fake.rows("tiers").find((x) => x.id === "t-prem").allowed_models = ["claude-haiku"];
-  assert.ok((await r.forUser("premium-kid")).allowedModels.includes("claude-opus"), "still cached");
+  assert.ok((await r.forUser("premium-kid")).allowedModels.includes("grok"), "still cached");
   clock += 61_000;
   assert.deepEqual((await r.forUser("premium-kid")).allowedModels, ["claude-haiku"], "an admin edit applies within a minute");
   r.clear();
@@ -108,13 +110,13 @@ test("cached for a minute; a failed read never blocks the message", async (t) =>
 test("Scenario K: a Pilot learner can switch to DeepSeek and to nothing else; outside the tier is refused with a notice", () => {
   const pilot = [...T.PLAN_TIER_MODELS.pilot];
   const usable = publicModelList(ON, { allowedModels: pilot }).filter((m) => m.available).map((m) => m.id);
-  assert.deepEqual(usable.sort(), ["deepseek", "gpt-4o-mini"]);
-  assert.equal(resolveChatChoice("deepseek", ON, { allowedModels: pilot }).apiModel, "deepseek-chat");
-  const refused = resolveChatChoice("claude-sonnet", ON, { allowedModels: pilot });
+  assert.deepEqual(usable.sort(), ["deepseek"]);
+  assert.equal(resolveChatChoice("deepseek", ON, { allowedModels: pilot }).apiModel, "deepseek-v4.1-flash");
+  const refused = resolveChatChoice("claude-haiku", ON, { allowedModels: pilot });
   assert.equal(refused.apiModel, null);
-  assert.match(refused.notice, /^Using GPT-4o mini: that model isn't in your plan\.$/);
+  assert.match(refused.notice, /^Using DeepSeek: that model isn't in your plan\.$/);
   // A downgrade: a Premium pick no longer in the list falls back to the default with a notice.
-  assert.match(resolveChatChoice("claude-opus", ON, { allowedModels: [...T.PLAN_TIER_MODELS.freemium] }).notice, /isn't in your plan/);
+  assert.match(resolveChatChoice("grok", ON, { allowedModels: [...T.PLAN_TIER_MODELS.freemium] }).notice, /isn't in your plan/);
 });
 
 test("the chat reads the payer's tier list only with the picker on, and reports the notice", () => {

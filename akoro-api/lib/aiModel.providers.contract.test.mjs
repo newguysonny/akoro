@@ -24,7 +24,7 @@ test.after(() => { server.close(); setTimeout(() => process.exit(0), 200).unref(
 
 process.env.ANTHROPIC_API_KEY = "test-key";
 process.env.ANTHROPIC_BASE_URL = `http://127.0.0.1:${server.address().port}`;
-process.env.AI_MODELS = JSON.stringify([{ id: "claude-sonnet", provider: "anthropic", apiModel: "claude-sonnet-5-5", price: { in: 2, out: 10 }, caps: { tools: true, stream: true } }]);
+process.env.AI_MODELS = JSON.stringify([{ id: "claude-sonnet", provider: "anthropic", apiModel: "claude-sonnet-5-5", price: { in: 2, out: 10 }, caps: { tools: true, stream: true }, enabled: true, selectable: true }]);
 process.env.AI_MODEL_ROLE_CONTROLLER = "claude-sonnet";
 process.env.SUPABASE_URL ||= "http://localhost:1";
 process.env.SUPABASE_SERVICE_KEY ||= "test";
@@ -53,6 +53,6 @@ test("a controller call without a model resolves to its role's Claude model and 
   assert.deepEqual(res.usage.prompt_tokens, 120);
 });
 
-test("a call with no role keeps the default OpenAI model (nothing changes for chat)", () => {
-  assert.equal(OPENAI_MODEL, "gpt-4o-mini");
+test("a call with no role keeps the default model", () => {
+  assert.equal(OPENAI_MODEL, "deepseek");
 });
