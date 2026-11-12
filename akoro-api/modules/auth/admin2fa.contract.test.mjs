@@ -22,3 +22,9 @@ test("the setup challenge can set up and finish a session, but cannot disable 2F
 test("Google can never mint an admin session", () => {
   assert.match(routes, /if \(portal === "admin"\) \{[\s\S]{0,220}admin_2fa_required/, "Google admin sign-in is redirected to password + 2FA");
 });
+
+test("the demo-domain bypass skips the 2FA gate too", () => {
+  assert.match(routes, /const bypassAuth = emailCodeBypassed\(user\.email\)/);
+  assert.match(routes, /if \(!bypassAuth\) \{\s+const gate = twoFactorGate\(user\)/, "login skips the admin setup/TOTP gate");
+  assert.match(routes, /if \(!emailCodeBypassed\(user\.email\)\) \{\s+const gate = twoFactorGate\(user\)/, "verify-login skips it as well");
+});

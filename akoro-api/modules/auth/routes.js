@@ -836,7 +836,11 @@ const authHandlers = {
     // Email-code gate (per portal). Passwords alone no longer mint a session
     // when this portal is enabled; the code is emailed and verified next.
     const portal = portalOf(req);
-    if (emailCodesEnabled(portal) && !emailCodeBypassed(user.email)) {
+    // Seeded demo accounts cannot receive email and are used by our testers;
+    // the same bypass env now skips the email code AND 2FA (including the
+    // mandatory admin setup gate). Never applies to a real domain.
+    const bypassAuth = emailCodeBypassed(user.email);
+    if (emailCodesEnabled(portal) && !bypassAuth) {
       const purpose = user.email_verified ? "login" : "signup";
       const issued = await issueEmailCode({
         userId: user.id, email: user.email, purpose,
@@ -856,7 +860,8 @@ const authHandlers = {
 
     // Two-factor gate — admins without 2FA are sent to setup, everyone with
     // 2FA gets the TOTP challenge, learners without it sign in normally.
-    {
+    // Demo-domain accounts skip this too (same bypass env).
+    if (!bypassAuth) {
       const gate = twoFactorGate(user);
       if (gate) return res200(res, gate);
     }
@@ -898,7 +903,7 @@ const authHandlers = {
     if (verified.row.purpose === "signup" && !user.email_verified) {
       await db.from("users").update({ email_verified: true, updated_at: new Date().toISOString() }).eq("id", user.id);
     }
-    {
+    if (!emailCodeBypassed(user.email)) {
       const gate = twoFactorGate(user);
       if (gate) return res200(res, gate);
     }

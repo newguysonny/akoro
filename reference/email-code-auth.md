@@ -45,10 +45,10 @@ Once all four builds are deployed, `AUTH_EMAIL_CODES=on` covers every portal (th
 
 ## Tester accounts
 
-Seeded testers/demo learners use `@demo.akoro.app` addresses that cannot receive email. Their **login** is exempt from the emailed code (password still required, TOTP still applies) while every real domain is enforced. The bypass is domain-scoped, never a username pattern:
+Seeded testers/demo learners use `@demo.akoro.app` addresses that cannot receive email. Their **login** is exempt from the emailed code **and from 2FA** (including the mandatory admin setup gate); the password is still required. Every real domain is fully enforced. The bypass is domain-scoped, never a username pattern:
 
 ```env
 AUTH_EMAIL_CODES_BYPASS=demo.akoro.app
 ```
 
-Set it empty to require codes for testers too. Signup/reset for real users are unaffected. The Agent Console already impersonates learners with an internal token, so console tests never depended on the login flow.
+Set it empty to require codes and 2FA for testers too. Signup/reset for real users are unaffected. The Agent Console already impersonates learners with an internal token, so console tests never depended on the login flow.
