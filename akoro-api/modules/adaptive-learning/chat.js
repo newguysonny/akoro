@@ -45,6 +45,7 @@ export const protegeDeps = {
   },
 };
 import { publicModelList, resolveChatChoice, pickerInfo, pickerEnabled } from "../../lib/modelCatalogue.js";
+import { modelRegistry } from "../../lib/modelRegistry.js";
 import { allowedModelsFor } from "../../lib/modelTiers.js";
 import { modelPicks, supabaseThreads } from "../workflows/modelPicks.js";
 const { Pool } = pkg;
@@ -3933,6 +3934,56 @@ async function streamThinkWithResponses({ send, messages, model, trace = null, i
   return { reply: full, thinking: thinking.trim() };
 }
 
+/*
+ * Thinking on a chat-completions model (DeepSeek/GLM/Qwen/GPT Luna/Grok):
+ * request reasoning where the provider accepts a hint, stream any exposed
+ * reasoning text into the "Thought for Ns" row, and answer from the same
+ * selected model — no hidden switch to o4-mini.
+ */
+async function thinkChatOnce({ messages, model, trace = null }) {
+  const thinkId = trace?.thinkStart();
+  const call = (extra) => openai.chat.completions.create({
+    model, temperature: 0.4, max_tokens: 2200, messages, ...extra,
+  });
+  let resp;
+  try { resp = await call({ reasoning_effort: "medium" }); }
+  catch (e) {
+    if (e?.status === 400 || /reasoning/i.test(String(e?.message || ""))) resp = await call({});
+    else { if (thinkId) trace.thinkEnd(thinkId, ""); throw e; }
+  }
+  const m = resp?.choices?.[0]?.message || {};
+  const thinking = String(m.reasoning_content || m.reasoning || "").trim();
+  const reply = String(m.content || "").trim();
+  if (thinkId) { if (thinking) trace.thinkDelta(thinkId, thinking); trace.thinkEnd(thinkId, ""); }
+  return { reply, thinking };
+}
+
+async function streamThinkChat({ send, messages, model, trace = null, isAborted = () => false }) {
+  let thinkId = trace?.thinkStart() || null;
+  const call = (extra) => openai.chat.completions.create({
+    model, temperature: 0.4, max_tokens: 2200, stream: true, messages, ...extra,
+  });
+  let stream;
+  try { stream = await call({ reasoning_effort: "medium" }); }
+  catch (e) {
+    if (e?.status === 400 || /reasoning/i.test(String(e?.message || ""))) stream = await call({});
+    else { if (thinkId) trace.thinkEnd(thinkId, ""); throw e; }
+  }
+  let full = "";
+  let thinking = "";
+  const close = () => { if (thinkId) { trace.thinkEnd(thinkId, ""); thinkId = null; } };
+  try {
+    for await (const chunk of stream) {
+      if (isAborted()) break;
+      const d = chunk.choices?.[0]?.delta || {};
+      const r = d.reasoning_content ?? d.reasoning ?? d.thinking;
+      if (r) { thinking += r; if (thinkId) trace.thinkDelta(thinkId, r); }
+      if (d.content) { if (thinkId) close(); full += d.content; send("delta", { text: d.content }); }
+    }
+  } finally { close(); }
+  return { reply: full, thinking: thinking.trim() };
+}
+
 /* Non-streaming reasoning call → { reply, thinking }; the summary is also a trace row. */
 async function thinkOnce({ messages, model, trace = null }) {
   const useReasoning = model !== "gpt-4o";
@@ -4748,19 +4799,34 @@ router.post("/agent", async (req, res) => {
       res.on("close", () => { if (activeTurnStops.get(key) === stopEntry) activeTurnStops.delete(key); });
     }
 
-    const mode = ["think", "research"].includes(rawMode) ? rawMode : "default";
-    const isThink = mode === "think";
+    let mode = ["think", "research"].includes(rawMode) ? rawMode : "default";
     const isResearch = mode === "research";
-    // The learner's model pick (a catalogue id) drives the standard mode's
-    // decisions and answer; Think and Research keep their own models. An
-    // unknown or unavailable pick is ignored — the default answers. With the
-    // §7.11.5 picker on, the pick must also be in the payer's tier list
-    // (§7.11.5a); a refused pick says why (modelNotice) and the default answers.
-    const picked = mode === "default" && typeof req.body?.model === "string" && req.body.model ? req.body.model : null;
+    // The learner's model pick applies to EVERY mode now. An unknown or
+    // unavailable pick is ignored — the default answers. With the §7.11.5
+    // picker on, the pick must also be in the payer's tier list.
+    const picked = typeof req.body?.model === "string" && req.body.model ? req.body.model : null;
     const tierModels = picked && pickerEnabled() ? await allowedModelsFor(req.user.id).catch(() => null) : null;
-    const { apiModel: chatModel, notice: modelNotice } = picked
+    const { apiModel: chatModel, notice: pickedNotice } = picked
       ? resolveChatChoice(picked, process.env, { allowedModels: tierModels?.allowedModels ?? null })
       : { apiModel: null, notice: null };
+    const pickedEntry = (picked && modelRegistry.get(picked))
+      || (chatModel && modelRegistry.catalogue.find((e) => e.apiModel === chatModel))
+      || null;
+    const selectedEntry = pickedEntry || modelRegistry.get(modelRegistry.defaultId) || null;
+    const canThinkResponses = !!selectedEntry?.caps?.responses;
+    const canThinkChat = !!selectedEntry?.caps?.reasoning;
+    const canResearch = !!selectedEntry?.caps?.tools;
+    // The browser disables unavailable modes; the server enforces it anyway.
+    let modeNotice = pickedNotice;
+    if (mode === "think" && !canThinkResponses && !canThinkChat) {
+      mode = "default";
+      modeNotice = `Thinking isn't available for ${selectedEntry?.label || "this model"} — answering normally.`;
+    }
+    if (mode === "research" && !canResearch) {
+      mode = "default";
+      modeNotice = `Research isn't available for ${selectedEntry?.label || "this model"} — answering normally.`;
+    }
+    const isThink = mode === "think";
     const role = ["instructor", "teacher", "school", "school_admin", "admin"].includes(req.user?.role)
       ? "instructor" : "student";
     // The instructor app asked, but the session is a learner's: a request that
@@ -4780,7 +4846,7 @@ router.post("/agent", async (req, res) => {
     let dialogue = safeHistory(history);
 
     if (wantsStream) beginStream();
-    if (modelNotice && wantsStream) status("model", modelNotice);
+    if (modeNotice && wantsStream) status("model", modeNotice);
     // The pick is remembered on the chat (Scenario K): a send that names its
     // model — a catalogue id, or null for the default — saves it on the thread
     // and the learner's open workflows; a change is a model_changed event.
@@ -5084,7 +5150,7 @@ router.post("/agent", async (req, res) => {
       role,
       trace,
       isAborted,
-      think: isThink,
+      think: isThink && canThinkResponses,
       streamText: !isResearch,
       model: chatModel,
     });
@@ -5102,12 +5168,15 @@ router.post("/agent", async (req, res) => {
       // the only authority that may invoke an Akoro tool.
       // Think mode: the reasoned last decision already is the answer; else
       // reason over the tool results (if any) for the answer.
-      if (prepared.finalText) { reply = prepared.finalText; usedModel = isThink ? THINK_MODEL : (chatModel || OPENAI_MODEL); }
-      else if (isThink) {
-        try { ({ reply, thinking } = await thinkOnce({ messages: finalMessages, model: THINK_MODEL, trace })); usedModel = THINK_MODEL; } catch { /* fallback below */ }
+      const thinkTarget = chatModel || THINK_MODEL;
+      if (prepared.finalText) { reply = prepared.finalText; usedModel = isThink ? (canThinkResponses ? thinkTarget : (chatModel || OPENAI_MODEL)) : (chatModel || OPENAI_MODEL); }
+      else if (isThink && canThinkResponses) {
+        try { ({ reply, thinking } = await thinkOnce({ messages: finalMessages, model: thinkTarget, trace })); usedModel = thinkTarget; } catch { /* fallback below */ }
+      } else if (isThink && canThinkChat) {
+        try { ({ reply, thinking } = await thinkChatOnce({ messages: finalMessages, model: chatModel || OPENAI_MODEL, trace })); usedModel = chatModel || OPENAI_MODEL; } catch { /* fallback below */ }
       }
       if (!reply) {
-        usedModel = isResearch ? RESEARCH_MODEL : (chatModel || "gpt-4o-mini");
+        usedModel = isResearch ? (chatModel || RESEARCH_MODEL) : (chatModel || "gpt-4o-mini");
         const completion = await openai.chat.completions.create({
           model: usedModel,
           temperature: 0.6,
@@ -5121,15 +5190,18 @@ router.post("/agent", async (req, res) => {
       if (!stopped() && prepared.finalText) {
         // Already on screen when it streamed as the last step's words.
         reply = prepared.finalText;
-        usedModel = isThink ? THINK_MODEL : (chatModel || OPENAI_MODEL);
+        usedModel = isThink ? (chatModel || OPENAI_MODEL) : (chatModel || OPENAI_MODEL);
         if (!prepared.promoted) send("delta", { text: reply });
-      } else if (!stopped() && isThink) {
+      } else if (!stopped() && isThink && canThinkResponses) {
         status("thinking", "Thinking…");
-        try { ({ reply, thinking } = await streamThinkWithResponses({ send, messages: finalMessages, model: THINK_MODEL, trace, isAborted })); usedModel = THINK_MODEL; } catch { /* fall through */ }
+        try { ({ reply, thinking } = await streamThinkWithResponses({ send, messages: finalMessages, model: chatModel || THINK_MODEL, trace, isAborted })); usedModel = chatModel || THINK_MODEL; } catch { /* fall through */ }
+      } else if (!stopped() && isThink && canThinkChat) {
+        status("thinking", "Thinking…");
+        try { ({ reply, thinking } = await streamThinkChat({ send, messages: finalMessages, model: chatModel || OPENAI_MODEL, trace, isAborted })); usedModel = chatModel || OPENAI_MODEL; } catch { /* fall through */ }
       }
       if (!reply && !stopped()) {
         if (isResearch) status("synthesis", "Writing it up…");
-        usedModel = isResearch ? RESEARCH_MODEL : (chatModel || "gpt-4o-mini");
+        usedModel = isResearch ? (chatModel || RESEARCH_MODEL) : (chatModel || "gpt-4o-mini");
         try {
           reply = await streamChat({
             send,
@@ -5206,7 +5278,7 @@ router.post("/agent", async (req, res) => {
     if (wantsStream) {
       timings.doneMs = Date.now() - t0;
       send("done", { reply, thinking, syllabus: syllabusRefs, pastQuestions: pastRefs, curriculum: curriculumRefs, mode,
-        metadata: { model: usedModel, responseTimeMs: Date.now() - t0, timings, retrieval, toolExecutions: prepared.toolExecutions, ...(durable ? { durableContext: true } : {}), ...(modelNotice ? { modelNotice } : {}) },
+        metadata: { model: usedModel, responseTimeMs: Date.now() - t0, timings, retrieval, toolExecutions: prepared.toolExecutions, ...(durable ? { durableContext: true } : {}), ...(modeNotice ? { modeNotice } : {}) },
         toolExecutions: prepared.toolExecutions, trace: traceBlocks, stopped: stopped() });
       doneSent = true;
       if (suggestionsP && !stopped()) suggestionsP.then((suggestions) => send("suggestions", { suggestions }));
@@ -5275,7 +5347,7 @@ router.post("/agent", async (req, res) => {
       retrieval,
       toolExecutions: prepared.toolExecutions,
       ...(durable ? { durableContext: true } : {}),
-      ...(modelNotice ? { modelNotice } : {}),
+      ...(modeNotice ? { modeNotice } : {}),
     };
     if (!wantsStream) {
       return res.json({ success: true, reply, response: reply, thinking, syllabus: syllabusRefs, pastQuestions: pastRefs, curriculum: curriculumRefs, mode, metadata, toolExecutions: prepared.toolExecutions, trace: traceBlocks, messageId: savedReplyId });

@@ -46,7 +46,8 @@ function ComposerTool({ icon, label, onClick, disabled = false, active = false, 
  * can't be picked. The host maps the id to its request. `up` opens the
  * menu above the chip (composer rails sit at the bottom of the screen).
  */
-export function ModelSwitch({ modelId, modelLabel, modelOptions = [], onModelChange, disabled = false, dark = false, up = true, unavailableTitle = '', icon = 'ti-sparkles', tier = null }) {
+export function ModelSwitch({ modelId, modelLabel, modelOptions = [], onModelChange, disabled = false, dark = false, up = true, unavailableTitle = '', icon = 'ti-sparkles', tier = null,
+  title = 'Choose a model', menuLabel = 'Models', ariaPrefix = 'Model' }) {
   const [open, setOpen] = useState(false);
   // A dearer model (option.confirm) asks once in the menu before it is picked.
   const [arming, setArming] = useState(null);
@@ -65,8 +66,8 @@ export function ModelSwitch({ modelId, modelLabel, modelOptions = [], onModelCha
         type="button"
         onClick={() => selectable && setOpen((o) => !o)}
         disabled={!selectable}
-        title={selectable ? 'Choose a model' : (unavailableTitle || modelLabel)}
-        aria-label={selectable ? `Model: ${modelLabel}. Choose a model` : modelLabel}
+        title={selectable ? title : (unavailableTitle || modelLabel)}
+        aria-label={selectable ? `${ariaPrefix}: ${modelLabel}. ${title}` : modelLabel}
         aria-haspopup="menu"
         aria-expanded={open}
         style={{
@@ -83,7 +84,7 @@ export function ModelSwitch({ modelId, modelLabel, modelOptions = [], onModelCha
       </button>
 
       {open && (
-        <div role="menu" aria-label="Models" style={{
+        <div role="menu" aria-label={menuLabel} style={{
           position: 'absolute', zIndex: 20, ...(up ? { bottom: 42 } : { top: 40 }), left: 0, width: 270, padding: 5,
           maxHeight: 'min(70vh, 460px)', overflowY: 'auto',
           border: `1px solid ${dark ? 'rgba(255,255,255,.15)' : '#E2E5ED'}`, borderRadius: 13,

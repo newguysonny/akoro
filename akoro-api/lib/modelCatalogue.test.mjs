@@ -53,10 +53,14 @@ test("a learner's pick resolves to an API model only when available", () => {
   assert.equal(resolveChatModel({ id: "x" }, env), null);
 });
 
-test("the chat: the pick drives the standard mode only, and /models lists the catalogue", () => {
-  assert.match(chat, /const picked = mode === "default" && typeof req\.body\?\.model === "string"/);
+test("the chat: the selected model drives every mode, with capability checks", () => {
+  assert.match(chat, /const picked = typeof req\.body\?\.model === "string"/, "the pick applies to think/research too");
   assert.match(chat, /resolveChatChoice\(picked, process\.env, \{ allowedModels: tierModels\?\.allowedModels \?\? null \}\)/);
-  assert.match(chat, /model: chatModel,/);
+  assert.match(chat, /const canThinkChat = !!selectedEntry\?\.caps\?\.reasoning/);
+  assert.match(chat, /const canThinkResponses = !!selectedEntry\?\.caps\?\.responses/);
+  assert.match(chat, /mode === "think" && !canThinkResponses && !canThinkChat/, "an incapable model downgrades Thinking");
+  assert.match(chat, /usedModel = isResearch \? \(chatModel \|\| RESEARCH_MODEL\)/, "Research uses the picked model");
+  assert.match(chat, /reasoning: \{ effort: THINK_ANSWER_EFFORT/, "Responses stays for capable models");
   assert.match(chat, /model: model \|\| OPENAI_MODEL,/);
   assert.match(chat, /models: publicModelList\(process\.env, \{ allowedModels: tier\?\.allowedModels \?\? null \}\),/);
   assert.match(chat, /picker: \{ \.\.\.pickerInfo\(\),/);

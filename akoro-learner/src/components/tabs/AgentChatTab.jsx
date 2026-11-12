@@ -5,7 +5,7 @@ import { useLang } from '../../contexts/LanguageContext.jsx';
 import { ZapIcon, BrainIcon, SparkleIcon, XIcon, Icon } from '../common/Icons.jsx';
 import { AgentAvatar } from '../common/AgentAvatar.jsx';
 import FortizoChatComposer, { ModelSwitch } from '../common/FortizoChatComposer.jsx';
-import { chatPicker, applyPick } from '../../lib/chatModels.js';
+import { chatPicker, applyModelPick, applyModePick } from '../../lib/chatModels.js';
 
 /* One gutter for the conversation and the composer, so messages line up with the input box. */
 const CHAT_GUTTER = 16;
@@ -1199,14 +1199,35 @@ function AgentChatTab({
   // Models (available ones, then "Coming soon") and the Thinking /
   // Research modes, as this deployment is set up (GET /chat/models).
   const picker = chatPicker(serverModels, { mode: selectedChatMode, modelId: chatModelId });
-  const choosePick = optionId => {
-    const next = applyPick(optionId, { mode: selectedChatMode, modelId: chatModelId }, serverModels);
+  const currentPick = { mode: selectedChatMode, modelId: chatModelId };
+  const labelOfModel = (id) => (serverModels?.models || []).find(m => m.id === id)?.label || "that model";
+  const chooseModel = optionId => {
+    const next = applyModelPick(optionId, currentPick, serverModels);
+    if (next === currentPick) return;
+    const reset = next.mode !== selectedChatMode;
+    setChatModelId(next.modelId);
     setThinkMode(next.mode === "think");
     setResearchMode(next.mode === "research");
-    setChatModelId(next.modelId);
-    setModelNotice("");
+    setModelNotice(reset ? `Thinking isn't available for ${labelOfModel(next.modelId || (serverModels?.models || []).find(m=>m.default)?.id)} — using Default.` : "");
     try { if (next.modelId) localStorage.setItem('ak_chat_model', next.modelId); else localStorage.removeItem('ak_chat_model'); } catch { /* private mode */ }
   };
+  const chooseMode = optionId => {
+    const next = applyModePick(optionId, currentPick, serverModels);
+    if (next.mode === selectedChatMode) return;
+    setThinkMode(next.mode === "think");
+    setResearchMode(next.mode === "research");
+    setModelNotice("");
+  };
+  // A saved mode can be unsupported by the model this device opens on.
+  useEffect(() => {
+    if (!serverModels || selectedChatMode === "default") return;
+    const picked = (serverModels.models || []).find(m => m.id === chatModelId && m.available)
+      || (serverModels.models || []).find(m => m.default);
+    if (picked && picked.modes && picked.modes[selectedChatMode] === false) {
+      setThinkMode(false); setResearchMode(false);
+      setModelNotice(`${selectedChatMode === "think" ? "Thinking" : "Research"} isn't available for ${picked.label} — using Default.`);
+    }
+  }, [serverModels, chatModelId, selectedChatMode]);
 
   return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:"var(--ak-surface)" }}>
@@ -1558,8 +1579,12 @@ function AgentChatTab({
             </div>
             {/* The model switch — the LLM behind the next message. */}
             <div style={{ display:"flex",alignItems:"center",gap:6,marginTop:8 }}>
-              <ModelSwitch modelId={picker.selectedId} modelLabel={picker.label} modelOptions={picker.options}
-                onModelChange={choosePick} disabled={running} icon="ti-cpu" tier={picker.tier}/>
+              <ModelSwitch modelId={picker.modelSelectedId} modelLabel={picker.modelLabel} modelOptions={picker.modelOptions}
+                onModelChange={chooseModel} disabled={running} icon="ti-cpu" tier={picker.tier}
+                title="Choose a model" menuLabel="Models" ariaPrefix="Model"/>
+              <ModelSwitch modelId={picker.modeSelectedId} modelLabel={picker.modeLabel} modelOptions={picker.modeOptions}
+                onModelChange={chooseMode} disabled={running} icon="ti-bolt"
+                title="Choose a mode" menuLabel="Modes" ariaPrefix="Mode"/>
             </div>
             {modelNotice&&(
               <div data-model-notice="" role="status" style={{ display:"flex",alignItems:"flex-start",gap:6,marginTop:6,padding:"7px 10px",borderRadius:10,background:"#F59E0B14",color:"#B45309",fontSize:11.5,fontWeight:700,lineHeight:1.4,fontFamily:"'Nunito',sans-serif" }}>

@@ -56,9 +56,15 @@ const COMPAT = Object.freeze({
 /** Where each provider's key lives (never in the catalogue). */
 const KEY_ENV = { openai: ["OPENAI_API_KEY"], anthropic: ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"], opencode: ["OPENCODE_API_KEY"] };
 
-const ALL = { tools: true, stream: true, json: true };
-const VISION = { tools: true, stream: true, json: true, vision: true };
-const NO_VISION = { tools: true, stream: true, json: true, vision: false };
+const ALL = { tools: true, stream: true, json: true, vision: false, reasoning: false, responses: true };
+const VISION = { tools: true, stream: true, json: true, vision: true, reasoning: false, responses: true };
+const NO_VISION = { tools: true, stream: true, json: true, vision: false, reasoning: false, responses: true };
+// Go chat models reason internally (probed: reasoning_tokens > 0) but are not
+// served through our Responses path, so `responses` stays false.
+const GO_PLAIN = { tools: true, stream: true, json: true, vision: false, reasoning: false, responses: false };
+const GO_REASON = { ...GO_PLAIN, reasoning: true };
+const GO_VISION = { ...GO_PLAIN, vision: true, reasoning: true };
+const GO_VISION_PLAIN = { ...GO_PLAIN, vision: true };
 
 /**
  * The final Go set (2026-11-12): the public models a learner can pick, all
@@ -67,13 +73,13 @@ const NO_VISION = { tools: true, stream: true, json: true, vision: false };
  * never under-billed.
  */
 const GO_MODELS = [
-  { id: "deepseek", label: "DeepSeek", provider: "opencode", lane: "go", family: "chat", apiModel: "deepseek-v4.1-flash", price: { in: 0.30, out: 1.20, cachedIn: 0.006 }, caps: NO_VISION, selectable: true, tier: "freemium", fallbackModel: "deepseek-direct" },
-  { id: "glm-5-3-flash", label: "GLM 5.3 Flash", provider: "opencode", lane: "go", family: "chat", apiModel: "glm-5.3-flash", price: { in: 0.15, out: 0.50, cachedIn: 0.03 }, caps: NO_VISION, selectable: true, tier: "freemium", fallbackModel: "deepseek" },
-  { id: "qwen3-8-flash", label: "Qwen3.8 Flash", provider: "opencode", lane: "go", family: "chat", apiModel: "qwen3.8-flash", price: { in: 0.15, out: 0.47, cachedIn: 0.016 }, caps: VISION, selectable: true, tier: "freemium", fallbackModel: "deepseek" },
-  { id: "claude-haiku", label: "Claude Haiku", provider: "opencode", lane: "go", family: "chat", apiModel: "claude-haiku-5-5", price: { in: 0.10, out: 0.50, cachedIn: 0.01 }, caps: VISION, selectable: true, tier: "trial", fallbackModel: "deepseek" },
-  { id: "gpt-6-luna", label: "GPT 6 Luna", provider: "opencode", lane: "go", family: "chat", apiModel: "gpt-6-luna", price: { in: 0.10, out: 0.50, cachedIn: 0.01 }, caps: VISION, selectable: true, tier: "freemium", fallbackModel: "deepseek" },
-  { id: "gpt-5-6-luna", label: "GPT 5.6 Luna", provider: "opencode", lane: "go", family: "chat", apiModel: "gpt-5.6-luna", price: { in: 0.20, out: 1.20, cachedIn: 0.02 }, caps: VISION, selectable: true, tier: "freemium", fallbackModel: "deepseek" },
-  { id: "grok", label: "Grok", provider: "opencode", lane: "go", family: "chat", apiModel: "grok-4.7", price: { in: 2.00, out: 6.00, cachedIn: 0.50 }, caps: NO_VISION, selectable: true, tier: "premium", fallbackModel: "deepseek" },
+  { id: "deepseek", label: "DeepSeek", provider: "opencode", lane: "go", family: "chat", apiModel: "deepseek-v4.1-flash", price: { in: 0.30, out: 1.20, cachedIn: 0.006 }, caps: GO_REASON, selectable: true, tier: "freemium", fallbackModel: "deepseek-direct" },
+  { id: "glm-5-3-flash", label: "GLM 5.3 Flash", provider: "opencode", lane: "go", family: "chat", apiModel: "glm-5.3-flash", price: { in: 0.15, out: 0.50, cachedIn: 0.03 }, caps: GO_REASON, selectable: true, tier: "freemium", fallbackModel: "deepseek" },
+  { id: "qwen3-8-flash", label: "Qwen3.8 Flash", provider: "opencode", lane: "go", family: "chat", apiModel: "qwen3.8-flash", price: { in: 0.15, out: 0.47, cachedIn: 0.016 }, caps: GO_VISION, selectable: true, tier: "freemium", fallbackModel: "deepseek" },
+  { id: "claude-haiku", label: "Claude Haiku", provider: "opencode", lane: "go", family: "chat", apiModel: "claude-haiku-5-5", price: { in: 0.10, out: 0.50, cachedIn: 0.01 }, caps: GO_VISION_PLAIN, selectable: true, tier: "trial", fallbackModel: "deepseek" },
+  { id: "gpt-6-luna", label: "GPT 6 Luna", provider: "opencode", lane: "go", family: "chat", apiModel: "gpt-6-luna", price: { in: 0.10, out: 0.50, cachedIn: 0.01 }, caps: GO_VISION, selectable: true, tier: "freemium", fallbackModel: "deepseek" },
+  { id: "gpt-5-6-luna", label: "GPT 5.6 Luna", provider: "opencode", lane: "go", family: "chat", apiModel: "gpt-5.6-luna", price: { in: 0.20, out: 1.20, cachedIn: 0.02 }, caps: GO_VISION, selectable: true, tier: "freemium", fallbackModel: "deepseek" },
+  { id: "grok", label: "Grok", provider: "opencode", lane: "go", family: "chat", apiModel: "grok-4.7", price: { in: 2.00, out: 6.00, cachedIn: 0.50 }, caps: GO_REASON, selectable: true, tier: "premium", fallbackModel: "deepseek" },
 ];
 
 /** Legacy rows kept (hidden, off) so old wallet/telemetry ids still resolve. */
@@ -162,7 +168,8 @@ export function checkEntry(raw, { env = {}, strict = true } = {}) {
     id: String(raw.id), provider, apiModel,
     label: String(raw.label || raw.id), description: raw.description || null,
     price: priced ? Object.freeze({ in: Number(price.in), out: Number(price.out), ...(price.cachedIn != null ? { cachedIn: Number(price.cachedIn) } : {}) }) : null,
-    caps: Object.freeze({ tools: !!raw.caps?.tools, stream: !!raw.caps?.stream, json: !!raw.caps?.json, vision: !!raw.caps?.vision }),
+    caps: Object.freeze({ tools: !!raw.caps?.tools, stream: !!raw.caps?.stream, json: !!raw.caps?.json,
+      vision: !!raw.caps?.vision, reasoning: !!raw.caps?.reasoning, responses: !!raw.caps?.responses }),
     selectable: !!raw.selectable, enabled, tier: raw.tier || null,
     fallbackModel: raw.fallbackModel || null,
     baseURL, apiKeyEnv: raw.apiKeyEnv || compat?.apiKeyEnv || (provider === "opencode" ? "OPENCODE_API_KEY" : null),

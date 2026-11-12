@@ -85,6 +85,9 @@ export function publicModelList(env = process.env, { allowedModels = null } = {}
       id: m.id, label: m.label, description: m.description || "", default: m.id === registry.defaultId,
       available: available && inPlan, note: reason || (inPlan ? null : "Not in your plan."),
       ...(inPlan ? {} : { locked: "plan" }), costMultiple: multiple, costHint: hint,
+      // Which chat modes THIS model can actually run. Thinking needs real
+      // reasoning (or a Responses surface); Research needs tool calling.
+      modes: { default: true, think: !!(m.caps?.reasoning || m.caps?.responses), research: !!m.caps?.tools },
     };
   });
 }
