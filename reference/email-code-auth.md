@@ -1,7 +1,7 @@
 # Email-code verification (signup / login / reset)
 
 **Status:** implemented, **off by default** via `AUTH_EMAIL_CODES`.
-**Transport:** SendGrid (`SENDGRID_API_KEY`, `SENDGRID_FROM_EMAIL`); Resend is the fallback for environments that have not migrated.
+**Transport:** **Resend primary** (`RESEND_API_KEY`, `RESEND_FROM_EMAIL`); **SendGrid fallback** (`SENDGRID_API_KEY`, `SENDGRID_FROM_EMAIL`) if Resend is unavailable or rejects the send.
 
 ## Flows
 
@@ -30,7 +30,7 @@
 
 ## Rollout
 1. Apply migration `2026-email-verification-codes.sql`.
-2. Set `SENDGRID_API_KEY` + `SENDGRID_FROM_EMAIL` (verify the sender in SendGrid). `AUTH_EMAIL_CODES` stays `off`.
+2. Ensure `RESEND_API_KEY` + `RESEND_FROM_EMAIL` are set (SendGrid keys optional, used only as fallback). `AUTH_EMAIL_CODES` stays `off`.
 3. Deploy the learner app (code screens implemented for Signin, Signup, Forgot, Reset).
 4. Set `AUTH_EMAIL_CODES=student` and test register → verify → login → reset.
 5. Update the admin/instructor portals' sign-in/sign-up screens, then widen to `student,instructor,admin` or `on`.

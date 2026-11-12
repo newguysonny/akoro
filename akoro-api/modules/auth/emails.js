@@ -12,7 +12,7 @@
 
 import { urlFor, displayHost } from "../../lib/urls.js";
 
-const EMAIL_FROM = process.env.SENDGRID_FROM_EMAIL || process.env.EMAIL_FROM || process.env.RESEND_FROM_EMAIL || "noreply@akoro.app";
+const EMAIL_FROM = process.env.RESEND_FROM_EMAIL || process.env.EMAIL_FROM || process.env.SENDGRID_FROM_EMAIL || "noreply@akoro.app";
 
 // Public base that serves the app's static assets (akoro-learner/public).
 // Uses the frontend URL (FRONTEND_URL) since that deployment serves /logo/* and
@@ -187,39 +187,7 @@ const cleanName = (name) => (name && name !== "there" ? esc(name) : "there");
 
 // ─── § Resend helper ─────────────────────────────────────────────────────────
 
-async function sendEmail({ to, subject, text, html, from }) {
-  const fromValue = from ?? `Akoro Learning <${EMAIL_FROM}>`;
-  // SendGrid is the transactional transport. Resend remains as a fallback for
-  // environments that have not moved their key yet (no behaviour change there).
-  if (process.env.SENDGRID_API_KEY) {
-    const res = await fetch("https://api.sendgrid.com/v3/mail/send", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${process.env.SENDGRID_API_KEY}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        personalizations: [{ to: (Array.isArray(to) ? to : [to]).map((email) => ({ email })) }],
-        from: (() => {
-          const m = String(fromValue).match(/^(.*)<([^>]+)>$/);
-          return m ? { name: m[1].trim() || "Akoro Learning", email: m[2].trim() } : { name: "Akoro Learning", email: String(fromValue).trim() };
-        })(),
-        subject,
-        content: [
-          { type: "text/plain", value: text || String(html || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim() },
-          { type: "text/html", value: html || `<p>${String(text || "").replace(/&/g, "&amp;").replace(/</g, "&lt;")}</p>` },
-        ],
-      }),
-    });
-    if (!res.ok) {
-      const body = await res.text().catch(() => "");
-      // Don't let a SendGrid sender/permission problem silently kill password
-      // reset and welcome emails: fall back to Resend when it is configured.
-      if (!process.env.RESEND_API_KEY) {
-        throw new Error(`SendGrid send failed (${res.status}): ${body.slice(0, 300)}`);
-      }
-      console.warn(`[auth:email] SendGrid failed (${res.status}); falling back to Resend`);
-    } else {
-      return;
-    }
-  }
+async function sendViaResend({ to, subject, text, html, fromValue }) {
   const { Resend } = await import("resend");
   const resend = new Resend(process.env.RESEND_API_KEY);
   const { error } = await resend.emails.send({
@@ -229,7 +197,50 @@ async function sendEmail({ to, subject, text, html, from }) {
     text,
     html,
   });
-  if (error) throw new Error(`Email send failed: ${error.message}`);
+  if (error) throw new Error(`Resend send failed: ${error.message}`);
+}
+
+async function sendViaSendGrid({ to, subject, text, html, fromValue }) {
+  const res = await fetch("https://api.sendgrid.com/v3/mail/send", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${process.env.SENDGRID_API_KEY}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      personalizations: [{ to: (Array.isArray(to) ? to : [to]).map((email) => ({ email })) }],
+      from: (() => {
+        const m = String(fromValue).match(/^(.*)<([^>]+)>$/);
+        return m ? { name: m[1].trim() || "Akoro Learning", email: m[2].trim() } : { name: "Akoro Learning", email: String(fromValue).trim() };
+      })(),
+      subject,
+      content: [
+        { type: "text/plain", value: text || String(html || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim() },
+        { type: "text/html", value: html || `<p>${String(text || "").replace(/&/g, "&amp;").replace(/</g, "&lt;")}</p>` },
+      ],
+    }),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`SendGrid send failed (${res.status}): ${body.slice(0, 300)}`);
+  }
+}
+
+async function sendEmail({ to, subject, text, html, from }) {
+  const fromValue = from ?? `Akoro Learning <${EMAIL_FROM}>`;
+  // Resend is the primary transport; SendGrid is the fallback when Resend is
+  // not configured or rejects the send.
+  if (process.env.RESEND_API_KEY) {
+    try {
+      await sendViaResend({ to, subject, text, html, fromValue });
+      return;
+    } catch (e) {
+      if (!process.env.SENDGRID_API_KEY) throw e;
+      console.warn(`[auth:email] Resend failed (${e?.message || e}); falling back to SendGrid`);
+    }
+  }
+  if (process.env.SENDGRID_API_KEY) {
+    await sendViaSendGrid({ to, subject, text, html, fromValue });
+    return;
+  }
+  throw new Error("No email transport is configured (RESEND_API_KEY / SENDGRID_API_KEY)");
 }
 
 /**

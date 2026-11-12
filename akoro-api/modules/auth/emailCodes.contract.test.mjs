@@ -21,8 +21,11 @@ test("codes are hashed, single-use, rate-limited and emailed", () => {
   assert.match(codes, /max_attempts/, "attempt cap");
   assert.match(codes, /consumed_at/, "single use");
 
-  assert.match(emails, /SENDGRID_API_KEY/, "SendGrid is the transport");
+  assert.match(emails, /sendViaResend/, "Resend is the primary transport");
+  assert.match(emails, /resend\.emails\.send/);
+  assert.match(emails, /sendViaSendGrid/, "SendGrid is the fallback transport");
   assert.match(emails, /api\.sendgrid\.com\/v3\/mail\/send/);
+  assert.match(emails, /No email transport is configured/, "missing keys fail clearly");
   assert.match(emails, /renderVerificationCodeEmail/);
 
   assert.match(routes, /router\.post\("\/verify-email"/);
