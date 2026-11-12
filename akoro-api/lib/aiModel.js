@@ -390,7 +390,9 @@ async function meteredCreate(params = {}) {
       res.choices[0].message.content = JSON.stringify(first.value);
     } else {
       bill(res);
-      console.warn(`[ai:json] retry ${feature} on ${entry?.id || model} (${first.errors[0] || "bad JSON"})`);
+      const msg0 = res?.choices?.[0]?.message || {};
+      const calls0 = (msg0.tool_calls || []).map((c) => ({ name: c?.function?.name, args: String(c?.function?.arguments || "").slice(0, 120) }));
+      console.warn(`[ai:json] retry ${feature} on ${entry?.id || model} (${first.errors[0] || "bad JSON"}) forced=${forceTool} calls=${JSON.stringify(calls0)} content=${JSON.stringify(String(msg0.content || "").slice(0, 120))}`);
       try {
         const retryMessages = [...(clean.messages || []), {
           role: "system",
