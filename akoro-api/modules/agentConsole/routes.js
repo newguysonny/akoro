@@ -321,11 +321,14 @@ router.post("/ai-ping", guard, asyncHandler(async (req, res) => {
   const probeReasoning = req.body?.reasoning === true;
   const probeJson = req.body?.json === true;
   const probeTools = req.body?.tools === true;
+  const image = typeof req.body?.image === "string" && req.body.image.startsWith("data:image/") ? req.body.image : "";
   try {
     const adapter = makeOpenCodeAdapter();
     const out = await adapter.create({
       model: apiModelOverride || entry.apiModel,
-      messages: [{ role: "user", content: prompt }],
+      messages: [{ role: "user", content: image
+        ? [{ type: "text", text: prompt }, { type: "image_url", image_url: { url: image } }]
+        : prompt }],
       max_tokens: maxTokens,
       ...(probeReasoning ? { reasoning_effort: "medium" } : {}),
       ...(probeStream ? { stream: true } : {}),
@@ -360,7 +363,7 @@ router.post("/ai-ping", guard, asyncHandler(async (req, res) => {
       ms: Date.now() - started, usage: out?.usage ?? null,
       messageKeys: Object.keys(msg),
       reasoning: String(msg.reasoning_content ?? msg.reasoning ?? msg.thinking ?? "").slice(0, 1200),
-      content: String(msg.content ?? "").slice(0, 300),
+      content: String(msg.content ?? "").slice(0, 600),
       parsed: probeJson ? (() => { try { return JSON.parse(String(msg.content || "")); } catch { return null; } })() : null,
       toolCalls: probeTools ? (msg.tool_calls || []).map((c) => ({ name: c?.function?.name, args: String(c?.function?.arguments || "").slice(0, 120) })) : null,
     } });
