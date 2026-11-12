@@ -16,7 +16,7 @@ import { makeAiBreaker } from "./circuitBreaker.js";
 import { aiContext } from "./aiContext.js";
 import { AI_DEFAULT_MAX_TOKENS, usdCost, cachedTokensOf, reportedCostUsd } from "./aiPricing.js";
 import { recordAiCall, errorKindOf } from "./aiTelemetry.js";
-import { modelRegistry, forcedModelFor } from "./modelRegistry.js";
+import { modelRegistry, forcedModelFor, availabilityOf } from "./modelRegistry.js";
 import { makeOpenAICompatibleAdapter } from "./providers/openaiCompatible.js";
 import { makeAnthropicAdapter } from "./providers/anthropic.js";
 import { makeOpenCodeAdapter } from "./providers/opencode.js";
@@ -45,11 +45,11 @@ function retryableFailure(err) {
 /** The next model to try when the provider fails (429/5xx/timeout/balance):
  *  the entry's fallbackModel, then the runtime/env global fallback, then the
  *  default — never itself. */
-export function errorFallbackFor(entry, { registry = modelRegistry } = {}) {
+export function errorFallbackFor(entry, { registry = modelRegistry, env = process.env } = {}) {
   if (!entry) return null;
   for (const id of [entry.fallbackModel, registry.fallbackId, registry.defaultId]) {
     const target = id && registry.get(id);
-    if (target && target.id !== entry.id && target.enabled) return target;
+    if (target && target.id !== entry.id && target.enabled && availabilityOf(target, env).available) return target;
   }
   return null;
 }
@@ -75,7 +75,8 @@ export function refusalOf(res) {
 export function refusalFallbackFor(entry, { registry = modelRegistry, env = process.env, noForce = false } = {}) {
   const base = (entry?.fallbackModel && registry.get(entry.fallbackModel))
     || registry.get(registry.fallbackId || registry.defaultId);
-  const target = base && entry && base.id !== entry.id && base.enabled ? base : null;
+  const target = base && entry && base.id !== entry.id && base.enabled
+    && availabilityOf(base, env).available ? base : null;
   if (!target || noForce) return target;
   const forced = forcedModelFor(target, target.apiModel, { registry, env });
   return forced && forced.id !== entry.id ? forced : target;

@@ -37,9 +37,10 @@ test("the seven Go models are enabled, priced and on the Go lane", () => {
   }
   assert.deepEqual(
     GO_IDS.map((id) => reg.get(id).fallbackModel).filter((id) => id !== null),
-    ["deepseek", "deepseek", "deepseek", "deepseek", "deepseek", "deepseek"],
+    ["deepseek-direct", "deepseek", "deepseek", "deepseek", "deepseek", "deepseek", "deepseek"],
   );
-  assert.equal(reg.get("deepseek").fallbackModel, null, "DeepSeek is the global fallback");
+  assert.equal(reg.get("deepseek").fallbackModel, "deepseek-direct", "OpenCode DeepSeek fails over to the direct API");
+  assert.equal(reg.get("deepseek-direct").selectable, false, "the direct transport is not a learner choice");
 });
 
 test("legacy OpenAI and Claude rows stay resolvable but are switched off", () => {

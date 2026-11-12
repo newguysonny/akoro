@@ -215,7 +215,7 @@ test("…the fallback obeys AI_FORCE_MODEL (a sandbox with OpenAI off retries on
   assert.equal(refusalFallbackFor(sonnet, { registry, env }).id, "gpt-4.1", "forced like every call");
   assert.equal(refusalFallbackFor(sonnet, { registry, env, noForce: true }).id, "gpt-4o-mini", "a check's stand-ins see the unforced choice");
   assert.equal(refusalFallbackFor(sonnet, { registry, env: { ...env, AI_FORCE_MODEL: "" } }).id, "gpt-4o-mini", "no force: the default");
-  assert.equal(refusalFallbackFor(registry.get("deepseek"), { registry, env }).id, "gpt-4.1", "forced, never back to itself");
+  assert.equal(refusalFallbackFor(registry.get("deepseek"), { registry, env }).id, "deepseek-direct", "same model, direct transport");
   // A check's stand-ins: noForce reaches the call itself.
   const r2 = recorder();
   await runWithProviders({ ...r2.providers, noForce: true }, () => openai.chat.completions.create({ model: "gpt-4o-mini", messages: [{ role: "user", content: "x" }] }));
@@ -260,4 +260,16 @@ test("a streamed refusal: before any text the fallback's stream takes over; mid-
   assert.equal(late[1].model_refusal.partial, true);
   assert.equal(late[1].model_refusal.fallbackModel, null, "text already shown: no second answer stitched on");
   assert.equal(late.at(-1).choices[0].finish_reason, "content_filter");
+});
+
+test("DeepSeek fails over from OpenCode to its own API, and skips it without a key", async () => {
+  const { errorFallbackFor } = await import("./aiModel.js");
+  const { createModelRegistry } = await import("./modelRegistry.js");
+  const env = { OPENCODE_API_KEY: "k", DEEPSEEK_API_KEY: "k", DEEPSEEK_MODEL: "deepseek-chat" };
+  const reg = createModelRegistry(env);
+  assert.equal(errorFallbackFor(reg.get("deepseek"), { registry: reg, env }).id, "deepseek-direct",
+    "same public model, direct transport");
+  const noKey = createModelRegistry({ OPENCODE_API_KEY: "k", DEEPSEEK_MODEL: "deepseek-chat" });
+  const target = errorFallbackFor(noKey.get("deepseek"), { registry: noKey, env: { OPENCODE_API_KEY: "k" } });
+  assert.equal(target, null, "without DEEPSEEK_API_KEY the direct route is skipped, never guessed");
 });

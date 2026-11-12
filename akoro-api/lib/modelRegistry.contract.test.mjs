@@ -25,7 +25,8 @@ test("unset AI_MODELS: the final Go catalogue and the locked default", () => {
   assert.equal(r.resolveModel({ role: "controller" }).id, "deepseek");
   assert.deepEqual(r.catalogue.filter((e) => e.selectable).map((e) => e.id),
     ["deepseek", "glm-5-3-flash", "qwen3-8-flash", "claude-haiku", "gpt-6-luna", "gpt-5-6-luna", "grok"], "the picker's seven Go models");
-  assert.ok(r.catalogue.filter((e) => !e.selectable).every((e) => ["openai", "anthropic"].includes(e.provider)), "legacy + price-table rows are not pickable");
+  assert.ok(r.catalogue.filter((e) => !e.selectable).every((e) => ["openai", "anthropic", "openai_compatible"].includes(e.provider)), "legacy, direct-fallback and price-table rows are not pickable");
+  assert.equal(r.get("deepseek").fallbackModel, "deepseek-direct", "the public DeepSeek model fails over to its direct transport");
   assert.ok(!r.get("text-embedding-3-small"), "embeddings are not chat models");
   assert.equal(createModelRegistry({ OPENAI_MODEL: "gpt-4.1" }).defaultId, "deepseek", "a disabled legacy default falls back to DeepSeek");
   assert.equal(createModelRegistry({ OPENAI_MODEL: "gpt-4o", AI_MODEL_DEFAULT: "gpt-4o" }).defaultId, "deepseek");

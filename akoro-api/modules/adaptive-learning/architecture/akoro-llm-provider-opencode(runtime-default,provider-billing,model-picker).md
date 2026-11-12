@@ -350,6 +350,13 @@ public catalogue — only the route list.
   env (apply the migration).
 - **Tests:** 98 across registry, tiers, picker, callsites, adapters, runtime, pricing — all green.
 
+- **DeepSeek direct failover:** the public `deepseek` row (OpenCode Go) carries
+  `fallbackModel: "deepseek-direct"` — a hidden, non-selectable entry
+  (`provider: "deepseek"` → OpenAI-compatible, `https://api.deepseek.com`,
+  `DEEPSEEK_API_KEY`, apiModel from `DEEPSEEK_MODEL`). A 429/402/5xx/timeout first
+  retries that same model on its direct transport; if the direct key/model is absent it is
+  skipped (availability-checked), never guessed. Learners only ever see "DeepSeek".
+
 ### Still open
 
 - Console pay-as-you-go lane (for Sonnet/Opus/frontier GPT when activated) and direct
