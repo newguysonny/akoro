@@ -110,6 +110,14 @@ export const ROLES = Object.freeze({
   // difficulty must not change with the learner's plan — scores stay comparable.
   agent_recall: { caps: [], locked: true },
   question_generator: { caps: [], locked: true },
+  // Helpers that used to pin a model. They now resolve through the platform
+  // default, with capability checks: a vision step can't land on DeepSeek, and
+  // a JSON step can't land on a model without JSON.
+  suggestions: { caps: ["json"] },
+  vision: { caps: ["vision"], prefer: ["gpt-6-luna", "claude-haiku", "qwen3-8-flash"] },
+  builder: { caps: ["json"], prefer: ["deepseek", "glm-5-3-flash"] },
+  rerank: { caps: ["json"] },
+  battle_answer: { caps: [] },
   background: { caps: [] },                 // schedulers, prewarm, tasks — no learner chose them
 });
 
@@ -228,13 +236,22 @@ export function createModelRegistry(env = process.env) {
   const pickerOn = pickerFlag(env);
   const roleEnv = (role) => env[`AI_MODEL_ROLE_${String(role).toUpperCase()}`] || null;
   const hasCaps = (entry, role) => (ROLES[role]?.caps || []).every((c) => entry.caps[c]);
-
-  /** → { model: entry, source: "locked"|"learner"|"role"|"default", notice? } */
+  // The platform default is only usable for a role whose capabilities it has.
+  const defaultFor = (role) => {
+    const e = byId.get(activeDefault());
+    return e && e.enabled && hasCaps(e, role) ? e : null;
+  };
+  const firstWithCaps = (role) => {
+    const preferred = (ROLES[role]?.prefer || []).map((id) => byId.get(id)).filter(Boolean);
+    return [...preferred, ...entries].find((e) => e.enabled && hasCaps(e, role) && availabilityOf(e, env).available) || null;
+  };
+  /** → { model: entry, source: "locked"|"learner"|"role"|"default"|"fallback", notice? } */
   function resolve({ role = "chat", learnerChoice = null, allowedModels = null } = {}) {
     if (!ROLES[role]) throw new Error(`Unknown model role "${role}"`);
     const usable = (id) => { const e = id && byId.get(id); return e && e.enabled && hasCaps(e, role) ? e : null; };
     const roleModel = usable(roleEnv(role));
-    if (locked.has(role)) return { model: roleModel || byId.get(defaultId), source: "locked" };
+    const labelEntry = () => roleModel || defaultFor(role) || firstWithCaps(role) || byId.get(activeDefault());
+    if (locked.has(role)) return { model: roleModel || defaultFor(role) || firstWithCaps(role) || byId.get(defaultId), source: "locked" };
     let notice = null;
     if (learnerChoice) {
       const e = byId.get(learnerChoice);
@@ -247,9 +264,18 @@ export function createModelRegistry(env = process.env) {
                 : !hasCaps(e, role) ? "that model can't do this step"
                   : null;
       if (!why) return { model: e, source: "learner" };
-      notice = `Using ${(roleModel || byId.get(activeDefault())).label}: ${why}.`;
+      notice = `Using ${labelEntry().label}: ${why}.`;
     }
     if (roleModel) return { model: roleModel, source: "role", ...(notice ? { notice } : {}) };
+    const def = defaultFor(role);
+    if (def) return { model: def, source: "default", ...(notice ? { notice } : {}) };
+    // The default lacks this step's capability (vision, JSON): use the first
+    // capable model this server can call, and say why if it replaced a pick.
+    const alt = firstWithCaps(role);
+    if (alt) {
+      const why = `the default can't do this step`;
+      return { model: alt, source: "fallback", notice: notice ? `Using ${alt.label}: ${why}.` : undefined };
+    }
     return { model: byId.get(activeDefault()), source: "default", ...(notice ? { notice } : {}) };
   }
 

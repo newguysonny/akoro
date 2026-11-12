@@ -2,26 +2,20 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { featureModels } from "./aiFeatureModels.js";
 
-test("pinned helpers keep their own model; the guide follows the default", () => {
-  const by = Object.fromEntries(featureModels({}, "deepseek").map((f) => [f.key, f]));
-  assert.equal(by.chat_suggestions.modelId, "gpt-4o-mini");
-  assert.equal(by.chat_suggestions.pinned, true);
-  assert.equal(by.guide_ideas.modelId, "gpt-4o-mini");
-  assert.equal(by.chat_guide.modelId, "deepseek");
-  assert.equal(by.chat_guide.pinned, false);
-  assert.equal(by.chat_guide.source, "default");
-  assert.equal(by.think_mode.modelId, "o4-mini");
-  assert.equal(by.vision_imports.modelId, "gpt-4o");
-  assert.equal(by.syllabus_import.modelId, "deepseek");
+test("only the Responses-API modes name a model directly", () => {
+  const list = featureModels({}, "deepseek");
+  assert.deepEqual(list.map((f) => f.key), ["think_mode", "research_mode"]);
+  for (const f of list) {
+    assert.equal(f.pinned, true);
+    assert.equal(f.api, "responses");
+    assert.match(f.reason, /Responses API/);
+  }
+  assert.equal(list[0].modelId, "o4-mini");
+  assert.equal(list[1].modelId, "gpt-4o");
 });
 
-test("an env var moves a pinned feature without touching code", () => {
-  const by = Object.fromEntries(featureModels({ OPENAI_SUGGEST_MODEL: "glm-5-3-flash", OPENAI_VISION_MODEL: "gpt-6-luna" }, "deepseek").map((f) => [f.key, f]));
-  assert.equal(by.chat_suggestions.modelId, "glm-5-3-flash");
-  assert.equal(by.chat_suggestions.pinned, true);
-  assert.equal(by.chat_suggestions.envSet, true);
-  assert.equal(by.vision_imports.modelId, "gpt-6-luna");
-  const guide = featureModels({ OPENAI_GUIDE_MODEL: "o4-mini" }, "deepseek").find((x) => x.key === "chat_guide");
-  assert.equal(guide.source, "env");
-  assert.equal(guide.pinned, true, "an env override is not the platform default");
+test("an env still overrides a Responses-API mode", () => {
+  const list = featureModels({ OPENAI_THINK_MODEL: "gpt-6-luna" }, "deepseek");
+  assert.equal(list[0].modelId, "gpt-6-luna");
+  assert.equal(list[0].source, "env");
 });

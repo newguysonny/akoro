@@ -215,3 +215,16 @@ test("openai_compatible: the provider's own address and key; a missing key is a 
   const keyless = makeOpenAICompatibleAdapter({ env: {} });
   await assert.rejects(() => keyless.create({ model: "grok-x", messages: [] }, undefined, grok), (e) => e.status === 401 && /XAI_API_KEY/.test(e.message));
 });
+
+test("helper roles follow the default, but capability roles pick a capable model", () => {
+  const env = { OPENCODE_API_KEY: "k" };
+  const r = createModelRegistry(env);
+  assert.equal(r.resolve({ role: "suggestions" }).model.id, "deepseek", "JSON step follows the default");
+  assert.equal(r.resolve({ role: "builder" }).model.id, "deepseek");
+  assert.equal(r.resolve({ role: "rerank" }).model.id, "deepseek");
+  assert.equal(r.resolve({ role: "battle_answer" }).model.id, "deepseek");
+  const vision = r.resolve({ role: "vision" });
+  assert.equal(vision.source, "fallback", "DeepSeek has no vision: the default is not used");
+  assert.equal(vision.model.id, "gpt-6-luna", "the first vision-capable preference");
+  assert.equal(vision.model.caps.vision, true);
+});

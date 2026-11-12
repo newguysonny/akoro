@@ -16,7 +16,7 @@ import { makeAiBreaker } from "./circuitBreaker.js";
 import { aiContext } from "./aiContext.js";
 import { AI_DEFAULT_MAX_TOKENS, usdCost, cachedTokensOf, reportedCostUsd } from "./aiPricing.js";
 import { recordAiCall, errorKindOf } from "./aiTelemetry.js";
-import { modelRegistry, forcedModelFor, availabilityOf } from "./modelRegistry.js";
+import { modelRegistry, forcedModelFor, availabilityOf, ROLES } from "./modelRegistry.js";
 import { makeOpenAICompatibleAdapter } from "./providers/openaiCompatible.js";
 import { makeAnthropicAdapter } from "./providers/anthropic.js";
 import { makeOpenCodeAdapter } from "./providers/opencode.js";
@@ -49,13 +49,16 @@ function retryableFailure(err) {
  * this server can actually call are included; the starting model is never a
  * target. Bounded to 4 hops.
  */
-export function fallbackLadder(entry, { registry = modelRegistry, env = process.env, max = 4 } = {}) {
+export function fallbackLadder(entry, { registry = modelRegistry, env = process.env, max = 4, role = null, ROLES: roleTable = null } = {}) {
   if (!entry) return [];
+  const roleCaps = roleTable?.[role]?.caps || null;
+  const capsOk = (e) => !roleCaps || roleCaps.every((c) => e.caps[c]);
   const out = [];
   const seen = new Set([entry.id]);
   const add = (candidate) => {
     if (!candidate || out.length >= max) return;
     if (seen.has(candidate.id) || !candidate.enabled) return;
+    if (!capsOk(candidate)) return;
     if (!availabilityOf(candidate, env).available) return;
     seen.add(candidate.id);
     out.push(candidate);
@@ -75,6 +78,16 @@ export function fallbackLadder(entry, { registry = modelRegistry, env = process.
     const seeds = [registry.get(registry.fallbackId), registry.get(registry.defaultId)];
     for (const seed of seeds) { add(seed); if (out.length >= max) break; }
     for (const seed of [...out]) chain(seed, 0);
+  }
+  // A capability role (vision) may have no capable hop in its chain — the
+  // default is text-only. Fall through to the role's capable models rather
+  // than sending an image to a model that cannot see it.
+  if (!out.length && roleCaps) {
+    const preferred = (roleTable?.[role]?.prefer || []).map((id) => registry.get(id)).filter(Boolean);
+    for (const candidate of [...preferred, ...registry.catalogue]) {
+      if (out.length >= max) break;
+      add(candidate);
+    }
   }
   return out;
 }
@@ -102,10 +115,14 @@ export function refusalOf(res) {
  * never itself — and, like every call, AI_FORCE_MODEL applies (a sandbox with
  * OpenAI off retries on the forced model). noForce: a check's stand-ins.
  */
-export function refusalFallbackFor(entry, { registry = modelRegistry, env = process.env, noForce = false } = {}) {
+export function refusalFallbackFor(entry, { registry = modelRegistry, env = process.env, noForce = false, role = "chat", ROLES: roleTable = ROLES } = {}) {
+  // Prefer the entry's own failover hop, but only if it can do this step
+  // (a vision call must never fall back to a text-only model).
   const base = (entry?.fallbackModel && registry.get(entry.fallbackModel))
     || registry.get(registry.fallbackId || registry.defaultId);
+  const caps = roleTable?.[role]?.caps || [];
   const target = base && entry && base.id !== entry.id && base.enabled
+    && caps.every((c) => base.caps[c])
     && availabilityOf(base, env).available ? base : null;
   if (!target || noForce) return target;
   const forced = forcedModelFor(target, target.apiModel, { registry, env });
@@ -254,7 +271,7 @@ async function meteredCreate(params = {}) {
       }, reqOpts);
     } catch (e) {
       report(null, { streamed: true, ok: false, errorKind: errorKindOf(e) });
-      const ladder = entry && retryableFailure(e) ? fallbackLadder(entry) : [];
+      const ladder = entry && retryableFailure(e) ? fallbackLadder(entry, { role: params.__role || "chat", ROLES }) : [];
       let lastError = e;
       let started = false;
       for (const target of ladder) {
@@ -287,7 +304,7 @@ async function meteredCreate(params = {}) {
     // takes over (billed at its own price); refused mid-reply → it ends with the marker.
     return withStreamRefusal(metered, {
       entry,
-      target: () => refusalFallbackFor(entry, { noForce: !!overrides?.noForce }),
+      target: () => refusalFallbackFor(entry, { noForce: !!overrides?.noForce, role: params.__role || "chat", ROLES }),
       second: async (target) => meterStreamUsage(
         await serve(target, { ...clean, model: target.apiModel, ...(bills ? { stream_options: { include_usage: true, ...(clean.stream_options || {}) } } : {}) }, reqOpts),
         (usage, ttfbMs) => { report(usage || (bills ? fallback : null), { ttfbMs, streamed: true, as: target.id }); if (bills) charge(usage || fallback, target.id); }),
@@ -299,7 +316,7 @@ async function meteredCreate(params = {}) {
     res = await fire(clean, reqOpts);
   } catch (e) {
     report(null, { ok: false, errorKind: errorKindOf(e) });
-    const ladder = entry && retryableFailure(e) ? fallbackLadder(entry) : [];
+    const ladder = entry && retryableFailure(e) ? fallbackLadder(entry, { role: params.__role || "chat", ROLES }) : [];
     if (!ladder.length) throw e;
     const tried = [];
     let lastError = e;
@@ -330,7 +347,7 @@ async function meteredCreate(params = {}) {
   // an agent loop records a model_refusal observation, never a malformed one.
   const refused = entry ? refusalOf(res) : null;
   if (refused) {
-    const target = refusalFallbackFor(entry, { noForce: !!overrides?.noForce });
+    const target = refusalFallbackFor(entry, { noForce: !!overrides?.noForce, role: params.__role || "chat", ROLES });
     const note = { model: entry.id, reason: refused.reason, category: refused.category, fallbackModel: target?.id || null };
     console.warn(`[ai] model_refusal on ${entry.id} (${feature})${target ? ` — retrying on ${target.id}` : ""}`);
     if (!target) return Object.assign(res, { model_refusal: note });

@@ -29,12 +29,8 @@ export const CURRICULUM_BODIES = Object.freeze({ NERDC: "nerdc" });
  * just because one provider isn't configured. SYLLABUS_IMPORT_MODEL overrides.
  */
 export async function importModel() {
-  const { modelRegistry, availabilityOf } = await import("../../../lib/modelRegistry.js");
-  for (const id of [process.env.SYLLABUS_IMPORT_MODEL, "deepseek", "gpt-4.1-mini"].filter(Boolean)) {
-    const e = modelRegistry.get(id);
-    if (e && availabilityOf(e).available) return id;
-  }
-  return "gpt-4.1-mini";
+  const { modelRegistry } = await import("../../../lib/modelRegistry.js");
+  return modelRegistry.resolveModel({ role: "background" }).id;
 }
 
 /** The model call: billed to the platform, JSON out. */

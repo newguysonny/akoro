@@ -2132,7 +2132,7 @@ async function runChatTool(name, input, studentId, { conversationId = null, role
           getSyllabusGrounding(query, { limit: 3 }).catch(() => ({ context: "" })),
         ]);
         const completion = await openai.chat.completions.create({
-          model: process.env.OPENAI_GUIDE_MODEL || OPENAI_MODEL, temperature: 0.3, max_tokens: 700,
+          __role: "persona", temperature: 0.3, max_tokens: 700,
           __timeoutMs: 30_000, __maxRetries: 1,
           response_format: { type: "json_object" },
           messages: buildGuideMessages({ question, topic: input?.topic, subject: input?.subject, taught: taught.chunks || [], syllabus }),
@@ -4596,7 +4596,7 @@ export async function suggestionsFor({ user, body }) {
       }
     }
     const completion = await openai.chat.completions.create({
-      model: process.env.OPENAI_SUGGEST_MODEL || "gpt-4o-mini", temperature: 0.5, max_tokens: 160,
+      __role: "suggestions", temperature: 0.5, max_tokens: 160,
       __timeoutMs: 12_000, __maxRetries: 0,
       response_format: { type: "json_object" },
       messages: buildSuggestionMessages({ role, ask: body?.ask, reply, context: body?.context, capabilities, notTaught, uploads }),
@@ -4636,7 +4636,7 @@ router.post("/learn-suggestions", async (req, res) => {
         const { passages } = await gatherPassages({ target, question: `${b.title || ""} ${b.topic || ""} key ideas summary`.slice(0, 400), search: searchRecordChunks });
         if (passages?.length) {
           const completion = await openai.chat.completions.create({
-            model: process.env.OPENAI_SUGGEST_MODEL || "gpt-4o-mini", temperature: 0.4, max_tokens: 320,
+            __role: "suggestions", temperature: 0.4, max_tokens: 320,
             __timeoutMs: 15_000, __maxRetries: 0,
             response_format: citedLearnSchema(),
             messages: buildCitedLearnSuggestionMessages({ topic: b.topic, subject: b.subject, title: b.title, passages }),
@@ -4653,7 +4653,7 @@ router.post("/learn-suggestions", async (req, res) => {
   }
   try {
     const completion = await openai.chat.completions.create({
-      model: process.env.OPENAI_SUGGEST_MODEL || "gpt-4o-mini", temperature: 0.4, max_tokens: 220,
+      __role: "suggestions", temperature: 0.4, max_tokens: 220,
       __timeoutMs: 12_000, __maxRetries: 0,
       response_format: { type: "json_object" },
       messages: buildLearnSuggestionMessages({ topic: b.topic, subject: b.subject, title: b.title, excerpt: b.excerpt, subtopics: b.subtopics }),

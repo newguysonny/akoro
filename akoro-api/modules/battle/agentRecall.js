@@ -26,7 +26,6 @@ import { rerank, rerankEnabled } from "../../lib/rerank.js";
 
 /** The model that answers. Small on purpose — this is a lookup, not an essay. */
 // Locked (§7.12.2, D23): set by env only, never by the learner's model pick.
-export const ANSWER_MODEL = process.env.BATTLE_ANSWER_MODEL || process.env.AI_MODEL_ROLE_AGENT_RECALL || "gpt-4o-mini";
 
 /** How many notes end up in front of the model. */
 const RECALL_LIMIT = 4;
@@ -155,7 +154,7 @@ export async function answerFromRecall({
   // The eval suite points this same path at a different tier — comparing
   // models on "does it refuse when the notes are silent" is the only way that
   // constraint is more than an assertion.
-  model = ANSWER_MODEL,
+  model = null,
   // "platform": the app pays — an Agent Check was charged once, up front (D45).
   payer = null,
 }) {
@@ -175,14 +174,13 @@ export async function answerFromRecall({
     `${String.fromCharCode(65 + i)}. ${typeof o === "string" ? o : (o?.text ?? "")}`).join("\n");
 
   const resp = await openai.chat.completions.create({
-    model,
+    ...(model ? { model } : { __role: "agent_recall" }),
     max_tokens: 120,
     // 0: recalling what a note says is not a creative act, and a battle that
     // gave different answers to the same notes would not be measuring anything.
     temperature: 0,
     __feature: payer === "platform" ? "agent_check_answer" : "battle_answer",
     __userId: userId,
-    __role: "agent_recall",
     ...(payer === "platform" ? { __payer: "platform" } : {}),
     response_format: { type: "json_object" },
     messages: [

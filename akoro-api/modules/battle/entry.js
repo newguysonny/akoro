@@ -17,10 +17,10 @@
 import db from "../../db.js";
 import { coinsAvailable, schoolBillTo } from "../../lib/coins.js";
 import { coinsForUsage } from "../../lib/aiPricing.js";
+import { modelRegistry } from "../../lib/modelRegistry.js";
 
-const ANSWER_MODEL = process.env.BATTLE_ANSWER_MODEL || "gpt-4o-mini";
 // One answer: the notes search (≈1 coin) and the answer from them (a ~1.5k-token prompt).
-export const coinsPerAnswer = () => coinsForUsage(ANSWER_MODEL, 1500, 60) + 1;
+export const coinsPerAnswer = () => coinsForUsage(modelRegistry.resolveModel({ role: "battle_answer" }).id, 1500, 60) + 1;
 export const coinsNeeded = (totalQuestions) => Math.max(1, Math.round(Number(totalQuestions) || 10)) * coinsPerAnswer();
 export const REVIEW_REWARD_COINS = Math.max(0, Math.round(Number(process.env.REVIEW_REWARD_COINS ?? 1) || 0));
 

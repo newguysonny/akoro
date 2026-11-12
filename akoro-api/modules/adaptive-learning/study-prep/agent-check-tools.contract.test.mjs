@@ -41,15 +41,16 @@ test("practice.run_agent_check and agent.get_knowledge_coverage are the plan's n
 
 test("the recall, question and assessor roles are locked: every learner pick is ignored, the env model serves", () => {
   for (const role of ["agent_recall", "question_generator", "assessor"]) assert.equal(ROLES[role]?.locked, true, role);
-  const env = { AI_MODEL_PICKER_ENABLED: "true", AI_MODEL_ROLE_AGENT_RECALL: "gpt-4o-mini", AI_MODEL_ROLE_ASSESSOR: "gpt-4.1" };
+  const env = { AI_MODEL_PICKER_ENABLED: "true", OPENCODE_API_KEY: "k",
+    AI_MODEL_ROLE_AGENT_RECALL: "glm-5-3-flash", AI_MODEL_ROLE_ASSESSOR: "claude-haiku" };
   const registry = createModelRegistry(env);
   for (const choice of ["claude-opus", "claude-fable", "gpt-4.1", "claude-haiku"]) {
     for (const role of ["agent_recall", "question_generator", "assessor"]) {
       const r = registry.resolve({ role, learnerChoice: choice, allowedModels: [choice] });
       assert.equal(r.source, "locked", `${role} with ${choice}`);
     }
-    assert.equal(registry.resolve({ role: "agent_recall", learnerChoice: choice }).model.id, "gpt-4o-mini");
-    assert.equal(registry.resolve({ role: "assessor", learnerChoice: choice }).model.id, "gpt-4.1");
+    assert.equal(registry.resolve({ role: "agent_recall", learnerChoice: choice }).model.id, "glm-5-3-flash");
+    assert.equal(registry.resolve({ role: "assessor", learnerChoice: choice }).model.id, "claude-haiku");
   }
   // A role that is not locked does follow the pick — the lock is what differs.
   assert.notEqual(createModelRegistry({ AI_MODEL_PICKER_ENABLED: "true", ANTHROPIC_API_KEY: "k" }).resolve({ role: "persona", learnerChoice: "claude-opus" }).source, "locked");
@@ -58,7 +59,8 @@ test("the recall, question and assessor roles are locked: every learner pick is 
 test("the Agent Check's call sites name their locked role and pass an env model (never the learner's)", () => {
   const recall = read("../../battle/agentRecall.js");
   assert.match(recall, /__role: "agent_recall"/);
-  assert.match(recall, /ANSWER_MODEL = process\.env\.BATTLE_ANSWER_MODEL \|\| process\.env\.AI_MODEL_ROLE_AGENT_RECALL/);
+  assert.match(recall, /__role: "agent_recall"/, "the locked recall role decides the model");
+  assert.doesNotMatch(recall, /model = ANSWER_MODEL/, "no model is pinned on the call");
   assert.doesNotMatch(recall, /__learnerChoice/);
   const questions = read("../../battle/questionSource.js");
   assert.match(questions, /__role: "question_generator"/);

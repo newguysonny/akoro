@@ -10,9 +10,7 @@ import { openai } from "../../lib/aiModel.js";
 import { DATA_VIEWS, describeView, audienceOf } from "./views.js";
 import { CAPABILITIES, capAudience } from "./capabilities.js";
 
-export const BUILDER_MODEL = () => process.env.AKORO_SELF_TOOLING_MODEL || "gpt-4.1-mini";
 // Code is the hardest stage (and the rarest): a stronger model writes it.
-export const CODE_MODEL = () => process.env.AKORO_SELF_TOOLING_CODE_MODEL || "gpt-4.1";
 
 const COMMON = `You build ONE small data tool for a learner or an instructor on Akoro, as JSON DATA.
 Rules:
@@ -98,7 +96,7 @@ export async function buildDefinition({ stage, goal, params, slice, feedback = n
   if (approved.length) messages.push({ role: "user", content: `This was approved for exactly this goal — build it with what was approved: ${approved.join("; ")}. Don't answer notExpressible.` });
   if (feedback) messages.push({ role: "user", content: `Your previous attempt failed: ${feedback}\nFix it and answer again with ONE JSON object.` });
   const resp = await openai.chat.completions.create({
-    model: stage === "code" ? CODE_MODEL() : BUILDER_MODEL(), temperature: 0, max_tokens: stage === "code" ? 2000 : 1200,
+    __role: "builder", temperature: 0, max_tokens: stage === "code" ? 2000 : 1200,
     response_format: { type: "json_object" },
     messages,
     __feature: "self_tooling", ...(platformPays ? { __payer: "platform" } : { __userId: learnerId }),

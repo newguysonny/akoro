@@ -372,3 +372,33 @@ public catalogue — only the route list.
 - `x-opencode-session` is currently the request id; switch to a conversation id for better
   cache/route stickiness.
 - Admin UI for the switch (the API is live).
+
+## 14. Pinned helpers converted to roles (2026-11-12)
+
+The platform default is now the only switch for the helpers that used to name a
+model. Each maps to a role and is resolved with capability checks:
+
+| Helper | Role | Notes |
+|---|---|---|
+| Chat follow-up / learn / upload suggestions | `suggestions` (JSON) | follows the default (DeepSeek) |
+| Guide chat | `persona` | follows the default; `OPENAI_GUIDE_MODEL` is no longer read |
+| Vision imports / OCR | `vision` (vision) | the default can't see images, so it resolves the first capable model (`gpt-6-luna`, then `claude-haiku`, `qwen3-8-flash`) |
+| Tool builder / code generator | `builder` (JSON) | follows the default |
+| Battle answerer | `battle_answer` | follows the default |
+| Battle judge | `assessor` (locked) | the locked role decides; `BATTLE_JUDGE_MODEL` is gone |
+| Agent Check recall | `agent_recall` (locked) | unchanged lock, no pinned model |
+| Search rerank | `rerank` (JSON) | follows the default |
+| Syllabus importer | `background` | follows the default |
+
+- The resolver now checks the **default's capabilities** for the role: a role
+  that needs vision or JSON will not silently use an incapable default.
+- Failover is role-aware too: a vision call's hops are all vision-capable; it
+  never falls back to text-only DeepSeek.
+- **Overrides are role envs now:** `AI_MODEL_ROLE_SUGGESTIONS`,
+  `_VISION`, `_BUILDER`, `_RERANK`, `_BATTLE_ANSWER`, `_PERSONA`, … The old
+  `OPENAI_SUGGEST_MODEL`, `OPENAI_GUIDE_MODEL`, `OPENAI_VISION_MODEL`,
+  `AKORO_SELF_TOOLING_MODEL/CODE`, `BATTLE_ANSWER_MODEL`, `BATTLE_JUDGE_MODEL`,
+  `RERANK_MODEL`, `SYLLABUS_IMPORT_MODEL` are no longer read.
+- **Still pinned by API shape:** chat think mode and research mode use the
+  OpenAI **Responses** API (`OPENAI_THINK_MODEL` / `OPENAI_RESEARCH_MODEL`).
+  The admin page lists only these two under “Feature models”.

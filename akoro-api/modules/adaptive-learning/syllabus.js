@@ -19,8 +19,8 @@ import { openai, llmComplete } from "../../lib/aiModel.js";
 import { requireRole } from "../auth/routes.js";
 import { renderPdfToImages } from "./pdfRender.js";
 import { contentKey, extractOnce, makePgCache } from "../../lib/extractionCache.js";
+import { modelRegistry } from "../../lib/modelRegistry.js";
 
-const VISION_MODEL = process.env.OPENAI_VISION_MODEL || "gpt-4o";
 
 const slugify = (s) => String(s || "").toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 
@@ -195,10 +195,10 @@ export async function extractSyllabusViaVision(buffer, hint = {}) {
   // Lever 5 (compile-once): the vision extraction is the expensive step. Key it on
   // the PDF content + model + hint so re-ingesting the same document reuses the
   // stored artifact instead of paying for vision again.
-  const cache = makePgCache({ model: VISION_MODEL });
+  const cache = makePgCache({ model: modelRegistry.resolveModel({ role: "vision" }).id });
   const key = contentKey(buffer, {
     scope: "syllabus_vision",
-    model: VISION_MODEL,
+    __role: "vision",
     hint: JSON.stringify({ exam: hint.exam || "", name: hint.name || "" }),
   });
   const { doc } = await extractOnce({ key, get: cache.get, put: cache.put, extract: () => visionExtract(buffer, hint) });
@@ -216,7 +216,7 @@ async function visionExtract(buffer, hint = {}) {
   for (const url of images) content.push({ type: "image_url", image_url: { url, detail: "high" } });
 
   const resp = await openai.chat.completions.create({
-    model: VISION_MODEL, max_tokens: 4000, temperature: 0.2,
+    __role: "vision", max_tokens: 4000, temperature: 0.2,
     messages: [{ role: "system", content: EXTRACT_SYSTEM }, { role: "user", content }],
   });
   let s = (resp.choices?.[0]?.message?.content || "").trim();

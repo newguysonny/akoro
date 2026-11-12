@@ -31,7 +31,6 @@ import { serverError } from "../../lib/httpError.js";
 const router = Router();
 const adminOnly = [authenticateToken, requireRole(["admin"])];
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 40 * 1024 * 1024 } }).single("file");
-const VISION_MODEL = process.env.OPENAI_VISION_MODEL || "gpt-4o";
 
 const Q_COLS = "id, number, type, stem, image_url, options, answer, explanation, marks, subject, topic, difficulty, verified, section_id, passage_id, source_page";
 
@@ -450,7 +449,7 @@ router.post("/papers/:id/ingest", adminOnly, (req, res) => {
       for (const url of images) content.push({ type: "image_url", image_url: { url, detail: "high" } });
 
       const resp = await openai.chat.completions.create({
-        model: VISION_MODEL, max_tokens: 6000, temperature: 0.1,
+        __role: "vision", max_tokens: 6000, temperature: 0.1,
         messages: [{ role: "system", content: INGEST_SYSTEM }, { role: "user", content }],
       });
       let raw = (resp.choices?.[0]?.message?.content || "").trim();

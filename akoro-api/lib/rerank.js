@@ -23,7 +23,6 @@
 
 import { openai } from "./aiModel.js";
 
-const RERANK_MODEL = process.env.RERANK_MODEL || "gpt-4o-mini";
 
 /**
  * Order candidates by how well each ANSWERS the query, keep the best `topK`.
@@ -39,7 +38,7 @@ const RERANK_MODEL = process.env.RERANK_MODEL || "gpt-4o-mini";
  * @param {Function} o.textOf      row -> the text to judge
  * @param {number}   o.topK        how many survive
  */
-export async function rerank({ query, candidates, textOf, topK = 4, userId = null, model = RERANK_MODEL }) {
+export async function rerank({ query, candidates, textOf, topK = 4, userId = null, model = null }) {
   // Nothing to choose between. Reranking three candidates down to four is a
   // model call that cannot change the outcome.
   if (!Array.isArray(candidates) || candidates.length <= topK) return candidates ?? [];
@@ -49,7 +48,7 @@ export async function rerank({ query, candidates, textOf, topK = 4, userId = nul
 
   try {
     const resp = await openai.chat.completions.create({
-      model,
+      ...(model ? { model } : { __role: "rerank" }),
       max_tokens: 200,
       temperature: 0,
       __feature: "rerank",

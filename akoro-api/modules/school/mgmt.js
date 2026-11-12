@@ -915,7 +915,6 @@ const studentDocUpload = multerLib({ storage: multerLib.memoryStorage(), limits:
 
 // ── Build a document template from a sample (photo / scan / PDF) via vision ───
 const tplFileUpload = multerLib({ storage: multerLib.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } }).single("file");
-const TPL_VISION_MODEL = process.env.OPENAI_VISION_MODEL || "gpt-4o";
 const TPL_VISION_SYSTEM = `You convert a photographed or scanned document into a clean, self-contained, PRINTABLE HTML template.
 Rules:
 - Return ONLY valid HTML (inline CSS, sized for A4). No markdown, no code fences, no commentary.
@@ -951,7 +950,7 @@ router.post("/document-templates/build-from-file", authenticateToken, requireRol
       for (const url of images) userContent.push({ type: "image_url", image_url: { url, detail: "high" } });
 
       const resp = await openai.chat.completions.create({
-        model: TPL_VISION_MODEL, max_tokens: 3200, temperature: 0.2,
+        __role: "vision", max_tokens: 3200, temperature: 0.2,
         messages: [{ role: "system", content: TPL_VISION_SYSTEM }, { role: "user", content: userContent }],
       });
       let html = (resp.choices?.[0]?.message?.content || "").trim();
