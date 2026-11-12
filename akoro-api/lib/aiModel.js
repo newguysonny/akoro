@@ -180,8 +180,9 @@ async function meteredCreate(params = {}) {
   const model = entry?.id || clean.model || OPENAI_MODEL;
   const charge = (usage, m = entry?.id || model) => chargeForAI({
     userId, feature, model: m, usage, ref, billTo,
-    // Decision A: bill the provider's reported cost when it gives one.
-    costUsd: reportedCostUsd(usage),
+    // Decision A: bill the provider's reported cost when it gives one,
+    // unless AI_BILL_PROVIDER_COST is switched off (static price wins).
+    costUsd: process.env.AI_BILL_PROVIDER_COST === "false" ? null : reportedCostUsd(usage),
   }).catch((e) => { if (!(e instanceof InsufficientCoins)) console.warn("[coins] charge failed:", e.message); });
 
   // Every call is TIMED, whether or not it is billed. Cost and tokens used to

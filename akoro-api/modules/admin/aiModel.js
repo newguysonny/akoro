@@ -26,6 +26,12 @@ const asyncHandler = (fn) => (req, res, next) => Promise.resolve(fn(req, res, ne
 
 const envFallbackModel = () => String(process.env.AI_MODEL_FALLBACK || "").trim() || null;
 const actorId = (req) => req.user?.email || req.user?.id || null;
+const runtimeEnabled = () => !["off", "false", "0"].includes(String(process.env.AI_RUNTIME_OVERRIDE || "on").toLowerCase());
+const runtimeDisabled = (res) => res.status(403).json({
+  success: false, code: "runtime_override_disabled",
+  error: "The runtime model switch is off (AI_RUNTIME_OVERRIDE). Change the env or turn it on.",
+  message: "The runtime model switch is off (AI_RUNTIME_OVERRIDE). Change the env or turn it on.",
+});
 
 async function writeAudit(req, action, before, after) {
   try {
@@ -62,12 +68,14 @@ router.get("/ai/model", adminOnly, asyncHandler(async (req, res) => {
     enabled: entry.enabled,
     selectable: entry.selectable,
     provider: entry.provider,
+    fallbackModel: entry.fallbackModel,
     availability: availabilityOf(entry),
   }));
-  return res.json({ success: true, ...state(), models });
+  return res.json({ success: true, ...state(), runtimeOverrideEnabled: runtimeEnabled(), models });
 }));
 
 router.put("/ai/model", adminOnly, asyncHandler(async (req, res) => {
+  if (!runtimeEnabled()) return runtimeDisabled(res);
   const result = validateModelChange(req.body ?? {}, {
     getEntry: (id) => modelRegistry.get(id),
     isAvailable: (entry) => availabilityOf(entry),
@@ -88,6 +96,7 @@ router.put("/ai/model", adminOnly, asyncHandler(async (req, res) => {
 }));
 
 router.delete("/ai/model", adminOnly, asyncHandler(async (req, res) => {
+  if (!runtimeEnabled()) return runtimeDisabled(res);
   await loadRuntimeSettings();
   const before = runtimeSettings();
   await clearRuntimeSettings({ by: actorId(req) });
