@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Icon } from '../../components/common/Icons.jsx';
 import { API } from '../../services/api.js';
@@ -6,12 +6,14 @@ import { API } from '../../services/api.js';
 const BRAND = '#6C3BFF';
 const RED   = '#EF4444';
 const GREEN = '#10B981';
+const mmss  = (s) => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
 
 export default function ResetPasswordPage() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const token = params.get('token') || '';
   const emailParam = params.get('email') || '';
+  const resendParam = Number(params.get('resend')) || 0;
   const codeFlow = !token && !!emailParam;
   const [email, setEmail] = useState(emailParam);
   const [code, setCode] = useState('');
@@ -20,8 +22,40 @@ export default function ResetPasswordPage() {
   const [confirm,   setConfirm]   = useState('');
   const [showPw,    setShowPw]    = useState(false);
   const [loading,   setLoading]   = useState(false);
+  const [resending, setResending] = useState(false);
   const [done,      setDone]      = useState(false);
   const [err,       setErr]       = useState('');
+  const [notice,    setNotice]    = useState('');
+  // A code was just emailed before landing here, so start the resend window.
+  const [cooldown,  setCooldown]  = useState(codeFlow ? (resendParam || 60) : 0);
+
+  // Tick the resend countdown down to zero.
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const id = setInterval(() => setCooldown(c => (c > 0 ? c - 1 : 0)), 1000);
+    return () => clearInterval(id);
+  }, [cooldown <= 0]);
+
+  const resendCode = async () => {
+    setErr(''); setNotice('');
+    if (!email) { setErr('Enter your email first.'); return; }
+    setResending(true);
+    try {
+      const res = await fetch(`${API}/api/auth/resend-code`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ email, purpose: 'reset' }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.message || 'Could not resend the code.');
+      setNotice('A new code is on its way.');
+      setCooldown(json.data?.resendSeconds || 60);
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setResending(false);
+    }
+  };
 
   const strength = (() => {
     if (!password) return 0;
@@ -118,6 +152,10 @@ export default function ResetPasswordPage() {
               {codeFlow ? 'Enter the 6-digit code we emailed you, then choose a new password.' : 'Choose a strong password of at least 8 characters.'}
             </p>
 
+            {notice && (
+              <div style={{ background: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: 10,
+                padding: '10px 14px', marginBottom: 16, fontSize: 13, fontWeight: 700, color: '#059669' }}>{notice}</div>
+            )}
             {err && (
               <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 10,
                 padding: '10px 14px', marginBottom: 16, fontSize: 13, fontWeight: 700, color: RED }}>{err}</div>
@@ -135,6 +173,17 @@ export default function ResetPasswordPage() {
                     <input type="text" inputMode="numeric" maxLength={6} value={code}
                       onChange={e => setCode(e.target.value.replace(/\D/g, ''))} placeholder="000000"
                       style={{ ...inp, textAlign: 'center', letterSpacing: 8, fontSize: 20, fontWeight: 800 }}/>
+                  </div>
+                  <div style={{ textAlign: 'center', marginTop: -4, marginBottom: 16 }}>
+                    <div style={{ fontSize: 12, color: 'var(--ak-text-muted)', marginBottom: 6 }}>Didn't receive code?</div>
+                    <button type="button" onClick={resendCode} disabled={resending || cooldown > 0} style={{
+                      background: 'none', border: 'none', fontFamily: "'Nunito',sans-serif",
+                      fontSize: 12.5, fontWeight: 800, padding: 0,
+                      color: cooldown > 0 ? 'var(--ak-text-muted)' : BRAND,
+                      cursor: cooldown > 0 ? 'default' : 'pointer',
+                    }}>
+                      Resend code{cooldown > 0 ? ` · ${mmss(cooldown)}` : ''}
+                    </button>
                   </div>
                 </>
               )}

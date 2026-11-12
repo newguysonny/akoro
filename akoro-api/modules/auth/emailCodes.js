@@ -154,7 +154,7 @@ export async function consumeEmailCode(challengeId) {
 }
 
 /** Issue a fresh code for an existing challenge (same email/purpose/user). */
-export async function resendEmailCode({ challengeId = null, email = null, ip = null, userAgent = null }) {
+export async function resendEmailCode({ challengeId = null, email = null, purpose = null, ip = null, userAgent = null }) {
   // Prefer the challenge row — it carries the email, purpose and user. A
   // consumed/expired row is still a valid anchor: the user proved they hold a
   // live challenge, and a fresh single-use code for that same address is safe.
@@ -167,8 +167,9 @@ export async function resendEmailCode({ challengeId = null, email = null, ip = n
   // button) — fall back to the email the client still holds instead of
   // dead-ending on "sign in again".
   if (!row && email) {
-    const { data } = await table().select("*").eq("email", normaliseEmail(email))
-      .order("created_at", { ascending: false }).limit(1).maybeSingle();
+    let q = table().select("*").eq("email", normaliseEmail(email));
+    if (purpose) q = q.eq("purpose", purpose);
+    const { data } = await q.order("created_at", { ascending: false }).limit(1).maybeSingle();
     row = data || null;
   }
   if (!row) return { ok: false, code: "invalid_code" };

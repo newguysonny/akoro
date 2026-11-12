@@ -935,11 +935,17 @@ const authHandlers = {
 
   // POST /api/auth/resend-code — a fresh code for the same challenge.
   resendCode: asyncHandler(async (req, res) => {
-    const { challengeId, email } = req.body;
+    const { challengeId, email, purpose } = req.body;
     if (!challengeId && !email) return res400(res, "Request a new code by signing in again.");
-    const issued = await resendEmailCode({ challengeId, email, ip: req.ip, userAgent: req.headers["user-agent"] });
+    const issued = await resendEmailCode({ challengeId, email, purpose, ip: req.ip, userAgent: req.headers["user-agent"] });
     if (!issued.ok && issued.code === "send_failed") {
       return res.status(503).json({ success: false, message: "Could not send the code. Try again." });
+    }
+    // Reset resends must not reveal whether an account or a live code exists:
+    // answer exactly like forgot-password does (generic success). A send that
+    // genuinely failed (503 above) is the only thing we surface.
+    if (purpose === "reset") {
+      return res200(res, { codeSent: true, resendSeconds: CODE_RESEND_SECONDS });
     }
     if (!issued.ok && ["invalid_code"].includes(issued.code)) return res400(res, "Request a new code by signing in again.");
     return res200(res, { codeSent: !!issued.ok, resendSeconds: CODE_RESEND_SECONDS,
@@ -1240,7 +1246,7 @@ router.post("/register", strictLimit,  rules.register, runValidation, authHandle
 router.post("/login",    strictLimit,  rules.login,    runValidation, authHandlers.login);
 router.post("/verify-email", strictLimit, body("challengeId").isUUID(), body("code").isLength({ min: 6, max: 6 }), runValidation, authHandlers.verifyEmail);
 router.post("/verify-login", strictLimit, body("challengeId").isUUID(), body("code").isLength({ min: 6, max: 6 }), runValidation, authHandlers.verifyLogin);
-router.post("/resend-code",  strictLimit, body("challengeId").optional().isUUID(), body("email").optional().isEmail(), runValidation, authHandlers.resendCode);
+router.post("/resend-code",  strictLimit, body("challengeId").optional().isUUID(), body("email").optional().isEmail(), body("purpose").optional().isIn(["signup", "login", "reset"]), runValidation, authHandlers.resendCode);
 router.post("/refresh",  refreshLimit, authHandlers.refresh);
 router.post("/logout",   authenticateToken, authHandlers.logout);
 router.get ("/me",       authenticateToken, authHandlers.me);
@@ -1372,7 +1378,7 @@ router.post("/forgot-password", strictLimit,
         }).catch(() => {});
       }
       // Same answer whether or not the account exists.
-      return res200(res, { codeFlow: true, message: "If that email is registered, a code has been sent." });
+      return res200(res, { codeFlow: true, resendSeconds: CODE_RESEND_SECONDS, message: "If that email is registered, a code has been sent." });
     }
 
     if (user && user.is_active) {

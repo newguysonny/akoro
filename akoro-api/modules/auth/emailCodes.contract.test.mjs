@@ -39,6 +39,8 @@ test("codes are hashed, single-use, rate-limited and emailed", () => {
   assert.match(codes, /stillUsable/, "cooldown only guards a still-usable code");
   assert.match(codes, /CODE_RESEND_SECONDS/, "the resend window is exported");
   assert.match(routes, /resendSeconds: CODE_RESEND_SECONDS/, "the client learns the resend window");
+  assert.match(routes, /body\("purpose"\)\.optional\(\)\.isIn/, "resend can target a purpose");
+  assert.match(routes, /purpose === "reset"[\s\S]{0,160}codeSent: true/, "reset resends are generic");
   assert.match(routes, /verificationRequired: true[\s\S]{0,320}challengeId/, "register asks for a code when enabled");
   assert.match(routes, /codeRequired: true[\s\S]{0,320}challengeId/, "login asks for a code when enabled");
   assert.match(routes, /purpose: "reset"/, "forgot-password sends a reset code");
