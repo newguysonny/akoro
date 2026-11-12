@@ -4532,10 +4532,12 @@ router.post("/agent/stop", (req, res) => {
  * ask for a model this deployment doesn't route. Names come from this
  * server's own configuration (OPENAI_MODEL / _THINK_ / _RESEARCH_).
  */
+// Modes run on the learner's chosen model now; no model is advertised per
+// mode. `model` is kept null for older clients that still render it.
 export const chatModelMenu = () => ([
-  { id: "default",  model: OPENAI_MODEL,   kind: "Fast",     description: "Quick, grounded answers for everyday study." },
-  { id: "think",    model: THINK_MODEL,    kind: "Thinking", description: "Reasons step by step before answering — best for hard problems." },
-  { id: "research", model: RESEARCH_MODEL, kind: "Research", description: "A deeper pass with more syllabus and past-question references." },
+  { id: "default",  model: null, kind: "Default",  description: "Quick, grounded answers for everyday study." },
+  { id: "think",    model: null, kind: "Thinking", description: "Reasons step by step before answering — best for hard problems." },
+  { id: "research", model: null, kind: "Research", description: "A deeper pass with more syllabus and past-question references." },
 ]);
 router.get("/models", async (req, res) => {
   res.set("Cache-Control", "private, max-age=300");

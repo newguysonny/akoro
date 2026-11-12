@@ -12,10 +12,10 @@
  */
 
 export const FEATURE_MODELS = Object.freeze([
-  { key: "think_mode",    label: "Chat think mode",    env: "OPENAI_THINK_MODEL",    fallback: "o4-mini", api: "responses",
-    reason: "Responses API (reasoning summaries)" },
-  { key: "research_mode", label: "Chat research mode", env: "OPENAI_RESEARCH_MODEL", fallback: "gpt-4o",  api: "responses",
-    reason: "Responses API (web-search tool events)" },
+  { key: "think_mode",    label: "Thinking — Responses path", env: "OPENAI_THINK_MODEL",    fallback: "o4-mini", api: "responses",
+    reason: "Only used when the chosen model has a Responses surface; every other model reasons on itself" },
+  { key: "research_mode", label: "Research — no pick",          env: "OPENAI_RESEARCH_MODEL", fallback: "gpt-4o",  api: "chat",
+    reason: "Fallback only when no model is chosen" },
 ]);
 
 export function featureModels(env = process.env, defaultId = null) {

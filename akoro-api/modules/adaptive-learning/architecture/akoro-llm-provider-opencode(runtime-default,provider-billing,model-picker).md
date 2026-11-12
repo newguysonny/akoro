@@ -402,3 +402,30 @@ model. Each maps to a role and is resolved with capability checks:
 - **Still pinned by API shape:** chat think mode and research mode use the
   OpenAI **Responses** API (`OPENAI_THINK_MODEL` / `OPENAI_RESEARCH_MODEL`).
   The admin page lists only these two under “Feature models”.
+
+## 15. Model + mode switches (implemented 2026-11-12)
+
+- The Agent Chat's single menu is now **two instances of the same `ModelSwitch`**:
+  a model switch (models only) and a mode switch (Default / Thinking /
+  Research), side by side in the composer.
+- `/api/adaptive/chat/models` returns `modes` without a model and each model
+  with `modes: { default, think, research }`. Availability comes from
+  capabilities: `think` needs `caps.reasoning` (or a Responses surface),
+  `research` needs tools. Nothing is guessed in the browser.
+- Modes the selected model cannot run are disabled in the mode menu (same
+  styling as “Coming soon” models) with “Not available for <model>”. The
+  server also downgrades to Default, with a notice, if an old client asks
+  anyway.
+- **Thinking runs on the selected model** over chat completions: a
+  `reasoning_effort` hint is tried once, any exposed `reasoning_content` /
+  `reasoning` streams into the Thought row, and the answer comes from the same
+  model. Capability probe (2026-11-12): DeepSeek 37, GLM 20, Qwen 105, GPT 6
+  Luna 30, GPT 5.6 Luna, Grok 109 reasoning tokens; Claude Haiku 0 (Thinking
+  disabled). The older Responses path remains only for models with
+  `caps.responses`; `OPENAI_THINK_MODEL` is its fallback, no longer the mode.
+- **Research runs on the selected model** with the deeper retrieval.
+  `OPENAI_RESEARCH_MODEL` is a fallback when no pick is sent.
+- Verified live: `/chat/models` marks per-model modes; Think+DeepSeek answered
+  391 with `metadata.model = deepseek-v4.1-flash`; Research+DeepSeek and
+  Default+DeepSeek also ran on the picked model. Frontend deploy required for
+  the two-switch UI.
