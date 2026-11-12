@@ -30,6 +30,7 @@ export default function SigninPage() {
   const [setup, setSetup] = useState(null);           // { setupToken, secret, otpauthUrl } */
   const [setupCode, setSetupCode] = useState('');
   const [code,      setCode]      = useState('');
+  const [notice,    setNotice]    = useState('');
   const urlError = params.get('error');
 
   const finishLogin = async (data) => {
@@ -97,7 +98,7 @@ export default function SigninPage() {
   };
 
   const handleEmailCode = async (e) => {
-    e.preventDefault(); setFormErr('');
+    e.preventDefault(); setFormErr(''); setNotice('');
     if (!/^\d{6}$/.test(code)) { setFormErr('Enter the 6-digit code'); return; }
     try {
       const data = await verifyLogin({ challengeId: emailStep.challengeId, code });
@@ -107,11 +108,12 @@ export default function SigninPage() {
     } catch (err) { setFormErr(err.message); }
   };
   const resendEmailCode = async () => {
-    setFormErr('');
+    setFormErr(''); setNotice('');
     try {
-      const d = await resendCode({ challengeId: emailStep.challengeId });
+      const d = await resendCode({ challengeId: emailStep.challengeId, email: emailStep.email });
       setEmailStep(s => ({ ...s, challengeId: d?.challengeId || s.challengeId, retryAfter: d?.retryAfter || 0 }));
-      setFormErr(d?.codeSent ? 'A new code is on its way.' : `Try again in ${d?.retryAfter || 60}s.`);
+      if (d?.codeSent) setNotice('A new code is on its way.');
+      else setNotice(`You can request another code in ${d?.retryAfter ?? 60}s.`);
     } catch (err) { setFormErr(err.message); }
   };
 
@@ -174,6 +176,10 @@ export default function SigninPage() {
           <p style={{ fontSize: 14, color: '#6B6B80', margin: '0 0 20px' }}>
             Enter the 6-digit code we sent to <strong>{emailStep.email}</strong>.
           </p>
+          {notice && (
+            <div style={{ background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 10,
+              padding: '10px 14px', marginBottom: 16, fontSize: 13, fontWeight: 600, color: '#15803D' }}>{notice}</div>
+          )}
           {formErr && (
             <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 10,
               padding: '10px 14px', marginBottom: 16, fontSize: 13, fontWeight: 600, color: '#EF4444' }}>{formErr}</div>
@@ -190,7 +196,7 @@ export default function SigninPage() {
           </form>
           <button onClick={resendEmailCode} style={{ width: '100%', marginTop: 12, background: 'none', border: 'none',
             color: '#6C3BFF', fontSize: 12.5, fontWeight: 800, cursor: 'pointer' }}>Resend code</button>
-          <button onClick={() => { setEmailStep(null); setCode(''); setFormErr(''); }} style={{ width: '100%',
+          <button onClick={() => { setEmailStep(null); setCode(''); setFormErr(''); setNotice(''); }} style={{ width: '100%',
             marginTop: 8, background: 'none', border: 'none', color: '#9490A0', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
             ← Back to sign in
           </button>

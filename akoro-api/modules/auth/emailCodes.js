@@ -68,12 +68,16 @@ export async function issueEmailCode({ userId = null, email, purpose, name = "th
   const to = normaliseEmail(email);
   if (!to) return { ok: false, code: "invalid_email" };
 
-  const { data: latest } = await table().select("id, created_at")
+  const { data: latest } = await table().select("id, created_at, consumed_at, expires_at")
     .eq("email", to).eq("purpose", purpose)
     .order("created_at", { ascending: false }).limit(1).maybeSingle();
   if (latest?.created_at) {
     const age = Date.now() - new Date(latest.created_at).getTime();
-    if (age < RESEND_SECONDS * 1000) {
+    // Cooldown only protects a code that can still be typed in. If the previous
+    // code was already used or has expired, holding the user to the cooldown
+    // (and handing back its now-dead challenge id) strands them — issue fresh.
+    const stillUsable = !latest.consumed_at && new Date(latest.expires_at).getTime() > Date.now();
+    if (stillUsable && age < RESEND_SECONDS * 1000) {
       // Keep the previously emailed code usable; hand its challenge id back so
       // the client can still show the code screen.
       return { ok: false, code: "cooldown", retryAfter: Math.ceil((RESEND_SECONDS * 1000 - age) / 1000), challengeId: latest.id };
@@ -149,9 +153,24 @@ export async function consumeEmailCode(challengeId) {
 }
 
 /** Issue a fresh code for an existing challenge (same email/purpose/user). */
-export async function resendEmailCode({ challengeId, ip = null, userAgent = null }) {
-  const { data: row } = await table().select("*").eq("id", challengeId).maybeSingle();
-  if (!row || row.consumed_at) return { ok: false, code: "invalid_code" };
+export async function resendEmailCode({ challengeId = null, email = null, ip = null, userAgent = null }) {
+  // Prefer the challenge row — it carries the email, purpose and user. A
+  // consumed/expired row is still a valid anchor: the user proved they hold a
+  // live challenge, and a fresh single-use code for that same address is safe.
+  let row = null;
+  if (challengeId) {
+    const { data } = await table().select("*").eq("id", challengeId).maybeSingle();
+    row = data || null;
+  }
+  // The screen can outlive its row (page restored from cache, refresh, back
+  // button) — fall back to the email the client still holds instead of
+  // dead-ending on "sign in again".
+  if (!row && email) {
+    const { data } = await table().select("*").eq("email", normaliseEmail(email))
+      .order("created_at", { ascending: false }).limit(1).maybeSingle();
+    row = data || null;
+  }
+  if (!row) return { ok: false, code: "invalid_code" };
   return issueEmailCode({
     userId: row.user_id, email: row.email, purpose: row.purpose,
     name: "there", ip, userAgent,

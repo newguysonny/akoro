@@ -31,6 +31,12 @@ test("codes are hashed, single-use, rate-limited and emailed", () => {
   assert.match(routes, /router\.post\("\/verify-email"/);
   assert.match(routes, /router\.post\("\/verify-login"/);
   assert.match(routes, /router\.post\("\/resend-code"/);
+  // Resend must survive a challenge that is already consumed/expired (page
+  // restored from cache, refresh, back button): recover by email and re-issue.
+  assert.match(routes, /resend-code[\s\S]{0,220}body\("email"\)/, "resend accepts the email fallback");
+  assert.match(codes, /if \(!row && email\)/, "resend recovers the challenge by email");
+  assert.doesNotMatch(codes, /!row \|\| row\.consumed_at/, "a consumed challenge no longer dead-ends the user");
+  assert.match(codes, /stillUsable/, "cooldown only guards a still-usable code");
   assert.match(routes, /verificationRequired: true[\s\S]{0,200}challengeId/, "register asks for a code when enabled");
   assert.match(routes, /codeRequired: true[\s\S]{0,120}challengeId/, "login asks for a code when enabled");
   assert.match(routes, /purpose: "reset"/, "forgot-password sends a reset code");

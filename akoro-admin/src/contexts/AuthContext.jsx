@@ -116,8 +116,8 @@ export function AuthProvider({ children }) {
     finally { setLoading(false); }
   }, [saveUser]);
 
-  const resendCode = useCallback(async ({ challengeId }) => {
-    const { data } = await authFetch('/api/auth/resend-code', { challengeId });
+  const resendCode = useCallback(async ({ challengeId, email }) => {
+    const { data } = await authFetch('/api/auth/resend-code', { challengeId, email });
     return data;
   }, []);
 

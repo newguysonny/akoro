@@ -935,8 +935,9 @@ const authHandlers = {
 
   // POST /api/auth/resend-code — a fresh code for the same challenge.
   resendCode: asyncHandler(async (req, res) => {
-    const { challengeId } = req.body;
-    const issued = await resendEmailCode({ challengeId, ip: req.ip, userAgent: req.headers["user-agent"] });
+    const { challengeId, email } = req.body;
+    if (!challengeId && !email) return res400(res, "Request a new code by signing in again.");
+    const issued = await resendEmailCode({ challengeId, email, ip: req.ip, userAgent: req.headers["user-agent"] });
     if (!issued.ok && issued.code === "send_failed") {
       return res.status(503).json({ success: false, message: "Could not send the code. Try again." });
     }
@@ -1239,7 +1240,7 @@ router.post("/register", strictLimit,  rules.register, runValidation, authHandle
 router.post("/login",    strictLimit,  rules.login,    runValidation, authHandlers.login);
 router.post("/verify-email", strictLimit, body("challengeId").isUUID(), body("code").isLength({ min: 6, max: 6 }), runValidation, authHandlers.verifyEmail);
 router.post("/verify-login", strictLimit, body("challengeId").isUUID(), body("code").isLength({ min: 6, max: 6 }), runValidation, authHandlers.verifyLogin);
-router.post("/resend-code",  strictLimit, body("challengeId").isUUID(), runValidation, authHandlers.resendCode);
+router.post("/resend-code",  strictLimit, body("challengeId").optional().isUUID(), body("email").optional().isEmail(), runValidation, authHandlers.resendCode);
 router.post("/refresh",  refreshLimit, authHandlers.refresh);
 router.post("/logout",   authenticateToken, authHandlers.logout);
 router.get ("/me",       authenticateToken, authHandlers.me);
