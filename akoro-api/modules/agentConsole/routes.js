@@ -358,6 +358,17 @@ router.post("/ai-failover-test", guard, asyncHandler(async (req, res) => {
   }
 }));
 
+/* Read-only: what the shared parse cache holds for a content key. */
+router.get("/content-parses", guard, asyncHandler(async (req, res) => {
+  const key = String(req.query?.key || "");
+  if (!key) return bad(res, "A key is required.");
+  const { data, error } = await db.schema("edu").from("content_parses")
+    .select("page_number, model, length(markdown) as chars, updated_at")
+    .eq("content_key", key).order("page_number", { ascending: true });
+  if (error) return bad(res, error.message, 500);
+  res.json({ success: true, data: { key, count: (data || []).length, pages: data || [] } });
+}));
+
 router.get("/learner-tools", guard, asyncHandler(async (req, res) => {
   let learner;
   try { learner = await resolveLearner(req.query?.learner); } catch (e) { return fail(res, e); }
