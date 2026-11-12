@@ -152,3 +152,28 @@ not left to a later idle step that can be missed:
 A failed or interrupted upload parse keeps every saved model page; retrying
 parses only the rest (pdf-text pages count as unfinished). The PHARM.D reader
 has no upload hook, so its Extract card is the guarantee for every topic.
+
+## 11. Versioned PHARM.D content keys (2026-11-12)
+
+A catalogue PDF can be replaced at the same Storage path, so the shared key
+now carries the **bytes hash**:
+
+```
+pharmd:<stored path>#<sha256[0..32]>
+```
+
+- `pharmd_topics.file_hash` (migration `2026-pharmd-topic-hash.sql`) is written
+  by the uploader for every new upload.
+- `GET /api/pharmd/courses/:code` returns both `file_hash` and the versioned
+  `contentKey`; the reader derives the key from `file_hash` if a cached course
+  payload predates it.
+- `resolvePharmdContent` canonicalises legacy path-only keys to the versioned
+  key, so old clients keep working; a client that sends a **different** hash
+  gets `409 — reopen the topic`.
+- Backfill (`npm run pharmd:backfill-hash` or
+  `POST /api/agent-console/pharmd-hash-backfill { limit, course }`) hashes
+  existing rows and **moves** any cached pages/jobs from the legacy key to the
+  versioned one, so nothing is re-extracted. Completed for the pilot catalogue:
+  122 topics across 9 courses, BIO 111's 27 pages moved, 0 failed.
+- Library records are unaffected: each upload gets its own `file_key`, so a
+  replacement is already a new key.
