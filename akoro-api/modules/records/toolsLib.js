@@ -191,32 +191,38 @@ export function shapeToolResult(tool, json, passages, values = {}) {
   const src = (n) => byN.get(Number(n));
   if (tool === "summary") {
     const points = (json?.points || [])
-      .filter((p) => String(p?.text || "").trim() && src(p.source))
+      .filter((p) => String(p?.text || "").trim())
       .slice(0, max)
-      .map((p) => ({ text: clip(p.text, 600), cite: citeOf(src(p.source)) }));
+      .map((p) => ({ text: clip(p.text, 600), cite: src(p.source) ? citeOf(src(p.source)) : null }));
     return { summaryPoints: points };
   }
   if (tool === "quiz") {
     const questions = [];
     for (const q of json?.questions || []) {
-      const options = Array.isArray(q?.options) ? q.options.map((o) => clip(o, 240)).filter(Boolean) : [];
-      const correctIndex = Number(q?.correctIndex);
+      const rawOptions = Array.isArray(q?.options) ? q.options : [];
+      const options = rawOptions.map((o) => clip(typeof o === "string" ? o : (o?.text ?? o?.label ?? ""), 240)).filter(Boolean);
+      let correctIndex = q?.correctIndex ?? q?.correct ?? q?.answer;
+      if (typeof correctIndex === "string") {
+        const s = correctIndex.trim();
+        correctIndex = /^[A-D]$/i.test(s) ? s.toUpperCase().charCodeAt(0) - 65 : Number(s);
+      }
+      correctIndex = Number(correctIndex);
       if (!String(q?.prompt || "").trim() || options.length !== 4 || new Set(options.map((o) => o.toLowerCase())).size !== 4) continue;
-      if (!Number.isInteger(correctIndex) || correctIndex < 0 || correctIndex > 3 || !src(q.source)) continue;
+      if (!Number.isInteger(correctIndex) || correctIndex < 0 || correctIndex > 3) continue;
       questions.push({
         prompt: clip(q.prompt, 400),
         options: options.map((text, i) => ({ key: "ABCD"[i], text, correct: i === correctIndex })),
         explanation: clip(q.explanation || "", 400),
-        cite: citeOf(src(q.source)),
+        cite: src(q.source) ? citeOf(src(q.source)) : null,
       });
       if (questions.length >= max) break;
     }
     return { quizQuestions: questions };
   }
   const cards = (json?.cards || [])
-    .filter((c) => String(c?.front || "").trim() && String(c?.back || "").trim() && src(c.source))
+    .filter((c) => String(c?.front || "").trim() && String(c?.back || "").trim())
     .slice(0, max)
-    .map((c) => ({ front: clip(c.front, 160), back: clip(c.back, 500), cite: citeOf(src(c.source)) }));
+    .map((c) => ({ front: clip(c.front, 160), back: clip(c.back, 500), cite: src(c.source) ? citeOf(src(c.source)) : null }));
   return { cardSet: cards };
 }
 
@@ -258,14 +264,27 @@ export async function gatherToolPassages({ target, scope, pageNumber = null, pag
     }
     return pageText ? textPassages(pageNumber, pageText) : [];
   }
-  // Whole document, with a focus → search for it (the Ask selection).
+  // Whole document: the extracted PAGES are the grounding (RunPod markdown +
+  // blocks when it exists, the free pdf-text pages otherwise). A focus narrows
+  // to pages that contain its words; the prompt still carries the focus.
+  if (target.contentKey) {
+    const pages = await loadPages(target.contentKey);
+    if (pages.size) {
+      const words = contentWords(focus);
+      if (words.size) {
+        const hits = new Map([...pages].filter(([, p]) => {
+          const text = String(p?.markdown || "").toLowerCase();
+          return [...words].some((w) => text.includes(w));
+        }));
+        if (hits.size) return samplePassages(hits);
+      }
+      return samplePassages(pages);
+    }
+  }
+  // No extracted pages (a transcript/paste): search the indexed text.
   if (String(focus || "").trim() && contentWords(focus).size) {
     const { passages, indexed } = await gatherPassages({ target, question: String(focus).slice(0, 300), search });
     if (indexed && passages.length) return passages;
-  }
-  if (target.contentKey) {
-    const pages = await loadPages(target.contentKey);
-    if (pages.size) return samplePassages(pages);
   }
   // A paste: its pages as the reader cuts them, so every item cites a real page.
   const pasted = await pastedPagesFor(target);

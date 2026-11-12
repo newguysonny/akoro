@@ -48,18 +48,44 @@ export async function generateToolResult({ userId = null, target, tool, scope = 
       ? "This page has no readable text yet — extract the document's text first."
       : "This document isn't readable yet — extract its text (or transcribe the recording) first." };
   }
+  const stripFence = (t) => String(t || "").replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "").trim();
+  const parseJson = (t) => { try { return JSON.parse(stripFence(t) || "{}"); } catch { return null; } };
+  const itemsOf = (json) => (tool === "summary" ? json?.points : tool === "quiz" ? json?.questions : json?.cards) || [];
   try {
-    const completion = await openai.chat.completions.create({
+    const messages = buildToolMessages({ tool, docName: target.name, passages, values });
+    const base = {
       __role: "background", temperature: 0.3, max_tokens: tool === "quiz" ? 2400 : 1600,
-      messages: buildToolMessages({ tool, docName: target.name, passages, values }),
-      response_format: { type: "json_schema", json_schema: { name: `reader_${tool}`, strict: true, schema: toolSchema(tool) } },
       ...(userId ? { __userId: userId } : {}), ...(feature ? { __feature: feature } : {}),
-    });
-    let json = null;
-    try { json = JSON.parse(completion.choices?.[0]?.message?.content || "{}"); } catch { json = {}; }
+    };
+    // 1) strict schema where the provider honours it (OpenAI-family models).
+    let completion = null, json = null, firstError = null;
+    try {
+      completion = await openai.chat.completions.create({
+        ...base, messages,
+        response_format: { type: "json_schema", json_schema: { name: `reader_${tool}`, strict: true, schema: toolSchema(tool) } },
+      });
+      json = parseJson(completion.choices?.[0]?.message?.content);
+    } catch (e) { firstError = e; }
+    // 2) JSON mode + the schema in the prompt. DeepSeek/GLM via OpenCode often
+    // ignore json_schema and answer in prose; this keeps generation working.
+    if (!itemsOf(json || {}).length) {
+      try {
+        completion = await openai.chat.completions.create({
+          ...base,
+          messages: [...messages, { role: "system", content: `Return ONLY one JSON object matching this JSON Schema:\n${JSON.stringify(toolSchema(tool))}` }],
+          response_format: { type: "json_object" },
+        });
+        json = parseJson(completion.choices?.[0]?.message?.content);
+      } catch (e) { firstError = firstError || e; }
+    }
+    if (!json) throw firstError || new Error("the model returned no JSON");
     const result = shapeToolResult(tool, json, passages, values);
     const items = result.summaryPoints || result.quizQuestions || result.cardSet || [];
-    if (!items.length) return { status: 422, message: "Couldn't build that from this material — try a different page or focus." };
+    if (!items.length) {
+      // Bounded diagnostics: enough to see why a batch was dropped.
+      console.warn("[records-tools] empty result", tool, JSON.stringify(json).slice(0, 600));
+      return { status: 422, message: "Couldn't build that from this material — try a different page or focus." };
+    }
     return { result: { ...result, passages: passages.length } };
   } catch (err) {
     if (err?.name === "InsufficientCoins") return { status: 402, message: "You're out of AI credit — top up to keep generating." };

@@ -1026,8 +1026,8 @@ export const CHAT_TOOLS = [
     input_schema: {
       type: "object",
       properties: {
-        query: { type: "string", description: "The topic or document to look for (3 to 200 characters)." },
-        tool: { type: "string", enum: ["quiz", "flashcards", "summary", "notes", "podcast"], description: "The reader's study tool they asked for, if any — the link opens the document on it." },
+        query: { type: "string", description: "REQUIRED. The topic or document to look for (3-200 characters)." },
+        tool: { type: "string", enum: ["quiz", "flashcards", "summary", "notes", "podcast"], description: "OPTIONAL. The reader's study tool they asked for - the returned link opens the document on it. Omit when they just want the document." },
       },
       required: ["query"],
     },
@@ -1038,12 +1038,13 @@ export const CHAT_TOOLS = [
     input_schema: {
       type: "object",
       properties: {
-        tool: { type: "string", enum: ["quiz", "flashcards", "summary", "podcast"], description: "What to make." },
-        query: { type: "string", description: "The topic or document name to make it from (optional with a folder)." },
-        folder: { type: "string", description: "The Library folder they named, e.g. 'Basic Science' (optional)." },
-        focus: { type: "string", description: "A narrower focus inside the document, e.g. 'photosynthesis' (optional)." },
-        count: { type: "string", description: "How many questions or cards, if they said (e.g. '10')." },
-        difficulty: { type: "string", enum: ["easy", "medium", "hard"], description: "Quiz difficulty, if they said." },
+        tool: { type: "string", enum: ["quiz", "flashcards", "summary", "podcast"], description: "REQUIRED. What to make." },
+        query: { type: "string", description: "OPTIONAL, but required unless folder is given. The topic or document name to build it from (3-200 characters). Use the learner's words." },
+        folder: { type: "string", description: "OPTIONAL. The Library folder they named, e.g. 'Basic Science'. Use instead of query when they point at a folder; if it holds several documents the tool returns them so you can ask which." },
+        focus: { type: "string", description: "OPTIONAL. A narrower focus inside the document, e.g. 'photosynthesis' or 'chapter 2'. Applies to quiz/flashcards/summary/podcast." },
+        count: { type: "integer", minimum: 1, maximum: 20, description: "OPTIONAL. How many questions or cards they asked for; omit to let the tool choose. Not used by summary/podcast." },
+        difficulty: { type: "string", enum: ["easy", "medium", "hard"], description: "OPTIONAL. Quiz difficulty; omit for medium. Ignored by flashcards/summary/podcast." },
+        length: { type: "string", enum: ["short", "medium", "long"], description: "OPTIONAL. Podcast length; omit for the default. Ignored by the other tools." },
       },
       required: ["tool"],
     },
@@ -2773,7 +2774,7 @@ async function runChatTool(name, input, studentId, { conversationId = null, role
       // The learner's own records only; the result is a saved reader tab (edu.record_artifacts).
       const { makeStudyMaterial } = await import("../records/studyMaterial.js");
       return makeStudyMaterial({ userId: studentId, tool: input?.tool, query: input?.query, folder: input?.folder,
-        focus: input?.focus || "", count: input?.count || "", difficulty: input?.difficulty || "" });
+        focus: input?.focus || "", count: input?.count || "", difficulty: input?.difficulty || "", length: input?.length || "" });
     }
     case "analyse_past_papers": {
       // The learner's own parsed past papers only (D53).

@@ -20,7 +20,7 @@ test("form values → item counts", () => {
   assert.equal(toolCount("summary", { depth: "Brief" }), 4);
   assert.equal(toolCount("summary", { depth: "Detailed" }), 8);
   assert.equal(toolCount("quiz", { count: "10" }), 10);
-  assert.equal(toolCount("quiz", { count: "999" }), 5, "only the form's choices");
+  assert.equal(toolCount("quiz", { count: "999" }), 50, "the server caps a large count");
   assert.equal(toolCount("flashcards", { count: "3" }), 3);
   assert.deepEqual(TOOL_IDS, ["summary", "quiz", "flashcards"]);
 });
@@ -70,8 +70,9 @@ test("the prompt is grounded, focused, and the schema is strict", () => {
 
 test("results are shaped for the views, cite their passage, and bad items are dropped", () => {
   const ps = pagePassages(3, { blocks: [block(100, "A"), block(200, "B")] });
-  const summary = shapeToolResult("summary", { points: [{ text: "Point one", source: 1 }, { text: "Ghost", source: 9 }, { text: "  ", source: 2 }] }, ps, { depth: "Brief" });
-  assert.deepEqual(summary.summaryPoints.map((p) => [p.text, p.cite.pageNumber, p.cite.bbox[1]]), [["Point one", 3, 100]]);
+  const summary = shapeToolResult("summary", { points: [{ text: "Point one", source: 1 }, { text: "Ghost", source: 9 }, { text: "No cite" }, { text: "  ", source: 2 }] }, ps, { depth: "Brief" });
+  assert.deepEqual(summary.summaryPoints.map((p) => [p.text, p.cite?.pageNumber ?? null, p.cite?.bbox?.[1] ?? null]),
+    [["Point one", 3, 100], ["Ghost", null, null], ["No cite", null, null]], "uncited points are kept without a citation");
 
   const quiz = shapeToolResult("quiz", { questions: [
     { prompt: "Q1?", options: ["a", "b", "c", "d"], correctIndex: 2, explanation: "because", source: 2 },
@@ -106,5 +107,20 @@ test("the route: auth, the Ask access rule, strict JSON, honest empty states", (
   assert.match(shared, /response_format: \{ type: "json_schema", json_schema: \{ name: `reader_\$\{tool\}`, strict: true, schema: toolSchema\(tool\) \} \}/);
   assert.match(shared, /has no readable text yet/);
   assert.match(shared, /out of AI credit/);
+  assert.match(shared, /response_format: { type: "json_object" }/, "a JSON-mode retry covers providers that ignore json_schema");
+  assert.match(shared, /empty result", tool/, "an empty batch is diagnosable without dumping content");
   assert.match(route, /pageText\.slice\(0, TOOL_LIMITS\.MAX_PAGE_TEXT_CHARS\)|req\.body\.pageText\.slice\(0, TOOL_LIMITS\.MAX_PAGE_TEXT_CHARS\)/, "client text is capped");
+});
+
+
+test("near-schema model JSON is salvaged: letter answers, object options, missing sources", () => {
+  const ps = [{ n: 1, pageNumber: 2, bbox: [0, 0, 10, 10], text: "A passage persons." }];
+  const q = shapeToolResult("quiz", { questions: [{
+    prompt: "Which?",
+    options: [{ text: "one" }, { text: "two" }, { text: "three" }, { text: "four" }],
+    answer: "C",
+  }] }, ps, { count: "5" });
+  assert.equal(q.quizQuestions.length, 1);
+  assert.equal(q.quizQuestions[0].options[2].correct, true);
+  assert.equal(q.quizQuestions[0].cite, null, "no fabricated citation");
 });
