@@ -21,12 +21,14 @@ function GoogleIcon() {
 export default function SigninPage() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
-  const { login, verifyEmail, verifyLogin, resendCode, verifyTwoFactor, loginWithGoogle, logoutSilent, loading, clearError } = useAuth();
+  const { login, verifyEmail, verifyLogin, resendCode, verifyTwoFactor, setupTwoFactor, enableTwoFactor, loginWithGoogle, logoutSilent, loading, clearError } = useAuth();
   const [email,    setEmail]    = useState('');
   const [password, setPassword] = useState('');
   const [formErr,  setFormErr]  = useState('');
   const [challenge, setChallenge] = useState(null);   // 2FA challenge token
   const [emailStep, setEmailStep] = useState(null);   // { challengeId, email, retryAfter }
+  const [setup, setSetup] = useState(null);           // { setupToken, secret, otpauthUrl } */
+  const [setupCode, setSetupCode] = useState('');
   const [code,      setCode]      = useState('');
   const urlError = params.get('error');
 
@@ -49,6 +51,7 @@ export default function SigninPage() {
     if (!email || !password) { setFormErr('Please fill in all fields'); return; }
     try {
       const data = await login({ email, password });
+      if (data?.twoFactorSetupRequired) { await startSetup(data.setupToken); return; }
       if (data?.twoFactorRequired) { setChallenge(data.challengeToken); return; }
       if (data?.codeRequired || data?.verificationRequired) {
         if (data.challengeId) setEmailStep({ challengeId: data.challengeId, email: data.email || email, retryAfter: data.retryAfter || 0 });
@@ -73,11 +76,32 @@ export default function SigninPage() {
     }
   };
 
+  const startSetup = async (setupToken) => {
+    setFormErr('');
+    try {
+      const d = await setupTwoFactor({ setupToken });
+      setEmailStep(null);
+      setChallenge(null);
+      setSetup({ setupToken, secret: d?.secret || '', otpauthUrl: d?.otpauthUrl || '' });
+      setCode('');
+    } catch (e) { setFormErr(e.message); }
+  };
+  const handleEnable = async (e) => {
+    e.preventDefault(); setFormErr('');
+    if (!/^\d{6}$/.test(setupCode)) { setFormErr('Enter the 6-digit code from your authenticator app'); return; }
+    try {
+      const data = await enableTwoFactor({ setupToken: setup.setupToken, code: setupCode });
+      if (data?.user) finishLogin(data);
+      else setFormErr('2FA was enabled, but the session could not be created. Sign in again.');
+    } catch (e) { setFormErr(e.message); }
+  };
+
   const handleEmailCode = async (e) => {
     e.preventDefault(); setFormErr('');
     if (!/^\d{6}$/.test(code)) { setFormErr('Enter the 6-digit code'); return; }
     try {
       const data = await verifyLogin({ challengeId: emailStep.challengeId, code });
+      if (data?.twoFactorSetupRequired) { await startSetup(data.setupToken); return; }
       if (data?.twoFactorRequired) { setEmailStep(null); setChallenge(data.challengeToken); setCode(''); return; }
       finishLogin(data);
     } catch (err) { setFormErr(err.message); }
@@ -99,6 +123,47 @@ export default function SigninPage() {
   };
 
 
+  if (setup) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: '#FAF8F5', padding: 24, fontFamily: "'DM Sans', sans-serif" }}>
+        <div style={{ width: '100%', maxWidth: 440, background: '#fff', borderRadius: 24,
+          padding: '32px 28px', boxShadow: '0 4px 32px rgba(0,0,0,.08)', border: '1px solid #EDE8E1' }}>
+          <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1A1A2E', margin: '0 0 6px' }}>Set up two-factor authentication</h1>
+          <p style={{ fontSize: 14, color: '#6B6B80', margin: '0 0 16px', lineHeight: 1.6 }}>
+            Admin accounts require 2FA on every sign-in. Add this secret to your authenticator app (Google Authenticator, Authy, 1Password), then enter the 6-digit code it shows.
+          </p>
+          <div style={{ background: '#F7F5FF', border: '1px solid #E7E1FB', borderRadius: 12, padding: '12px 14px', marginBottom: 10 }}>
+            <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', color: '#9490A0', marginBottom: 4 }}>Secret</div>
+            <div style={{ fontFamily: 'ui-monospace, Menlo, Consolas, monospace', fontSize: 16, fontWeight: 800,
+              color: '#1A1A2E', letterSpacing: 2, wordBreak: 'break-all' }}>{setup.secret}</div>
+          </div>
+          {setup.otpauthUrl && (
+            <a href={setup.otpauthUrl} style={{ display: 'inline-block', fontSize: 12, fontWeight: 700, color: '#6C3BFF', marginBottom: 16 }}>
+              Open in your authenticator app
+            </a>
+          )}
+          {formErr && (
+            <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 10,
+              padding: '10px 14px', margin: '10px 0 16px', fontSize: 13, fontWeight: 600, color: '#EF4444' }}>{formErr}</div>
+          )}
+          <form onSubmit={handleEnable}>
+            <input type="text" inputMode="numeric" autoFocus maxLength={6} value={setupCode}
+              onChange={e => setSetupCode(e.target.value.replace(/\D/g, ''))} placeholder="000000"
+              style={{ ...inp, textAlign: 'center', letterSpacing: 8, fontSize: 22, fontWeight: 800, marginBottom: 18 }}/>
+            <button type="submit" disabled={loading} style={{ width: '100%', padding: '13px', borderRadius: 14,
+              border: 'none', background: loading ? '#EDE8E1' : '#6C3BFF', color: loading ? '#9490A0' : '#fff',
+              fontSize: 14, fontWeight: 800, cursor: loading ? 'not-allowed' : 'pointer', fontFamily: "'DM Sans', sans-serif" }}>
+              {loading ? 'Enabling…' : 'Enable 2FA & continue'}
+            </button>
+          </form>
+          <button onClick={() => { setSetup(null); setSetupCode(''); setFormErr(''); }} style={{ width: '100%', marginTop: 10,
+            background: 'none', border: 'none', color: '#9490A0', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
+        </div>
+      </div>
+    );
+  }
+
   if (emailStep) {
     return (
       <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -107,7 +172,7 @@ export default function SigninPage() {
           padding: '32px 28px', boxShadow: '0 4px 32px rgba(0,0,0,.08)', border: '1px solid #EDE8E1' }}>
           <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1A1A2E', margin: '0 0 6px' }}>Check your email</h1>
           <p style={{ fontSize: 14, color: '#6B6B80', margin: '0 0 20px' }}>
-            Enter the 6-digit code we sent to <strong>emailStep.email</strong>.
+            Enter the 6-digit code we sent to <strong>{emailStep.email}</strong>.
           </p>
           {formErr && (
             <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 10,
@@ -223,7 +288,9 @@ export default function SigninPage() {
             {formErr
               || (urlError === 'session_expired' ? 'Your session timed out for security. Please sign in again.'
               : urlError === 'google_failed' ? 'Google sign-in failed. Try again.'
-              : urlError === 'not_admin' ? 'This portal is for admins only.' : urlError === 'not_instructor' ? 'Access denied.'
+              : urlError === 'not_admin' ? 'This portal is for admins only.'
+              : urlError === 'admin_2fa_required' ? 'Admins must sign in with their password and complete 2FA.'
+              : urlError === 'not_instructor' ? 'Access denied.'
               : urlError)}
           </div>
         )}

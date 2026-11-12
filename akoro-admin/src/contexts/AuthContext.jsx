@@ -121,6 +121,17 @@ export function AuthProvider({ children }) {
     return data;
   }, []);
 
+  const setupTwoFactor = useCallback(async ({ setupToken }) => {
+    const { data } = await authFetch('/api/auth/2fa/setup', { setupToken });
+    return data;
+  }, []);
+
+  const enableTwoFactor = useCallback(async ({ setupToken, code }) => {
+    const { data } = await authFetch('/api/auth/2fa/enable', { setupToken, code });
+    if (data?.user) saveUser(data.user);
+    return data;
+  }, [saveUser]);
+
   const verifyTwoFactor = useCallback(async ({ challengeToken, code }) => {
     setLoading(true); setError(null);
     try {

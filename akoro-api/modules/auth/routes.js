@@ -43,6 +43,7 @@ import {
   sendPasswordChangedEmail,
 } from "./emails.js";
 import { urlFor } from "../../lib/urls.js";
+import { userFacingMessage } from "../../lib/userFacingError.js";
 import {
   issueEmailCode, verifyEmailCode, resendEmailCode, consumeEmailCode,
   emailCodesEnabled, emailCodeBypassed, normaliseEmail, CODE_TTL_MINUTES,
@@ -106,10 +107,11 @@ const asyncHandler = (fn) => (req, res, next) =>
 
 const res200 = (res, data, meta = {}) => res.status(200).json({ success: true,  data, ...meta });
 const res201 = (res, data)            => res.status(201).json({ success: true,  data });
-const res400 = (res, message)         => res.status(400).json({ success: false, message });
-const res401 = (res, message, code)   => res.status(401).json({ success: false, message, ...(code ? { code } : {}) });
-const res403 = (res, message)         => res.status(403).json({ success: false, message });
-const res404 = (res, message)         => res.status(404).json({ success: false, message });
+const safe = (message) => userFacingMessage(message);
+const res400 = (res, message)         => res.status(400).json({ success: false, message: safe(message) });
+const res401 = (res, message, code)   => res.status(401).json({ success: false, message: safe(message), ...(code ? { code } : {}) });
+const res403 = (res, message)         => res.status(403).json({ success: false, message: safe(message) });
+const res404 = (res, message)         => res.status(404).json({ success: false, message: safe(message) });
 
 const now = () => new Date().toISOString();
 
@@ -662,11 +664,38 @@ const safeUser = (u) => ({
 });
 
 // Short-lived (5 min) token proving password step passed, pending TOTP code.
-const signChallenge = (userId) => {
-  const payload = { sub: userId, type: "2fa_challenge", iss: JWT_ISSUER, aud: JWT_AUDIENCE };
+const signChallenge = (userId, type = "2fa_challenge") => {
+  const payload = { sub: userId, type, iss: JWT_ISSUER, aud: JWT_AUDIENCE };
   return USE_RSA
     ? jwt.sign(payload, PRIVATE_KEY, { algorithm: "RS256", expiresIn: 300 })
     : jwt.sign(payload, HS_SECRET,  { algorithm: "HS256", expiresIn: 300 });
+};
+const signSetupChallenge = (userId) => signChallenge(userId, "2fa_setup");
+
+/** Admins must have 2FA. Learners keep it optional. */
+const twoFactorGate = (user) => {
+  if (user.two_factor_enabled && user.two_factor_secret) {
+    return { twoFactorRequired: true, challengeToken: signChallenge(user.id) };
+  }
+  if (user.role === "admin") {
+    return { twoFactorSetupRequired: true, setupToken: signSetupChallenge(user.id) };
+  }
+  return null;
+};
+
+/** 2FA setup/enable may be called with a setup challenge instead of a session. */
+const authenticateSetup = (req, res, next) => {
+  const token = req.body?.setupToken;
+  if (!token) return authenticateToken(req, res, next);
+  try {
+    const decoded = verifyToken(token);
+    if (decoded.type !== "2fa_setup") return res401(res, "Invalid or expired setup challenge");
+    req.user = { id: decoded.sub };
+    req.setupFlow = true;
+    return next();
+  } catch {
+    return res401(res, "Invalid or expired setup challenge");
+  }
 };
 
 const issueTokenPair = async (res, user, portal = "student") => {
@@ -825,10 +854,11 @@ const authHandlers = {
       });
     }
 
-    // Two-factor gate — issue a short-lived challenge token instead of a session.
-    if (user.two_factor_enabled && user.two_factor_secret) {
-      const challengeToken = signChallenge(user.id);
-      return res200(res, { twoFactorRequired: true, challengeToken });
+    // Two-factor gate — admins without 2FA are sent to setup, everyone with
+    // 2FA gets the TOTP challenge, learners without it sign in normally.
+    {
+      const gate = twoFactorGate(user);
+      if (gate) return res200(res, gate);
     }
 
     const payload = await issueTokenPair(res, user, portalOf(req));
@@ -868,8 +898,9 @@ const authHandlers = {
     if (verified.row.purpose === "signup" && !user.email_verified) {
       await db.from("users").update({ email_verified: true, updated_at: new Date().toISOString() }).eq("id", user.id);
     }
-    if (user.two_factor_enabled && user.two_factor_secret) {
-      return res200(res, { twoFactorRequired: true, challengeToken: signChallenge(user.id) });
+    {
+      const gate = twoFactorGate(user);
+      if (gate) return res200(res, gate);
     }
     const payload = await issueTokenPair(res, user, portalOf(req));
     const signinUrl = user.role === "instructor" ? `${INSTRUCTOR_FRONTEND_URL}/signin` : `${FRONTEND_URL}/signin`;
@@ -946,6 +977,11 @@ const authHandlers = {
     if (!verifyTOTP(user.two_factor_secret, code)) return res.status(400).json({ success: false, message: "Invalid authentication code" });
 
     await db.from("users").update({ two_factor_enabled: true }).eq("id", user.id);
+    if (req.setupFlow) {
+      const { data: full } = await db.from("users").select("*").eq("id", user.id).maybeSingle();
+      const payload = await issueTokenPair(res, full, portalOf(req));
+      return res200(res, { ...payload, twoFactorEnabled: true });
+    }
     res200(res, { twoFactorEnabled: true });
   }),
 
@@ -1186,8 +1222,8 @@ router.get ("/me",       authenticateToken, authHandlers.me);
 
 // Two-factor authentication
 router.post("/2fa/login",   strictLimit, authHandlers.twoFactorLogin);
-router.post("/2fa/setup",   authenticateToken, authHandlers.twoFactorSetup);
-router.post("/2fa/enable",  strictLimit, authenticateToken, authHandlers.twoFactorEnable);
+router.post("/2fa/setup",   authenticateSetup, authHandlers.twoFactorSetup);
+router.post("/2fa/enable",  strictLimit, authenticateSetup, authHandlers.twoFactorEnable);
 router.post("/2fa/disable", strictLimit, authenticateToken, authHandlers.twoFactorDisable);
 
 router.post("/change-password", authenticateToken, authHandlers.changePassword);
@@ -1235,6 +1271,11 @@ router.get("/google/callback",
     }
     if (portal === "admin" && user.role !== "admin") {
       return res.redirect(`${ADMIN_FRONTEND_URL}/signin?error=not_admin`);
+    }
+    if (portal === "admin") {
+      // Admin sessions require password + email code + TOTP. A Google redirect
+      // cannot show the TOTP step, so never mint an admin session here.
+      return res.redirect(`${ADMIN_FRONTEND_URL}/signin?error=admin_2fa_required`);
     }
     if (portal === "school" && !["school", "school_admin", "admin"].includes(user.role)) {
       return res.redirect(`${SCHOOL_FRONTEND_URL}/signin?error=not_instructor`);
