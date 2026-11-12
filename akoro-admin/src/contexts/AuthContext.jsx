@@ -212,7 +212,7 @@ export function AuthProvider({ children }) {
   return (
     <AuthContext.Provider value={{
       user, loading, initializing, error, isAuthenticated,
-      login, verifyEmail, verifyLogin, resendCode, verifyTwoFactor, register, loginWithGoogle, logout, logoutSilent, refresh, restoreFromCallback,
+      login, verifyEmail, verifyLogin, resendCode, verifyTwoFactor, setupTwoFactor, enableTwoFactor, register, loginWithGoogle, logout, logoutSilent, refresh, restoreFromCallback,
       markOnboarded,
       clearError: () => setError(null),
     }}>
