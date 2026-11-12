@@ -33,7 +33,7 @@ adds the OpenCode transport, the runtime switch, provider-cost billing and the c
 | 3 | Switching | **Runtime admin override** (no restart), persisted, plus env. |
 | 4 | Fallback | **DeepSeek V4.1 Flash** — per-entry fallback first, then global fallback (its own route falls back to the direct DeepSeek API if Go is unavailable). |
 | 5 | Scope | **Both** the server default and the learner model picker. |
-| 6 | Granularity | **One global default** (no per-role model envs for now). |
+| 6 | Granularity | **One global default: DeepSeek V4.1 Flash** (`deepseek`), locked. No per-role model envs for now. |
 | 7 | Privacy | Learner documents/prompts **may** transit OpenCode's routing. |
 | 8 | Visibility | **OpenCode is internal only.** Existing model names/labels stay as they are; the new open models get neutral public identity (model family only). No provider/gateway name is ever shown. |
 
@@ -75,7 +75,7 @@ From `https://opencode.ai/docs/console/api/inference`:
 
 ```bash
 AI_PROVIDER=opencode_go              # Go subscription lane (docs: coding-agent traffic)
-AI_MODEL_DEFAULT=deepseek             # proposed: DeepSeek V4.1 Flash (see open items)
+AI_MODEL_DEFAULT=deepseek             # locked: DeepSeek V4.1 Flash (the default)
 AI_MODEL_FALLBACK=deepseek            # its route falls back to the direct DeepSeek API
 OPENCODE_API_KEY=…                   # Go key; only here, never logged
 OPENCODE_BASE_URL=https://opencode.ai/inference/go
@@ -106,7 +106,7 @@ changes a learner's saved choice or telemetry. The public identity never names t
 
 | public id | public label | Go apiModel | Go endpoint family | Go price in/out (per 1M) | Go monthly allowance |
 |---|---|---|---|---|---|
-| `deepseek` | DeepSeek | deepseek-v4.1-flash | chat completions | $0.15/$0.60 off-peak · $0.30/$1.20 peak* | $100 |
+| `deepseek` **← default** | DeepSeek | deepseek-v4.1-flash | chat completions | $0.15/$0.60 off-peak · $0.30/$1.20 peak* | $100 |
 | `glm-5-3-flash` | GLM 5.3 Flash | glm-5.3-flash | chat completions | $0.15/$0.50 (cached $0.03) | $60 |
 | `qwen3-8-flash` | Qwen3.8 Flash | qwen3.8-flash | anthropic messages | $0.15/$0.47 | $30 |
 | `claude-haiku` | Claude Haiku | claude-haiku-5-5 | anthropic messages | $0.10/$0.50 ≤100K · $0.50/$2.50 >100K | $15 |
@@ -304,8 +304,8 @@ public catalogue — only the route list.
 
 - Exact first model per family (from the live model list) and its `price` values for the
   fallback biller.
-- **Which model is the single global default** — proposed **DeepSeek V4.1 Flash** (cheapest
-  stable, already the fallback) vs **GLM 5.3 Flash** (cheaper output, $60 allowance). Pick one.
+- ~~Which model is the single global default~~ — **locked: DeepSeek V4.1 Flash**. Runtime
+  override may change it temporarily; the env default stays DeepSeek.
 - Public labels/tiers for the two Luna models (both are listed; decide whether both are visible
   or GPT 6 Luna is pickable and 5.6 is internal).
 - When to activate Sonnet/Opus/Kimi/MiniMax: flipping `enabled/selectable` plus a route, no
