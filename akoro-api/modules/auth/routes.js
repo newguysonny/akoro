@@ -115,11 +115,28 @@ const res404 = (res, message)         => res.status(404).json({ success: false, 
 
 const now = () => new Date().toISOString();
 
+const FIELD_MESSAGE = {
+  email: "Enter a valid email address.",
+  password: "Password must be at least 8 characters.",
+  username: "Username must be 3-40 characters: letters, numbers or underscore.",
+  fullName: "That name is too long.",
+  role: "That account type isn't available.",
+};
 const runValidation = (req, res, next) => {
   const errors = validationResult(req);
-  if (!errors.isEmpty())
-    return res.status(422).json({ success: false, message: "Validation failed", errors: errors.array({ onlyFirstError: true }) });
-  next();
+  if (errors.isEmpty()) return next();
+  // Structured and user-readable: {field, message}; never echo the raw value.
+  const fields = errors.array({ onlyFirstError: true }).map((e) => {
+    const field = e.path || e.param || "request";
+    const msg = e.msg && e.msg !== "Invalid value" ? e.msg : (FIELD_MESSAGE[field] || "This value isn't valid.");
+    return { field, message: msg };
+  });
+  return res.status(422).json({
+    success: false,
+    code: "validation_failed",
+    message: fields.length === 1 ? fields[0].message : "Please check the highlighted fields and try again.",
+    errors: fields,
+  });
 };
 
 // ─── § TOKEN FACTORY ──────────────────────────────────────────────────────────
@@ -628,16 +645,18 @@ export const requireRole = (roles) => (req, res, next) => {
 
 const rules = {
   register: [
-    body("email").trim().isEmail().normalizeEmail(),
+    body("email").trim().isEmail().withMessage("Enter a valid email address.").normalizeEmail(),
     // Username is optional — schools sign up without one (auto-generated below).
-    body("username").optional({ checkFalsy: true }).trim().isLength({ min: 3, max: 40 }).matches(/^[a-zA-Z0-9_]+$/),
-    body("password").isLength({ min: 8 }),
-    body("fullName").optional().trim().isLength({ max: 120 }),
-    body("role").optional().isIn(["student", "instructor", "school_admin"]),
+    body("username").optional({ checkFalsy: true }).trim().isLength({ min: 3, max: 40 })
+      .withMessage("Username must be 3-40 characters.").matches(/^[a-zA-Z0-9_]+$/)
+      .withMessage("Username can only use letters, numbers and underscore."),
+    body("password").isLength({ min: 8 }).withMessage("Password must be at least 8 characters."),
+    body("fullName").optional().trim().isLength({ max: 120 }).withMessage("That name is too long."),
+    body("role").optional().isIn(["student", "instructor", "school_admin"]).withMessage("That account type isn't available."),
   ],
   login: [
-    body("email").trim().isEmail().normalizeEmail(),
-    body("password").notEmpty(),
+    body("email").trim().isEmail().withMessage("Enter a valid email address.").normalizeEmail(),
+    body("password").notEmpty().withMessage("Enter your password."),
   ],
   review: [
     body("rating").isInt({ min: 1, max: 5 }),
