@@ -221,28 +221,7 @@ export function LoginTrendsChart({ data, loading }) {
   );
 }
 
-/* ---------- Balance + payment breakdown ---------- */
-export function BalanceCard() {
-  return (
-    <div style={{ ...CARD, marginBottom: 0 }}>
-      <div style={{ fontSize: 12, color: BX.muted, fontWeight: 500 }}>Akoro Balance</div>
-      <div style={{ fontSize: 26, fontWeight: 600, letterSpacing: '-0.02em', margin: '2px 0', color: BX.ink }}>N/A</div>
-      <div style={{ height: 6, borderRadius: 3, background: '#F1F1F5', margin: '14px 0 10px', overflow: 'hidden' }}>
-        <div style={{ height: '100%', width: '0%', background: BX.primary, borderRadius: 3 }} />
-      </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 14, fontSize: 11.5, color: BX.muted }}>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-          <i style={{ width: 7, height: 7, borderRadius: '50%', background: BX.primary }} />Available
-        </span>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-          <i style={{ width: 7, height: 7, borderRadius: '50%', background: '#D8D8E0' }} />Pending
-        </span>
-        <span style={{ marginLeft: 'auto', fontWeight: 600, color: BX.ink }}>N/A available</span>
-      </div>
-    </div>
-  );
-}
-
+/* ---------- Payment breakdown ---------- */
 const BREAKDOWN = [
   { key: 'success',  label: 'Succeeded', color: '#0E9F6E' },
   { key: 'pending',  label: 'Pending',   color: '#D97706' },
@@ -275,6 +254,48 @@ export function PaymentBreakdown({ data, loading }) {
             {b.label}
             <span style={{ fontSize: 11, color: BX.muted }}>{n != null ? `${pct}%` : ''}</span>
             <b style={{ marginLeft: 'auto', fontWeight: 600, color: BX.muted }}>{n != null ? n.toLocaleString() : 'N/A'}</b>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ---------- Popular features ---------- */
+const FEATURE_COLORS = ['#4A5CD5', '#0E9F6E', '#D97706', '#7C3AED', '#DC2626'];
+
+function prettyFeature(key) {
+  const s = String(key || 'unattributed').replace(/[._-]+/g, ' ').trim();
+  return s ? s.charAt(0).toUpperCase() + s.slice(1) : 'Unattributed';
+}
+
+export function PopularFeatures({ data, loading }) {
+  if (loading) return (
+    <div style={{ ...CARD, marginBottom: 0 }}>
+      <Skeleton height={12} width={130} style={{ marginBottom: 10 }} />
+      {[1, 2, 3, 4, 5].map(i => <Skeleton key={i} height={30} style={{ marginBottom: 8 }} />)}
+    </div>
+  );
+  const rows = Array.isArray(data) ? data : [];
+  const total = rows.reduce((s, r) => s + (Number(r.count) || 0), 0);
+  return (
+    <div style={{ ...CARD, marginBottom: 0 }}>
+      <h2 style={{ ...H2, marginBottom: 8 }}>Popular features</h2>
+      {rows.length === 0 ? (
+        <div style={{ padding: 20, textAlign: 'center', color: BX.muted, fontSize: 13, fontFamily: BX.font }}>No usage yet</div>
+      ) : rows.map((r, i) => {
+        const n = Number(r.count) || 0;
+        const pct = total > 0 ? Math.round((n / total) * 100) : 0;
+        return (
+          <div key={r.feature || i} style={{
+            display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0',
+            borderBottom: i < rows.length - 1 ? '1px solid #F5F5F8' : 'none',
+            fontSize: 12.5, color: BX.ink,
+          }}>
+            <i style={{ width: 8, height: 8, borderRadius: '50%', background: FEATURE_COLORS[i % FEATURE_COLORS.length], flexShrink: 0 }} />
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{prettyFeature(r.feature)}</span>
+            <span style={{ fontSize: 11, color: BX.muted }}>{pct}%</span>
+            <b style={{ marginLeft: 'auto', fontWeight: 600, color: BX.muted }}>{n.toLocaleString()}</b>
           </div>
         );
       })}

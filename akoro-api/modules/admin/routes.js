@@ -78,6 +78,7 @@ router.get("/stats", adminOnly, asyncHandler(async (req, res) => {
     revenueRows, prevRevenueRows, aiRows, aiYesterdayRows,
     onlineRows, visitRows, totalVisits, approvals,
     paid, pending, refunded, failed,
+    featureRows,
   ] = await Promise.all([
     countSafe(db.from("users").select("*", { count: "exact", head: true })),
     countSafe(db.from("users").select("*", { count: "exact", head: true }).eq("role", "instructor")),
@@ -96,6 +97,7 @@ router.get("/stats", adminOnly, asyncHandler(async (req, res) => {
     countSafe(db.from("payments").select("*", { count: "exact", head: true }).eq("status", "pending")),
     countSafe(db.from("payments").select("*", { count: "exact", head: true }).eq("status", "refunded")),
     countSafe(db.from("payments").select("*", { count: "exact", head: true }).eq("status", "failed")),
+    safe(db.schema("edu").rpc("ai_spend_by_feature", { p_hours: 24 * 30 }), []),
   ]);
 
   const revenueMtd = sum(revenueRows) / 100;               // kobo → naira
@@ -105,6 +107,14 @@ router.get("/stats", adminOnly, asyncHandler(async (req, res) => {
   const online = new Set((onlineRows || []).map((r) => r.user_id)).size;
   const visitsToday = new Set((visitRows || []).map((r) => r.user_id)).size;
   const pct = (a, b) => (b > 0 ? Math.round(((a - b) / b) * 1000) / 10 : null);
+
+  // Most-used features over the last 30 days (by AI call volume — the platform's
+  // per-feature telemetry). Bounded: the RPC caps at 50 rows, we keep the top 5.
+  const topFeatures = (featureRows || [])
+    .map((r) => ({ feature: r.feature || "unattributed", count: Number(r.calls) || 0 }))
+    .filter((r) => r.count > 0)
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 5);
 
   ok(res, {
     totalUsers, totalInstructors, totalCourses, totalStudents, newUsers,
@@ -121,6 +131,7 @@ router.get("/stats", adminOnly, asyncHandler(async (req, res) => {
     visits_today: visitsToday,
     total_visits: totalVisits,
     payments_by_status: { success: paid, pending, refunded, failed },
+    top_features: topFeatures,
   });
 }));
 

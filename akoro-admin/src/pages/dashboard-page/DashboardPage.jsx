@@ -11,7 +11,7 @@ import { apiGet } from '../../services/api.js';
 import { useAuth } from '../../contexts/AuthContext.jsx';
 import {
   MetricCard, ReviewBanner, RangePills, LoginsCard,
-  BalanceCard, PaymentBreakdown, NewestUsers, BlogPosts,
+  PopularFeatures, PaymentBreakdown, NewestUsers, BlogPosts,
 } from './parts.jsx';
 
 const fmtCount = (n) => (n == null ? 'N/A' : Number(n).toLocaleString());
@@ -125,9 +125,9 @@ export default function DashboardPage() {
       {/* Logins */}
       <LoginsCard data={loginTrends} loading={loading} range={range} />
 
-      {/* Balance + breakdown */}
+      {/* Popular features + breakdown */}
       <div style={grid2} className="bx-duo">
-        <BalanceCard />
+        <PopularFeatures data={stats?.top_features} loading={loading} />
         <PaymentBreakdown data={payments} loading={loading} />
       </div>
 
