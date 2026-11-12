@@ -210,9 +210,15 @@ async function sendEmail({ to, subject, text, html, from }) {
     });
     if (!res.ok) {
       const body = await res.text().catch(() => "");
-      throw new Error(`SendGrid send failed (${res.status}): ${body.slice(0, 300)}`);
+      // Don't let a SendGrid sender/permission problem silently kill password
+      // reset and welcome emails: fall back to Resend when it is configured.
+      if (!process.env.RESEND_API_KEY) {
+        throw new Error(`SendGrid send failed (${res.status}): ${body.slice(0, 300)}`);
+      }
+      console.warn(`[auth:email] SendGrid failed (${res.status}); falling back to Resend`);
+    } else {
+      return;
     }
-    return;
   }
   const { Resend } = await import("resend");
   const resend = new Resend(process.env.RESEND_API_KEY);
