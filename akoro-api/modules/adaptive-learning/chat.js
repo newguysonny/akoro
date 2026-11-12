@@ -4078,6 +4078,39 @@ function safeMemoryUpdates(message) {
   return [];
 }
 
+/**
+ * Write the user + reply rows immediately, before the slow durable context
+ * work. Rows carry agent_session_id/agent_turn_id, so persistLearnerAgent…
+ * finds them by (session, turn, role) and enriches instead of duplicating.
+ * Returns the assistant message id, or null when the write failed.
+ */
+async function appendFastChatTurn({ conversationId, userId, sessionId, turnId, userMessage, assistantMessage }) {
+  const { data: session, error: sessionError } = await db.from("chat_sessions")
+    .select("id, title").eq("id", conversationId).eq("user_id", userId).maybeSingle();
+  if (sessionError || !session) return null;
+  const ensure = async (role, text, createdAt) => {
+    const find = () => db.from("chat_messages").select("id, text")
+      .eq("session_id", conversationId).eq("user_id", userId)
+      .eq("agent_session_id", sessionId).eq("agent_turn_id", turnId).eq("role", role).maybeSingle();
+    const existing = await find();
+    if (existing.data) return existing.data.id;
+    const inserted = await db.from("chat_messages").insert({
+      session_id: conversationId, user_id: userId, role, text,
+      agent_session_id: sessionId, agent_turn_id: turnId, created_at: createdAt,
+    }).select("id").single();
+    if (!inserted.error) return inserted.data?.id || null;
+    if (inserted.error.code === "23505") { const again = await find(); return again.data?.id || null; }
+    return null;
+  };
+  const now = Date.now();
+  const userIdRow = await ensure("user", userMessage, new Date(now).toISOString());
+  const assistantId = await ensure("agent", assistantMessage, new Date(now + 1).toISOString());
+  const patch = { last_message_at: new Date().toISOString(), updated_at: new Date().toISOString() };
+  if (!session.title || session.title === "New chat") patch.title = sessionTitleFrom(userMessage);
+  try { await db.from("chat_sessions").update(patch).eq("id", conversationId).eq("user_id", userId); } catch { /* best effort */ }
+  return userIdRow && assistantId ? assistantId : null;
+}
+
 async function appendBasicChatTurn({ conversationId, userId, userMessage, assistantMessage }) {
   const { data: session, error: sessionError } = await db.from("chat_sessions")
     .select("id, title").eq("id", conversationId).eq("user_id", userId).maybeSingle();
@@ -5303,10 +5336,23 @@ router.post("/agent", async (req, res) => {
     // The reply is final: the learner gets "done" now (cards, chips, approvals settle) and
     // saving follows; the saved message's id comes after as "saved" (realtime, 2026-11-07:
     // the save took 3–35 s on the sandbox and held everything back).
+    // The visible reply is persisted BEFORE the client is told it is done: a
+    // refresh in the next seconds (or an instance crash) can no longer lose
+    // what the learner just saw. The slow durable context work still follows.
+    let fastSavedId = null;
+    if (conversationId && turnId) {
+      try {
+        fastSavedId = await timed("fastSave", appendFastChatTurn({
+          conversationId, userId: req.user.id, sessionId: agentSessionId(conversationId), turnId,
+          userMessage, assistantMessage: reply,
+        }));
+      } catch (e) { console.warn("[/chat/agent] fast save failed:", e?.message || e); }
+    }
     let doneSent = false;
     if (wantsStream) {
       timings.doneMs = Date.now() - t0;
       send("done", { reply, thinking, syllabus: syllabusRefs, pastQuestions: pastRefs, curriculum: curriculumRefs, mode,
+        ...(fastSavedId ? { messageId: fastSavedId } : {}),
         metadata: { model: usedModel, responseTimeMs: Date.now() - t0, timings, retrieval, toolExecutions: prepared.toolExecutions, ...(durable ? { durableContext: true } : {}), ...(modeNotice ? { modeNotice } : {}) },
         toolExecutions: prepared.toolExecutions, trace: traceBlocks, stopped: stopped() });
       doneSent = true;
@@ -5329,7 +5375,7 @@ router.post("/agent", async (req, res) => {
             memories: safeMemoryUpdates(userMessage),
           }));
           turnSaved = true;
-          await timed("saveTrace", saveTurn(persisted?.assistantMessageId));
+          await timed("saveTrace", saveTurn(persisted?.assistantMessageId || fastSavedId));
         } catch (persistError) {
           // The reply already happened — never lose the transcript to a
           // durable-write hiccup. Fall back to the plain two-row append.
@@ -5338,13 +5384,33 @@ router.post("/agent", async (req, res) => {
           // failure, keep those (a second append duplicated every turn).
           const already = await savedTurnReplyId({ conversationId, userId: req.user.id, turnId }).catch(() => null);
           if (already) { turnSaved = true; await saveTurn(already).catch(() => {}); }
+          else if (fastSavedId) { turnSaved = true; savedReplyId = fastSavedId; await saveTurn(fastSavedId).catch(() => {}); }
+          else if (turnId) {
+            const retried = await appendFastChatTurn({ conversationId, userId: req.user.id,
+              sessionId: agentSessionId(conversationId), turnId, userMessage, assistantMessage: reply }).catch(() => null);
+            if (retried) { turnSaved = true; savedReplyId = retried; await saveTurn(retried).catch(() => {}); }
+            else await appendBasicChatTurn({ conversationId, userId: req.user.id, userMessage, assistantMessage: reply })
+              .then(async (saved) => { turnSaved = true; savedReplyId = saved?.assistantMessageId; await saveTurn(saved?.assistantMessageId); })
+              .catch((e) => console.error("[/chat/agent] basic transcript append failed:", e.message));
+          }
           else await appendBasicChatTurn({ conversationId, userId: req.user.id, userMessage, assistantMessage: reply })
             .then(async (saved) => { turnSaved = true; await saveTurn(saved?.assistantMessageId); })
             .catch((e) => console.error("[/chat/agent] basic transcript append failed:", e.message));
         }
+      } else if (fastSavedId) {
+        turnSaved = true;
+        savedReplyId = fastSavedId;
+        await saveTurn(fastSavedId).catch(() => {});
+      } else if (turnId) {
+        const retried = await appendFastChatTurn({ conversationId, userId: req.user.id,
+          sessionId: agentSessionId(conversationId), turnId, userMessage, assistantMessage: reply }).catch(() => null);
+        if (retried) { turnSaved = true; savedReplyId = retried; await saveTurn(retried).catch(() => {}); }
+        else await appendBasicChatTurn({ conversationId, userId: req.user.id, userMessage, assistantMessage: reply })
+          .then(async (saved) => { turnSaved = true; savedReplyId = saved?.assistantMessageId; await saveTurn(saved?.assistantMessageId); })
+          .catch((e) => console.error("[/chat/agent] basic transcript append failed:", e.message));
       } else {
         await appendBasicChatTurn({ conversationId, userId: req.user.id, userMessage, assistantMessage: reply })
-          .then(async (saved) => { turnSaved = true; await saveTurn(saved?.assistantMessageId); })
+          .then(async (saved) => { turnSaved = true; savedReplyId = saved?.assistantMessageId; await saveTurn(saved?.assistantMessageId); })
           .catch((e) => console.error("[/chat/agent] basic transcript append failed:", e.message));
       }
     } else if (!warnedUnsavedTurn) {

@@ -16,3 +16,14 @@ test("reply materials and ideas merge atomically instead of overwriting", () => 
   assert.match(chat, /await mergeChatMeta\(last\.id, \{ ideas: ideas\.slice\(0, 3\) \}\)/, "suggestions merge ideas");
   assert.doesNotMatch(chat, /update\(\{ \.\.\.\(hasTrace \? \{ trace \} : \{\}\), \.\.\.\(meta \? \{ meta \} : \{\}\) \}\)/, "no replacing write remains");
 });
+
+test("the visible reply is saved before done, keyed by the turn", () => {
+  const chat = read("./chat.js");
+  assert.match(chat, /async function appendFastChatTurn/, "a fast transcript writer exists");
+  assert.match(chat, /agent_session_id: sessionId, agent_turn_id: turnId/, "rows carry the turn key (idempotent with the durable save)");
+  const fast = chat.indexOf("fastSave\", appendFastChatTurn");
+  const done = chat.indexOf('send("done"', fast);
+  assert.ok(fast > 0 && fast < done, "the save runs before done");
+  assert.match(chat, /\.\.\.\(fastSavedId \? \{ messageId: fastSavedId \} : \{\}\)/, "done carries the saved message id");
+  assert.match(chat, /saveTurn\(persisted\?\.assistantMessageId \|\| fastSavedId\)/, "the durable enrichment reuses the fast row");
+});

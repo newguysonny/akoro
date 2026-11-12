@@ -105,6 +105,25 @@ const SUGG_KIND = {
 };
 
 /* Ideas: the icon for what it builds, and for where it came from. */
+/* A turn the client has seen but the server may still be saving. Kept per
+   session so a refresh in the seconds before "saved" does not lose the reply:
+   it is shown as pending and reconciled until the transcript has it. */
+const pendingKey = (sid) => `ak_pending_turn:${sid}`;
+function readPendingTurn(sid) {
+  try {
+    const p = JSON.parse(localStorage.getItem(pendingKey(sid)) || "null");
+    if (!p || Date.now() - Number(p.at || 0) > 5 * 60_000) return null;
+    return p;
+  } catch { return null; }
+}
+function writePendingTurn(sid, patch) {
+  try {
+    const cur = readPendingTurn(sid) || {};
+    localStorage.setItem(pendingKey(sid), JSON.stringify({ ...cur, ...patch, at: cur.at || Date.now() }));
+  } catch { /* private mode */ }
+}
+function clearPendingTurn(sid) { try { localStorage.removeItem(pendingKey(sid)); } catch { /* private mode */ } }
+
 /* A study tool chat made (saved as a reader tab): kind, document, count — Open goes to the reader on that tab. */
 const OUTPUT_ICON = { quiz: "ti-list-check", flashcards: "ti-cards", summary: "ti-align-left", podcast: "ti-headphones" };
 const OUTPUT_KIND = { quiz: "Quiz", flashcards: "Flashcards", summary: "Summary", podcast: "Podcast" };
@@ -437,22 +456,41 @@ function AgentChatTab({
   // Which chat the learner asked for last: a slower load of an earlier choice
   // (the resume on mount) must never replace a New chat or a later pick.
   const openSeqRef = useRef(0);
+  const pendingTriesRef = useRef(new Map());
   const choseChatRef = useRef(false);
-  const openSession = async (id, { auto = false } = {}) => {
+  const openSession = async (id, { auto = false, force = false } = {}) => {
     setDrawerOpen(false);
-    if (id === sessionIdRef.current) return;
+    if (id === sessionIdRef.current && !force) return;
     if (!auto) choseChatRef.current = true;
     const seq = ++openSeqRef.current;
     try {
       const d = await apiGet(`${CHAT_BASE}/sessions/${id}/messages?limit=${HISTORY_PAGE}`);
       if (seq !== openSeqRef.current) return;
       const msgs = (d?.messages ?? []).map(fromSaved);
+      const pending = readPendingTurn(id);
+      const norm = (t) => String(t || "").replace(/\s+/g, " ").trim();
+      const savedReply = pending?.reply && msgs.some((m) => m.from === "agent" && norm(m.text) === norm(pending.reply));
+      if (savedReply) { clearPendingTurn(id); pendingTriesRef.current.delete(id); }
+      const withPending = pending?.reply && !savedReply
+        ? [...msgs, { id: `pending-${pending.turnId || "turn"}`, from: "agent", text: pending.reply,
+            time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+            at: new Date().toISOString(), pendingSave: true, blocks: [] }]
+        : msgs;
       setSession(id);
       atBottomRef.current = true;
       olderRef.current = { hasMore: !!d?.hasMore, before: msgs[0]?.at || null, loading: false };
       setLoadingOlder(false);
-      setMessages(msgs.length ? msgs : [greeting(agentName, agentEmoji)]);
+      setMessages(withPending.length ? withPending : [greeting(agentName, agentEmoji)]);
       setHistoryError(null);
+      // The reply was seen but the transcript does not have it yet: look again
+      // shortly, up to three times, without hiding it meanwhile.
+      if (pending?.reply && !savedReply) {
+        const tries = pendingTriesRef.current.get(id) || 0;
+        if (tries < 3) {
+          pendingTriesRef.current.set(id, tries + 1);
+          setTimeout(() => openSession(id, { auto: true, force: true }), tries === 0 ? 3000 : 8000);
+        }
+      }
     } catch {
       // Keep the current view, but SAY so — a silent failure here looks
       // exactly like "this conversation is empty" and learners conclude
@@ -956,6 +994,7 @@ function AgentChatTab({
     // durable turn contract to repair a partial write without duplicate rows.
     const turnId = createAgentChatTurnId();
     turnIdRef.current = turnId;
+    writePendingTurn(sid, { turnId, text, reply: "" });
     // The picked model rides the standard mode only (the server checks it and
     // remembers it on this chat; null = the default model).
     const modelPick = mode === "default" ? { model: chatModelId || null } : {};
@@ -1027,7 +1066,12 @@ function AgentChatTab({
         // The chips arrive on the same stream (no second request).
         onSuggestions: (list)=>{ inlineIdeas=true; const ideas=cleanIdeas(list); if(ideas.length) setMessages(prev=>prev.map(m=>m.id===replyId?{...m,ideas}:m)); },
         // The stored reply's id (ratings), sent once the save finishes — after done.
-        onSaved: ({ messageId })=>{ if(messageId) setMessages(prev=>prev.map(m=>m.id===replyId?{...m,serverId:messageId}:m)); },
+        onSaved: ({ messageId })=>{
+          clearPendingTurn(sid);
+          setMessages(prev=>prev.map(m=>m.id===replyId
+            ? { ...m, ...(messageId ? { serverId: messageId } : {}), pendingSave: false }
+            : (m.pendingSave ? { ...m, pendingSave: false } : m)));
+        },
         onDone: ({ reply, syllabus, pastQuestions, thinking, toolExecutions, trace, stopped, messageId })=>{
           gotDone=true;
           ensureBubble(); setStatusLabel("");
@@ -1037,6 +1081,7 @@ function AgentChatTab({
           // Study-prep sessions ride the reply as a session echo (the
           // activity-draft pattern) — render the interactive session card.
           const studyPrepSession = (toolExecutions || []).find((entry) => entry?.session?.id && entry?.success)?.session || null;
+          if (reply != null) writePendingTurn(sid, { turnId, reply });
           setMessages(prev=>prev.map(m=>m.id===replyId?{...m,...(reply!=null?{text:reply}:{}),thinking:thinking||m.thinking,syllabus:syllabus||[],pastQuestions:pastQuestions||[],phase:"done",...(stopped?{stopped:true}:{}),...(messageId?{serverId:messageId}:{}),...(studyPrepSession?{studyPrepSessionId:studyPrepSession.id}:{}),...protegeMoves(toolExecutions)}:m));
           turnTools=toolExecutions||[];
           if ((toolExecutions || []).some((entry) => entry?.tool === "create_task" && entry?.success)) refetchTasks();
@@ -1073,6 +1118,7 @@ function AgentChatTab({
         try {
           const data = await apiPost(agentChatEndpoint(), payload);
           finalReply = data.reply || data.response || t('agent.fallback');
+          writePendingTurn(sid, { turnId, reply: finalReply });
           setMessages(prev=>[...prev,{id:replyId,from:"agent",text:finalReply,time:t2,
             thinking:data.thinking||"",syllabus:data.syllabus||[],pastQuestions:data.pastQuestions||[],
             blocks:blocksFromSavedTrace(data.trace),...protegeMoves(data?.toolExecutions),...(ingest?{ingestId:ingest.id,ingestIds}:{})}]);
@@ -1315,6 +1361,7 @@ function AgentChatTab({
                   )}
                   <div style={{ fontSize:10,color:"var(--ak-text-muted)",marginTop:3,display:"flex",alignItems:"center",gap:4 }}>
                     {msg.time}
+                    {msg.pendingSave && <span title="The server is still saving this reply">· Saving…</span>}
                     <CopyMessageButton text={msg.text} />
                   </div>
                 </div>
