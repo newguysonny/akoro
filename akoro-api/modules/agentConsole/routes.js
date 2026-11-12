@@ -313,7 +313,10 @@ router.post("/ai-ping", guard, asyncHandler(async (req, res) => {
   // A raw Go model can be probed even when this environment's AI_MODELS still
   // defines the public id on another transport (e.g. legacy direct DeepSeek).
   const apiModelOverride = String(req.body?.apiModel || "").trim() || null;
-  if (!apiModelOverride && entry.provider !== "opencode") return bad(res, `"${id}" isn't an OpenCode model.`);
+  // viaModel routes through lib/aiModel (the real provider dispatch), so the
+  // direct fallback and OpenCode can be compared on the same request.
+  const viaModel = req.body?.viaModel === true;
+  if (!apiModelOverride && !viaModel && entry.provider !== "opencode") return bad(res, `"${id}" isn't an OpenCode model.`);
   const started = Date.now();
   const maxTokens = Math.max(2, Math.min(512, Number(req.body?.maxTokens) || 16));
   const prompt = String(req.body?.prompt || "ping").slice(0, 200);
@@ -323,6 +326,25 @@ router.post("/ai-ping", guard, asyncHandler(async (req, res) => {
   const probeTools = req.body?.tools === true;
   const image = typeof req.body?.image === "string" && req.body.image.startsWith("data:image/") ? req.body.image : "";
   try {
+    if (viaModel) {
+      const out = await openai.chat.completions.create({
+        model: id,
+        messages: [{ role: "user", content: image
+          ? [{ type: "text", text: prompt }, { type: "image_url", image_url: { url: image } }]
+          : prompt }],
+        max_tokens: maxTokens,
+        ...(probeReasoning ? { reasoning_effort: "medium" } : {}),
+        __feature: "vision_probe", __payer: "platform",
+      });
+      const msg = out?.choices?.[0]?.message || {};
+      return res.json({ success: true, data: {
+        model: entry.id, provider: entry.provider, apiModel: out?.model || entry.apiModel,
+        ms: Date.now() - started, usage: out?.usage ?? null,
+        finish: out?.choices?.[0]?.finish_reason ?? null,
+        content: String(msg.content ?? "").slice(0, 800),
+        reasoningChars: String(msg.reasoning_content ?? msg.reasoning ?? "").length,
+      } });
+    }
     const adapter = makeOpenCodeAdapter();
     const out = await adapter.create({
       model: apiModelOverride || entry.apiModel,
