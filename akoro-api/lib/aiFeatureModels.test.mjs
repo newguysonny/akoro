@@ -20,3 +20,12 @@ test("an env still overrides a Responses-API mode", () => {
   assert.equal(list[0].modelId, "gpt-6-luna");
   assert.equal(list[0].source, "env");
 });
+
+test("a runtime feature override wins over env and fallback and is labelled", () => {
+  const list = featureModels({ OPENAI_RESEARCH_MODEL: "gpt-5" }, "deepseek", { research_mode: "glm-5-3-flash" });
+  const research = list.find((f) => f.key === "research_mode");
+  assert.equal(research.modelId, "glm-5-3-flash");
+  assert.equal(research.source, "runtime");
+  assert.equal(research.override, undefined, "the API adds the raw override");
+  assert.deepEqual(research.requires, ["tools"]);
+});

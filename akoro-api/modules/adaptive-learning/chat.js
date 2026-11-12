@@ -46,6 +46,7 @@ export const protegeDeps = {
 };
 import { publicModelList, resolveChatChoice, pickerInfo, pickerEnabled } from "../../lib/modelCatalogue.js";
 import { modelRegistry } from "../../lib/modelRegistry.js";
+import { runtimeFeatureModel } from "../../lib/modelRuntime.js";
 import { allowedModelsFor } from "../../lib/modelTiers.js";
 import { modelPicks, supabaseThreads } from "../workflows/modelPicks.js";
 const { Pool } = pkg;
@@ -5214,7 +5215,8 @@ router.post("/agent", async (req, res) => {
       // A chat-reasoning Think turn answers in the reasoning pass below, so the
       // preflight decision must not stream (or become) the final answer.
       streamText: !isResearch && !(isThink && canThinkChat),
-      model: chatModel,
+      // A mode with no learner pick uses its runtime feature override, then env.
+      model: chatModel || (isThink ? runtimeFeatureModel("think_mode") : isResearch ? runtimeFeatureModel("research_mode") : null),
     });
     mark("agentLoop");
     const stopped = () => Boolean(prepared.aborted) || isAborted();
@@ -5230,7 +5232,7 @@ router.post("/agent", async (req, res) => {
       // the only authority that may invoke an Akoro tool.
       // Think mode: the reasoned last decision already is the answer; else
       // reason over the tool results (if any) for the answer.
-      const thinkTarget = chatModel || THINK_MODEL;
+      const thinkTarget = chatModel || runtimeFeatureModel("think_mode") || THINK_MODEL;
       if (prepared.finalText && !(isThink && canThinkChat)) { reply = prepared.finalText; usedModel = isThink ? (canThinkResponses ? thinkTarget : (chatModel || OPENAI_MODEL)) : (chatModel || OPENAI_MODEL); }
       else if (isThink && canThinkResponses) {
         try { ({ reply, thinking } = await thinkOnce({ messages: finalMessages, model: thinkTarget, trace })); usedModel = thinkTarget; } catch { /* fallback below */ }
@@ -5238,7 +5240,7 @@ router.post("/agent", async (req, res) => {
         try { ({ reply, thinking } = await thinkChatOnce({ messages: finalMessages, model: chatModel || OPENAI_MODEL, trace })); usedModel = chatModel || OPENAI_MODEL; } catch { /* fallback below */ }
       }
       if (!reply) {
-        usedModel = isResearch ? (chatModel || RESEARCH_MODEL) : (chatModel || "gpt-4o-mini");
+        usedModel = isResearch ? (chatModel || runtimeFeatureModel("research_mode") || RESEARCH_MODEL) : (chatModel || "gpt-4o-mini");
         const completion = await openai.chat.completions.create({
           model: usedModel,
           temperature: 0.6,
@@ -5252,7 +5254,7 @@ router.post("/agent", async (req, res) => {
       if (!stopped() && prepared.finalText && !(isThink && canThinkChat)) {
         // Already on screen when it streamed as the last step's words.
         reply = prepared.finalText;
-        usedModel = isThink ? (chatModel || OPENAI_MODEL) : (chatModel || OPENAI_MODEL);
+        usedModel = chatModel || (isThink ? runtimeFeatureModel("think_mode") : isResearch ? runtimeFeatureModel("research_mode") : null) || OPENAI_MODEL;
         if (!prepared.promoted) send("delta", { text: reply });
       } else if (!stopped() && isThink && canThinkResponses) {
         status("thinking", "Thinking…");
@@ -5263,7 +5265,7 @@ router.post("/agent", async (req, res) => {
       }
       if (!reply && !stopped()) {
         if (isResearch) status("synthesis", "Writing it up…");
-        usedModel = isResearch ? (chatModel || RESEARCH_MODEL) : (chatModel || "gpt-4o-mini");
+        usedModel = isResearch ? (chatModel || runtimeFeatureModel("research_mode") || RESEARCH_MODEL) : (chatModel || "gpt-4o-mini");
         try {
           reply = await streamChat({
             send,

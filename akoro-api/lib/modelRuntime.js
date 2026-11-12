@@ -10,9 +10,14 @@
 const EMPTY = Object.freeze({
   defaultModel: null,
   fallbackModel: null,
+  roleModels: Object.freeze({}),
+  featureModels: Object.freeze({}),
   updatedBy: null,
   updatedAt: null,
 });
+const cleanMap = (value) => (value && typeof value === "object" && !Array.isArray(value))
+  ? Object.fromEntries(Object.entries(value).map(([k, v]) => [String(k), text(v)]).filter(([, v]) => v))
+  : {};
 
 let cache = EMPTY;
 let loaded = false;
@@ -29,6 +34,8 @@ function shape(row) {
   return {
     defaultModel: text(row.default_model),
     fallbackModel: text(row.fallback_model),
+    roleModels: cleanMap(row.role_models),
+    featureModels: cleanMap(row.feature_models),
     updatedBy: text(row.updated_by),
     updatedAt: row.updated_at == null ? null : String(row.updated_at),
   };
@@ -85,12 +92,29 @@ export function runtimeFallbackModel() {
   return cache.fallbackModel;
 }
 
-export async function setRuntimeSettings({ defaultModel, fallbackModel } = {}, { by = null } = {}) {
+export function runtimeRoleModel(role) {
+  refreshIfStale();
+  return cache.roleModels?.[String(role)] || null;
+}
+
+export function runtimeFeatureModel(key) {
+  refreshIfStale();
+  return cache.featureModels?.[String(key)] || null;
+}
+
+export function runtimeRoleModels() { refreshIfStale(); return { ...(cache.roleModels || {}) }; }
+export function runtimeFeatureModels() { refreshIfStale(); return { ...(cache.featureModels || {}) }; }
+
+export async function setRuntimeSettings({ defaultModel, fallbackModel, roleModels, featureModels } = {}, { by = null } = {}) {
   const db = await getDb();
+  // undefined keeps a value (patch semantics); null/"" clears it.
+  const current = cache;
   const row = {
     id: 1,
-    default_model: text(defaultModel),
-    fallback_model: text(fallbackModel),
+    default_model: defaultModel === undefined ? current.defaultModel : text(defaultModel),
+    fallback_model: fallbackModel === undefined ? current.fallbackModel : text(fallbackModel),
+    role_models: roleModels === undefined ? (current.roleModels || {}) : cleanMap(roleModels),
+    feature_models: featureModels === undefined ? (current.featureModels || {}) : cleanMap(featureModels),
     updated_by: text(by),
     updated_at: new Date().toISOString(),
   };
@@ -118,9 +142,12 @@ export async function clearRuntimeSettings({ by = null } = {}) {
  * entry (or null); `isAvailable(entry)` returns a boolean or availabilityOf's
  * { available, reason }.
  */
-export function validateModelChange({ defaultModel, fallbackModel } = {}, { getEntry, isAvailable } = {}) {
+export function validateModelChange({ defaultModel, fallbackModel, roleModels, featureModels } = {},
+  { getEntry, isAvailable, roles = null, features = null } = {}) {
   const defaultId = String(defaultModel ?? "").trim();
-  if (!defaultId) {
+  const hasRoleMap = roleModels && typeof roleModels === "object" && Object.keys(roleModels).length;
+  const hasFeatureMap = featureModels && typeof featureModels === "object" && Object.keys(featureModels).length;
+  if (!defaultId && !hasRoleMap && !hasFeatureMap) {
     return {
       ok: false, code: "default_model_required", field: "defaultModel",
       message: "Choose a default model.",
@@ -148,7 +175,7 @@ export function validateModelChange({ defaultModel, fallbackModel } = {}, { getE
     return null;
   };
 
-  const defaultProblem = check(defaultId, "defaultModel");
+  const defaultProblem = defaultId ? check(defaultId, "defaultModel") : null;
   if (defaultProblem) return defaultProblem;
 
   const fallbackId = String(fallbackModel ?? "").trim();
@@ -163,5 +190,45 @@ export function validateModelChange({ defaultModel, fallbackModel } = {}, { getE
     if (fallbackProblem) return fallbackProblem;
   }
 
-  return { ok: true, values: { defaultModel: defaultId, fallbackModel: fallbackId || null } };
+  const rolesOut = {};
+  for (const [role, idRaw] of Object.entries(cleanMap(roleModels))) {
+    if (roles && !roles[role]) {
+      return { ok: false, code: "unknown_role", field: "roleModels", message: `"${role}" is not a known role.` };
+    }
+    const problem = check(idRaw, "roleModels");
+    if (problem) return problem;
+    const entry = getEntry(idRaw);
+    const caps = roles?.[role]?.caps || [];
+    const missing = caps.filter((c) => !entry.caps?.[c]);
+    if (missing.length) {
+      return { ok: false, code: "role_capability", field: "roleModels",
+        message: `"${entry.label || entry.id}" can't serve the ${role} role (needs: ${missing.join(", ")}).` };
+    }
+    rolesOut[role] = idRaw;
+  }
+  const featuresOut = {};
+  for (const [key, idRaw] of Object.entries(cleanMap(featureModels))) {
+    if (features && !features[key]) {
+      return { ok: false, code: "unknown_feature", field: "featureModels", message: `"${key}" is not a known feature.` };
+    }
+    const problem = check(idRaw, "featureModels");
+    if (problem) return problem;
+    const entry = getEntry(idRaw);
+    const needs = features?.[key]?.requires || [];
+    const missing = needs.filter((c) => !entry.caps?.[c]);
+    if (missing.length) {
+      return { ok: false, code: "feature_capability", field: "featureModels",
+        message: `"${entry.label || entry.id}" can't serve ${key} (needs: ${missing.join(", ")}).` };
+    }
+    featuresOut[key] = idRaw;
+  }
+
+  const values = {};
+  // Sending defaultModel keeps the original contract (fallback defaults to
+  // null). A role/feature-only patch leaves the default and fallback alone.
+  if (defaultModel !== undefined) values.defaultModel = defaultId || null;
+  if (defaultModel !== undefined || fallbackModel !== undefined) values.fallbackModel = fallbackId || null;
+  if (roleModels !== undefined) values.roleModels = rolesOut;
+  if (featureModels !== undefined) values.featureModels = featuresOut;
+  return { ok: true, values };
 }

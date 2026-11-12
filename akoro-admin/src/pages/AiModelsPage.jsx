@@ -37,6 +37,8 @@ export default function AiModelsPage() {
   const [toast, setToast] = useState(null);
   const [defaultModel, setDefaultModel] = useState('');
   const [fallbackModel, setFallbackModel] = useState('');
+  const [roleDraft, setRoleDraft] = useState({});
+  const [featureDraft, setFeatureDraft] = useState({});
   const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
@@ -46,6 +48,8 @@ export default function AiModelsPage() {
       setData(d);
       setDefaultModel(d?.effective?.defaultModel || d?.env?.defaultModel || '');
       setFallbackModel(d?.runtime?.fallbackModel || '');
+      setRoleDraft({ ...(d?.runtime?.roleModels || {}) });
+      setFeatureDraft({ ...(d?.runtime?.featureModels || {}) });
     } catch (e) { setError(e.message); }
     finally { setLoading(false); }
   }, []);
@@ -55,21 +59,31 @@ export default function AiModelsPage() {
   const models = data?.models ?? [];
   const pickable = useMemo(() => models.filter((m) => m.selectable), [models]);
   const callable = useMemo(() => pickable.filter((m) => m.enabled && m.availability?.available), [pickable]);
+  // Role/feature overrides may point at a hidden failover route too.
+  const assignable = useMemo(() => models.filter((m) => m.enabled && m.availability?.available), [models]);
   const enabled = data?.runtimeOverrideEnabled !== false;
   const effective = data?.effective?.defaultModel || '—';
   const envDefault = data?.env?.defaultModel || '—';
   const runtimeDefault = data?.runtime?.defaultModel || '';
   const runtimeFallback = data?.runtime?.fallbackModel || '';
+  const runtimeRoles = data?.runtime?.roleModels || {};
+  const runtimeFeatures = data?.runtime?.featureModels || {};
+  const sameMap = (a, b) => JSON.stringify(Object.entries(a).filter(([, v]) => v).sort()) ===
+    JSON.stringify(Object.entries(b).filter(([, v]) => v).sort());
   const dirty = defaultModel !== (runtimeDefault || envDefault)
-    || fallbackModel !== (runtimeFallback || '');
+    || fallbackModel !== (runtimeFallback || '')
+    || !sameMap(roleDraft, runtimeRoles)
+    || !sameMap(featureDraft, runtimeFeatures);
   const invalid = !defaultModel || (fallbackModel && fallbackModel === defaultModel);
 
   const save = async () => {
     if (invalid) { setToast({ type: 'error', message: 'Pick a default model, and a fallback that is different from it.' }); return; }
     setSaving(true);
     try {
-      await apiPut('/api/admin/ai/model', { defaultModel, fallbackModel: fallbackModel || null });
-      setToast({ type: 'success', message: 'Default model updated — new calls use it now.' });
+      const roleModels = Object.fromEntries(Object.entries(roleDraft).filter(([, v]) => v));
+      const featureModels = Object.fromEntries(Object.entries(featureDraft).filter(([, v]) => v));
+      await apiPut('/api/admin/ai/model', { defaultModel, fallbackModel: fallbackModel || null, roleModels, featureModels });
+      setToast({ type: 'success', message: 'AI model settings updated — new calls use them now.' });
       await load();
     } catch (e) { setToast({ type: 'error', message: e.message }); }
     finally { setSaving(false); }
@@ -80,7 +94,8 @@ export default function AiModelsPage() {
     setSaving(true);
     try {
       await apiDelete('/api/admin/ai/model');
-      setToast({ type: 'success', message: 'Runtime override cleared — back to the env default.' });
+      setRoleDraft({}); setFeatureDraft({});
+      setToast({ type: 'success', message: 'All runtime overrides cleared — back to env defaults.' });
       await load();
     } catch (e) { setToast({ type: 'error', message: e.message }); }
     finally { setSaving(false); }
@@ -224,6 +239,16 @@ export default function AiModelsPage() {
                     <tr key={r.role}>
                       <td style={{ padding: '9px 14px', borderBottom: `1px solid ${BORDER}`, fontWeight: 800, color: INK }}>{r.role}{r.locked && <Chip tone="warn">locked</Chip>}</td>
                       <td style={{ padding: '9px 14px', borderBottom: `1px solid ${BORDER}`, color: MUTED }}>{r.label} <span style={{ fontFamily: 'monospace', color: MUTED2 }}>({r.model})</span></td>
+                      <td style={{ padding: '9px 14px', borderBottom: `1px solid ${BORDER}`, minWidth: 190 }}>
+                        <select value={roleDraft[r.role] || ''} disabled={!enabled}
+                          onChange={(e) => setRoleDraft((d) => ({ ...d, [r.role]: e.target.value }))}
+                          style={{ ...field, padding: '6px 8px', fontSize: 11.5 }}>
+                          <option value="">Env / default</option>
+                          {assignable.filter((m) => (r.caps || []).every((c) => m.caps?.[c])).map((m) => (
+                            <option key={m.id} value={m.id}>{m.label}</option>
+                          ))}
+                        </select>
+                      </td>
                       <td style={{ padding: '9px 14px', borderBottom: `1px solid ${BORDER}` }}><Chip tone={r.source === 'default' ? 'ok' : 'info'}>{r.source}</Chip></td>
                     </tr>
                   ))}
@@ -242,6 +267,16 @@ export default function AiModelsPage() {
                     <tr key={f.key}>
                       <td style={{ padding: '9px 14px', borderBottom: `1px solid ${BORDER}`, fontWeight: 800, color: INK }}>{f.label}</td>
                       <td style={{ padding: '9px 14px', borderBottom: `1px solid ${BORDER}`, color: MUTED }}>{f.modelId || '—'}</td>
+                      <td style={{ padding: '9px 14px', borderBottom: `1px solid ${BORDER}`, minWidth: 180 }}>
+                        <select value={featureDraft[f.key] || ''} disabled={!enabled}
+                          onChange={(e) => setFeatureDraft((d) => ({ ...d, [f.key]: e.target.value }))}
+                          style={{ ...field, padding: '6px 8px', fontSize: 11.5 }}>
+                          <option value="">Env / fallback</option>
+                          {assignable.filter((m) => (f.requires || []).every((c) => m.caps?.[c])).map((m) => (
+                            <option key={m.id} value={m.id}>{m.label}</option>
+                          ))}
+                        </select>
+                      </td>
                       <td style={{ padding: '9px 14px', borderBottom: `1px solid ${BORDER}` }}>
                         {f.source === "default" ? <Chip tone="ok">follows default</Chip>
                           : f.source === "env" ? <Chip tone="warn">env override</Chip>

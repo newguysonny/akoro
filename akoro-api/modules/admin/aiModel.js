@@ -15,7 +15,7 @@ import db from "../../db.js";
 import { authenticateToken, requireRole } from "../auth/routes.js";
 import { serverError } from "../../lib/httpError.js";
 import { modelRegistry, availabilityOf, ROLES } from "../../lib/modelRegistry.js";
-import { featureModels } from "../../lib/aiFeatureModels.js";
+import { featureModels, FEATURE_MODELS } from "../../lib/aiFeatureModels.js";
 import {
   loadRuntimeSettings, runtimeSettings, runtimeDefaultModel, runtimeFallbackModel,
   setRuntimeSettings, clearRuntimeSettings, validateModelChange,
@@ -74,13 +74,18 @@ router.get("/ai/model", adminOnly, asyncHandler(async (req, res) => {
     selectable: entry.selectable,
     provider: entry.provider,
     fallbackModel: entry.fallbackModel,
+    caps: entry.caps,
     availability: availabilityOf(entry),
   }));
+  const runtime = runtimeSettings();
   const roles = Object.keys(ROLES).map((role) => {
     const r = modelRegistry.resolve({ role });
-    return { role, model: r.model.id, label: r.model.label, source: r.source, locked: !!ROLES[role].locked };
+    return { role, model: r.model.id, label: r.model.label, source: r.source,
+      locked: !!ROLES[role].locked, caps: ROLES[role].caps || [],
+      override: runtime.roleModels?.[role] || null };
   });
-  const features = featureModels(process.env, modelRegistry.envDefaultId);
+  const features = featureModels(process.env, modelRegistry.envDefaultId, runtime.featureModels || {})
+    .map((f) => ({ ...f, override: runtime.featureModels?.[f.key] || null }));
   return res.json({ success: true, ...state(), runtimeOverrideEnabled: runtimeEnabled(), models, roles, features });
 }));
 
@@ -89,6 +94,8 @@ router.put("/ai/model", adminOnly, asyncHandler(async (req, res) => {
   const result = validateModelChange(req.body ?? {}, {
     getEntry: (id) => modelRegistry.get(id),
     isAvailable: (entry) => availabilityOf(entry),
+    roles: ROLES,
+    features: Object.fromEntries(FEATURE_MODELS.map((f) => [f.key, f])),
   });
   if (!result.ok) {
     return res.status(400).json({
@@ -100,7 +107,7 @@ router.put("/ai/model", adminOnly, asyncHandler(async (req, res) => {
   await loadRuntimeSettings();
   const before = runtimeSettings();
   const settings = await setRuntimeSettings(result.values, { by: actorId(req) });
-  console.log(`[admin:aiModel] default=${settings.defaultModel} fallback=${settings.fallbackModel ?? "-"} by ${actorId(req) || "admin"}`);
+  console.log(`[admin:aiModel] default=${settings.defaultModel ?? "-"} fallback=${settings.fallbackModel ?? "-"} roles=${Object.keys(settings.roleModels || {}).length} features=${Object.keys(settings.featureModels || {}).length} by ${actorId(req) || "admin"}`);
   await writeAudit(req, "ai_model.override_set", before, settings);
   return res.json({ success: true, ...state() });
 }));

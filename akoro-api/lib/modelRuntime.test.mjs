@@ -2,12 +2,16 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { validateModelChange } from "./modelRuntime.js";
 
+const caps = { tools: true, stream: true, json: true };
 const entries = {
-  deepseek: { id: "deepseek", label: "DeepSeek", enabled: true },
-  claude: { id: "claude-haiku", label: "Claude Haiku", enabled: true },
-  disabled: { id: "gpt-4o", label: "GPT-4o", enabled: false },
-  unavailable: { id: "unavailable", label: "Grok", enabled: true },
+  deepseek: { id: "deepseek", label: "DeepSeek", enabled: true, caps },
+  claude: { id: "claude-haiku", label: "Claude Haiku", enabled: true, caps: { ...caps, vision: true } },
+  o4: { id: "o4-mini", label: "o4-mini", enabled: true, caps: { ...caps, responses: true } },
+  disabled: { id: "gpt-4o", label: "GPT-4o", enabled: false, caps },
+  unavailable: { id: "unavailable", label: "Grok", enabled: true, caps },
 };
+const roles = { suggestions: { caps: ["json"] }, vision: { caps: ["vision"] } };
+const features = { think_mode: { requires: ["responses"] }, research_mode: { requires: ["tools"] } };
 
 const getEntry = (id) => entries[id] || null;
 const isAvailable = (entry) => entry.id !== "unavailable"
@@ -72,4 +76,30 @@ test("an invalid fallback is reported on the fallback field", () => {
   assert.equal(out.ok, false);
   assert.equal(out.code, "unknown_model");
   assert.equal(out.field, "fallbackModel");
+});
+
+
+test("a role-only patch leaves the default alone and validates capability", () => {
+  const withMaps = (body) => validateModelChange(body, {
+    getEntry, isAvailable, roles, features,
+  });
+  const ok = withMaps({ roleModels: { suggestions: "deepseek" } });
+  assert.equal(ok.ok, true);
+  assert.deepEqual(ok.values, { roleModels: { suggestions: "deepseek" } });
+  const noVision = withMaps({ roleModels: { vision: "deepseek" } });
+  assert.equal(noVision.ok, false);
+  assert.equal(noVision.code, "role_capability");
+  const vision = withMaps({ roleModels: { vision: "claude" } });
+  assert.equal(vision.ok, true);
+  assert.equal(withMaps({ roleModels: { nope: "deepseek" } }).code, "unknown_role");
+});
+
+test("feature overrides check their required capability", () => {
+  const withMaps = (body) => validateModelChange(body, { getEntry, isAvailable, roles, features });
+  assert.equal(withMaps({ featureModels: { research_mode: "deepseek" } }).ok, true);
+  const think = withMaps({ featureModels: { think_mode: "deepseek" } });
+  assert.equal(think.ok, false);
+  assert.equal(think.code, "feature_capability");
+  assert.equal(withMaps({ featureModels: { think_mode: "o4" } }).ok, true);
+  assert.equal(withMaps({ featureModels: { nope: "o4" } }).code, "unknown_feature");
 });

@@ -429,3 +429,31 @@ model. Each maps to a role and is resolved with capability checks:
   391 with `metadata.model = deepseek-v4.1-flash`; Research+DeepSeek and
   Default+DeepSeek also ran on the picked model. Frontend deploy required for
   the two-switch UI.
+
+## 16. Per-role and per-feature runtime overrides (2026-11-12)
+
+The admin AI model page now edits more than the global default:
+
+- `edu.ai_runtime_settings.role_models` — `{"suggestions":"glm-5-3-flash", …}`.
+  Resolution: learner pick → **runtime role override** → `AI_MODEL_ROLE_<ROLE>`
+  → platform default. Locked roles accept a runtime override too (they still
+  ignore learner picks). An override that is disabled, unavailable or missing
+  the role's capabilities is ignored and the env/default is used.
+- `edu.ai_runtime_settings.feature_models` — the two Responses/fallback modes
+  (`think_mode`, `research_mode`). Research may point at any tool-capable model;
+  Thinking's Responses fallback requires a `responses` model. These modes run on
+  the learner's selected model when it can handle them; the override only
+  supplies the fallback.
+- `PUT /api/admin/ai/model` accepts `roleModels` and `featureModels` alongside
+  `defaultModel`/`fallbackModel` (all optional; omitted fields are unchanged,
+  explicit empty values clear). Every id is validated for existence,
+  availability and the role/feature capability. `GET` returns the raw overrides
+  (`runtime.roleModels/featureModels`) and per-row `override` + `source`.
+- The page renders a dropdown on every role and feature row; “Env / default”
+  clears that override. One Save applies the default, fallback and all maps;
+  Reset clears everything back to env.
+
+Practical meaning: suggestions, vision, builder, rerank, battle answering and
+the locked graders can each be pinned to a different model from the admin page
+without a deploy; the default remains the fallback for anything left on
+“Env / default”.

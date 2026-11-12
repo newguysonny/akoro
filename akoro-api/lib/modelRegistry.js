@@ -34,7 +34,7 @@
  *     "caps": { "tools": true, "stream": true, "json": true }, "selectable": true }
  */
 import { DEFAULT_MODEL_PRICES, registerModelPrice } from "./aiPricing.js";
-import { runtimeDefaultModel, runtimeFallbackModel } from "./modelRuntime.js";
+import { runtimeDefaultModel, runtimeFallbackModel, runtimeRoleModel } from "./modelRuntime.js";
 
 /** AI_MODEL_PICKER_ENABLED — on by default (2026-11-07); "false" / "0" / "off" / "no" turns it off. */
 export const pickerFlag = (env = process.env) => !["false", "0", "off", "no"].includes(String(env.AI_MODEL_PICKER_ENABLED ?? "true").trim().toLowerCase());
@@ -258,7 +258,14 @@ export function createModelRegistry(env = process.env) {
   function resolve({ role = "chat", learnerChoice = null, allowedModels = null } = {}) {
     if (!ROLES[role]) throw new Error(`Unknown model role "${role}"`);
     const usable = (id) => { const e = id && byId.get(id); return e && e.enabled && hasCaps(e, role) ? e : null; };
-    const roleModel = usable(roleEnv(role));
+    // An admin override for THIS role wins over its env value; an override that
+    // is unavailable or lacks the role's capabilities is ignored (env/default).
+    const runtimeRole = (() => {
+      const id = runtimeRoleModel(role);
+      const entry = id && byId.get(id);
+      return entry && entry.enabled && hasCaps(entry, role) && availabilityOf(entry, env).available ? entry : null;
+    })();
+    const roleModel = runtimeRole || usable(roleEnv(role));
     const labelEntry = () => roleModel || defaultFor(role) || firstWithCaps(role) || byId.get(activeDefault());
     if (locked.has(role)) return { model: roleModel || defaultFor(role) || firstWithCaps(role) || byId.get(defaultId), source: "locked" };
     let notice = null;
