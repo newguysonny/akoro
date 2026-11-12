@@ -17,7 +17,7 @@
  */
 import db from "../../db.js";
 import { openai } from "../../lib/aiModel.js";
-import { TOOL_IDS, TOOL_LIMITS, toolSchema, toolCount, buildToolMessages, shapeToolResult, gatherToolPassages } from "./toolsLib.js";
+import { TOOL_IDS, TOOL_LIMITS, toolSchema, toolCount, buildToolMessages, shapeToolResult, gatherToolPassages, citeOf } from "./toolsLib.js";
 import { searchRecordChunks } from "./searchLib.js";
 import { createArtifact, listArtifacts, updateArtifact } from "./artifactsLib.js";
 import { PODCAST_LIMITS, lengthOf, podcastSchema, podcastInFlight, runPodcastJob } from "./podcastLib.js";
@@ -236,9 +236,12 @@ export async function findStudyRecord({ userId, query = "", folder = "", recordI
 }
 
 /** Agent Chat: make the study material and save it as a reader tab. Never throws. */
-export async function makeStudyMaterial({ userId, tool, query = "", folder = "", recordId = null, focus = "", count = "", difficulty = "", length = "" } = {}) {
+export async function makeStudyMaterial({ userId, tool, query = "", folder = "", recordId = null, focus = "", count = "", difficulty = "", length = "", scope = "document", pageNumber = null } = {}) {
   try {
     if (!CHAT_STUDY_TOOLS.includes(tool)) return { error: `tool must be one of: ${CHAT_STUDY_TOOLS.join(", ")}.` };
+    const docScope = scope === "page" ? "page" : "document";
+    const page = Number.isInteger(Number(pageNumber)) && Number(pageNumber) >= 1 ? Number(pageNumber) : null;
+    if (docScope === "page" && !page) return { error: "Which page? Say the page number (1-based) for a page-scoped request, or ask for the whole document." };
     const found = await findStudyRecord({ userId, query, folder, recordId });
     if (found.error) return { error: found.error };
     if (found.needsChoice) {
@@ -251,21 +254,23 @@ export async function makeStudyMaterial({ userId, tool, query = "", folder = "",
     const base = { tool, recordId: found.record.id, name: found.record.name, ...(found.folder ? { folder: found.folder.name } : {}) };
 
     if (tool === "podcast") {
-      const out = await startPodcast({ userId, target, scope: "document", values: { focus, length }, deps: await podcastDeps() });
+      const out = await startPodcast({ userId, target, scope: docScope, pageNumber: page, values: { focus, length }, deps: await podcastDeps() });
       if (out.status) return { error: out.message };
       return { made: true, ...base, artifactId: out.artifact.id, status: "making", label: LABEL.podcast,
         href: `/library?record=${found.record.id}&artifact=${out.artifact.id}` };
     }
 
     const values = toolValues({ focus, count, difficulty });
-    const g = await generateToolResult({ userId, target, tool, scope: "document", values, feature: `chat_${tool}` });
+    const g = await generateToolResult({ userId, target, tool, scope: docScope, pageNumber: page, values, feature: `chat_${tool}` });
     if (g.status) return { error: g.message };
     const content = toReaderContent(tool, g.result);
     const created = await createArtifact({ userId, recordId: found.record.id, row: {
-      kind: tool, page_number: null, open: true, params: { ...values, scope: "Whole document", from: "chat" }, content } });
+      kind: tool, page_number: docScope === "page" ? page : null, open: true,
+      params: { ...values, scope: docScope === "page" ? `Page ${page}` : "Whole document", from: "chat" }, content } });
     if (created.error) return { error: created.error };
     const n = (content.quizQuestions || content.cardSet || content.summaryPoints || []).length;
     return { made: true, ...base, artifactId: created.artifact.id, count: n, label: LABEL[tool],
+      scope: docScope === "page" ? `Page ${page}` : "Whole document",
       href: `/library?record=${found.record.id}&artifact=${created.artifact.id}` };
   } catch (e) {
     console.warn("[study-material] not made:", String(e?.message || e).slice(0, 160));

@@ -23,7 +23,7 @@ test("a chat-made quiz is the same tab the reader saves: questions + fresh answe
 });
 
 test("chat saves it as a reader tab and links to it; a folder with several files asks", () => {
-  assert.match(src, /createArtifact\(\{ userId, recordId: found\.record\.id, row: \{\s*kind: tool, page_number: null, open: true/);
+  assert.match(src, /createArtifact\(\{ userId, recordId: found\.record\.id, row: \{\s*kind: tool, page_number: docScope === "page" \? page : null, open: true/);
   assert.match(src, /href: `\/library\?record=\$\{found\.record\.id\}&artifact=\$\{created\.artifact\.id\}`/);
   assert.match(src, /ask which one \(by name\) to make the \$\{tool\} from; don't guess/);
   assert.match(src, /from\("library_folder_items"\)[\s\S]{0,200}\.eq\("item_type", "record"\)/);

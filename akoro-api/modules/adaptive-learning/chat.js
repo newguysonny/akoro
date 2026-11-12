@@ -1042,6 +1042,8 @@ export const CHAT_TOOLS = [
         query: { type: "string", description: "OPTIONAL, but required unless folder is given. The topic or document name to build it from (3-200 characters). Use the learner's words." },
         folder: { type: "string", description: "OPTIONAL. The Library folder they named, e.g. 'Basic Science'. Use instead of query when they point at a folder; if it holds several documents the tool returns them so you can ask which." },
         focus: { type: "string", description: "OPTIONAL. A narrower focus inside the document, e.g. 'photosynthesis' or 'chapter 2'. Applies to quiz/flashcards/summary/podcast." },
+        scope: { type: "string", enum: ["document", "page"], description: "OPTIONAL. 'document' (default) builds from the whole file; 'page' builds from one page and REQUIRES pageNumber. Use 'page' only when the learner says 'this page' or names a page." },
+        pageNumber: { type: "integer", minimum: 1, description: "OPTIONAL. The 1-based page for scope='page'. Omit for the whole document." },
         count: { type: "integer", minimum: 1, maximum: 20, description: "OPTIONAL. How many questions or cards they asked for; omit to let the tool choose. Not used by summary/podcast." },
         difficulty: { type: "string", enum: ["easy", "medium", "hard"], description: "OPTIONAL. Quiz difficulty; omit for medium. Ignored by flashcards/summary/podcast." },
         length: { type: "string", enum: ["short", "medium", "long"], description: "OPTIONAL. Podcast length; omit for the default. Ignored by the other tools." },
@@ -2774,7 +2776,8 @@ async function runChatTool(name, input, studentId, { conversationId = null, role
       // The learner's own records only; the result is a saved reader tab (edu.record_artifacts).
       const { makeStudyMaterial } = await import("../records/studyMaterial.js");
       return makeStudyMaterial({ userId: studentId, tool: input?.tool, query: input?.query, folder: input?.folder,
-        focus: input?.focus || "", count: input?.count || "", difficulty: input?.difficulty || "", length: input?.length || "" });
+        focus: input?.focus || "", count: input?.count || "", difficulty: input?.difficulty || "", length: input?.length || "",
+        scope: input?.scope === "page" ? "page" : "document", pageNumber: input?.pageNumber ?? null });
     }
     case "analyse_past_papers": {
       // The learner's own parsed past papers only (D53).
