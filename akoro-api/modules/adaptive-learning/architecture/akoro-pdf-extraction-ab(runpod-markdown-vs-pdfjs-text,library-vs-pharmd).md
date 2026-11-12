@@ -135,3 +135,19 @@ kept (scans need it) and is now safe to enable for any document:
 
 This is the foundation for switching Library documents to markdown selection
 later without reintroducing the hang; large files and scans benefit today.
+
+## 10. Extraction rule (2026-11-12, clarified)
+
+"Every upload is extracted" does **not** mean every upload is sent to RunPod:
+
+| Upload | Stored at registration (free) | Paid model parse |
+|---|---|---|
+| Text PDF | **yes** — pdf.js text layer → `pdf-text` pages (lines, boxes, page size) | **no** (the browser skips it) |
+| Scanned PDF / image | nothing (no text layer) | **yes** — uploader's background run, or the reader's offer |
+| txt / md / csv / Office | **yes** — text (or office text) pages | no |
+| A/V | API transcription | no (transcript is the extraction) |
+
+So the shelf always ends up with page text for grounding, citations and
+search; only scans pay for the GPU. The PHARM.D reader follows the same gate
+(§9). Change `943695e0` introduced this; the older "always extract" wording in
+comments was stale.

@@ -83,17 +83,16 @@ export async function rasterizeImageFile(url) {
 }
 
 /**
- * autoExtractUpload — the "always extract" rule, uploader's side.
+ * Extraction at upload — the uploader's side.
  *
- * The moment a PDF or image record is registered (right after the bytes
- * land in the bucket), the uploader's browser rasterizes and parses it in
- * the background — no reader, no waiting. By the time anyone opens the
- * record (the uploader included) the extraction is cached under the file's
- * key, the teaching session grounds instantly, and the search index has
- * real text to chew on. A/V uploads don't come through here: the API
- * transcribes those itself at registration. Everything fails silent — a
- * half-finished run has still cached every batch that worked, and the
- * reader's offer remains as the manual retry for the rest.
+ * EVERY upload is read at registration, but not every upload is paid for:
+ * the API stores the text it can read without a GPU (a PDF's text layer,
+ * txt/md/csv, Word/PowerPoint), and those pages become the file's extraction.
+ * This browser run therefore only covers what the server cannot read — a
+ * scanned PDF or an image — and starts right after the bytes land, in the
+ * background, so the parse is cached before anyone opens the record. A/V is
+ * transcribed by the API itself. Everything fails silent: completed batches
+ * stay cached and the reader's offer is the retry for the rest.
  */
 export async function autoExtractUpload(record) {
   try { await extractUpload(record); } catch { /* silent — the reader still offers if this never finished */ }
