@@ -12,13 +12,15 @@ const PUBLIC_PHARMD = /\/object\/public\/pharmd-courses\/([^?#]+)/i;
 
 export function pharmdContentKey(topic) {
   if (topic?.contentKey) return String(topic.contentKey);
+  const hash = String(topic?.file_hash || "").trim();
+  const suffix = hash ? `#${hash}` : "";
   const url = String(topic?.file_url || "");
   const m = url.match(PUBLIC_PHARMD);
   if (!m) return null;
   try {
-    return `pharmd:${decodeURIComponent(m[1])}`;
+    return `pharmd:${decodeURIComponent(m[1])}${suffix}`;
   } catch {
-    return `pharmd:${m[1]}`;
+    return `pharmd:${m[1]}${suffix}`;
   }
 }
 

@@ -9,5 +9,10 @@ test("the shared key comes from contentKey, or is derived from the public URL", 
     "pharmd:BIO 111/01 - Cell Structure and Organization.pdf",
   );
   assert.equal(pharmdContentKey({ file_url: "https://example.com/other/file.pdf" }), null);
+  assert.equal(
+    pharmdContentKey({ file_hash: "abc123", file_url: "https://x.supabase.co/storage/v1/object/public/pharmd-courses/BIO%20111/01.pdf" }),
+    "pharmd:BIO 111/01.pdf#abc123",
+  );
+  assert.equal(pharmdContentKey({ contentKey: "pharmd:X#v1", file_hash: "ignored" }), "pharmd:X#v1");
   assert.equal(pharmdContentKey({}), null);
 });
