@@ -39,3 +39,13 @@
 - **Learner (`akoro-learner`)**: signup, sign-in and reset code screens implemented.
 - **Admin / instructor**: still the legacy password-only screens; keep those portals out of `AUTH_EMAIL_CODES` until updated.
 - Google sign-in is unchanged and does not use email codes.
+
+## Tester accounts
+
+Seeded testers/demo learners use `@demo.akoro.app` addresses that cannot receive email. Their **login** is exempt from the emailed code (password still required, TOTP still applies) while every real domain is enforced. The bypass is domain-scoped, never a username pattern:
+
+```env
+AUTH_EMAIL_CODES_BYPASS=demo.akoro.app
+```
+
+Set it empty to require codes for testers too. Signup/reset for real users are unaffected. The Agent Console already impersonates learners with an internal token, so console tests never depended on the login flow.

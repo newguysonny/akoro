@@ -45,7 +45,7 @@ import {
 import { urlFor } from "../../lib/urls.js";
 import {
   issueEmailCode, verifyEmailCode, resendEmailCode, consumeEmailCode,
-  emailCodesEnabled, normaliseEmail, CODE_TTL_MINUTES,
+  emailCodesEnabled, emailCodeBypassed, normaliseEmail, CODE_TTL_MINUTES,
 } from "./emailCodes.js";
 
 // ─── § CONSTANTS ──────────────────────────────────────────────────────────────
@@ -807,7 +807,7 @@ const authHandlers = {
     // Email-code gate (per portal). Passwords alone no longer mint a session
     // when this portal is enabled; the code is emailed and verified next.
     const portal = portalOf(req);
-    if (emailCodesEnabled(portal)) {
+    if (emailCodesEnabled(portal) && !emailCodeBypassed(user.email)) {
       const purpose = user.email_verified ? "login" : "signup";
       const issued = await issueEmailCode({
         userId: user.id, email: user.email, purpose,

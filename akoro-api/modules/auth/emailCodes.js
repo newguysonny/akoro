@@ -34,6 +34,20 @@ export function emailCodesEnabled(portal) {
 
 export const normaliseEmail = (email) => String(email || "").trim().toLowerCase();
 
+/**
+ * Seeded testers/demo learners cannot receive email. Their accounts live on a
+ * domain Akoro controls, so the login code is skipped for those addresses ONLY.
+ * Real domains are never bypassed; set AUTH_EMAIL_CODES_BYPASS= (empty) to
+ * require codes for testers too.
+ */
+const BYPASS_DOMAINS = String(process.env.AUTH_EMAIL_CODES_BYPASS ?? "demo.akoro.app")
+  .split(",").map((d) => d.trim().toLowerCase()).filter(Boolean);
+
+export function emailCodeBypassed(email) {
+  const domain = normaliseEmail(email).split("@")[1] || "";
+  return BYPASS_DOMAINS.some((d) => domain === d || domain.endsWith(`.${d}`));
+}
+
 function hashCode(email, purpose, code) {
   return createHmac("sha256", SECRET).update(`${purpose}:${normaliseEmail(email)}:${code}`).digest("hex");
 }

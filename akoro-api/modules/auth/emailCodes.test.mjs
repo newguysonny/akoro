@@ -26,3 +26,11 @@ test("emails are normalised and the TTL is sane", async () => {
   assert.equal(normaliseEmail("  Ada@Example.COM "), "ada@example.com");
   assert.ok(CODE_TTL_MINUTES >= 3 && CODE_TTL_MINUTES <= 30);
 });
+
+test("only the controlled demo domain bypasses login codes", async () => {
+  const mod = await import("./emailCodes.js?bypass=1");
+  assert.equal(mod.emailCodeBypassed("tester17@demo.akoro.app"), true);
+  assert.equal(mod.emailCodeBypassed("stu.jss12@demo.akoro.app"), true);
+  assert.equal(mod.emailCodeBypassed("ada@akoro.app"), false);
+  assert.equal(mod.emailCodeBypassed("ada@example.com"), false);
+});
