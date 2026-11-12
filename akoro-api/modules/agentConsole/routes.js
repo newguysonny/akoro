@@ -30,7 +30,7 @@
 import express from "express";
 import { randomUUID } from "node:crypto";
 import db from "../../db.js";
-import { openai, fallbackLadder } from "../../lib/aiModel.js";
+import { openai, fallbackLadder, runWithProviders } from "../../lib/aiModel.js";
 import { readLogs, logSeq } from "../../lib/logTap.js";
 import { runDry } from "../../lib/dryRunContext.js";
 import { signInternalAccess } from "../auth/routes.js";
@@ -321,6 +321,40 @@ router.post("/ai-ping", guard, asyncHandler(async (req, res) => {
   } catch (e) {
     res.status(502).json({ success: false, error: String(e?.message || e).slice(0, 300), status: e?.status ?? null,
       model: entry.id, apiModel: entry.apiModel, ms: Date.now() - started });
+  }
+}));
+
+/* Simulate a 429 on the OpenCode transport and let the REAL next hop answer.
+   Proves the failover ladder end-to-end without spending the gateway: the
+   primary/hop calls are stubbed, the direct transport is a live call. */
+router.post("/ai-failover-test", guard, asyncHandler(async (req, res) => {
+  const model = String(req.body?.model || process.env.AI_MODEL_DEFAULT || "deepseek");
+  const maxTokens = Math.max(2, Math.min(64, Number(req.body?.maxTokens) || 16));
+  const prompt = String(req.body?.prompt || "ping").slice(0, 200);
+  const failing = {
+    async create() {
+      throw Object.assign(new Error("simulated 429 on the OpenCode transport"), { status: 429 });
+    },
+  };
+  const started = Date.now();
+  try {
+    const out = await runWithProviders({ opencode: failing }, () => openai.chat.completions.create({
+      model,
+      messages: [{ role: "user", content: prompt }],
+      max_tokens: maxTokens,
+      __feature: "failover_test",
+      __payer: "platform",
+    }));
+    res.json({ success: true, data: {
+      model,
+      ms: Date.now() - started,
+      content: out?.choices?.[0]?.message?.content ?? null,
+      fallback: out?.model_fallback ?? null,
+      usage: out?.usage ?? null,
+    } });
+  } catch (e) {
+    res.status(502).json({ success: false, error: String(e?.message || e).slice(0, 300),
+      status: e?.status ?? null, model, ms: Date.now() - started });
   }
 }));
 
