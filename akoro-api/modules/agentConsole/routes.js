@@ -313,18 +313,42 @@ router.post("/ai-ping", guard, asyncHandler(async (req, res) => {
   const apiModelOverride = String(req.body?.apiModel || "").trim() || null;
   if (!apiModelOverride && entry.provider !== "opencode") return bad(res, `"${id}" isn't an OpenCode model.`);
   const started = Date.now();
-  const maxTokens = Math.max(2, Math.min(64, Number(req.body?.maxTokens) || 16));
+  const maxTokens = Math.max(2, Math.min(512, Number(req.body?.maxTokens) || 16));
   const prompt = String(req.body?.prompt || "ping").slice(0, 200);
+  const probeStream = req.body?.stream === true;
+  const probeReasoning = req.body?.reasoning === true;
   try {
     const adapter = makeOpenCodeAdapter();
     const out = await adapter.create({
       model: apiModelOverride || entry.apiModel,
       messages: [{ role: "user", content: prompt }],
       max_tokens: maxTokens,
-    }, { timeout: 20000, maxRetries: 0 }, entry);
-    res.json({ success: true, data: {
-      model: entry.id, apiModel: apiModelOverride || entry.apiModel, ms: Date.now() - started,
-      usage: out?.usage ?? null,
+      ...(probeReasoning ? { reasoning_effort: "medium" } : {}),
+      ...(probeStream ? { stream: true } : {}),
+    }, { timeout: 60000, maxRetries: 0 }, entry);
+    if (probeStream) {
+      let reasoning = "", content = "", chunks = 0;
+      const keys = new Set();
+      for await (const ch of out) {
+        chunks += 1;
+        const d = ch?.choices?.[0]?.delta || {};
+        Object.keys(d).forEach((k) => keys.add(k));
+        reasoning += String(d.reasoning_content ?? d.reasoning ?? d.thinking ?? "");
+        content += String(d.content ?? "");
+      }
+      return res.json({ success: true, data: {
+        model: entry.id, apiModel: apiModelOverride || entry.apiModel, stream: true, chunks,
+        deltaKeys: [...keys], reasoningChars: reasoning.length, reasoning: reasoning.slice(0, 1200),
+        contentChars: content.length, content: content.slice(0, 300),
+      } });
+    }
+    const msg = out?.choices?.[0]?.message || {};
+    return res.json({ success: true, data: {
+      model: entry.id, apiModel: apiModelOverride || entry.apiModel,
+      ms: Date.now() - started, usage: out?.usage ?? null,
+      messageKeys: Object.keys(msg),
+      reasoning: String(msg.reasoning_content ?? msg.reasoning ?? msg.thinking ?? "").slice(0, 1200),
+      content: String(msg.content ?? "").slice(0, 300),
     } });
   } catch (e) {
     res.status(502).json({ success: false, error: String(e?.message || e).slice(0, 300), status: e?.status ?? null,
