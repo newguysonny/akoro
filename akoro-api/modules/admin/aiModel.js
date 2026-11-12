@@ -62,7 +62,11 @@ function state() {
 
 router.get("/ai/model", adminOnly, asyncHandler(async (req, res) => {
   await loadRuntimeSettings();
-  const models = modelRegistry.catalogue.map((entry) => ({
+  // The pickable models plus any hidden entry used as a failover route
+  // (e.g. deepseek-direct); the 150-row price table is not an admin choice.
+  const fallbackTargets = new Set(modelRegistry.catalogue.map((e) => e.fallbackModel).filter(Boolean));
+  const shown = modelRegistry.catalogue.filter((e) => e.selectable || fallbackTargets.has(e.id));
+  const models = shown.map((entry) => ({
     id: entry.id,
     label: entry.label,
     enabled: entry.enabled,

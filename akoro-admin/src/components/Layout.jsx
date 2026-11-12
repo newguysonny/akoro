@@ -50,6 +50,7 @@ const NAV_GROUPS = [
     { to: '/analytics', icon: BarChart2,    label: 'Analytics' },
     { to: '/reports',   icon: FileBarChart, label: 'Reports' },
     { to: '/ai-spend',  icon: Cpu,          label: 'AI spend' },
+    { to: '/ai-models', icon: Bot,          label: 'AI model' },
     { to: '/evals',     icon: FlaskConical, label: 'Evals' },
     { to: '/agent-tool-requests', icon: Wrench, label: 'Agent requests' },
     { to: '/real-account-checks', icon: ShieldCheck, label: 'Real-account checks' },
