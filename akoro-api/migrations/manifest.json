@@ -257,7 +257,8 @@
     "2026-agent-execution-log.sql",
     "2026-agent-tools-domain.sql",
     "2026-ai-runtime-settings.sql",
-    "2026-pharmd-topic-hash.sql"
+    "2026-pharmd-topic-hash.sql",
+    "2026-chat-message-meta-merge.sql"
   ],
   "demo": [
     "2026-seed-school-passwords.sql",

@@ -4134,14 +4134,35 @@ function previewMetaFrom(toolExecutions) {
  * same cards. Best effort: a missing column during a rolling deploy or a
  * write hiccup never touches the saved reply itself.
  */
+/**
+ * Merge a reply-meta patch atomically. Materials (the turn) and ideas (the
+ * parallel suggestions call) used to read-modify-write the same jsonb, so one
+ * could overwrite the other — the card vanished on refresh. The SQL function
+ * merges in one UPDATE; a read-merge-write fallback keeps old deploys working.
+ */
+async function mergeChatMeta(messageId, patch) {
+  if (!messageId || !patch || !Object.keys(patch).length) return;
+  try {
+    const { error } = await db.rpc("merge_chat_message_meta", { p_id: messageId, p_patch: patch });
+    if (!error) return;
+  } catch { /* fall through to the portable merge */ }
+  try {
+    const { data } = await db.from("chat_messages").select("meta").eq("id", messageId).maybeSingle();
+    await db.from("chat_messages").update({ meta: { ...(data?.meta || {}), ...patch } }).eq("id", messageId);
+  } catch (e) { console.warn("[agent-chat] meta merge failed:", e?.message || e); }
+}
+
 let warnedTraceColumn = false;
 async function saveMessageTrace({ messageId, userId, trace, meta = null }) {
   const hasTrace = Array.isArray(trace) && trace.length > 0;
   if (!messageId || (!hasTrace && !meta)) return;
   try {
-    const { error } = await db.from("chat_messages").update({ ...(hasTrace ? { trace } : {}), ...(meta ? { meta } : {}) })
-      .eq("id", messageId).eq("user_id", userId).eq("role", "agent");
-    if (error) throw error;
+    if (hasTrace) {
+      const { error } = await db.from("chat_messages").update({ trace })
+        .eq("id", messageId).eq("user_id", userId).eq("role", "agent");
+      if (error) throw error;
+    }
+    if (meta) await mergeChatMeta(messageId, meta);
   } catch (error) {
     if (!warnedTraceColumn) {
       warnedTraceColumn = true;
@@ -4613,12 +4634,12 @@ router.put("/sessions/:id/model", async (req, res) => {
 export async function saveReplyIdeas({ userId, conversationId, reply, ideas }) {
   try {
     if (!userId || !/^[0-9a-f-]{36}$/i.test(String(conversationId || "")) || !Array.isArray(ideas) || !ideas.length) return false;
-    const { data: last } = await db.from("chat_messages").select("id, text, meta").eq("session_id", conversationId).eq("user_id", userId)
+    const { data: last } = await db.from("chat_messages").select("id, text").eq("session_id", conversationId).eq("user_id", userId)
       .eq("role", "agent").order("created_at", { ascending: false }).limit(1).maybeSingle();
     const norm = (t) => String(t || "").replace(/\s+/g, " ").trim();
     if (!last || norm(last.text) !== norm(reply)) return false;
-    const { error } = await db.from("chat_messages").update({ meta: { ...(last.meta || {}), ideas: ideas.slice(0, 3) } }).eq("id", last.id).eq("user_id", userId);
-    return !error;
+    await mergeChatMeta(last.id, { ideas: ideas.slice(0, 3) });
+    return true;
   } catch { return false; }
 }
 
