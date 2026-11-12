@@ -268,6 +268,50 @@ router.post("/cleanup-domain-tools", guard, asyncHandler(async (req, res) => {
 /* GET /agent-console/learner-tools?learner=@x&status=active
    Read-only inspection of a learner's saved tools (name, view/domain, actions,
    capabilities, params) — the console can otherwise only see built-in tools. */
+/* The OpenCode lane, as configured on THIS server (no secrets) + a 1-token
+   live ping so an env change can be verified without a deploy. */
+router.get("/ai-provider", guard, (_req, res) => {
+  const lane = String(process.env.OPENCODE_LANE || "go");
+  const base = String(process.env.OPENCODE_BASE_URL || "https://opencode.ai/inference").replace(/\/+$/, "");
+  res.json({ success: true, data: {
+    provider: process.env.AI_PROVIDER || null,
+    defaultModel: modelRegistry.defaultId,
+    envDefault: modelRegistry.envDefaultId,
+    fallback: modelRegistry.fallbackId,
+    lane,
+    baseURL: base,
+    keySet: !!process.env.OPENCODE_API_KEY,
+    billProviderCost: process.env.AI_BILL_PROVIDER_COST !== "false",
+    models: modelRegistry.catalogue.filter((e) => e.selectable).map((e) => ({
+      id: e.id, label: e.label, apiModel: e.apiModel, lane: e.lane, provider: e.provider,
+      availability: availabilityOf(e),
+    })),
+  } });
+});
+
+router.post("/ai-ping", guard, asyncHandler(async (req, res) => {
+  const id = String(req.body?.model || process.env.AI_MODEL_DEFAULT || modelRegistry.defaultId);
+  const entry = modelRegistry.get(id);
+  if (!entry) return bad(res, `Unknown model id "${id}".`);
+  if (entry.provider !== "opencode") return bad(res, `"${id}" isn't an OpenCode model.`);
+  const started = Date.now();
+  try {
+    const adapter = makeOpenCodeAdapter();
+    const out = await adapter.create({
+      model: entry.apiModel,
+      messages: [{ role: "user", content: "ping" }],
+      max_tokens: 1,
+    }, { timeout: 15000, maxRetries: 0 }, entry);
+    res.json({ success: true, data: {
+      model: entry.id, apiModel: entry.apiModel, ms: Date.now() - started,
+      usage: out?.usage ?? null,
+    } });
+  } catch (e) {
+    res.status(502).json({ success: false, error: String(e?.message || e).slice(0, 300), status: e?.status ?? null,
+      model: entry.id, apiModel: entry.apiModel, ms: Date.now() - started });
+  }
+}));
+
 router.get("/learner-tools", guard, asyncHandler(async (req, res) => {
   let learner;
   try { learner = await resolveLearner(req.query?.learner); } catch (e) { return fail(res, e); }
