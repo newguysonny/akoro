@@ -243,7 +243,10 @@ export default function AiModelsPage() {
                       <td style={{ padding: '9px 14px', borderBottom: `1px solid ${BORDER}`, fontWeight: 800, color: INK }}>{f.label}</td>
                       <td style={{ padding: '9px 14px', borderBottom: `1px solid ${BORDER}`, color: MUTED }}>{f.modelId || '—'}</td>
                       <td style={{ padding: '9px 14px', borderBottom: `1px solid ${BORDER}` }}>
-                        {f.pinned ? <Chip tone="warn">pinned</Chip> : <Chip tone="ok">follows default</Chip>}
+                        {f.source === "default" ? <Chip tone="ok">follows default</Chip>
+                          : f.source === "env" ? <Chip tone="warn">env override</Chip>
+                            : f.source === "preference" ? <Chip tone="info">prefers DeepSeek</Chip>
+                              : <Chip tone="warn">pinned</Chip>}
                         {f.envSet && <span style={{ fontSize: 10.5, color: MUTED2, marginLeft: 6, fontFamily: 'monospace' }}>{f.env}</span>}
                       </td>
                     </tr>

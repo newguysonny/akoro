@@ -32,12 +32,15 @@ export function featureModels(env = process.env, defaultId = null) {
     const modelId = f.followsDefault
       ? (fromEnv || defaultId || env.OPENAI_MODEL || null)
       : (fromEnv || (f.prefersAvailable ? f.prefersAvailable[0] : null) || f.fallback);
+    const source = fromEnv ? "env" : f.followsDefault ? "default" : f.prefersAvailable ? "preference" : "fallback";
     return {
       key: f.key,
       label: f.label,
       env: f.env,
       modelId,
-      pinned: !f.followsDefault,
+      source,
+      pinned: source !== "default",
+      followsDefault: source === "default",
       fallsBackTo: f.fallback,
       envSet: !!fromEnv,
     };

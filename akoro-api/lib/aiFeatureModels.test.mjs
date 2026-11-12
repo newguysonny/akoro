@@ -9,6 +9,7 @@ test("pinned helpers keep their own model; the guide follows the default", () =>
   assert.equal(by.guide_ideas.modelId, "gpt-4o-mini");
   assert.equal(by.chat_guide.modelId, "deepseek");
   assert.equal(by.chat_guide.pinned, false);
+  assert.equal(by.chat_guide.source, "default");
   assert.equal(by.think_mode.modelId, "o4-mini");
   assert.equal(by.vision_imports.modelId, "gpt-4o");
   assert.equal(by.syllabus_import.modelId, "deepseek");
@@ -20,4 +21,7 @@ test("an env var moves a pinned feature without touching code", () => {
   assert.equal(by.chat_suggestions.pinned, true);
   assert.equal(by.chat_suggestions.envSet, true);
   assert.equal(by.vision_imports.modelId, "gpt-6-luna");
+  const guide = featureModels({ OPENAI_GUIDE_MODEL: "o4-mini" }, "deepseek").find((x) => x.key === "chat_guide");
+  assert.equal(guide.source, "env");
+  assert.equal(guide.pinned, true, "an env override is not the platform default");
 });
