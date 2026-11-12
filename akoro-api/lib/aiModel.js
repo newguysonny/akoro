@@ -392,7 +392,8 @@ async function meteredCreate(params = {}) {
       bill(res);
       const msg0 = res?.choices?.[0]?.message || {};
       const calls0 = (msg0.tool_calls || []).map((c) => ({ name: c?.function?.name, args: String(c?.function?.arguments || "").slice(0, 120) }));
-      console.warn(`[ai:json] retry ${feature} on ${entry?.id || model} (${first.errors[0] || "bad JSON"}) forced=${forceTool} calls=${JSON.stringify(calls0)} content=${JSON.stringify(String(msg0.content || "").slice(0, 120))}`);
+      const finish0 = res?.choices?.[0]?.finish_reason || null;
+      console.warn(`[ai:json] retry ${feature} on ${entry?.id || model} (${first.errors[0] || "bad JSON"}) forced=${forceTool} finish=${finish0} calls=${JSON.stringify(calls0)} content=${JSON.stringify(String(msg0.content || "").slice(0, 120))}`);
       try {
         const retryMessages = [...(clean.messages || []), {
           role: "system",
@@ -400,9 +401,15 @@ async function meteredCreate(params = {}) {
             ? `Your previous submit_result was missing or invalid (${first.errors[0] || "bad JSON"}). Call submit_result again with ONLY a JSON object matching this schema:\n${JSON.stringify(jsonRequest)}`
             : jsonRetryInstruction(jsonRequest, first.errors),
         }];
+        // A reasoning model can spend the whole completion budget on thinking
+        // and truncate the JSON (finish_reason "length"). Give the retry room.
+        const limitHit = finish0 === "length";
+        const currentMax = Number(clean.max_tokens || clean.max_completion_tokens || 800);
+        const bumped = limitHit ? Math.min(4000, Math.round(currentMax * 1.6)) : null;
         const second = extractStructured(await fire({
           ...clean,
           ...(forceTool ? {} : { response_format: { type: "json_object" } }),
+          ...(limitHit ? (clean.max_tokens ? { max_tokens: bumped } : { max_completion_tokens: bumped }) : {}),
           messages: retryMessages,
         }, reqOpts));
         const retried = readStructured(second?.choices?.[0]?.message?.content, jsonRequest);
