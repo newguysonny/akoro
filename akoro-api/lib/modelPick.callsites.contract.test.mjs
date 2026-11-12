@@ -15,6 +15,8 @@ process.env.ANTHROPIC_API_KEY ||= "test";
 process.env.AI_TELEMETRY = "on";
 process.env.AI_TELEMETRY_DB = "off";
 process.env.OPENCODE_API_KEY ||= "test";
+process.env.DEEPSEEK_API_KEY ||= "test";
+process.env.DEEPSEEK_MODEL ||= "deepseek-chat";
 // This file exercises call-site mechanics against the fixtures it was written
 // with; the live catalogue (seven Go models, DeepSeek default) is covered by
 // lib/modelRegistry.contract.test.mjs.
@@ -272,4 +274,50 @@ test("DeepSeek fails over from OpenCode to its own API, and skips it without a k
   const noKey = createModelRegistry({ OPENCODE_API_KEY: "k", DEEPSEEK_MODEL: "deepseek-chat" });
   const target = errorFallbackFor(noKey.get("deepseek"), { registry: noKey, env: { OPENCODE_API_KEY: "k" } });
   assert.equal(target, null, "without DEEPSEEK_API_KEY the direct route is skipped, never guessed");
+});
+
+
+test("a failed model walks the full ladder: DeepSeek OpenCode, then DeepSeek direct", async () => {
+  const { fallbackLadder } = await import("./aiModel.js");
+  const { createModelRegistry } = await import("./modelRegistry.js");
+  const env = { OPENCODE_API_KEY: "k", DEEPSEEK_API_KEY: "k", DEEPSEEK_MODEL: "deepseek-chat" };
+  const reg = createModelRegistry(env);
+  assert.deepEqual(fallbackLadder(reg.get("glm-5-3-flash"), { registry: reg, env }).map((e) => e.id),
+    ["deepseek", "deepseek-direct"], "GLM → DeepSeek Go → DeepSeek direct");
+  assert.deepEqual(fallbackLadder(reg.get("deepseek"), { registry: reg, env }).map((e) => e.id),
+    ["deepseek-direct"], "the public DeepSeek model fails over to its direct transport");
+  const noDirect = { OPENCODE_API_KEY: "k" };
+  const reg2 = createModelRegistry(noDirect);
+  assert.deepEqual(fallbackLadder(reg2.get("glm-5-3-flash"), { registry: reg2, env: noDirect }).map((e) => e.id),
+    ["deepseek"], "without DEEPSEEK_API_KEY the direct hop is skipped, never guessed");
+});
+
+test("a 429 on GLM and on DeepSeek Go is answered by DeepSeek direct in the same request", async () => {
+  const { openai, runWithProviders } = await import("./aiModel.js");
+  const seenModels = [];
+  const reply = {
+    choices: [{ index: 0, finish_reason: "stop", message: { role: "assistant", content: "direct answer" } }],
+    usage: { prompt_tokens: 10, completion_tokens: 2 },
+  };
+  const opencode = { async create(body) {
+    seenModels.push(body.model);
+    throw Object.assign(new Error("rate limited"), { status: 429 });
+  } };
+  const direct = { async create(body) {
+    seenModels.push(body.model);
+    assert.equal(body.model, "deepseek-chat", "the direct transport's apiModel");
+    return reply;
+  } };
+  const res = await runWithProviders({ opencode, openai_compatible: direct }, () =>
+    openai.chat.completions.create({
+      model: "glm-5-3-flash",
+      messages: [{ role: "user", content: "hi" }],
+      __feature: "ladder_test",
+      __userId: null,
+      __payer: "platform",
+    }));
+  assert.deepEqual(seenModels, ["glm-5.3-flash", "deepseek-v4.1-flash", "deepseek-chat"]);
+  assert.equal(res.choices[0].message.content, "direct answer");
+  assert.equal(res.model_fallback.fallbackModel, "deepseek-direct");
+  assert.deepEqual(res.model_fallback.tried, ["deepseek", "deepseek-direct"]);
 });

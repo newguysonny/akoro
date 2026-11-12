@@ -350,6 +350,11 @@ public catalogue — only the route list.
   env (apply the migration).
 - **Tests:** 98 across registry, tiers, picker, callsites, adapters, runtime, pricing — all green.
 
+- **Full failover ladder:** a retryable failure (429/402/5xx/timeout/auth) walks
+  `entry.fallbackModel → that model's own fallback → …` (max 4). So GLM → DeepSeek
+  OpenCode → DeepSeek direct, all inside one request; each hop is availability-checked and the
+  final answer carries `model_fallback: { model, fallbackModel, tried, reason }`. Streams walk
+  the ladder before the first chunk; refusals keep the single existing hop.
 - **DeepSeek direct failover:** the public `deepseek` row (OpenCode Go) carries
   `fallbackModel: "deepseek-direct"` — a hidden, non-selectable entry
   (`provider: "deepseek"` → OpenAI-compatible, `https://api.deepseek.com`,

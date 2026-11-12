@@ -30,7 +30,7 @@
 import express from "express";
 import { randomUUID } from "node:crypto";
 import db from "../../db.js";
-import { openai } from "../../lib/aiModel.js";
+import { openai, fallbackLadder } from "../../lib/aiModel.js";
 import { readLogs, logSeq } from "../../lib/logTap.js";
 import { runDry } from "../../lib/dryRunContext.js";
 import { signInternalAccess } from "../auth/routes.js";
@@ -286,7 +286,9 @@ router.get("/ai-provider", guard, (_req, res) => {
     billProviderCost: process.env.AI_BILL_PROVIDER_COST !== "false",
     models: modelRegistry.catalogue.filter((e) => e.selectable).map((e) => ({
       id: e.id, label: e.label, apiModel: e.apiModel, lane: e.lane, provider: e.provider,
-      fallbackModel: e.fallbackModel, availability: availabilityOf(e),
+      fallbackModel: e.fallbackModel,
+      ladder: fallbackLadder(e).map((t) => t.id),
+      availability: availabilityOf(e),
     })),
     // Hidden failover routes (e.g. DeepSeek's own API behind the public model).
     targets: modelRegistry.catalogue.filter((e) => !e.selectable && e.enabled)

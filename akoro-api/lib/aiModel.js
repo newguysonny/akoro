@@ -42,16 +42,46 @@ function retryableFailure(err) {
   return RETRYABLE.has(kind) || /rate.?limit|quota|balance|capacity|overload|insufficient/i.test(String(err?.message || ""));
 }
 
-/** The next model to try when the provider fails (429/5xx/timeout/balance):
- *  the entry's fallbackModel, then the runtime/env global fallback, then the
- *  default — never itself. */
-export function errorFallbackFor(entry, { registry = modelRegistry, env = process.env } = {}) {
-  if (!entry) return null;
-  for (const id of [entry.fallbackModel, registry.fallbackId, registry.defaultId]) {
-    const target = id && registry.get(id);
-    if (target && target.id !== entry.id && target.enabled && availabilityOf(target, env).available) return target;
+/**
+ * The ordered failover ladder for a model: its own fallbackModel, then the
+ * runtime/env global fallback, then the default — and each of those model's
+ * own fallback (so GLM → DeepSeek OpenCode → DeepSeek direct). Only models
+ * this server can actually call are included; the starting model is never a
+ * target. Bounded to 4 hops.
+ */
+export function fallbackLadder(entry, { registry = modelRegistry, env = process.env, max = 4 } = {}) {
+  if (!entry) return [];
+  const out = [];
+  const seen = new Set([entry.id]);
+  const add = (candidate) => {
+    if (!candidate || out.length >= max) return;
+    if (seen.has(candidate.id) || !candidate.enabled) return;
+    if (!availabilityOf(candidate, env).available) return;
+    seen.add(candidate.id);
+    out.push(candidate);
+  };
+  // 1) Follow the entry's explicit fallback chain (GLM → DeepSeek → direct).
+  const chain = (from, depth) => {
+    if (!from || depth > 3 || out.length >= max) return;
+    const next = from.fallbackModel && registry.get(from.fallbackModel);
+    if (!next) return;
+    add(next);
+    chain(next, depth + 1);
+  };
+  chain(entry, 0);
+  // 2) No usable explicit chain: the runtime/env global fallback, then the
+  //    default, each with its own chain.
+  if (!out.length) {
+    const seeds = [registry.get(registry.fallbackId), registry.get(registry.defaultId)];
+    for (const seed of seeds) { add(seed); if (out.length >= max) break; }
+    for (const seed of [...out]) chain(seed, 0);
   }
-  return null;
+  return out;
+}
+
+/** The first fallback for a failed call (kept for callers/tests). */
+export function errorFallbackFor(entry, opts = {}) {
+  return fallbackLadder(entry, opts)[0] || null;
 }
 
 export function runWithProviders(overrides, fn) {
@@ -224,14 +254,25 @@ async function meteredCreate(params = {}) {
       }, reqOpts);
     } catch (e) {
       report(null, { streamed: true, ok: false, errorKind: errorKindOf(e) });
-      const target = retryableFailure(e) ? errorFallbackFor(entry) : null;
-      if (!target) throw e;
-      console.warn(`[ai] ${entry.id} failed (${errorKindOf(e)}) — streaming from ${target.id}`);
-      source = await serve(target, {
-        ...clean, model: target.apiModel,
-        ...(bills ? { stream_options: { include_usage: true, ...(clean.stream_options || {}) } } : {}),
-      }, reqOpts);
-      entry = target;
+      const ladder = entry && retryableFailure(e) ? fallbackLadder(entry) : [];
+      let lastError = e;
+      let started = false;
+      for (const target of ladder) {
+        console.warn(`[ai] ${entry.id} failed (${errorKindOf(e)}) — streaming from ${target.id}`);
+        try {
+          source = await serve(target, {
+            ...clean, model: target.apiModel,
+            ...(bills ? { stream_options: { include_usage: true, ...(clean.stream_options || {}) } } : {}),
+          }, reqOpts);
+          entry = target;
+          started = true;
+          break;
+        } catch (e2) {
+          lastError = e2;
+          report(null, { streamed: true, ok: false, errorKind: errorKindOf(e2), as: target.id });
+        }
+      }
+      if (!started) throw lastError;
     }
 
     const fallback = { prompt_tokens: estimateTokens(clean.messages), completion_tokens: Math.min(clean.max_tokens || 700, 700) };
@@ -258,15 +299,26 @@ async function meteredCreate(params = {}) {
     res = await fire(clean, reqOpts);
   } catch (e) {
     report(null, { ok: false, errorKind: errorKindOf(e) });
-    const target = retryableFailure(e) ? errorFallbackFor(entry) : null;
-    if (!target) throw e;
-    console.warn(`[ai] ${entry.id} failed (${errorKindOf(e)}) — trying ${target.id}`);
-    let second;
-    try { second = await serve(target, { ...clean, model: target.apiModel }, reqOpts); }
-    catch (e2) { report(null, { ok: false, errorKind: errorKindOf(e2), as: target.id }); throw e2; }
-    report(second?.usage ?? null, { as: target.id });
-    if (bills && second?.usage) charge(second.usage, target.id);
-    return Object.assign(second || {}, { model_fallback: { model: entry.id, fallbackModel: target.id, reason: errorKindOf(e) } });
+    const ladder = entry && retryableFailure(e) ? fallbackLadder(entry) : [];
+    if (!ladder.length) throw e;
+    const tried = [];
+    let lastError = e;
+    for (const target of ladder) {
+      tried.push(target.id);
+      console.warn(`[ai] ${entry.id} failed (${errorKindOf(e)}) — trying ${target.id} (${tried.length}/${ladder.length})`);
+      try {
+        const second = await serve(target, { ...clean, model: target.apiModel }, reqOpts);
+        report(second?.usage ?? null, { as: target.id });
+        if (bills && second?.usage) charge(second.usage, target.id);
+        return Object.assign(second || {}, {
+          model_fallback: { model: entry.id, fallbackModel: target.id, tried, reason: errorKindOf(e) },
+        });
+      } catch (e2) {
+        lastError = e2;
+        report(null, { ok: false, errorKind: errorKindOf(e2), as: target.id });
+      }
+    }
+    throw lastError;
   }
 
   report(res?.usage ?? null);
