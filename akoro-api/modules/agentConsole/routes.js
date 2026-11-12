@@ -300,7 +300,7 @@ router.post("/ai-ping", guard, asyncHandler(async (req, res) => {
   const apiModelOverride = String(req.body?.apiModel || "").trim() || null;
   if (!apiModelOverride && entry.provider !== "opencode") return bad(res, `"${id}" isn't an OpenCode model.`);
   const started = Date.now();
-  const maxTokens = Math.max(1, Math.min(64, Number(req.body?.maxTokens) || 1));
+  const maxTokens = Math.max(2, Math.min(64, Number(req.body?.maxTokens) || 16));
   const prompt = String(req.body?.prompt || "ping").slice(0, 200);
   try {
     const adapter = makeOpenCodeAdapter();
