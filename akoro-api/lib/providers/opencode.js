@@ -14,6 +14,7 @@
 import OpenAI from "openai";
 import { makeAiBreaker } from "../circuitBreaker.js";
 import { aiContext } from "../aiContext.js";
+import { compatParams } from "./openaiCompatible.js";
 
 const DEFAULT_BASE = "https://opencode.ai/inference";
 const DEFAULT_USER_AGENT = "akoro-api/1.0";
@@ -94,15 +95,19 @@ export function makeOpenCodeAdapter({ env = process.env, clientFor = null } = {}
     async create(params, reqOpts, entry) {
       const baseURL = openCodeBaseURL(entry, env);
       const opts = { ...(reqOpts || {}), headers: { ...(reqOpts?.headers || {}), ...headersFor() } };
+      // The gateway/models take json_object, not json_schema: the schema becomes
+      // an instruction. Without this every strict-schema call silently degraded
+      // to prose (quiz/summary, mark schemes, autonomy, materials, suggestions).
+      const payload = compatParams(params);
       try {
-        const res = await breakerFor(baseURL).fire(entry, params, opts);
-        if (params?.stream) return streamWithMeta(res);
+        const res = await breakerFor(baseURL).fire(entry, payload, opts);
+        if (payload?.stream) return streamWithMeta(res);
         return attachOpenCodeMeta(res, res?.usage);
       } catch (error) {
         // A 4xx that is not 429 is our request's fault: say what was refused.
         const status = error?.status ?? error?.response?.status;
         if (status && status >= 400 && status < 500) {
-          console.warn(`[ai:${entry.id}] ${status} rejected ${params?.stream ? "stream " : ""}request (${Object.keys(params || {}).filter((k) => !["messages", "model"].includes(k)).join(",")}): ${String(error?.message || "").slice(0, 300)}`);
+          console.warn(`[ai:${entry.id}] ${status} rejected ${payload?.stream ? "stream " : ""}request (${Object.keys(payload || {}).filter((k) => !["messages", "model"].includes(k)).join(",")}): ${String(error?.message || "").slice(0, 300)}`);
         }
         throw error;
       }

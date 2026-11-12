@@ -317,6 +317,8 @@ router.post("/ai-ping", guard, asyncHandler(async (req, res) => {
   const prompt = String(req.body?.prompt || "ping").slice(0, 200);
   const probeStream = req.body?.stream === true;
   const probeReasoning = req.body?.reasoning === true;
+  const probeJson = req.body?.json === true;
+  const probeTools = req.body?.tools === true;
   try {
     const adapter = makeOpenCodeAdapter();
     const out = await adapter.create({
@@ -325,6 +327,14 @@ router.post("/ai-ping", guard, asyncHandler(async (req, res) => {
       max_tokens: maxTokens,
       ...(probeReasoning ? { reasoning_effort: "medium" } : {}),
       ...(probeStream ? { stream: true } : {}),
+      ...(probeJson ? { response_format: { type: "json_schema", json_schema: {
+        name: "ping", strict: true,
+        schema: { type: "object", additionalProperties: false, required: ["value"], properties: { value: { type: "string" } } },
+      } } } : {}),
+      ...(probeTools ? { tools: [{ type: "function", function: {
+        name: "ping", description: "Return a value",
+        parameters: { type: "object", required: ["value"], properties: { value: { type: "string" } } },
+      } }], tool_choice: "required" } : {}),
     }, { timeout: 60000, maxRetries: 0 }, entry);
     if (probeStream) {
       let reasoning = "", content = "", chunks = 0;
@@ -349,6 +359,8 @@ router.post("/ai-ping", guard, asyncHandler(async (req, res) => {
       messageKeys: Object.keys(msg),
       reasoning: String(msg.reasoning_content ?? msg.reasoning ?? msg.thinking ?? "").slice(0, 1200),
       content: String(msg.content ?? "").slice(0, 300),
+      parsed: probeJson ? (() => { try { return JSON.parse(String(msg.content || "")); } catch { return null; } })() : null,
+      toolCalls: probeTools ? (msg.tool_calls || []).map((c) => ({ name: c?.function?.name, args: String(c?.function?.arguments || "").slice(0, 120) })) : null,
     } });
   } catch (e) {
     res.status(502).json({ success: false, error: String(e?.message || e).slice(0, 300), status: e?.status ?? null,
