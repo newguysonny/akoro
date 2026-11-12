@@ -87,7 +87,7 @@ export function publicModelList(env = process.env, { allowedModels = null } = {}
       ...(inPlan ? {} : { locked: "plan" }), costMultiple: multiple, costHint: hint,
       // Which chat modes THIS model can actually run. Thinking needs real
       // reasoning (or a Responses surface); Research needs tool calling.
-      modes: { default: true, think: !!(m.caps?.reasoning || m.caps?.responses), research: !!m.caps?.tools },
+      modes: { default: true, think: !!(m.caps?.reasoning || m.caps?.responses), research: !!m.caps?.tools, thinkExposed: !!m.caps?.reasoningExposed },
     };
   });
 }

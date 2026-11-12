@@ -5153,7 +5153,9 @@ router.post("/agent", async (req, res) => {
       trace,
       isAborted,
       think: isThink && canThinkResponses,
-      streamText: !isResearch,
+      // A chat-reasoning Think turn answers in the reasoning pass below, so the
+      // preflight decision must not stream (or become) the final answer.
+      streamText: !isResearch && !(isThink && canThinkChat),
       model: chatModel,
     });
     mark("agentLoop");
@@ -5171,7 +5173,7 @@ router.post("/agent", async (req, res) => {
       // Think mode: the reasoned last decision already is the answer; else
       // reason over the tool results (if any) for the answer.
       const thinkTarget = chatModel || THINK_MODEL;
-      if (prepared.finalText) { reply = prepared.finalText; usedModel = isThink ? (canThinkResponses ? thinkTarget : (chatModel || OPENAI_MODEL)) : (chatModel || OPENAI_MODEL); }
+      if (prepared.finalText && !(isThink && canThinkChat)) { reply = prepared.finalText; usedModel = isThink ? (canThinkResponses ? thinkTarget : (chatModel || OPENAI_MODEL)) : (chatModel || OPENAI_MODEL); }
       else if (isThink && canThinkResponses) {
         try { ({ reply, thinking } = await thinkOnce({ messages: finalMessages, model: thinkTarget, trace })); usedModel = thinkTarget; } catch { /* fallback below */ }
       } else if (isThink && canThinkChat) {
@@ -5189,7 +5191,7 @@ router.post("/agent", async (req, res) => {
         reply = completion.choices?.[0]?.message?.content?.trim() || "";
       }
     } else {
-      if (!stopped() && prepared.finalText) {
+      if (!stopped() && prepared.finalText && !(isThink && canThinkChat)) {
         // Already on screen when it streamed as the last step's words.
         reply = prepared.finalText;
         usedModel = isThink ? (chatModel || OPENAI_MODEL) : (chatModel || OPENAI_MODEL);
