@@ -64,7 +64,7 @@ export default function SigninPage() {
     setFormErr('');
     try {
       const d = await resendCode({ challengeId: emailStep.challengeId });
-      setEmailStep(s => ({ ...s, retryAfter: d?.retryAfter || 0 }));
+      setEmailStep(s => ({ ...s, challengeId: d?.challengeId || s.challengeId, retryAfter: d?.retryAfter || 0 }));
       setFormErr(d?.codeSent ? 'A new code is on its way.' : `Try again in ${d?.retryAfter || 60}s.`);
     } catch (err) { setFormErr(err.message); }
   };
