@@ -244,27 +244,40 @@ export function BalanceCard() {
 }
 
 const BREAKDOWN = [
-  { label: 'Succeeded', color: '#0E9F6E' },
-  { label: 'Pending', color: '#D97706' },
-  { label: 'Refunded', color: '#4A5CD5' },
-  { label: 'Failed', color: '#DC2626' },
+  { key: 'success',  label: 'Succeeded', color: '#0E9F6E' },
+  { key: 'pending',  label: 'Pending',   color: '#D97706' },
+  { key: 'refunded', label: 'Refunded',  color: '#4A5CD5' },
+  { key: 'failed',   label: 'Failed',    color: '#DC2626' },
 ];
 
-export function PaymentBreakdown() {
+export function PaymentBreakdown({ data, loading }) {
+  if (loading) return (
+    <div style={{ ...CARD, marginBottom: 0 }}>
+      <Skeleton height={12} width={120} style={{ marginBottom: 10 }} />
+      {[1, 2, 3, 4].map(i => <Skeleton key={i} height={30} style={{ marginBottom: 8 }} />)}
+    </div>
+  );
+  const counts = data || {};
+  const total = Object.values(counts).reduce((s, n) => s + (Number(n) || 0), 0);
   return (
     <div style={{ ...CARD, marginBottom: 0 }}>
       <h2 style={{ ...H2, marginBottom: 4 }}>Payment breakdown</h2>
-      {BREAKDOWN.map((b, i) => (
-        <div key={b.label} style={{
-          display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0',
-          borderBottom: i < BREAKDOWN.length - 1 ? '1px solid #F5F5F8' : 'none',
-          fontSize: 12.5, color: BX.ink,
-        }}>
-          <i style={{ width: 8, height: 8, borderRadius: '50%', background: b.color, flexShrink: 0 }} />
-          {b.label}
-          <b style={{ marginLeft: 'auto', fontWeight: 600, color: BX.muted }}>N/A</b>
-        </div>
-      ))}
+      {BREAKDOWN.map((b, i) => {
+        const n = counts[b.key] != null ? Number(counts[b.key]) : null;
+        const pct = n != null && total > 0 ? Math.round((n / total) * 100) : 0;
+        return (
+          <div key={b.key} style={{
+            display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0',
+            borderBottom: i < BREAKDOWN.length - 1 ? '1px solid #F5F5F8' : 'none',
+            fontSize: 12.5, color: BX.ink,
+          }}>
+            <i style={{ width: 8, height: 8, borderRadius: '50%', background: b.color, flexShrink: 0 }} />
+            {b.label}
+            <span style={{ fontSize: 11, color: BX.muted }}>{n != null ? `${pct}%` : ''}</span>
+            <b style={{ marginLeft: 'auto', fontWeight: 600, color: BX.muted }}>{n != null ? n.toLocaleString() : 'N/A'}</b>
+          </div>
+        );
+      })}
     </div>
   );
 }

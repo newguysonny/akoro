@@ -55,25 +55,73 @@ router.get("/usage", adminOnly, asyncHandler(async (req, res) => {
 }));
 
 router.get("/stats", adminOnly, asyncHandler(async (req, res) => {
+  const now = new Date();
+  const y = now.getUTCFullYear(), m = now.getUTCMonth(), d = now.getUTCDate();
+  const monthStart = new Date(Date.UTC(y, m, 1)).toISOString();
+  const todayStart = new Date(Date.UTC(y, m, d)).toISOString();
+  const yesterdayStart = new Date(Date.UTC(y, m, d - 1)).toISOString();
+  const weekAgo = new Date(Date.UTC(y, m, d - 7)).toISOString();
+  const fifteenMinAgo = new Date(now.getTime() - 15 * 60 * 1000).toISOString();
+  const prevMonthStart = new Date(Date.UTC(y, m - 1, 1)).toISOString();
+  const prevMonthSame = new Date(Date.UTC(y, m - 1, d + 1)).toISOString();
+
+  const safe = async (promise, fallback = null) => {
+    try { const r = await promise; return r?.error ? fallback : (r?.data ?? fallback); } catch { return fallback; }
+  };
+  const countSafe = async (promise) => {
+    try { const r = await promise; return r?.error ? null : (r?.count ?? 0); } catch { return null; }
+  };
+  const sum = (rows, key = "amount_paid") => (rows || []).reduce((n, r) => n + Number(r?.[key] || 0), 0);
+
   const [
-    { count: totalUsers },
-    { count: totalInstructors },
-    { count: totalCourses },
-    { count: totalStudents },
+    totalUsers, totalInstructors, totalCourses, totalStudents, newUsers,
+    revenueRows, prevRevenueRows, aiRows, aiYesterdayRows,
+    onlineRows, visitRows, totalVisits, approvals,
+    paid, pending, refunded, failed,
   ] = await Promise.all([
-    db.from("users").select("*", { count: "exact", head: true }),
-    db.from("users").select("*", { count: "exact", head: true }).eq("role", "instructor"),
-    db.from("courses").select("*", { count: "exact", head: true }),
-    db.from("users").select("*", { count: "exact", head: true }).eq("role", "student"),
+    countSafe(db.from("users").select("*", { count: "exact", head: true })),
+    countSafe(db.from("users").select("*", { count: "exact", head: true }).eq("role", "instructor")),
+    countSafe(db.from("courses").select("*", { count: "exact", head: true })),
+    countSafe(db.from("users").select("*", { count: "exact", head: true }).eq("role", "student")),
+    countSafe(db.from("users").select("*", { count: "exact", head: true }).gte("created_at", weekAgo)),
+    safe(db.from("payments").select("amount_paid").eq("status", "success").gte("created_at", monthStart), []),
+    safe(db.from("payments").select("amount_paid").eq("status", "success").gte("created_at", prevMonthStart).lt("created_at", prevMonthSame), []),
+    safe(db.schema("edu").from("ai_call_log").select("cost_usd").gte("created_at", todayStart), []),
+    safe(db.schema("edu").from("ai_call_log").select("cost_usd").gte("created_at", yesterdayStart).lt("created_at", todayStart), []),
+    safe(db.from("refresh_tokens").select("user_id").gte("created_at", fifteenMinAgo), []),
+    safe(db.from("refresh_tokens").select("user_id").gte("created_at", todayStart), []),
+    countSafe(db.from("refresh_tokens").select("*", { count: "exact", head: true })),
+    countSafe(db.schema("edu").from("builder_courses").select("*", { count: "exact", head: true }).eq("status", "review")),
+    countSafe(db.from("payments").select("*", { count: "exact", head: true }).eq("status", "success")),
+    countSafe(db.from("payments").select("*", { count: "exact", head: true }).eq("status", "pending")),
+    countSafe(db.from("payments").select("*", { count: "exact", head: true }).eq("status", "refunded")),
+    countSafe(db.from("payments").select("*", { count: "exact", head: true }).eq("status", "failed")),
   ]);
 
-  // recent signups (last 30 days)
-  const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-  const { count: newUsers } = await db.from("users")
-    .select("*", { count: "exact", head: true })
-    .gte("created_at", since);
+  const revenueMtd = sum(revenueRows) / 100;               // kobo → naira
+  const revenuePrev = sum(prevRevenueRows) / 100;
+  const aiToday = sum(aiRows, "cost_usd");
+  const aiYesterday = sum(aiYesterdayRows, "cost_usd");
+  const online = new Set((onlineRows || []).map((r) => r.user_id)).size;
+  const visitsToday = new Set((visitRows || []).map((r) => r.user_id)).size;
+  const pct = (a, b) => (b > 0 ? Math.round(((a - b) / b) * 1000) / 10 : null);
 
-  ok(res, { totalUsers, totalInstructors, totalCourses, totalStudents, newUsers });
+  ok(res, {
+    totalUsers, totalInstructors, totalCourses, totalStudents, newUsers,
+    new_users_7d: newUsers,
+    revenue_mtd: revenueMtd,
+    revenue_prev_mtd: revenuePrev,
+    revenue_currency: "NGN",
+    revenue_change_pct: pct(revenueMtd, revenuePrev),
+    ai_spend_today_usd: Math.round(aiToday * 10000) / 10000,
+    ai_spend_yesterday_usd: Math.round(aiYesterday * 10000) / 10000,
+    ai_spend_change_pct: pct(aiToday, aiYesterday),
+    course_approvals: approvals,
+    active_users_online: online,
+    visits_today: visitsToday,
+    total_visits: totalVisits,
+    payments_by_status: { success: paid, pending, refunded, failed },
+  });
 }));
 
 // ── Users ────────────────────────────────────────────────────────────────────
