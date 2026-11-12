@@ -450,13 +450,15 @@ export async function streamGet(path, { onEvent, signal } = {}) {
 }
 
 export async function streamPost(path, body, { onDelta, onDone, onThinking, onStatus, onTrace, onCard, onSuggestions, onSaved, signal } = {}) {
+  // timeout 0: a chat stream is deliberately long-lived. authedFetch's 30s
+  // deadline must never apply to it (tool loops and reasoning can exceed that).
   const r = await authedFetch(`${API}${path}`, {
     ...BASE_OPTS,
     method:  'POST',
     headers: { ...BASE_OPTS.headers, Accept: 'text/event-stream' },
     body:    JSON.stringify(body),
     ...(signal ? { signal } : {}),
-  });
+  }, 0);
   if (!r.ok) throw await apiError(r, 'POST', path);
   // A 200 with no body means the stream died before it began — the caller's
   // fallback needs a real error, not a silent hang.

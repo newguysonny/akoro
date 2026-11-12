@@ -1094,7 +1094,7 @@ function AgentChatTab({
       } else if(!gotDone){
         // The connection closed before the end. The server still saves the
         // full reply — it shows when the chat is reopened.
-        settleBroken("The connection dropped before the reply finished — reopen this chat to see the rest.");
+        settleBroken("The connection dropped while the agent was working. The reply is saved as soon as it finishes — reopening in a moment will show it.");
         finalReply="";
       }
     } catch (err) {

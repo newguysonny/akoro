@@ -4791,6 +4791,8 @@ router.post("/agent", async (req, res) => {
   // SSE comments (": ping") are ignored by every EventSource parser — and by
   // this API's own client, which skips blocks without a data line.
   let heartbeat = null;
+  let turnCtx = null;          // conversation/turn/message, for the error path
+  let streamedAnswer = "";     // deltas of the final answer, for a partial save
   const stopHeartbeat = () => { if (heartbeat) { clearInterval(heartbeat); heartbeat = null; } };
   res.on("close", stopHeartbeat);
   const beginStream = () => {
@@ -4820,6 +4822,7 @@ router.post("/agent", async (req, res) => {
   // One lookup's own time (they overlap; the slowest is what the turn waits for).
   const timed = (name, promise) => { const s0 = Date.now(); return Promise.resolve(promise).finally(() => { (timings.parts ||= {})[name] = Date.now() - s0; }); };
   const send = (event, data) => {
+    if (event === "delta" && data?.text) streamedAnswer += data.text;
     if (timings.firstVisibleMs == null && event !== "status") timings.firstVisibleMs = Date.now() - t0;
     if (res.destroyed || res.writableEnded) return;
     const envelope = data && typeof data === "object" ? chatEnvelope(event, data, { turnId, sequence: liveSequence++ }) : null;
@@ -4845,6 +4848,7 @@ router.post("/agent", async (req, res) => {
       return res.status(400).json({ error: `Too many attachments (max ${MAX_FILES}).` });
     }
     const conversationId = rawConversationId == null ? null : String(rawConversationId);
+    turnCtx = { conversationId, turnId: rawTurnId == null ? null : String(rawTurnId), userMessage };
     if (conversationId && !CHAT_SESSION_ID.test(conversationId)) {
       return res.status(422).json({ error: "conversationId is invalid" });
     }
@@ -5458,7 +5462,22 @@ router.post("/agent", async (req, res) => {
   } catch (error) {
     console.error("[/chat/agent]", error);
     if (wantsStream && headersSent) {
-      send("error", { error: "Agent Chat could not complete that response. Please try again." });
+      // Persist what the learner already saw (or an honest note when the
+      // failure happened during tool work), so a refresh is never empty.
+      const partial = streamedAnswer.trim();
+      if (turnCtx?.conversationId && turnCtx.turnId) {
+        try {
+          await appendFastChatTurn({
+            conversationId: turnCtx.conversationId, userId: req.user.id,
+            sessionId: agentSessionId(turnCtx.conversationId), turnId: turnCtx.turnId,
+            userMessage: turnCtx.userMessage,
+            assistantMessage: partial
+              ? `${partial}\n\n_The connection dropped while the agent was working. Please try again._`
+              : "_The connection dropped while the agent was working before it could answer. Please try again._",
+          });
+        } catch (e) { console.warn("[/chat/agent] could not save the interrupted turn:", e?.message || e); }
+      }
+      send("error", { error: "The connection dropped while the agent was working. Reopening this chat in a moment will show what was saved." });
       return res.end();
     }
     return res.status(error?.status || 500).json({ error: error?.message || "Agent Chat is unavailable" });
