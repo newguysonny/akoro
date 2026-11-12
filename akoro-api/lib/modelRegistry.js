@@ -75,7 +75,7 @@ const GO_VISION_PLAIN = { ...GO_PLAIN, vision: true };
  * never under-billed.
  */
 const GO_MODELS = [
-  { id: "deepseek", label: "DeepSeek", provider: "opencode", lane: "go", family: "chat", apiModel: "deepseek-v4.1-flash", price: { in: 0.30, out: 1.20, cachedIn: 0.006 }, caps: GO_REASON, selectable: true, tier: "freemium", fallbackModel: "deepseek-direct" },
+  { id: "deepseek", label: "DeepSeek", provider: "opencode", lane: "go", family: "chat", apiModel: "deepseek-v4.1-flash", price: { in: 0.30, out: 1.20, cachedIn: 0.006 }, caps: GO_VISION, selectable: true, tier: "freemium", fallbackModel: "deepseek-direct" },
   { id: "glm-5-3-flash", label: "GLM 5.3 Flash", provider: "opencode", lane: "go", family: "chat", apiModel: "glm-5.3-flash", price: { in: 0.15, out: 0.50, cachedIn: 0.03 }, caps: GO_REASON, selectable: true, tier: "freemium", fallbackModel: "deepseek" },
   { id: "qwen3-8-flash", label: "Qwen3.8 Flash", provider: "opencode", lane: "go", family: "chat", apiModel: "qwen3.8-flash", price: { in: 0.15, out: 0.47, cachedIn: 0.016 }, caps: GO_VISION, selectable: true, tier: "freemium", fallbackModel: "deepseek" },
   { id: "claude-haiku", label: "Claude Haiku", provider: "opencode", lane: "go", family: "chat", apiModel: "claude-haiku-5-5", price: { in: 0.10, out: 0.50, cachedIn: 0.01 }, caps: GO_VISION_PLAIN, selectable: true, tier: "trial", fallbackModel: "deepseek" },
@@ -101,7 +101,7 @@ const LEGACY_MODELS = [
    DEEPSEEK_MODEL (apiModel comes from that env, as with the legacy alias). */
 const DIRECT_FALLBACKS = [
   { id: "deepseek-direct", label: "DeepSeek (direct)", provider: "deepseek", apiModelEnv: "DEEPSEEK_MODEL",
-    price: { in: 0.30, out: 1.20, cachedIn: 0.028 }, caps: NO_VISION, selectable: false, enabled: true, fallbackModel: null },
+    price: { in: 0.30, out: 1.20, cachedIn: 0.028 }, caps: VISION, selectable: false, enabled: true, fallbackModel: null },
 ];
 
 const PLAN_MODELS = [...GO_MODELS, ...DIRECT_FALLBACKS, ...LEGACY_MODELS];

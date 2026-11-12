@@ -457,3 +457,23 @@ Practical meaning: suggestions, vision, builder, rerank, battle answering and
 the locked graders can each be pinned to a different model from the admin page
 without a deploy; the default remains the fallback for anything left on
 “Env / default”.
+
+## 17. DeepSeek vision (verified 2026-11-12)
+
+Probed through the real provider dispatch with two screenshots (the My tools
+list and the upload sheet):
+
+| Model | Result |
+|---|---|
+| `deepseek` (OpenCode Go, `deepseek-v4.1-flash`) | first tool `Library document count`, **13** tools, last `Practice time by subject`; first record `Status Report CAC - MEKANO1 ...`, **5** records, button `Save record` |
+| `deepseek-direct` (`deepseek-chat`) | identical answers |
+| `gpt-6-luna` (control) | identical answers |
+
+So DeepSeek V4.1 Flash **does accept images and perform OCR**; the catalogue now
+marks both DeepSeek rows as vision-capable.
+
+Important operational caveat: image questions make DeepSeek reason. At
+`max_tokens: 1200` it spent 512 tokens reasoning and returned **empty content**
+(finish `stop`); at `max_tokens: 3000` it answered (≈240 reasoning tokens). Any
+vision call pinned to DeepSeek needs a generous completion budget; `vision`
+still prefers `gpt-6-luna` for cost/latency, but DeepSeek is now selectable.
