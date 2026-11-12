@@ -369,9 +369,10 @@ test("PHARM.D topics share one extraction key and pass the access rule", () => {
   assert.match(routesSrc, /from\("pharmd_topics"\)/, "the topic row is the authority for the file");
   assert.match(pharmdReaderSrc, /getSharedExtraction\(contentKey\)/, "the PHARM.D reader reads the shared cache");
   assert.match(pharmdReaderSrc, /pageBlocks: pages\.map/, "blocks feed the citation flash as an array");
-  assert.match(pharmdReaderSrc, /import \{ looksScanned \}/, "the PHARM.D reader uses the same scan gate as upload");
-  assert.match(pharmdReaderSrc, /!looksScanned\(texts\)/, "text PDFs are not sent for a paid parse");
-  assert.match(pharmdReaderSrc, /void textsReady\.then/, "the decision runs after the quiet full text read");
+  assert.match(pharmdReaderSrc, /pharmdContentKey\(topic\)/, "the key is derived even from a stale course payload");
+  assert.match(pharmdReaderSrc, /hasPharmdParsedMark\(contentKey\)/, "a finished extraction is never offered again on this device");
+  assert.match(pharmdReaderSrc, /setExtract\(\{ status: 'offer'/, "every topic can be extracted from its card");
+  assert.doesNotMatch(pharmdReaderSrc, /looksScanned/, "no text-PDF skip on topics");
   assert.match(pharmdReaderSrc, /bboxForQuote\(pageBlocks, c\.pageNumber, c\.quote\)/, "Ask citations get the exact block bbox");
 });
 
@@ -381,7 +382,9 @@ test("a heavy PDF opens before every page is read; selection stays on the PDF la
   assert.match(pdfPagesSrc, /textsReady/, "the full read finishes in the background");
   assert.match(pdfPagesSrc, /new Array\(pdf\.numPages\)\.fill\(''\)/, "page indexes are stable while text fills in");
   assert.match(pdfPagesSrc, /DOC_CACHE_BYTES_MAX/, "the document cache is bounded by bytes");
-  assert.match(extractPagesSrc, /await textsReady/, "scan detection waits for the full text instead of guessing");
+  assert.match(extractPagesSrc, /const \{ pdf \} = await loadPdfDocument/, "uploads start rasterising without waiting for text");
+  assert.doesNotMatch(extractPagesSrc, /looksScanned/, "every PDF is model-parsed, text layer or not");
+  assert.match(extractPagesSrc, /p\.model !== 'pdf-text'/, "model pages replace the free pdf-text pages");
   assert.doesNotMatch(teachSessionSrc, /selectionOverlay\/>/, "text PDFs keep the pdf.js selectable layer");
   assert.match(readerSrc, /bestRatio = 0\.12/, "a tall page still selects in the pager");
   assert.match(readerSrc, /setCurrentPage\(targetPage\)/, "a citation jump selects its page at once");

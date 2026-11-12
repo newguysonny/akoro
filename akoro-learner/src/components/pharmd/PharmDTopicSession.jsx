@@ -36,7 +36,7 @@ import { BRAND } from '../../constants.js';
 import { APP_HOME } from '../../config/target.js';
 import { askPharmd } from '../../services/pharmdApi.js';
 import { getSharedExtraction } from '../../services/recordsApi.js';
-import { looksScanned } from '../../lib/textLayer.js';
+import { pharmdContentKey, markPharmdParsed, hasPharmdParsedMark } from '../../lib/pharmdContent.js';
 
 const MAX_REFERENCE_CHARS = 12_000;   // the server's reference cap
 
@@ -106,7 +106,7 @@ export default function PharmDTopicSession({ topic, course, onClose }) {
       try {
         // pdf.js is a big dependency — it loads only when a PDF opens.
         const { loadPdfDocument, PdfPage } = await import('../library/PdfPages.jsx');
-        const { pdf, texts, textsReady } = await loadPdfDocument(topic.file_url);
+        const { pdf, texts } = await loadPdfDocument(topic.file_url);
         if (cancelled) return;
         // The pages ARE the PDF's pages — text kept beside each so the
         // Generate tools work on the document's real sentences. The same
@@ -119,25 +119,36 @@ export default function PharmDTopicSession({ topic, course, onClose }) {
 
         // The catalogue file's extraction is SHARED: whoever opened this topic
         // first paid for the pages; everyone after reads the same markdown.
-        const contentKey = topic.contentKey;
+        // Look it up BEFORE offering anything, derive the key from the file URL
+        // when a cached course payload predates contentKey, and retry once so a
+        // flaky read cannot make us ask for an extraction that already exists.
+        const contentKey = pharmdContentKey(topic);
         if (contentKey) {
-          const saved = await getSharedExtraction(contentKey).catch(() => ({ pages: [] }));
+          const readShared = () => getSharedExtraction(contentKey).catch(() => ({ pages: [] }));
+          let saved = await readShared();
+          if (!(saved.pages || []).length) {
+            await new Promise((r) => setTimeout(r, 700));
+            if (cancelled) return;
+            saved = await readShared();
+          }
           if (cancelled) return;
           if ((saved.pages || []).length) {
             applyExtractedRef.current?.(saved, texts);
+            markPharmdParsed(contentKey);
+          } else if (hasPharmdParsedMark(contentKey)) {
+            // It was extracted on this device — don't ask again; re-check quietly.
+            for (const delay of [4000, 12000]) {
+              setTimeout(async () => {
+                if (cancelled) return;
+                const again = await readShared();
+                if (!cancelled && (again.pages || []).length) applyExtractedRef.current?.(again, texts);
+              }, delay);
+            }
           } else {
-            // Same rule as the Library upload: a PDF with a real text layer is
-            // grounded for free from its own words — only a scan needs the paid
-            // parse. Decide after the quiet full read; the reader is usable now.
-            void textsReady.then(() => {
-              if (cancelled) return;
-              if (!looksScanned(texts)) {
-                const all = texts.filter(Boolean).join('\n\n');
-                if (all) setReference({ name: topic.title, text: all.slice(0, MAX_REFERENCE_CHARS) });
-                return;
-              }
-              setExtract({ status: 'offer', done: 0, total: pdf.numPages });
-            }).catch(() => {});
+            // Every topic can be model-extracted (text PDFs included): the
+            // upload-time guarantee for Library files has no equivalent here,
+            // so the card is the guarantee. The parse is shared per topic.
+            setExtract({ status: 'offer', done: 0, total: pdf.numPages });
           }
         }
       } catch (e) {
@@ -171,7 +182,7 @@ export default function PharmDTopicSession({ topic, course, onClose }) {
   /* Paid extraction — the SAME card and shared cache as the Library reader. */
   const startExtraction = async () => {
     const pdf = pdfParts?.pdf;
-    const contentKey = topic?.contentKey;
+    const contentKey = pharmdContentKey(topic);
     if (!pdf || !contentKey) return;
     const run = ++extRunRef.current;
     const mine = () => aliveRef.current && run === extRunRef.current;
@@ -197,6 +208,7 @@ export default function PharmDTopicSession({ topic, course, onClose }) {
       ];
       if (!allPages.length) throw new Error(res.error || 'Extraction returned no text — try again.');
       applyExtracted({ pages: allPages });
+      markPharmdParsed(contentKey);
       setExtract({ status: 'applied', done: allPages.length, total: rendered.length, error: res.error || null });
       if (!res.error) setTimeout(() => { if (mine()) setExtract((s) => (s?.status === 'applied' ? null : s)); }, 6000);
     } catch (e) {

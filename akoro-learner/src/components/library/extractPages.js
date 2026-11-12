@@ -17,7 +17,6 @@ import * as pdfjsLib from 'pdfjs-dist';
 import { extractRecordPages, getExtractionStatus, getRecordExtraction } from '../../services/recordsApi.js';
 import { runExtraction } from '../../lib/extractRun.js';
 import { fetchFileWithRetry } from '../../lib/fetchFile.js';
-import { looksScanned } from '../../lib/textLayer.js';
 
 export const MAX_RECORD_PAGES = 60;   // matches the API's cap
 
@@ -85,14 +84,14 @@ export async function rasterizeImageFile(url) {
 /**
  * Extraction at upload — the uploader's side.
  *
- * EVERY upload is read at registration, but not every upload is paid for:
- * the API stores the text it can read without a GPU (a PDF's text layer,
- * txt/md/csv, Word/PowerPoint), and those pages become the file's extraction.
- * This browser run therefore only covers what the server cannot read — a
- * scanned PDF or an image — and starts right after the bytes land, in the
- * background, so the parse is cached before anyone opens the record. A/V is
- * transcribed by the API itself. Everything fails silent: completed batches
- * stay cached and the reader's offer is the retry for the rest.
+ * EVERY PDF and image is model-parsed here, right after the bytes land, in
+ * the background and with progress in the Add sheet. Text PDFs still get the
+ * server's free pdf-text pages at registration, but the model parse replaces
+ * them page by page: upload is the guarantee that the markdown (and the
+ * layout boxes citations jump to) exists — not a later idle step that can be
+ * missed. A failed or closed run keeps every saved page; reopening or
+ * retrying parses only the rest. A/V is transcribed by the API itself;
+ * txt/md/csv/Office are read server-side and are not sent to the GPU.
  */
 export async function autoExtractUpload(record) {
   try { await extractUpload(record); } catch { /* silent — the reader still offers if this never finished */ }
@@ -103,7 +102,7 @@ export async function autoExtractUpload(record) {
  * progress and, when it fails, the error (with a retry) right where the
  * learner uploaded, instead of them finding out later in the reader.
  *
- * Resolves { status: 'skipped' } (nothing to parse: text PDF, A/V, docs),
+ * Resolves { status: 'skipped' } (nothing to parse: text files, A/V, docs),
  * { status: 'done', done, total } or { status: 'error', error, done, total }.
  * Retrying only parses pages not saved yet (the API caches per page).
  */
@@ -113,22 +112,13 @@ export async function extractUpload(record, { onProgress, isCancelled } = {}) {
   const isImage = /^image\//.test(record.mime || '');
   if (!isPdf && !isImage) return { status: 'skipped' };   // text files read as-is; A/V is the API's lane
   let pages;
-  let scan = false;
   try {
     if (isPdf) {
       // Loaded the way the reader loads it: PdfPages.jsx also points pdf.js
-      // at its worker.
+      // at its worker. We no longer wait for the page text: every PDF goes to
+      // the model, text layer or not.
       const { loadPdfDocument } = await import('./PdfPages.jsx');
-      // The reader loads pages lazily; scan detection needs EVERY page's text,
-      // so wait for the quiet background read to finish here (this runs after
-      // the upload is saved, never in front of the learner).
-      const { pdf, texts, textsReady } = await loadPdfDocument(record.fileUrl);
-      await textsReady.catch(() => {});
-      // A PDF with a real text layer is read by the server for free at
-      // registration — only a scan needs the paid parse. A watermark repeated
-      // on every page is not a text layer (lib/textLayer.js).
-      if (!looksScanned(texts || [])) return { status: 'skipped' };
-      scan = true;
+      const { pdf } = await loadPdfDocument(record.fileUrl);
       pages = await rasterizePdfPages(pdf);
     } else {
       pages = await rasterizeImageFile(record.fileUrl);
@@ -137,10 +127,10 @@ export async function extractUpload(record, { onProgress, isCancelled } = {}) {
     return { status: 'error', error: e?.message || 'Could not open the file to read it.', done: 0, total: 0 };
   }
   if (!pages.length) return { status: 'skipped' };
-  // Pages already saved (an earlier run, or a retry) aren't sent again.
+  // Pages the MODEL already saved (an earlier run, or a retry) aren't sent
+  // again. Free pdf-text pages are replaced: upload guarantees model markdown.
   const saved = await getRecordExtraction(record.id).catch(() => ({ pages: [] }));
-  // A scan's saved text-layer pages (the watermark, read before this rule) are parsed again.
-  const have = new Set((saved?.pages || []).filter((p) => !(scan && p.model === 'pdf-text')).map((p) => p.pageNumber));
+  const have = new Set((saved?.pages || []).filter((p) => p.model !== 'pdf-text').map((p) => p.pageNumber));
   const toSend = pages.filter((p) => !have.has(p.pageNumber));
   const total = pages.length;
   onProgress?.(have.size, total);

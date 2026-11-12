@@ -198,7 +198,10 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
       // extracted file) must not pay to re-parse pages already saved.
       const readSaved = () => (record.contentKey ? getSharedExtraction(record.contentKey) : getRecordExtraction(record.id));
       const savedBefore = await readSaved();
-      const have = new Set((savedBefore?.pages || []).map((p) => p.pageNumber));
+      // Free pdf-text pages are not done: this run replaces them page by page.
+      const have = new Set((savedBefore?.pages || [])
+        .filter((p) => p.model !== 'pdf-text')
+        .map((p) => p.pageNumber));
       const toSend = rendered.filter((p) => !have.has(p.pageNumber));
       const res = toSend.length ? await runRecordExtraction({
         recordId: record.id,
@@ -357,13 +360,20 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
           const blocksByPage = new Map((cached.pages || [])
             .filter((p) => Array.isArray(p.blocks) && p.blocks.length)
             .map((p) => [p.pageNumber, p.blocks]));
-          const haveAll = texts.length > 0 && texts.every((_, i) => byPage.has(i + 1));
+          // Upload guarantees MODEL markdown. Free pdf-text pages ground the
+          // session but do not count as finished: if the model run was
+          // interrupted, the offer stays so it can be completed later.
+          const modelPages = new Set((cached.pages || [])
+            .filter((p) => p.model !== 'pdf-text' && (p.markdown || '').trim())
+            .map((p) => p.pageNumber));
+          const haveAll = texts.length > 0 && texts.every((_, i) => modelPages.has(i + 1));
           if (haveAll) {
             applyExtracted(byPage, blocksByPage);   // cached — straight into a grounded session
             return;
           }
+          if (byPage.size) applyExtracted(byPage, blocksByPage);   // partial: ground on what exists
           applyRef.current = applyExtracted;
-          setExtract({ status: 'offer', done: 0, total: texts.length });
+          setExtract({ status: 'offer', done: modelPages.size, total: texts.length });
           ready(texts.map((tx) => ({ html: '', text: tx })), { pdf, PdfPage },
             joined ? { name: record.name, text: joined.slice(0, MAX_REFERENCE_CHARS) } : null);
         } else if (type === 'text') {
