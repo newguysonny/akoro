@@ -295,17 +295,22 @@ router.post("/ai-ping", guard, asyncHandler(async (req, res) => {
   const id = String(req.body?.model || process.env.AI_MODEL_DEFAULT || modelRegistry.defaultId);
   const entry = modelRegistry.get(id);
   if (!entry) return bad(res, `Unknown model id "${id}".`);
-  if (entry.provider !== "opencode") return bad(res, `"${id}" isn't an OpenCode model.`);
+  // A raw Go model can be probed even when this environment's AI_MODELS still
+  // defines the public id on another transport (e.g. legacy direct DeepSeek).
+  const apiModelOverride = String(req.body?.apiModel || "").trim() || null;
+  if (!apiModelOverride && entry.provider !== "opencode") return bad(res, `"${id}" isn't an OpenCode model.`);
   const started = Date.now();
+  const maxTokens = Math.max(1, Math.min(64, Number(req.body?.maxTokens) || 1));
+  const prompt = String(req.body?.prompt || "ping").slice(0, 200);
   try {
     const adapter = makeOpenCodeAdapter();
     const out = await adapter.create({
-      model: entry.apiModel,
-      messages: [{ role: "user", content: "ping" }],
-      max_tokens: 1,
-    }, { timeout: 15000, maxRetries: 0 }, entry);
+      model: apiModelOverride || entry.apiModel,
+      messages: [{ role: "user", content: prompt }],
+      max_tokens: maxTokens,
+    }, { timeout: 20000, maxRetries: 0 }, entry);
     res.json({ success: true, data: {
-      model: entry.id, apiModel: entry.apiModel, ms: Date.now() - started,
+      model: entry.id, apiModel: apiModelOverride || entry.apiModel, ms: Date.now() - started,
       usage: out?.usage ?? null,
     } });
   } catch (e) {

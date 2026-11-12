@@ -93,7 +93,12 @@ export function coinsForReportedCost(costUsd) {
 
 /** Provider-reported cost from a usage object, or null when absent/unusable. */
 export function reportedCostUsd(usage) {
+  // OpenCode Go includes calls in the subscription: usage.cost is 0 while the
+  // call still consumes allowance at list price. Bill/record the list cost so
+  // the wallet and cost dashboards are not blind to Go usage.
+  const goList = Number(usage?.opencode?.list_cost);
   const raw = usage?.cost ?? usage?.opencode?.cost;
+  if ((raw == null || Number(raw) === 0) && Number.isFinite(goList) && goList > 0) return goList;
   const n = Number(raw);
   return Number.isFinite(n) && n >= 0 ? n : null;
 }
