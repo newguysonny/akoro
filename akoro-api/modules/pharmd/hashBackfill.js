@@ -33,6 +33,7 @@ export async function runPharmdHashBackfill({ limit = 500, course = null, onLog 
   const q = edu().from("pharmd_topics")
     .select("id, title, position, file_bucket, file_path, file_hash")
     .not("file_path", "is", null)
+    .is("file_hash", null)
     .order("position", { ascending: true })
     .limit(limit);
   if (courseId) q.eq("course_id", courseId);
