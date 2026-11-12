@@ -374,8 +374,13 @@ app.use((req, res, next) => {
       if (Array.isArray(clean.errors)) {
         clean.errors = clean.errors.map((e) => {
           if (typeof e === "string") return userFacingMessage(e, fallback);
-          if (e && typeof e === "object" && typeof e.message === "string") {
-            return { ...e, message: userFacingMessage(e.message, fallback) };
+          if (e && typeof e === "object") {
+            const item = { ...e };
+            delete item.value;                 // never echo submitted data
+            for (const key of ["message", "msg"]) {
+              if (typeof item[key] === "string") item[key] = userFacingMessage(item[key], fallback);
+            }
+            return item;
           }
           return e;
         });

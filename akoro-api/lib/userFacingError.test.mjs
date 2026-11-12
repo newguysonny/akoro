@@ -22,5 +22,6 @@ test("the global JSON guard is mounted before the routers", async () => {
   const app = readFileSync(new URL("../app.js", import.meta.url), "utf8");
   assert.match(app, /res\.json = \(body\) =>/);
   assert.match(app, /userFacingMessage\(clean\[key\], fallback\)/);
+  assert.match(app, /delete item\.value/);
   assert.ok(app.indexOf("res.json = (body)") < app.indexOf('app.use("/api"'));
 });
