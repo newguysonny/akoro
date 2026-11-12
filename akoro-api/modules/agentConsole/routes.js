@@ -38,6 +38,7 @@ import { safeCompare } from "../../lib/safeCompare.js";
 import { isDocumentGoal } from "../self-tooling/toolSimilarity.js";
 import { cleanupPlan } from "./cleanup.js";
 import { modelRegistry, availabilityOf, ROLES } from "../../lib/modelRegistry.js";
+import { validateShape } from "../../lib/structuredOutput.js";
 import { featureModels } from "../../lib/aiFeatureModels.js";
 import { resolveContentAccess } from "../records/access.js";
 import { getExtraction } from "../records/extractLib.js";
@@ -445,6 +446,61 @@ router.post("/pharmd-hash-backfill", guard, asyncHandler(async (req, res) => {
   const course = req.body?.course ? String(req.body.course) : null;
   const out = await runPharmdHashBackfill({ limit, course, onLog: (line) => lines.push(line) });
   res.json({ success: true, data: { ...out, limit, log: lines } });
+}));
+
+/* Side-by-side structured-output check: same schema + prompt through the
+   real aiModel path on two models (default: OpenCode DeepSeek vs DeepSeek
+   direct). Reports retries, validation, latency and usage — no learner data. */
+router.post("/structured-test", guard, asyncHandler(async (req, res) => {
+  const text = String(req.body?.text || "The cell membrane is a selectively permeable phospholipid bilayer. The nucleus holds DNA. Mitochondria make ATP. Ribosomes build proteins. The cell wall gives plant cells support.").slice(0, 3000);
+  const schema = req.body?.schema || {
+    type: "object", additionalProperties: false, required: ["title", "items"],
+    properties: {
+      title: { type: "string" },
+      items: { type: "array", minItems: 1, items: {
+        type: "object", additionalProperties: false, required: ["term", "definition", "score"],
+        properties: { term: { type: "string" }, definition: { type: "string" }, score: { type: "integer" } },
+      } },
+    },
+  };
+  const prompt = String(req.body?.prompt || "From the text below, return JSON with a title and 3 items. Each item has term, a one-sentence definition, and an integer score from 1 to 10.\n\nTEXT:\n" + text);
+  const models = Array.isArray(req.body?.models) && req.body.models.length ? req.body.models : ["deepseek", "deepseek-direct"];
+  const maxTokens = Math.max(64, Math.min(1200, Number(req.body?.maxTokens) || 600));
+  const runs = [];
+  for (const id of models) {
+    const entry = modelRegistry.get(id);
+    if (!entry) { runs.push({ id, error: "unknown model" }); continue; }
+    const fromSeq = logSeq();
+    const t0 = Date.now();
+    try {
+      const out = await openai.chat.completions.create({
+        model: id,
+        messages: [{ role: "user", content: prompt }],
+        max_tokens: maxTokens,
+        response_format: { type: "json_schema", json_schema: { name: "compare", strict: true, schema } },
+        __feature: "structured_compare",
+        __payer: "platform",
+      });
+      const content = String(out?.choices?.[0]?.message?.content || "");
+      let parsed = null;
+      try { parsed = JSON.parse(content); } catch { parsed = null; }
+      const errors = parsed ? validateShape(parsed, schema) : ["unparseable JSON"];
+      const logs = readLogs({ since: fromSeq, limit: 200 }).lines
+        .map((l) => (typeof l === "string" ? l : l?.msg || JSON.stringify(l)))
+        .filter((l) => /\[ai:json\]|\[ai\].*failed/.test(l));
+      runs.push({
+        id, provider: entry.provider, lane: entry.lane || null, apiModel: entry.apiModel,
+        ms: Date.now() - t0, ok: errors.length === 0, errors: errors.slice(0, 4),
+        retries: logs.length, retryLog: logs.slice(0, 3),
+        contentChars: content.length, content: content.slice(0, 400),
+        parsedOk: !!parsed, usage: out?.usage ?? null,
+      });
+    } catch (e) {
+      runs.push({ id, provider: entry.provider, lane: entry.lane || null, apiModel: entry.apiModel,
+        ms: Date.now() - t0, ok: false, error: String(e?.message || e).slice(0, 300), status: e?.status ?? null });
+    }
+  }
+  res.json({ success: true, data: { schema, promptChars: prompt.length, maxTokens, runs } });
 }));
 
 router.get("/learner-tools", guard, asyncHandler(async (req, res) => {
