@@ -286,8 +286,11 @@ router.get("/ai-provider", guard, (_req, res) => {
     billProviderCost: process.env.AI_BILL_PROVIDER_COST !== "false",
     models: modelRegistry.catalogue.filter((e) => e.selectable).map((e) => ({
       id: e.id, label: e.label, apiModel: e.apiModel, lane: e.lane, provider: e.provider,
-      availability: availabilityOf(e),
+      fallbackModel: e.fallbackModel, availability: availabilityOf(e),
     })),
+    // Hidden failover routes (e.g. DeepSeek's own API behind the public model).
+    targets: modelRegistry.catalogue.filter((e) => !e.selectable && e.enabled)
+      .map((e) => ({ id: e.id, apiModel: e.apiModel, provider: e.provider, availability: availabilityOf(e) })),
   } });
 });
 
