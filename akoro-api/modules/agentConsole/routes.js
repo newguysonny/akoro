@@ -37,7 +37,8 @@ import { signInternalAccess } from "../auth/routes.js";
 import { safeCompare } from "../../lib/safeCompare.js";
 import { isDocumentGoal } from "../self-tooling/toolSimilarity.js";
 import { cleanupPlan } from "./cleanup.js";
-import { modelRegistry, availabilityOf } from "../../lib/modelRegistry.js";
+import { modelRegistry, availabilityOf, ROLES } from "../../lib/modelRegistry.js";
+import { featureModels } from "../../lib/aiFeatureModels.js";
 import { resolveContentAccess } from "../records/access.js";
 import { getExtraction } from "../records/extractLib.js";
 import { makeOpenCodeAdapter } from "../../lib/providers/opencode.js";
@@ -295,6 +296,11 @@ router.get("/ai-provider", guard, (_req, res) => {
     // Hidden failover routes (e.g. DeepSeek's own API behind the public model).
     targets: modelRegistry.catalogue.filter((e) => !e.selectable && e.enabled)
       .map((e) => ({ id: e.id, apiModel: e.apiModel, provider: e.provider, availability: availabilityOf(e) })),
+    roles: Object.keys(ROLES).map((role) => {
+      const r = modelRegistry.resolve({ role });
+      return { role, model: r.model.id, source: r.source, locked: !!ROLES[role].locked };
+    }),
+    features: featureModels(process.env, modelRegistry.envDefaultId),
   } });
 });
 
