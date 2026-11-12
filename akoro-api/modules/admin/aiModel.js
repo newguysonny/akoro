@@ -14,7 +14,8 @@ import { Router } from "express";
 import db from "../../db.js";
 import { authenticateToken, requireRole } from "../auth/routes.js";
 import { serverError } from "../../lib/httpError.js";
-import { modelRegistry, availabilityOf } from "../../lib/modelRegistry.js";
+import { modelRegistry, availabilityOf, ROLES } from "../../lib/modelRegistry.js";
+import { featureModels } from "../../lib/aiFeatureModels.js";
 import {
   loadRuntimeSettings, runtimeSettings, runtimeDefaultModel, runtimeFallbackModel,
   setRuntimeSettings, clearRuntimeSettings, validateModelChange,
@@ -75,7 +76,12 @@ router.get("/ai/model", adminOnly, asyncHandler(async (req, res) => {
     fallbackModel: entry.fallbackModel,
     availability: availabilityOf(entry),
   }));
-  return res.json({ success: true, ...state(), runtimeOverrideEnabled: runtimeEnabled(), models });
+  const roles = Object.keys(ROLES).map((role) => {
+    const r = modelRegistry.resolve({ role });
+    return { role, model: r.model.id, label: r.model.label, source: r.source, locked: !!ROLES[role].locked };
+  });
+  const features = featureModels(process.env, modelRegistry.envDefaultId);
+  return res.json({ success: true, ...state(), runtimeOverrideEnabled: runtimeEnabled(), models, roles, features });
 }));
 
 router.put("/ai/model", adminOnly, asyncHandler(async (req, res) => {

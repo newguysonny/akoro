@@ -212,6 +212,46 @@ export default function AiModelsPage() {
               </table>
             </div>
           </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+            <div style={{ ...card, padding: 0, overflow: 'hidden' }}>
+              <div style={{ padding: '14px 18px', borderBottom: `1px solid ${BORDER}` }}>
+                <strong style={{ fontSize: 13.5, color: INK, fontFamily: FONT }}>Roles</strong>
+                <div style={{ fontSize: 11.5, color: MUTED, marginTop: 3 }}>What each kind of call resolves to. Locked roles ignore learner picks; they use their env or the platform default.</div>
+              </div>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
+                <tbody>
+                  {(data?.roles || []).map((r) => (
+                    <tr key={r.role}>
+                      <td style={{ padding: '9px 14px', borderBottom: `1px solid ${BORDER}`, fontWeight: 800, color: INK }}>{r.role}{r.locked && <Chip tone="warn">locked</Chip>}</td>
+                      <td style={{ padding: '9px 14px', borderBottom: `1px solid ${BORDER}`, color: MUTED }}>{r.label} <span style={{ fontFamily: 'monospace', color: MUTED2 }}>({r.model})</span></td>
+                      <td style={{ padding: '9px 14px', borderBottom: `1px solid ${BORDER}` }}><Chip tone={r.source === 'default' ? 'ok' : 'info'}>{r.source}</Chip></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div style={{ ...card, padding: 0, overflow: 'hidden' }}>
+              <div style={{ padding: '14px 18px', borderBottom: `1px solid ${BORDER}` }}>
+                <strong style={{ fontSize: 13.5, color: INK, fontFamily: FONT }}>Feature models</strong>
+                <div style={{ fontSize: 11.5, color: MUTED, marginTop: 3 }}>Helpers that name a model directly. “Pinned” ones do not follow the platform default.</div>
+              </div>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
+                <tbody>
+                  {(data?.features || []).map((f) => (
+                    <tr key={f.key}>
+                      <td style={{ padding: '9px 14px', borderBottom: `1px solid ${BORDER}`, fontWeight: 800, color: INK }}>{f.label}</td>
+                      <td style={{ padding: '9px 14px', borderBottom: `1px solid ${BORDER}`, color: MUTED }}>{f.modelId || '—'}</td>
+                      <td style={{ padding: '9px 14px', borderBottom: `1px solid ${BORDER}` }}>
+                        {f.pinned ? <Chip tone="warn">pinned</Chip> : <Chip tone="ok">follows default</Chip>}
+                        {f.envSet && <span style={{ fontSize: 10.5, color: MUTED2, marginLeft: 6, fontFamily: 'monospace' }}>{f.env}</span>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
       )}
     </PageLayout>
