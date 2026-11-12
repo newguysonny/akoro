@@ -17,7 +17,7 @@
  */
 import db from "../../db.js";
 import { openai } from "../../lib/aiModel.js";
-import { TOOL_IDS, TOOL_LIMITS, toolSchema, buildToolMessages, shapeToolResult, gatherToolPassages } from "./toolsLib.js";
+import { TOOL_IDS, TOOL_LIMITS, toolSchema, toolCount, buildToolMessages, shapeToolResult, gatherToolPassages } from "./toolsLib.js";
 import { searchRecordChunks } from "./searchLib.js";
 import { createArtifact, listArtifacts, updateArtifact } from "./artifactsLib.js";
 import { PODCAST_LIMITS, lengthOf, podcastSchema, podcastInFlight, runPodcastJob } from "./podcastLib.js";
@@ -49,7 +49,20 @@ export async function generateToolResult({ userId = null, target, tool, scope = 
       : "This document isn't readable yet — extract its text (or transcribe the recording) first." };
   }
   const stripFence = (t) => String(t || "").replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "").trim();
-  const parseJson = (t) => { try { return JSON.parse(stripFence(t) || "{}"); } catch { return null; } };
+  // Providers answer in prose, with a fenced block, or JSON plus a sentence.
+  const parseJson = (t) => {
+    const text = String(t || "").trim();
+    if (!text) return null;
+    const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+    for (const candidate of [stripFence(text), fenced?.[1]]) {
+      if (!candidate) continue;
+      try { return JSON.parse(candidate); } catch { /* try the object inside */ }
+      const a = candidate.indexOf("{");
+      const b = candidate.lastIndexOf("}");
+      if (a >= 0 && b > a) { try { return JSON.parse(candidate.slice(a, b + 1)); } catch { /* give up */ } }
+    }
+    return null;
+  };
   const itemsOf = (json) => (tool === "summary" ? json?.points : tool === "quiz" ? json?.questions : json?.cards) || [];
   try {
     const messages = buildToolMessages({ tool, docName: target.name, passages, values });
@@ -78,7 +91,20 @@ export async function generateToolResult({ userId = null, target, tool, scope = 
         json = parseJson(completion.choices?.[0]?.message?.content);
       } catch (e) { firstError = firstError || e; }
     }
-    if (!json) throw firstError || new Error("the model returned no JSON");
+    if (!json) {
+      const raw = String(completion?.choices?.[0]?.message?.content || "");
+      console.warn("[records-tools] unparseable", tool, raw.slice(0, 300));
+      // Summary has a safe, extractive fallback: the passages ARE the material.
+      if (tool === "summary") {
+        const max = toolCount("summary", values);
+        const points = passages.slice(0, Math.max(1, Math.min(8, max))).map((p) => ({
+          text: String(p.text || "").split(/(?<=[.!?])\s+/).slice(0, 2).join(" ").slice(0, 600),
+          cite: citeOf(p),
+        })).filter((p) => p.text.trim());
+        if (points.length) return { result: { summaryPoints: points, passages: passages.length, extracted: true } };
+      }
+      throw firstError || new Error("the model returned no JSON");
+    }
     const result = shapeToolResult(tool, json, passages, values);
     const items = result.summaryPoints || result.quizQuestions || result.cardSet || [];
     if (!items.length) {
