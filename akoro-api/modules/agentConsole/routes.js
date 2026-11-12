@@ -385,6 +385,15 @@ router.get("/content-parses", guard, asyncHandler(async (req, res) => {
   res.json({ success: true, data: { key, count: pages.length, pages, access } });
 }));
 
+/* A short internal token for an allow-listed learner, so an operator can
+   call a learner-scoped endpoint exactly as the app does. Console-key only. */
+router.post("/debug-token", guard, asyncHandler(async (req, res) => {
+  let learner;
+  try { learner = await resolveLearner(req.body?.learner); } catch (e) { return fail(res, e); }
+  const token = signInternalAccess({ id: learner.id, role: learner.role || "student" }, 120);
+  res.json({ success: true, data: { learner: learner.username, token } });
+}));
+
 router.get("/learner-tools", guard, asyncHandler(async (req, res) => {
   let learner;
   try { learner = await resolveLearner(req.query?.learner); } catch (e) { return fail(res, e); }
