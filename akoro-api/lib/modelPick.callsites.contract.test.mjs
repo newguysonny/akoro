@@ -353,3 +353,31 @@ test("a json_schema reply is normalised, and retried once when it is prose", asy
   assert.equal(one.length, 1, "valid JSON embedded in prose needs no retry");
   assert.deepEqual(JSON.parse(res2.choices[0].message.content), { value: "fine" });
 });
+
+test("OpenCode json_schema becomes a forced submit_result tool call", async () => {
+  const { openai, runWithProviders } = await import("./aiModel.js");
+  const schema = { type: "object", additionalProperties: false, required: ["value"], properties: { value: { type: "string" } } };
+  const calls = [];
+  const toolReply = (args) => ({
+    choices: [{ index: 0, finish_reason: "tool_calls", message: { role: "assistant", content: null,
+      tool_calls: [{ id: "t1", type: "function", function: { name: "submit_result", arguments: args } }] } }],
+    usage: { prompt_tokens: 2, completion_tokens: 2 },
+  });
+  const stub = {
+    async create(body) {
+      calls.push(body);
+      return toolReply('{"value":"from-tool"}');
+    },
+  };
+  const res = await runWithProviders({ opencode: stub }, () => openai.chat.completions.create({
+    model: "deepseek",
+    messages: [{ role: "user", content: "give me json" }],
+    response_format: { type: "json_schema", json_schema: { name: "t", strict: true, schema } },
+    __feature: "json_tool_test", __payer: "platform",
+  }));
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].response_format, undefined, "no response_format reaches the gateway");
+  assert.equal(calls[0].tool_choice, "required");
+  assert.equal(calls[0].tools[0].function.name, "submit_result");
+  assert.deepEqual(JSON.parse(res.choices[0].message.content), { value: "from-tool" });
+});

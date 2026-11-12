@@ -171,7 +171,7 @@ async function meteredCreate(params = {}) {
   const feature = params.__feature ?? store.feature ?? "ai";
   const ref     = params.__ref     ?? null;
   const billTo  = platform ? null : params.__billTo  ?? store.billTo  ?? null;   // e.g. school funds it
-  const clean = { ...params };
+  let clean = { ...params };
   delete clean.__userId; delete clean.__feature; delete clean.__ref; delete clean.__billTo; delete clean.__payer;
   delete clean.__timeoutMs; delete clean.__maxRetries;
   delete clean.__role; delete clean.__learnerChoice; delete clean.__allowedModels;
@@ -312,6 +312,41 @@ async function meteredCreate(params = {}) {
     });
   }
 
+  // Structured output: for OpenCode/compatible models a forced tool call is far
+  // more reliable than response_format (DeepSeek often answered complex schemas
+  // in prose). The schema becomes the tool's parameters; its arguments are the
+  // consumer's JSON. Other providers keep response_format.
+  const jsonRequest = !clean.stream && clean.response_format?.type === "json_schema" && clean.response_format.json_schema?.schema
+    ? clean.response_format.json_schema.schema : null;
+  const forceTool = !!(jsonRequest && !clean.tools && entry?.caps?.tools
+    && ["opencode", "openai_compatible"].includes(entry.provider));
+  if (forceTool) {
+    clean = {
+      ...clean,
+      tools: [{ type: "function", function: {
+        name: "submit_result",
+        description: "Submit the final answer as a JSON object that matches the schema.",
+        parameters: jsonRequest,
+      } }],
+      tool_choice: "required",
+    };
+    delete clean.response_format;
+  }
+  const extractStructured = (r) => {
+    if (!forceTool || !r?.choices?.[0]?.message) return r;
+    const msg = r.choices[0].message;
+    const call = (msg.tool_calls || []).find((c) => c?.function?.name === "submit_result");
+    if (call?.function?.arguments) msg.content = call.function.arguments;
+    return r;
+  };
+  const normalizeStructured = (r) => {
+    if (!jsonRequest || !r?.choices?.[0]?.message) return r;
+    extractStructured(r);
+    const out = readStructured(r.choices[0].message.content, jsonRequest);
+    if (out.value != null) r.choices[0].message.content = JSON.stringify(out.value);
+    return r;
+  };
+
   let res;
   let resBilled = false;
   const bill = (r) => {
@@ -321,7 +356,7 @@ async function meteredCreate(params = {}) {
     if (bills && r?.usage) charge(r.usage);
   };
   try {
-    res = await fire(clean, reqOpts);
+    res = extractStructured(await fire(clean, reqOpts));
   } catch (e) {
     report(null, { ok: false, errorKind: errorKindOf(e) });
     const ladder = entry && retryableFailure(e) ? fallbackLadder(entry, { role: params.__role || "chat", ROLES }) : [];
@@ -332,7 +367,7 @@ async function meteredCreate(params = {}) {
       tried.push(target.id);
       console.warn(`[ai] ${entry.id} failed (${errorKindOf(e)}) — trying ${target.id} (${tried.length}/${ladder.length})`);
       try {
-        const second = await serve(target, { ...clean, model: target.apiModel }, reqOpts);
+        const second = normalizeStructured(await serve(target, { ...clean, model: target.apiModel }, reqOpts));
         report(second?.usage ?? null, { as: target.id });
         if (bills && second?.usage) charge(second.usage, target.id);
         return Object.assign(second || {}, {
@@ -349,22 +384,26 @@ async function meteredCreate(params = {}) {
   // A json_schema reply is normalised for EVERY consumer: parse the body, a
   // fence or an embedded object; if the required shape is unusable, retry once
   // and hand back valid JSON. No feature has to parse model JSON on its own.
-  const rf = clean.response_format;
-  if (!clean.stream && rf?.type === "json_schema" && rf.json_schema?.schema) {
-    const schema = rf.json_schema.schema;
-    const first = readStructured(res?.choices?.[0]?.message?.content, schema);
+  if (jsonRequest) {
+    const first = readStructured(res?.choices?.[0]?.message?.content, jsonRequest);
     if (first.ok) {
-      if (res?.choices?.[0]?.message) res.choices[0].message.content = JSON.stringify(first.value);
+      res.choices[0].message.content = JSON.stringify(first.value);
     } else {
       bill(res);
       console.warn(`[ai:json] retry ${feature} on ${entry?.id || model} (${first.errors[0] || "bad JSON"})`);
       try {
-        const second = await fire({
+        const retryMessages = [...(clean.messages || []), {
+          role: "system",
+          content: forceTool
+            ? `Your previous submit_result was missing or invalid (${first.errors[0] || "bad JSON"}). Call submit_result again with ONLY a JSON object matching this schema:\n${JSON.stringify(jsonRequest)}`
+            : jsonRetryInstruction(jsonRequest, first.errors),
+        }];
+        const second = extractStructured(await fire({
           ...clean,
-          response_format: { type: "json_object" },
-          messages: [...(clean.messages || []), { role: "system", content: jsonRetryInstruction(schema, first.errors) }],
-        }, reqOpts);
-        const retried = readStructured(second?.choices?.[0]?.message?.content, schema);
+          ...(forceTool ? {} : { response_format: { type: "json_object" } }),
+          messages: retryMessages,
+        }, reqOpts));
+        const retried = readStructured(second?.choices?.[0]?.message?.content, jsonRequest);
         if (second?.choices?.[0]?.message) {
           second.choices[0].message.content = JSON.stringify(retried.value ?? {});
           res = second;
