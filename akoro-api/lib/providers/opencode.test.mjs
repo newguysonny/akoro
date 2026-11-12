@@ -6,7 +6,7 @@ import { attachOpenCodeMeta, makeOpenCodeAdapter, openCodeMeta } from "./opencod
 
 const GO_IDS = ["deepseek", "glm-5-3-flash", "qwen3-8-flash", "claude-haiku", "gpt-6-luna", "gpt-5-6-luna", "grok"];
 const LEGACY_IDS = ["gpt-4o-mini", "gpt-4.1", "gpt-4.1-mini", "gpt-4o", "claude-sonnet", "claude-opus", "claude-fable"];
-const VISION_IDS = ["qwen3-8-flash", "claude-haiku", "gpt-6-luna", "gpt-5-6-luna"];
+const VISION_IDS = ["deepseek", "qwen3-8-flash", "claude-haiku", "gpt-6-luna", "gpt-5-6-luna"];
 const env = { OPENCODE_API_KEY: "oc-key" };
 const deepseek = checkEntry({
   id: "deepseek", provider: "opencode", lane: "go", family: "chat", apiModel: "deepseek-v4.1-flash",

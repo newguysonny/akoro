@@ -27,6 +27,10 @@ test("missing keys fail validation; repair fills and coerces for the retry", () 
 
 test("readStructured returns ok only when the shape matches", () => {
   assert.equal(readStructured('{"value":"v","items":[]}', schema).ok, true);
+  const missing = readStructured('{"items":[]}', schema);
+  assert.equal(missing.ok, false, "a repaired missing key is still not ok");
+  assert.deepEqual(missing.value, { value: "", items: [] });
+  assert.match(missing.errors[0], /required/);
   const bad = readStructured("prose", schema);
   assert.equal(bad.ok, false);
   assert.match(bad.errors[0], /unparseable/);

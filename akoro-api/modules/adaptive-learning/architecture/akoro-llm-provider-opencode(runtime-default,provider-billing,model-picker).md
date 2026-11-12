@@ -477,3 +477,25 @@ Important operational caveat: image questions make DeepSeek reason. At
 (finish `stop`); at `max_tokens: 3000` it answered (≈240 reasoning tokens). Any
 vision call pinned to DeepSeek needs a generous completion budget; `vision`
 still prefers `gpt-6-luna` for cost/latency, but DeepSeek is now selectable.
+
+## 18. Strict output: no silent repair-as-success (2026-11-12)
+
+Strict schemas are not removed; they are transport-specific:
+
+- Direct OpenAI still sends `response_format: json_schema, strict: true`.
+- OpenCode / compatible providers get a **forced `submit_result` tool call** whose
+  parameters ARE the schema (they ignore `response_format`).
+- Anthropic gets the schema as a system instruction (its API has no `response_format`).
+
+Validation policy (`lib/structuredOutput.js` + `lib/aiModel.js`):
+
+- The RAW parsed object is validated first. Repair is **not** success: a missing
+  required key now triggers the retry instead of being defaulted silently.
+- One retry (tool call again, or JSON mode).
+- After the retry: unparseable output is always a hard failure
+  (`structured_output_invalid`); an unresolvable shape (bad type/enum) is also a
+  hard failure. Missing fields that repair can fill are returned with
+  `__structured_errors` and a `[ai:json] schema_mismatch` log — visible, not silent.
+- `AI_STRUCTURED_STRICT=true` promotes even those repairable mismatches to hard
+  failures (fail-closed). Default is fail-visible-but-lenient for tolerant readers.
+- `readStructured()` itself never reports a repaired object as `ok`.

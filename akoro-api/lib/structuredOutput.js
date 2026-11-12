@@ -113,13 +113,17 @@ export function repairShape(value, schema) {
   return value;
 }
 
-/** Parse + validate + repair in one call. */
+/**
+ * Parse + validate. A structurally broken object is NOT "ok" even when repair
+ * can fill it — repair exists for the retry prompt and for tolerant consumers,
+ * never to turn a schema violation into a silent success.
+ */
 export function readStructured(text, schema) {
   const parsed = parseLooseJson(text);
   if (parsed == null) return { ok: false, value: null, errors: ["unparseable JSON"] };
-  const value = repairShape(parsed, schema);
-  const errors = validateShape(value, schema);
-  return { ok: errors.length === 0, value, errors };
+  const errors = validateShape(parsed, schema);
+  if (!errors.length) return { ok: true, value: parsed, errors: [] };
+  return { ok: false, value: repairShape(parsed, schema), errors };
 }
 
 export function jsonRetryInstruction(schema, errors = []) {

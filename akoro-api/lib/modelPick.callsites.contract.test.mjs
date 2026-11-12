@@ -381,3 +381,32 @@ test("OpenCode json_schema becomes a forced submit_result tool call", async () =
   assert.equal(calls[0].tools[0].function.name, "submit_result");
   assert.deepEqual(JSON.parse(res.choices[0].message.content), { value: "from-tool" });
 });
+
+test("an unresolvable schema after retry fails visibly", async () => {
+  const { openai, runWithProviders } = await import("./aiModel.js");
+  const schema = { type: "object", additionalProperties: false, required: ["value"], properties: { value: { type: "string", enum: ["ok"] } } };
+  const reply = (value) => ({ choices: [{ index: 0, finish_reason: "stop", message: { role: "assistant", content: JSON.stringify({ value }) } }], usage: { prompt_tokens: 1, completion_tokens: 1 } });
+  const stub = { async create() { return reply("not-ok"); } };
+  await assert.rejects(
+    () => runWithProviders({ openai: stub }, () => openai.chat.completions.create({
+      model: "gpt-4o-mini", messages: [{ role: "user", content: "json" }],
+      response_format: { type: "json_schema", json_schema: { name: "t", strict: true, schema } },
+      __feature: "json_strict_test", __payer: "platform",
+    })),
+    (e) => e.code === "structured_output_invalid" && /invalid after retry/.test(e.message),
+  );
+});
+
+test("a repairable missing field is returned with the errors attached", async () => {
+  const { openai, runWithProviders } = await import("./aiModel.js");
+  const schema = { type: "object", additionalProperties: false, required: ["value"], properties: { value: { type: "string" } } };
+  const reply = { choices: [{ index: 0, finish_reason: "stop", message: { role: "assistant", content: "{}" } }], usage: { prompt_tokens: 1, completion_tokens: 1 } };
+  const stub = { async create() { return reply; } };
+  const res = await runWithProviders({ openai: stub }, () => openai.chat.completions.create({
+    model: "gpt-4o-mini", messages: [{ role: "user", content: "json" }],
+    response_format: { type: "json_schema", json_schema: { name: "t", strict: true, schema } },
+    __feature: "json_lenient_test", __payer: "platform",
+  }));
+  assert.deepEqual(JSON.parse(res.choices[0].message.content), { value: "" });
+  assert.ok(Array.isArray(res.__structured_errors) && res.__structured_errors.length, "the violation is attached, not hidden");
+});

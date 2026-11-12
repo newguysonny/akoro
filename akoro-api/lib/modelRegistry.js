@@ -122,7 +122,7 @@ export const ROLES = Object.freeze({
   // default, with capability checks: a vision step can't land on DeepSeek, and
   // a JSON step can't land on a model without JSON.
   suggestions: { caps: ["json"] },
-  vision: { caps: ["vision"], prefer: ["gpt-6-luna", "claude-haiku", "qwen3-8-flash"] },
+  vision: { caps: ["vision"], prefer: ["gpt-6-luna", "claude-haiku", "qwen3-8-flash"], preferOverDefault: true },
   builder: { caps: ["json"], prefer: ["deepseek", "glm-5-3-flash"] },
   rerank: { caps: ["json"] },
   battle_answer: { caps: [] },
@@ -266,7 +266,9 @@ export function createModelRegistry(env = process.env) {
       return entry && entry.enabled && hasCaps(entry, role) && availabilityOf(entry, env).available ? entry : null;
     })();
     const roleModel = runtimeRole || usable(roleEnv(role));
-    const labelEntry = () => roleModel || defaultFor(role) || firstWithCaps(role) || byId.get(activeDefault());
+    const labelEntry = () => roleModel
+      || (ROLES[role]?.preferOverDefault ? firstWithCaps(role) : null)
+      || defaultFor(role) || firstWithCaps(role) || byId.get(activeDefault());
     if (locked.has(role)) return { model: roleModel || defaultFor(role) || firstWithCaps(role) || byId.get(defaultId), source: "locked" };
     let notice = null;
     if (learnerChoice) {
@@ -283,6 +285,12 @@ export function createModelRegistry(env = process.env) {
       notice = `Using ${labelEntry().label}: ${why}.`;
     }
     if (roleModel) return { model: roleModel, source: "role", ...(notice ? { notice } : {}) };
+    // Capability roles with an explicit preference (vision) keep it even when
+    // the platform default is technically capable — cost/latency wins.
+    if (ROLES[role]?.preferOverDefault) {
+      const preferred = firstWithCaps(role);
+      if (preferred) return { model: preferred, source: "fallback", ...(notice ? { notice } : {}) };
+    }
     const def = defaultFor(role);
     if (def) return { model: def, source: "default", ...(notice ? { notice } : {}) };
     // The default lacks this step's capability (vision, JSON): use the first

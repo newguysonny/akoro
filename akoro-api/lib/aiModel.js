@@ -17,7 +17,7 @@ import { aiContext } from "./aiContext.js";
 import { AI_DEFAULT_MAX_TOKENS, usdCost, cachedTokensOf, reportedCostUsd } from "./aiPricing.js";
 import { recordAiCall, errorKindOf } from "./aiTelemetry.js";
 import { modelRegistry, forcedModelFor, availabilityOf, ROLES } from "./modelRegistry.js";
-import { readStructured, jsonRetryInstruction } from "./structuredOutput.js";
+import { readStructured, validateShape, jsonRetryInstruction } from "./structuredOutput.js";
 import { makeOpenAICompatibleAdapter } from "./providers/openaiCompatible.js";
 import { makeAnthropicAdapter } from "./providers/anthropic.js";
 import { makeOpenCodeAdapter } from "./providers/opencode.js";
@@ -414,11 +414,27 @@ async function meteredCreate(params = {}) {
         }, reqOpts));
         const retried = readStructured(second?.choices?.[0]?.message?.content, jsonRequest);
         if (second?.choices?.[0]?.message) {
+          if (!retried.ok) {
+            const unparseable = retried.value == null;
+            // Even after structural repair, an unresolvable shape (bad type,
+            // enum, required object) is an honest failure. Missing fields that
+            // repair can fill are logged/attached; AI_STRUCTURED_STRICT=true
+            // turns those into failures too (fail-closed deployments).
+            const repairedErrors = unparseable ? retried.errors : validateShape(retried.value, jsonRequest);
+            if (unparseable || repairedErrors.length || process.env.AI_STRUCTURED_STRICT === "true") {
+              const err = Object.assign(new Error(`${entry?.id || model}: structured output invalid after retry (${retried.errors.slice(0, 2).join("; ")})`),
+                { status: 502, code: "structured_output_invalid", errors: retried.errors });
+              throw err;
+            }
+            console.warn(`[ai:json] schema_mismatch ${feature} on ${entry?.id || model}: ${retried.errors.slice(0, 3).join("; ")}`);
+            Object.defineProperty(second, "__structured_errors", { value: retried.errors, enumerable: false, configurable: true });
+          }
           second.choices[0].message.content = JSON.stringify(retried.value ?? {});
           res = second;
           resBilled = false;
         }
       } catch (retryError) {
+        if (retryError?.code === "structured_output_invalid") throw retryError;
         report(null, { ok: false, errorKind: errorKindOf(retryError) });
       }
     }
