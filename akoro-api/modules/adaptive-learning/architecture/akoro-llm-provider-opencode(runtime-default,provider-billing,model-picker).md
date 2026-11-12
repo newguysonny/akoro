@@ -35,6 +35,7 @@ adds the OpenCode transport, the runtime switch, provider-cost billing and the c
 | 5 | Scope | **Both** the server default and the learner model picker. |
 | 6 | Granularity | **One global default** (no per-role model envs for now). |
 | 7 | Privacy | Learner documents/prompts **may** transit OpenCode's routing. |
+| 8 | Visibility | **OpenCode is internal only.** The learner-facing model list, names and labels stay exactly as they are; no provider name is ever shown. |
 
 Locked roles (assessor, evidence, agent_recall, question_generator) keep their locked behaviour.
 Gemini is deliberately deferred.
@@ -80,6 +81,9 @@ AI_MODELS=[ … ]                      # existing JSON catalogue, now with provi
 
 - `AI_PROVIDER` does not bypass the registry; it records intent and lets boot validate that the
   intended provider has a key and at least one callable model.
+- **The public model list does not change.** OpenCode is a transport behind the existing
+  public models (DeepSeek, Claude, GPT); no "OpenCode/" label, id prefix or provider name
+  appears in the picker, wallet, or learner-facing text.
 - Legacy `AI_MODEL_DEFAULT` / `OPENAI_MODEL` continue to work when the new vars are unset.
 - One global default: role envs (`AI_MODEL_ROLE_*`) stay available but are not used by this plan.
 
@@ -110,6 +114,48 @@ a model without a price is listed but unavailable. `caps` gate roles — a model
 can never serve `controller`.
 
 ---
+
+## 5b. Internal routing: public model → transport
+
+The learner sees a **product model** (id + label); the server picks the **transport** that
+serves it. This is the layer that lets us move between OpenCode and direct provider APIs
+without touching the catalogue, the picker, or anything a learner reads.
+
+```
+public model        internal routes (in order)                         fallback model
+claude-sonnet   →   opencode/anthropic → direct anthropic               deepseek
+gpt-4.1         →   opencode/responses → direct openai                  deepseek
+deepseek        →   opencode/chat      → direct deepseek                claude-haiku
+```
+
+- Routes are configuration, per environment (`AI_TRANSPORT=auto|opencode|direct`, plus an
+  optional per-model override). "auto" uses the order above.
+- A route is eligible only if its key exists, the model id resolves on that transport, and
+  its capabilities cover the role; otherwise it is skipped at boot with a warning.
+- **Billing keeps the public model as the unit.** The learner is charged the public model's
+  coin price; the transport's real cost (reported by OpenCode, or static for direct) is what
+  we record internally and reconcile against. Provider choice never changes what a learner
+  pays, and never appears in a receipt.
+- Telemetry carries `transport`, `billing_source`, `provider_cost_usd` and `list_cost_usd`
+  as internal fields; no learner-facing surface renders them.
+
+### Failover policy
+
+1. **Same model, next transport** on: `429` (rate limit), `402` (balance/quota), `5xx`,
+   timeouts/network errors, and gateway-specific unavailability. One short jittered retry,
+   then move on — never hammer the same route.
+2. **Context limit is not a transport failure.** Map `context_length_exceeded` /
+   "prompt is too long" to its own error kind. Do **not** resend the same oversized prompt to
+   an equivalent route. Instead: use a route/model with a larger context if one is configured,
+   else trigger the existing truncation/summarisation path, and only then fail.
+3. **Cross-model fallback** (`AI_MODEL_FALLBACK=deepseek`) when every route for the chosen
+   model is exhausted.
+4. **Silent when it is the same model** (transport swap). If the public model had to change,
+   the learner gets the existing notice, phrased without provider names
+   ("Using DeepSeek: Claude is busy right now").
+5. Every failover is logged with model, from-route, to-route, error kind and latency, so the
+   internal dashboard shows which transport is carrying the product — without surfacing it to
+   learners.
 
 ## 6. Implementation shape
 
@@ -146,9 +192,11 @@ can never serve `controller`.
   `PUT { "defaultModel": "deepseek" }` or the env var.
 
 ### 6.4 Learner picker / tiers
-- Add OpenCode entries to `lib/modelTiers.js` lists; availability = key + price + caps.
-- Picker payload gains provider + label; ids stay ours; locked roles unchanged.
-- No UI redesign — the list payload drives the existing switch.
+- The picker is **unchanged**: same ids, labels, prices and tiers as today. No provider field
+  is added to the payload and no "OpenCode" string is rendered.
+- Availability is decided by the internal routes (§5b), so a model stays selectable as long as
+  at least one eligible transport exists.
+- Locked roles unchanged; a learner's saved choice keeps working across a transport switch.
 
 ---
 
@@ -174,7 +222,9 @@ can never serve `controller`.
   `controller`.
 - DeepSeek fallback is exercised by a forced 500/402 in tests, with the existing learner notice.
 - The picker lists only available, allowed, capable models, immediately reflecting a runtime
-  switch.
+  switch — and its payload/UI contains **no provider name or "OpenCode" string**.
+- Forcing the primary transport to fail (429/500) swaps to the next route of the **same**
+  public model with no learner-visible change; only a model change produces a notice.
 - `/health` reports OpenCode key + model-list reachability.
 
 ---
@@ -217,6 +267,11 @@ can never serve `controller`.
 
 - Exact first model per family (from the live model list) and its `price` values for the
   fallback biller.
+- Which public model maps to the open tier by default (the visible list stays as-is, so the
+  open models must be reachable through an existing product model or added later under their
+  own labels).
+- Context-limit ladder: which models/routes count as "larger context" before summarisation.
+- Learner notice wording for the silent-vs-model-change cases.
 - Drift threshold and alert destination.
 - Admin authentication to reuse (existing admin guard vs console key).
 - Whether the learner picker shows vendor provider names or friendly aliases only.
