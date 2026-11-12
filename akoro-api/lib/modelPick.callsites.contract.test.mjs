@@ -321,3 +321,35 @@ test("a 429 on GLM and on DeepSeek Go is answered by DeepSeek direct in the same
   assert.equal(res.model_fallback.fallbackModel, "deepseek-direct");
   assert.deepEqual(res.model_fallback.tried, ["deepseek", "deepseek-direct"]);
 });
+
+test("a json_schema reply is normalised, and retried once when it is prose", async () => {
+  const { openai, runWithProviders } = await import("./aiModel.js");
+  const schema = { type: "object", additionalProperties: false, required: ["value"], properties: { value: { type: "string" } } };
+  const calls = [];
+  const reply = (content) => ({ choices: [{ index: 0, finish_reason: "stop", message: { role: "assistant", content } }], usage: { prompt_tokens: 2, completion_tokens: 2 } });
+  const stub = {
+    async create(body) {
+      calls.push(body);
+      return calls.length === 1 ? reply("Sure — the answer is in prose, not JSON.") : reply('```json\n{"value":"ok"}\n```');
+    },
+  };
+  const res = await runWithProviders({ openai: stub }, () => openai.chat.completions.create({
+    model: "gpt-4o-mini",
+    messages: [{ role: "user", content: "give me JSON" }],
+    response_format: { type: "json_schema", json_schema: { name: "t", strict: true, schema } },
+    __feature: "json_test", __payer: "platform",
+  }));
+  assert.equal(calls.length, 2, "one retry");
+  assert.equal(calls[1].response_format.type, "json_object");
+  assert.deepEqual(JSON.parse(res.choices[0].message.content), { value: "ok" }, "the content is valid JSON for the consumer");
+
+  const one = [];
+  const clean = { async create(body) { one.push(body); return reply('Here: {"value":"fine"}'); } };
+  const res2 = await runWithProviders({ openai: clean }, () => openai.chat.completions.create({
+    model: "gpt-4o-mini", messages: [{ role: "user", content: "json" }],
+    response_format: { type: "json_schema", json_schema: { name: "t", strict: true, schema } },
+    __feature: "json_test", __payer: "platform",
+  }));
+  assert.equal(one.length, 1, "valid JSON embedded in prose needs no retry");
+  assert.deepEqual(JSON.parse(res2.choices[0].message.content), { value: "fine" });
+});

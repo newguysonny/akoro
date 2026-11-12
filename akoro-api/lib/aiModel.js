@@ -17,6 +17,7 @@ import { aiContext } from "./aiContext.js";
 import { AI_DEFAULT_MAX_TOKENS, usdCost, cachedTokensOf, reportedCostUsd } from "./aiPricing.js";
 import { recordAiCall, errorKindOf } from "./aiTelemetry.js";
 import { modelRegistry, forcedModelFor, availabilityOf, ROLES } from "./modelRegistry.js";
+import { readStructured, jsonRetryInstruction } from "./structuredOutput.js";
 import { makeOpenAICompatibleAdapter } from "./providers/openaiCompatible.js";
 import { makeAnthropicAdapter } from "./providers/anthropic.js";
 import { makeOpenCodeAdapter } from "./providers/opencode.js";
@@ -312,6 +313,13 @@ async function meteredCreate(params = {}) {
   }
 
   let res;
+  let resBilled = false;
+  const bill = (r) => {
+    if (!r || resBilled) return;
+    resBilled = true;
+    report(r?.usage ?? null);
+    if (bills && r?.usage) charge(r.usage);
+  };
   try {
     res = await fire(clean, reqOpts);
   } catch (e) {
@@ -338,8 +346,36 @@ async function meteredCreate(params = {}) {
     throw lastError;
   }
 
-  report(res?.usage ?? null);
-  if (bills && res?.usage) charge(res.usage);
+  // A json_schema reply is normalised for EVERY consumer: parse the body, a
+  // fence or an embedded object; if the required shape is unusable, retry once
+  // and hand back valid JSON. No feature has to parse model JSON on its own.
+  const rf = clean.response_format;
+  if (!clean.stream && rf?.type === "json_schema" && rf.json_schema?.schema) {
+    const schema = rf.json_schema.schema;
+    const first = readStructured(res?.choices?.[0]?.message?.content, schema);
+    if (first.ok) {
+      if (res?.choices?.[0]?.message) res.choices[0].message.content = JSON.stringify(first.value);
+    } else {
+      bill(res);
+      console.warn(`[ai:json] retry ${feature} on ${entry?.id || model} (${first.errors[0] || "bad JSON"})`);
+      try {
+        const second = await fire({
+          ...clean,
+          response_format: { type: "json_object" },
+          messages: [...(clean.messages || []), { role: "system", content: jsonRetryInstruction(schema, first.errors) }],
+        }, reqOpts);
+        const retried = readStructured(second?.choices?.[0]?.message?.content, schema);
+        if (second?.choices?.[0]?.message) {
+          second.choices[0].message.content = JSON.stringify(retried.value ?? {});
+          res = second;
+          resBilled = false;
+        }
+      } catch (retryError) {
+        report(null, { ok: false, errorKind: errorKindOf(retryError) });
+      }
+    }
+  }
+  bill(res);
 
   // A refusal is not a crash (§7.11.4): the refused call is billed as it ran,
   // then the same request goes once to the fallback model (the entry's
