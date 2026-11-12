@@ -28,14 +28,14 @@ adds the OpenCode transport, the runtime switch, provider-cost billing and the c
 
 | # | Decision | Choice |
 |---|---|---|
-| 1 | Models first | Go straight: open tier (**DeepSeek / Kimi / GLM / Minimax**) + **Claude** + **GPT** through OpenCode. Gemini out of scope. |
+| 1 | Models first | Go straight: open tier (**DeepSeek / Kimi / GLM / Minimax**) + **Claude** + **GPT** through OpenCode. **Kimi, GLM and Minimax are added as their own public models** with neutral labels (no gateway branding). Gemini out of scope. |
 | 2 | Billing | **A — provider-reported cost** (`usage.cost`), static price as fallback/estimate/display. |
 | 3 | Switching | **Runtime admin override** (no restart), persisted, plus env. |
 | 4 | Fallback | **DeepSeek (current)** — per-entry fallback first, then global fallback. |
 | 5 | Scope | **Both** the server default and the learner model picker. |
 | 6 | Granularity | **One global default** (no per-role model envs for now). |
 | 7 | Privacy | Learner documents/prompts **may** transit OpenCode's routing. |
-| 8 | Visibility | **OpenCode is internal only.** The learner-facing model list, names and labels stay exactly as they are; no provider name is ever shown. |
+| 8 | Visibility | **OpenCode is internal only.** Existing model names/labels stay as they are; the new open models get neutral public identity (model family only). No provider/gateway name is ever shown. |
 
 Locked roles (assessor, evidence, agent_recall, question_generator) keep their locked behaviour.
 Gemini is deliberately deferred.
@@ -70,7 +70,7 @@ From `https://opencode.ai/docs/console/api/inference`:
 
 ```bash
 AI_PROVIDER=opencode                 # documentation/validation; the registry resolves
-AI_MODEL_DEFAULT=oc-glm-5.3          # OUR stable id → vendor apiModel (see §5)
+AI_MODEL_DEFAULT=glm-5-3              # OUR stable id → vendor apiModel (see §5)
 AI_MODEL_FALLBACK=deepseek           # existing catalogue id
 OPENCODE_API_KEY=…                   # only here; never logged
 OPENCODE_BASE_URL=https://opencode.ai/inference
@@ -81,9 +81,10 @@ AI_MODELS=[ … ]                      # existing JSON catalogue, now with provi
 
 - `AI_PROVIDER` does not bypass the registry; it records intent and lets boot validate that the
   intended provider has a key and at least one callable model.
-- **The public model list does not change.** OpenCode is a transport behind the existing
-  public models (DeepSeek, Claude, GPT); no "OpenCode/" label, id prefix or provider name
-  appears in the picker, wallet, or learner-facing text.
+- OpenCode is a transport behind **public models**. Existing entries keep their names;
+  **Kimi / GLM / Minimax are added as first-class public models** with neutral ids/labels.
+  No "OpenCode/" label, gateway id prefix or provider name appears in the picker, wallet or
+  learner-facing text.
 - Legacy `AI_MODEL_DEFAULT` / `OPENAI_MODEL` continue to work when the new vars are unset.
 - One global default: role envs (`AI_MODEL_ROLE_*`) stay available but are not used by this plan.
 
@@ -91,16 +92,23 @@ AI_MODELS=[ … ]                      # existing JSON catalogue, now with provi
 
 ## 5. Catalogue entries
 
-Ids are **ours and stable**; vendor strings live in `apiModel` so a vendor rename never changes
-a learner's saved choice or telemetry.
+Ids and labels are **ours and stable**; vendor strings live in `apiModel` so a vendor rename never
+changes a learner's saved choice or telemetry. The public identity never names the gateway —
+Kimi/GLM/Minimax are presented as their own models.
+
+| public id | label | apiModel (vendor) | tier |
+|---|---|---|---|
+| `kimi-k3` | Kimi K3 | kimi-k3 | freemium / premium (tune by price) |
+| `glm-5-3` | GLM 5.3 | glm-5.3 | freemium / premium |
+| `minimax-m3` | Minimax M3 | minimax-m3 | freemium / premium |
 
 ```json
 {
-  "id": "oc-glm-5.3",
+  "id": "glm-5-3",
+  "label": "GLM 5.3",
   "provider": "opencode",
   "family": "chat",
   "apiModel": "glm-5.3",
-  "label": "GLM 5.3",
   "price": { "in": 0.0, "out": 0.0 },
   "caps": { "tools": true, "stream": true, "json": true, "vision": false },
   "selectable": true,
@@ -126,6 +134,9 @@ public model        internal routes (in order)                         fallback 
 claude-sonnet   →   opencode/anthropic → direct anthropic               deepseek
 gpt-4.1         →   opencode/responses → direct openai                  deepseek
 deepseek        →   opencode/chat      → direct deepseek                claude-haiku
+kimi-k3         →   opencode/chat                                      deepseek
+glm-5-3         →   opencode/chat                                      deepseek
+minimax-m3      →   opencode/chat                                      deepseek
 ```
 
 - Routes are configuration, per environment (`AI_TRANSPORT=auto|opencode|direct`, plus an
@@ -192,8 +203,9 @@ deepseek        →   opencode/chat      → direct deepseek                clau
   `PUT { "defaultModel": "deepseek" }` or the env var.
 
 ### 6.4 Learner picker / tiers
-- The picker is **unchanged**: same ids, labels, prices and tiers as today. No provider field
-  is added to the payload and no "OpenCode" string is rendered.
+- Existing entries keep their ids/labels; **Kimi K3, GLM 5.3 and Minimax M3 join the picker as
+  neutral public models**. No provider field is added to the payload and no "OpenCode" string is
+  rendered.
 - Availability is decided by the internal routes (§5b), so a model stays selectable as long as
   at least one eligible transport exists.
 - Locked roles unchanged; a learner's saved choice keeps working across a transport switch.
@@ -267,9 +279,10 @@ deepseek        →   opencode/chat      → direct deepseek                clau
 
 - Exact first model per family (from the live model list) and its `price` values for the
   fallback biller.
-- Which public model maps to the open tier by default (the visible list stays as-is, so the
-  open models must be reachable through an existing product model or added later under their
-  own labels).
+- Final public ids/labels and tiers for Kimi/GLM/Minimax (proposed: `kimi-k3`, `glm-5-3`,
+  `minimax-m3`; labels without any gateway reference). If fully white-label names are
+  preferred (e.g. "Akoro Fast" with the model family only in an internal description), the
+  catalogue supports that without touching the transport layer.
 - Context-limit ladder: which models/routes count as "larger context" before summarisation.
 - Learner notice wording for the silent-vs-model-change cases.
 - Drift threshold and alert destination.
