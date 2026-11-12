@@ -43,6 +43,10 @@ import {
   sendPasswordChangedEmail,
 } from "./emails.js";
 import { urlFor } from "../../lib/urls.js";
+import {
+  issueEmailCode, verifyEmailCode, resendEmailCode, consumeEmailCode,
+  emailCodesEnabled, normaliseEmail, CODE_TTL_MINUTES,
+} from "./emailCodes.js";
 
 // ─── § CONSTANTS ──────────────────────────────────────────────────────────────
 
@@ -694,9 +698,31 @@ const authHandlers = {
   register: asyncHandler(async (req, res) => {
     const { email, password, fullName, role = "student" } = req.body;
     let { username } = req.body;
+    const portal = portalOf(req);
+    const codesOn = emailCodesEnabled(portal);
 
-    const { data: existing } = await db.from("users").select("id").eq("email", email).maybeSingle();
-    if (existing) return res400(res, "Email already registered");
+    const { data: existing } = await db.from("users")
+      .select("id, email, email_verified, full_name, username").eq("email", email).maybeSingle();
+    if (existing) {
+      if (!codesOn) return res400(res, "Email already registered");
+      // Never confirm the account state to an unknown caller: an unverified
+      // account gets a fresh code, a verified one gets only a generic 200.
+      if (!existing.email_verified) {
+        const issued = await issueEmailCode({
+          userId: existing.id, email, purpose: "signup",
+          name: existing.full_name || existing.username || "there",
+          ip: req.ip, userAgent: req.headers["user-agent"],
+        });
+        if (!issued.ok && issued.code === "send_failed") return res.status(503).json({ success: false, message: "Could not send the verification email. Try again." });
+        return res200(res, {
+          verificationRequired: true, email: normaliseEmail(email), codeSent: !!issued.ok,
+          ...(issued.challengeId ? { challengeId: issued.challengeId, expiresInMinutes: CODE_TTL_MINUTES } : {}),
+          ...(issued.ok ? {} : { retryAfter: issued.retryAfter ?? null }),
+        });
+      }
+      return res200(res, { verificationRequired: false, codeSent: false,
+        message: "If this email can sign in, use your password." });
+    }
 
     // Auto-generate a unique username when none is supplied (e.g. schools).
     if (!username) {
@@ -706,7 +732,7 @@ const authHandlers = {
     const { data: existingUser } = await db.from("users").select("id").eq("username", username).maybeSingle();
     if (existingUser) {
       if (req.body.username) return res400(res, "Username already taken");
-      username = `${username}_${Math.random().toString(36).slice(2, 6)}`; // collision → nudge
+      username = `${username}_${Math.random().toString(36).slice(2, 6)}`;
     }
 
     const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
@@ -716,19 +742,32 @@ const authHandlers = {
       full_name:      fullName ?? null,
       role,
       is_active:      true,
-      email_verified: false,
+      email_verified: !codesOn,
     }).select("*").single();
-
     if (error) return res400(res, "Registration failed");
 
-    const payload = await issueTokenPair(res, user, portalOf(req));
+    if (codesOn) {
+      const issued = await issueEmailCode({
+        userId: user.id, email, purpose: "signup",
+        name: user.full_name || user.username || "there",
+        ip: req.ip, userAgent: req.headers["user-agent"],
+      });
+      if (!issued.ok) {
+        if (issued.code === "send_failed") {
+          return res.status(503).json({ success: false, message: "Could not send the verification email. Try again." });
+        }
+        return res201(res, { verificationRequired: true, email: normaliseEmail(email), codeSent: false,
+          retryAfter: issued.retryAfter ?? null });
+      }
+      return res201(res, { verificationRequired: true, email: normaliseEmail(email), codeSent: true,
+        challengeId: issued.challengeId, expiresInMinutes: CODE_TTL_MINUTES });
+    }
 
+    const payload = await issueTokenPair(res, user, portal);
     const loginUrl = role === "instructor" ? `${INSTRUCTOR_FRONTEND_URL}/signin`
       : role === "school_admin" ? `${SCHOOL_FRONTEND_URL}/signin`
       : `${FRONTEND_URL}/signin`;
-    sendWelcomeEmail({ to: user.email, name: user.full_name || user.username, loginUrl, role })
-      .catch(() => {});
-
+    sendWelcomeEmail({ to: user.email, name: user.full_name || user.username, loginUrl, role }).catch(() => {});
     res201(res, payload);
   }),
 
@@ -765,6 +804,27 @@ const authHandlers = {
       }
     }
 
+    // Email-code gate (per portal). Passwords alone no longer mint a session
+    // when this portal is enabled; the code is emailed and verified next.
+    const portal = portalOf(req);
+    if (emailCodesEnabled(portal)) {
+      const purpose = user.email_verified ? "login" : "signup";
+      const issued = await issueEmailCode({
+        userId: user.id, email: user.email, purpose,
+        name: user.full_name || user.username || "there",
+        ip: req.ip, userAgent: req.headers["user-agent"],
+      });
+      if (!issued.ok && issued.code === "send_failed") {
+        return res.status(503).json({ success: false, message: "Could not send the sign-in code. Try again." });
+      }
+      return res200(res, {
+        ...(purpose === "signup" ? { verificationRequired: true } : { codeRequired: true }),
+        email: normaliseEmail(user.email), codeSent: !!issued.ok,
+        ...(issued.challengeId ? { challengeId: issued.challengeId, expiresInMinutes: CODE_TTL_MINUTES } : {}),
+        ...(issued.ok ? {} : { retryAfter: issued.retryAfter ?? null }),
+      });
+    }
+
     // Two-factor gate — issue a short-lived challenge token instead of a session.
     if (user.two_factor_enabled && user.two_factor_secret) {
       const challengeToken = signChallenge(user.id);
@@ -781,6 +841,54 @@ const authHandlers = {
     }).catch(() => {});
 
     res200(res, payload);
+  }),
+
+  // POST /api/auth/verify-email — finish sign-up with the emailed code.
+  verifyEmail: asyncHandler(async (req, res) => {
+    const { challengeId, code } = req.body;
+    const verified = await verifyEmailCode({ challengeId, code, purpose: "signup" });
+    if (!verified.ok) return res400(res, "Invalid or expired code.");
+    const { data: user } = await db.from("users").select("*").eq("id", verified.row.user_id).maybeSingle();
+    if (!user) return res400(res, "Invalid or expired code.");
+    await db.from("users").update({ email_verified: true, updated_at: new Date().toISOString() }).eq("id", user.id);
+    const payload = await issueTokenPair(res, user, portalOf(req));
+    const loginUrl = user.role === "instructor" ? `${INSTRUCTOR_FRONTEND_URL}/signin` : `${FRONTEND_URL}/signin`;
+    sendWelcomeEmail({ to: user.email, name: user.full_name || user.username, loginUrl, role: user.role }).catch(() => {});
+    res200(res, payload);
+  }),
+
+  // POST /api/auth/verify-login — finish sign-in with the emailed code.
+  verifyLogin: asyncHandler(async (req, res) => {
+    const { challengeId, code } = req.body;
+    let verified = await verifyEmailCode({ challengeId, code, purpose: "login" });
+    if (!verified.ok) verified = await verifyEmailCode({ challengeId, code, purpose: "signup" });
+    if (!verified.ok) return res400(res, "Invalid or expired code.");
+    const { data: user } = await db.from("users").select("*").eq("id", verified.row.user_id).maybeSingle();
+    if (!user || !user.is_active) return res401(res, "User not found");
+    if (verified.row.purpose === "signup" && !user.email_verified) {
+      await db.from("users").update({ email_verified: true, updated_at: new Date().toISOString() }).eq("id", user.id);
+    }
+    if (user.two_factor_enabled && user.two_factor_secret) {
+      return res200(res, { twoFactorRequired: true, challengeToken: signChallenge(user.id) });
+    }
+    const payload = await issueTokenPair(res, user, portalOf(req));
+    const signinUrl = user.role === "instructor" ? `${INSTRUCTOR_FRONTEND_URL}/signin` : `${FRONTEND_URL}/signin`;
+    sendLoginAlertEmail({ to: user.email, name: user.full_name || user.username, ip: req.ip,
+      userAgent: req.headers["user-agent"], time: new Date(), signinUrl }).catch(() => {});
+    res200(res, payload);
+  }),
+
+  // POST /api/auth/resend-code — a fresh code for the same challenge.
+  resendCode: asyncHandler(async (req, res) => {
+    const { challengeId } = req.body;
+    const issued = await resendEmailCode({ challengeId, ip: req.ip, userAgent: req.headers["user-agent"] });
+    if (!issued.ok && issued.code === "send_failed") {
+      return res.status(503).json({ success: false, message: "Could not send the code. Try again." });
+    }
+    if (!issued.ok && ["invalid_code"].includes(issued.code)) return res400(res, "Request a new code by signing in again.");
+    return res200(res, { codeSent: !!issued.ok,
+      ...(issued.challengeId ? { challengeId: issued.challengeId, expiresInMinutes: CODE_TTL_MINUTES } : {}),
+      ...(issued.ok ? {} : { retryAfter: issued.retryAfter ?? null }) });
   }),
 
   // POST /api/auth/2fa/login — complete a 2FA-gated login with a TOTP code.
@@ -1069,6 +1177,9 @@ const router = Router();
 
 router.post("/register", strictLimit,  rules.register, runValidation, authHandlers.register);
 router.post("/login",    strictLimit,  rules.login,    runValidation, authHandlers.login);
+router.post("/verify-email", strictLimit, body("challengeId").isUUID(), body("code").isLength({ min: 6, max: 6 }), runValidation, authHandlers.verifyEmail);
+router.post("/verify-login", strictLimit, body("challengeId").isUUID(), body("code").isLength({ min: 6, max: 6 }), runValidation, authHandlers.verifyLogin);
+router.post("/resend-code",  strictLimit, body("challengeId").isUUID(), runValidation, authHandlers.resendCode);
 router.post("/refresh",  refreshLimit, authHandlers.refresh);
 router.post("/logout",   authenticateToken, authHandlers.logout);
 router.get ("/me",       authenticateToken, authHandlers.me);
@@ -1182,9 +1293,21 @@ router.post("/forgot-password", strictLimit,
 
     // Always respond 200 — never reveal whether an email is registered
     const { data: user } = await db.from("users")
-      .select("id, full_name, email, is_active")
+      .select("id, full_name, username, email, is_active")
       .eq("email", email)
       .maybeSingle();
+
+    if (emailCodesEnabled(portalOf(req))) {
+      if (user && user.is_active) {
+        await issueEmailCode({
+          userId: user.id, email: user.email, purpose: "reset",
+          name: user.full_name || user.username || "there",
+          ip: req.ip, userAgent: req.headers["user-agent"],
+        }).catch(() => {});
+      }
+      // Same answer whether or not the account exists.
+      return res200(res, { codeFlow: true, message: "If that email is registered, a code has been sent." });
+    }
 
     if (user && user.is_active) {
       // Invalidate any existing unused tokens for this user
@@ -1223,11 +1346,35 @@ router.post("/forgot-password", strictLimit,
 
 /** POST /api/auth/reset-password */
 router.post("/reset-password", strictLimit,
-  body("token").notEmpty(),
+  body("token").optional({ values: "falsy" }),
+  body("email").optional({ values: "falsy" }).isEmail().normalizeEmail(),
+  body("code").optional({ values: "falsy" }).isLength({ min: 6, max: 6 }),
   body("password").isLength({ min: 8 }).withMessage("Password must be at least 8 characters"),
   runValidation,
   asyncHandler(async (req, res) => {
-    const { token, password } = req.body;
+    const { token, password, email, code } = req.body;
+
+    // Emailed-code reset (no link): verify, update, consume.
+    if (!token) {
+      if (!email || !code) return res400(res, "Enter the email and the code we sent.");
+      const verified = await verifyEmailCode({ email, code, purpose: "reset", consume: false });
+      if (!verified.ok || !verified.row.user_id) return res400(res, "Invalid or expired code.");
+      const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
+      await db.from("users")
+        .update({ password_hash: passwordHash, must_change_password: false, updated_at: new Date().toISOString() })
+        .eq("id", verified.row.user_id);
+      await consumeEmailCode(verified.row.id);
+      await db.from("refresh_tokens").update({ used: true }).eq("user_id", verified.row.user_id).eq("used", false);
+      const { data: resetUser } = await db.from("users")
+        .select("email, full_name, username, role").eq("id", verified.row.user_id).maybeSingle();
+      if (resetUser) {
+        const signinUrl = resetUser.role === "instructor" ? `${INSTRUCTOR_FRONTEND_URL}/signin` : `${FRONTEND_URL}/signin`;
+        sendPasswordChangedEmail({ to: resetUser.email, name: resetUser.full_name || resetUser.username || "there",
+          ip: req.ip, signinUrl }).catch(() => {});
+      }
+      return res200(res, { message: "Password updated. You can now sign in with your new password." });
+    }
+
     const tokenHash = hashToken(token);
 
     const { data: record } = await db.from("password_reset_tokens")

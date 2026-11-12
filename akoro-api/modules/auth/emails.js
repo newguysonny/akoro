@@ -12,7 +12,7 @@
 
 import { urlFor, displayHost } from "../../lib/urls.js";
 
-const EMAIL_FROM = process.env.RESEND_FROM_EMAIL || "noreply@akoro.app";
+const EMAIL_FROM = process.env.SENDGRID_FROM_EMAIL || process.env.EMAIL_FROM || process.env.RESEND_FROM_EMAIL || "noreply@akoro.app";
 
 // Public base that serves the app's static assets (akoro-learner/public).
 // Uses the frontend URL (FRONTEND_URL) since that deployment serves /logo/* and
@@ -188,16 +188,81 @@ const cleanName = (name) => (name && name !== "there" ? esc(name) : "there");
 // ─── § Resend helper ─────────────────────────────────────────────────────────
 
 async function sendEmail({ to, subject, text, html, from }) {
+  const fromValue = from ?? `Akoro Learning <${EMAIL_FROM}>`;
+  // SendGrid is the transactional transport. Resend remains as a fallback for
+  // environments that have not moved their key yet (no behaviour change there).
+  if (process.env.SENDGRID_API_KEY) {
+    const res = await fetch("https://api.sendgrid.com/v3/mail/send", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${process.env.SENDGRID_API_KEY}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        personalizations: [{ to: (Array.isArray(to) ? to : [to]).map((email) => ({ email })) }],
+        from: (() => {
+          const m = String(fromValue).match(/^(.*)<([^>]+)>$/);
+          return m ? { name: m[1].trim() || "Akoro Learning", email: m[2].trim() } : { name: "Akoro Learning", email: String(fromValue).trim() };
+        })(),
+        subject,
+        content: [
+          { type: "text/plain", value: text || String(html || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim() },
+          { type: "text/html", value: html || `<p>${String(text || "").replace(/&/g, "&amp;").replace(/</g, "&lt;")}</p>` },
+        ],
+      }),
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new Error(`SendGrid send failed (${res.status}): ${body.slice(0, 300)}`);
+    }
+    return;
+  }
   const { Resend } = await import("resend");
   const resend = new Resend(process.env.RESEND_API_KEY);
   const { error } = await resend.emails.send({
-    from: from ?? `Akoro Learning <${EMAIL_FROM}>`,
+    from: fromValue,
     to:   Array.isArray(to) ? to : [to],
     subject,
     text,
     html,
   });
   if (error) throw new Error(`Email send failed: ${error.message}`);
+}
+
+/**
+ * Emailed verification code (signup / login / password reset). A code, not a
+ * link: it must be typed into the screen that asked for it.
+ */
+export function renderVerificationCodeEmail({ code, purpose = "login", expiresMinutes = 10, name = "there" }) {
+  const what = purpose === "signup" ? "finish creating your account"
+    : purpose === "reset" ? "reset your password"
+    : "finish signing in";
+  const subject = `Your Akoro code to ${what}`;
+  const pretty = String(code || "").replace(/(\d{3})(\d{3})/, "$1 $2");
+  const text = `Hi ${name},\n\nYour Akoro verification code is ${code}. It expires in ${expiresMinutes} minutes and can be used once.\n\nUse it to ${what}. If this wasn't you, ignore this email and consider changing your password.`;
+  const html = `<!doctype html><html><body style="margin:0;padding:0;background:${BG};font-family:${FONT}">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${BG};padding:28px 12px">
+   <tr><td align="center">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;background:#fff;border:1px solid ${LINE};border-radius:18px;overflow:hidden">
+     <tr><td style="padding:26px 26px 6px">
+       <div style="font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:${PURPLE}">Akoro Learning</div>
+       <h1 style="margin:10px 0 6px;font-size:21px;line-height:1.3;color:${INK}">Your verification code</h1>
+       <p style="margin:0;color:${BODY};font-size:14px;line-height:1.6">Use this code to ${esc(what)}. It expires in ${expiresMinutes} minutes and works once.</p>
+     </td></tr>
+     <tr><td style="padding:18px 26px">
+       <div style="background:${PANEL};border:1px solid ${LINE};border-radius:14px;padding:18px;text-align:center">
+         <div style="font-size:34px;font-weight:900;letter-spacing:.22em;color:${INK};font-family:ui-monospace,Menlo,Consolas,monospace">${esc(pretty || code)}</div>
+       </div>
+     </td></tr>
+     <tr><td style="padding:0 26px 24px">
+       <p style="margin:0;color:${MUTED};font-size:12px;line-height:1.6">If you didn't request this, ignore the email. Never share this code — Akoro will never ask for it.</p>
+     </td></tr>
+    </table>
+   </td></tr>
+  </table>
+</body></html>`;
+  return { subject, text, html };
+}
+
+export async function sendVerificationCodeEmail({ to, code, purpose, expiresMinutes, name }) {
+  await sendEmail({ to, ...renderVerificationCodeEmail({ code, purpose, expiresMinutes, name }) });
 }
 
 /**

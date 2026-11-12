@@ -25,12 +25,13 @@ export default function SigninPage() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const after = nextPath(params.toString()) || APP_HOME;   // e.g. back to a /join/:token invite
-  const { login, verifyTwoFactor, loginWithGoogle, loading, clearError } = useAuth();
+  const { login, verifyEmail, verifyLogin, resendCode, verifyTwoFactor, loginWithGoogle, loading, clearError } = useAuth();
   const { t } = useLang();
   const [email,     setEmail]    = useState('');
   const [password,  setPassword] = useState('');
   const [formErr,   setFormErr]  = useState('');
   const [challenge, setChallenge]= useState(null);
+  const [emailStep, setEmailStep]= useState(null);   // { challengeId, email, retryAfter }
   const [code,      setCode]     = useState('');
   const urlError = params.get('error');
 
@@ -40,7 +41,31 @@ export default function SigninPage() {
     try {
       const data = await login({ email, password });
       if (data?.twoFactorRequired) { setChallenge(data.challengeToken); return; }
+      if (data?.codeRequired || data?.verificationRequired) {
+        if (data.challengeId) setEmailStep({ challengeId: data.challengeId, email: data.email || email, retryAfter: data.retryAfter || 0 });
+        else setFormErr(data.retryAfter ? `A code was sent recently — try again in ${data.retryAfter}s.` : 'Check your email for the code.');
+        return;
+      }
       navigate(after, { replace:true });
+    } catch (err) { setFormErr(err.message); }
+  };
+
+  const handleEmailCode = async (e) => {
+    e.preventDefault(); setFormErr('');
+    if (!/^\d{6}$/.test(code)) { setFormErr(t('auth.enter_6digit')); return; }
+    try {
+      const data = await verifyLogin({ challengeId: emailStep.challengeId, code });
+      if (data?.twoFactorRequired) { setEmailStep(null); setChallenge(data.challengeToken); setCode(''); return; }
+      navigate(after, { replace:true });
+    } catch (err) { setFormErr(err.message); }
+  };
+
+  const resendEmailCode = async () => {
+    setFormErr('');
+    try {
+      const d = await resendCode({ challengeId: emailStep.challengeId });
+      setEmailStep(s => ({ ...s, retryAfter: d?.retryAfter || 0 }));
+      setFormErr(d?.codeSent ? 'A new code is on its way.' : `Try again in ${d?.retryAfter || 60}s.`);
     } catch (err) { setFormErr(err.message); }
   };
 
@@ -71,7 +96,39 @@ export default function SigninPage() {
         padding:'32px 28px', boxShadow:'0 4px 32px rgba(0,0,0,.12)',
         border:'1px solid var(--ak-border)' }}>
 
-        {challenge ? (
+        {emailStep ? (
+          <>
+            <h1 style={{ fontSize:22, fontWeight:900, color:'var(--ak-text)', margin:'0 0 6px' }}>Check your email</h1>
+            <p style={{ fontSize:13, color:'var(--ak-text-sub)', margin:'0 0 24px' }}>
+              Enter the 6-digit code we sent to <strong>{emailStep.email}</strong>.
+            </p>
+            {formErr && (
+              <div style={{ background:'#FEF2F2', border:'1px solid #FECACA', borderRadius:10,
+                padding:'10px 14px', marginBottom:16, fontSize:13, fontWeight:600, color:RED }}>{formErr}</div>
+            )}
+            <form onSubmit={handleEmailCode}>
+              <input type="text" inputMode="numeric" autoFocus maxLength={6} value={code}
+                onChange={e=>setCode(e.target.value.replace(/\D/g,''))} placeholder="000000"
+                style={{ ...inp, textAlign:'center', letterSpacing:8, fontSize:22, fontWeight:800, marginBottom:20 }}/>
+              <button type="submit" disabled={loading}
+                style={{ width:'100%', padding:'13px', borderRadius:14, border:'none',
+                  background:loading?'var(--ak-tag-bg)':`linear-gradient(135deg,${BRAND},#4C1DCC)`,
+                  color:loading?'var(--ak-text-muted)':'#fff', fontSize:14, fontWeight:800,
+                  cursor:loading?'not-allowed':'pointer', fontFamily:"'Nunito',sans-serif" }}>
+                {loading ? t('common.loading') : 'Verify code'}
+              </button>
+            </form>
+            <button onClick={resendEmailCode} style={{ width:'100%', marginTop:12, background:'none', border:'none',
+              color:BRAND, fontSize:12.5, fontWeight:800, cursor:'pointer' }}>
+              Resend code
+            </button>
+            <button onClick={() => { setEmailStep(null); setCode(''); setFormErr(''); }}
+              style={{ width:'100%', marginTop:10, background:'none', border:'none',
+                color:'var(--ak-text-muted)', fontSize:13, fontWeight:700, cursor:'pointer' }}>
+              ← {t('common.back')} {t('auth.back_to_signin')}
+            </button>
+          </>
+        ) : challenge ? (
           <>
             <h1 style={{ fontSize:22, fontWeight:900, color:'var(--ak-text)', margin:'0 0 6px' }}>{t('auth.2fa_title')}</h1>
             <p style={{ fontSize:13, color:'var(--ak-text-sub)', margin:'0 0 24px' }}>{t('auth.2fa_sub')}</p>

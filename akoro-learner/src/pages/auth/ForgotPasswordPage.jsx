@@ -25,6 +25,10 @@ export default function ForgotPasswordPage() {
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json.message || 'Something went wrong');
+      if (json.data?.codeFlow) {
+        navigate(`/reset-password?email=${encodeURIComponent(email)}`);
+        return;
+      }
       setSent(true);
     } catch (e) {
       setErr(e.message);

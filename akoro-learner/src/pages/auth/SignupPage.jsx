@@ -25,10 +25,12 @@ export default function SignupPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const after = nextPath(location.search) || APP_HOME;   // e.g. back to a /join/:token invite
-  const { register, loginWithGoogle, loading, clearError } = useAuth();
+  const { register, verifyEmail, resendCode, loginWithGoogle, loading, clearError } = useAuth();
   const { t } = useLang();
   const [form,    setForm]   = useState({ fullName:'', username:'', email:'', password:'' });
   const [formErr, setFormErr]= useState('');
+  const [emailStep, setEmailStep] = useState(null);   // { challengeId, email, retryAfter }
+  const [code, setCode] = useState('');
 
   const set = (k) => (e) => setForm(f => ({ ...f, [k]: e.target.value }));
 
@@ -37,8 +39,31 @@ export default function SignupPage() {
     const { fullName, username, email, password } = form;
     if (!fullName || !username || !email || !password) { setFormErr(t('auth.fill_all_fields')); return; }
     if (password.length < 8) { setFormErr(t('auth.password_min8')); return; }
-    try { await register({ fullName, username, email, password }); navigate(after, { replace:true }); }
+    try {
+      const data = await register({ fullName, username, email, password });
+      if (data?.verificationRequired) {
+        if (data.challengeId) setEmailStep({ challengeId: data.challengeId, email: data.email || email, retryAfter: data.retryAfter || 0 });
+        else setFormErr(data.retryAfter ? `A code was sent recently — try again in ${data.retryAfter}s.` : 'Check your email for the code.');
+        return;
+      }
+      if (!data?.user) { setFormErr(data?.message || "Check your email to continue."); return; }
+      navigate(after, { replace:true });
+    } catch (err) { setFormErr(err.message); }
+  };
+
+  const handleEmailCode = async (e) => {
+    e.preventDefault(); setFormErr('');
+    if (!/^\d{6}$/.test(code)) { setFormErr(t('auth.enter_6digit')); return; }
+    try { await verifyEmail({ challengeId: emailStep.challengeId, code }); navigate(after, { replace:true }); }
     catch (err) { setFormErr(err.message); }
+  };
+  const resendEmailCode = async () => {
+    setFormErr('');
+    try {
+      const d = await resendCode({ challengeId: emailStep.challengeId });
+      setEmailStep(s => ({ ...s, retryAfter: d?.retryAfter || 0 }));
+      setFormErr(d?.codeSent ? 'A new code is on its way.' : `Try again in ${d?.retryAfter || 60}s.`);
+    } catch (err) { setFormErr(err.message); }
   };
 
   const inp = {
@@ -61,6 +86,38 @@ export default function SignupPage() {
       <div style={{ width:'100%', maxWidth:400, background:'var(--ak-surface)', borderRadius:24,
         padding:'32px 28px', boxShadow:'0 4px 32px rgba(0,0,0,.12)',
         border:'1px solid var(--ak-border)' }}>
+        {emailStep ? (
+          <>
+            <h1 style={{ fontSize:22, fontWeight:900, color:'var(--ak-text)', margin:'0 0 6px' }}>Check your email</h1>
+            <p style={{ fontSize:13, color:'var(--ak-text-sub)', margin:'0 0 24px' }}>
+              Enter the 6-digit code we sent to <strong>{emailStep.email}</strong> to finish creating your account.
+            </p>
+            {formErr && (
+              <div style={{ background:'#FEF2F2', border:'1px solid #FECACA', borderRadius:10,
+                padding:'10px 14px', marginBottom:16, fontSize:13, fontWeight:600, color:RED }}>{formErr}</div>
+            )}
+            <form onSubmit={handleEmailCode}>
+              <input type="text" inputMode="numeric" autoFocus maxLength={6} value={code}
+                onChange={e=>setCode(e.target.value.replace(/\D/g,''))} placeholder="000000"
+                style={{ ...inp, textAlign:'center', letterSpacing:8, fontSize:22, fontWeight:800, marginBottom:20 }}/>
+              <button type="submit" disabled={loading}
+                style={{ width:'100%', padding:'13px', borderRadius:14, border:'none',
+                  background:loading?'var(--ak-tag-bg)':`linear-gradient(135deg,${BRAND},#4C1DCC)`,
+                  color:loading?'var(--ak-text-muted)':'#fff', fontSize:14, fontWeight:800,
+                  cursor:loading?'not-allowed':'pointer', fontFamily:"'Nunito',sans-serif" }}>
+                {loading ? t('common.loading') : 'Verify code'}
+              </button>
+            </form>
+            <button onClick={resendEmailCode} style={{ width:'100%', marginTop:12, background:'none', border:'none',
+              color:BRAND, fontSize:12.5, fontWeight:800, cursor:'pointer' }}>Resend code</button>
+            <button onClick={() => { setEmailStep(null); setCode(''); setFormErr(''); }}
+              style={{ width:'100%', marginTop:10, background:'none', border:'none',
+                color:'var(--ak-text-muted)', fontSize:13, fontWeight:700, cursor:'pointer' }}>
+              ← {t('common.back')}
+            </button>
+          </>
+        ) : (
+        <>
         <h1 style={{ fontSize:22, fontWeight:900, color:'var(--ak-text)', margin:'0 0 6px' }}>{t('auth.create_account')}</h1>
         <p style={{ fontSize:13, color:'var(--ak-text-sub)', margin:'0 0 24px' }}>{t('auth.start_today')}</p>
         <button onClick={() => loginWithGoogle(after)}
@@ -120,6 +177,8 @@ export default function SignupPage() {
           {t('auth.have_account')}{' '}
           <Link to={after === APP_HOME ? '/signin' : `/signin?next=${encodeURIComponent(after)}`} style={{ color:BRAND, fontWeight:800, textDecoration:'none' }}>{t('auth.signin')}</Link>
         </p>
+        </>
+        )}
       </div>
     </div>
   );
