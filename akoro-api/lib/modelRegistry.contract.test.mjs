@@ -228,3 +228,13 @@ test("helper roles follow the default, but capability roles pick a capable model
   assert.equal(vision.model.id, "gpt-6-luna", "the first vision-capable preference");
   assert.equal(vision.model.caps.vision, true);
 });
+
+test("Anthropic gets JSON instructions because its API has no response_format", () => {
+  const schema = { type: "object", required: ["value"], properties: { value: { type: "string" } } };
+  const a = toAnthropicParams({ messages: [{ role: "user", content: "hi" }], response_format: { type: "json_schema", json_schema: { name: "x", schema } } }, CLAUDE);
+  assert.equal("response_format" in a, false, "no OpenAI-only field leaks to Claude");
+  assert.match(a.system, /Return only a JSON object/);
+  assert.match(a.system, /"required":\["value"\]/);
+  const b = toAnthropicParams({ messages: [{ role: "user", content: "hi" }], response_format: { type: "json_object" } }, CLAUDE);
+  assert.match(b.system, /Return only one JSON object/);
+});

@@ -72,7 +72,17 @@ export function toAnthropicParams(params, entry) {
     messages,
     output_config: { effort: entry.effort || "low" },
   };
-  const sys = [system, tools.length && required ? ONE_TOOL : null].filter(Boolean).join("\n\n");
+  // The Messages API has no response_format. A JSON request becomes an
+  // instruction, exactly like the compatible-provider conversion — without it
+  // a structured-output feature would get prose when Claude is the provider.
+  const rf = params.response_format;
+  let jsonRule = null;
+  if (rf?.type === "json_schema" && rf.json_schema?.schema) {
+    jsonRule = `Return only a JSON object that matches this JSON schema exactly (every required key present; null where the schema allows it):\n${JSON.stringify(rf.json_schema.schema)}`;
+  } else if (rf?.type === "json_object") {
+    jsonRule = "Return only one JSON object. No prose, no markdown fences.";
+  }
+  const sys = [system, tools.length && required ? ONE_TOOL : null, jsonRule].filter(Boolean).join("\n\n");
   if (sys) out.system = sys;
   if (tools.length) out.tools = tools;
   if (tools.length && choice === "none") out.tool_choice = { type: "none" };
