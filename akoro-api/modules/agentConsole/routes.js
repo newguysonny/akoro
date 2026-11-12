@@ -38,7 +38,8 @@ import { safeCompare } from "../../lib/safeCompare.js";
 import { isDocumentGoal } from "../self-tooling/toolSimilarity.js";
 import { cleanupPlan } from "./cleanup.js";
 import { modelRegistry, availabilityOf, ROLES } from "../../lib/modelRegistry.js";
-import { validateShape } from "../../lib/structuredOutput.js";
+import { validateShape, readStructured } from "../../lib/structuredOutput.js";
+import { buildToolMessages, toolSchema, shapeToolResult } from "../records/toolsLib.js";
 import { featureModels } from "../../lib/aiFeatureModels.js";
 import { resolveContentAccess } from "../records/access.js";
 import { getExtraction } from "../records/extractLib.js";
@@ -505,6 +506,98 @@ router.post("/structured-test", guard, asyncHandler(async (req, res) => {
     }
   }
   res.json({ success: true, data: { schema, promptChars: prompt.length, maxTokens, runs } });
+}));
+
+/* Grounding A/B: the SAME question/quiz, two passage sets (pdf text vs
+   extracted markdown), then a model judge. Passages are supplied by the
+   caller: {n, pageNumber, text, bbox|null}. No learner data is read here. */
+router.post("/grounding-ab", guard, asyncHandler(async (req, res) => {
+  const question = String(req.body?.question || "").slice(0, 800);
+  const count = Math.max(2, Math.min(6, Number(req.body?.quizCount) || 4));
+  const clean = (list) => (Array.isArray(list) ? list : [])
+    .map((p, i) => ({ n: i + 1, pageNumber: Number.isInteger(p?.pageNumber) ? p.pageNumber : null,
+      text: String(p?.text || "").slice(0, 2200), bbox: Array.isArray(p?.bbox) ? p.bbox : null }))
+    .filter((p) => p.text.trim()).slice(0, 18);
+  const variants = {
+    pdf_text: clean(req.body?.passagesA),
+    markdown: clean(req.body?.passagesB),
+  };
+  const passageText = (ps) => ps.map((p) => `[${p.n}] (${p.pageNumber ? `page ${p.pageNumber}` : "part"})\n${p.text}`).join("\n\n");
+  const citeStats = (answer, ps) => {
+    const nums = [...new Set((String(answer).match(/\[(\d+)\]/g) || []).map((x) => Number(x.slice(1, -1))))];
+    const found = nums.map((n) => ps.find((p) => p.n === n)).filter(Boolean);
+    return { cited: found.length, withBbox: found.filter((p) => p.bbox).length,
+      bboxRate: found.length ? Math.round((found.filter((p) => p.bbox).length / found.length) * 100) : null,
+      pages: [...new Set(found.map((p) => p.pageNumber).filter(Boolean))] };
+  };
+  const ask = async (ps, label) => {
+    const t0 = Date.now();
+    const out = await openai.chat.completions.create({
+      __role: "chat", __feature: "grounding_ab", __payer: "platform",
+      temperature: 0.2, max_tokens: 700,
+      messages: [
+        { role: "system", content: "Answer the learner's question using ONLY the numbered passages. Cite every claim with [n]. If the passages do not contain the answer, say so plainly." },
+        { role: "user", content: `PASSAGES:\n${passageText(ps)}\n\nQUESTION: ${question}` },
+      ],
+    });
+    const answer = String(out?.choices?.[0]?.message?.content || "");
+    return { variant: label, ms: Date.now() - t0, answer, usage: out?.usage ?? null, cites: citeStats(answer, ps) };
+  };
+  const quiz = async (ps, label) => {
+    const t0 = Date.now();
+    const values = { count: String(count), difficulty: "Medium", focus: "" };
+    const out = await openai.chat.completions.create({
+      __role: "background", __feature: "grounding_ab_quiz", __payer: "platform",
+      temperature: 0.3, max_tokens: 1800,
+      messages: buildToolMessages({ tool: "quiz", docName: "the document", passages: ps, values }),
+      response_format: { type: "json_schema", json_schema: { name: "reader_quiz", strict: true, schema: toolSchema("quiz") } },
+    });
+    let json = {}; try { json = JSON.parse(out?.choices?.[0]?.message?.content || "{}"); } catch { json = {}; }
+    const shaped = shapeToolResult("quiz", json, ps, values);
+    const questions = shaped.quizQuestions || [];
+    const cites = questions.map((q) => q.cite).filter(Boolean);
+    return { variant: label, ms: Date.now() - t0, count: questions.length,
+      withBbox: cites.filter((c) => c?.bbox).length,
+      bboxRate: cites.length ? Math.round((cites.filter((c) => c?.bbox).length / cites.length) * 100) : null,
+      pages: [...new Set(cites.map((c) => c?.pageNumber).filter(Boolean))],
+      sample: questions.slice(0, 2).map((q) => ({ prompt: q.prompt, options: q.options.map((o) => o.text), cite: q.cite })),
+      usage: out?.usage ?? null };
+  };
+  const judge = async (reference, kind, payload) => {
+    const out = await openai.chat.completions.create({
+      __role: "background", __feature: "grounding_ab_judge", __payer: "platform",
+      temperature: 0, max_tokens: 300,
+      messages: [
+        { role: "system", content: "You grade a study assistant against the reference passages (the truth). Be strict and concise. Return JSON only." },
+        { role: "user", content: `TASK: judge the ${kind}. Score 1-10 for correctness, grounding, and completeness (for a quiz: correctness, answerability, distractor quality). List concrete issues.\n\nREFERENCE:\n${reference.slice(0, 5000)}\n\nCANDIDATE:\n${JSON.stringify(payload).slice(0, 5000)}\n\nReturn {"score": int, "grounding": int, "completeness": int, "issues": [string]}` },
+      ],
+      response_format: { type: "json_schema", json_schema: { name: "judge", strict: true,
+        schema: { type: "object", additionalProperties: false, required: ["score", "grounding", "completeness", "issues"],
+          properties: { score: { type: "integer" }, grounding: { type: "integer" }, completeness: { type: "integer" },
+            issues: { type: "array", items: { type: "string" } } } } } },
+    });
+    const parsed = readStructured(out?.choices?.[0]?.message?.content, { type: "object", required: ["score"], properties: { score: { type: "integer" } } });
+    return parsed.value || { score: null, issues: ["judge unparseable"] };
+  };
+
+  try {
+    const reference = variants.markdown.map((p) => p.text).join("\n\n");
+    const results = {};
+    for (const [key, ps] of Object.entries(variants)) {
+      try {
+        const a = await ask(ps, key);
+        const q = await quiz(ps, key);
+        const ja = await judge(reference, "answer", { answer: a.answer });
+        const jq = await judge(reference, "quiz", q.sample);
+        results[key] = { passages: ps.length, ask: { ...a, judge: ja }, quiz: { ...q, judge: jq } };
+      } catch (e) {
+        results[key] = { error: String(e?.message || e).slice(0, 300), status: e?.status ?? null };
+      }
+    }
+    res.json({ success: true, data: { question, count, results } });
+  } catch (e) {
+    res.status(502).json({ success: false, error: String(e?.message || e).slice(0, 400) });
+  }
 }));
 
 router.get("/learner-tools", guard, asyncHandler(async (req, res) => {
