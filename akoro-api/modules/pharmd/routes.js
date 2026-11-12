@@ -92,7 +92,7 @@ router.get("/courses/:code", asyncHandler(async (req, res) => {
   if (!course) return missing(res, "Course not found");
 
   const { data: topics } = await edu().from("pharmd_topics")
-    .select("id, position, title, read_minutes, file_bucket, file_path, file_mime, file_size")
+    .select("id, position, title, read_minutes, file_bucket, file_path, file_mime, file_size, file_hash")
     .eq("course_id", course.id).order("position");
 
   ok(res, {
