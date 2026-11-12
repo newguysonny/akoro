@@ -25,11 +25,16 @@ async function authFetch(path, body) {
     headers:     { 'Content-Type': 'application/json', 'X-Akoro-Portal': 'admin' },
     body:        JSON.stringify(body),
   });
-  const json = await res.json();
+  // Tolerate empty / non-JSON bodies (rate limits, gateway restarts) so the
+  // learner sees a clear message instead of "Unexpected end of JSON input".
+  const text = await res.text();
+  let json = {};
+  if (text) { try { json = JSON.parse(text); } catch { json = {}; } }
   if (!res.ok) {
-    // The STATUS is what tells refresh() whether the session is really gone or
-    // the request merely didn't land. Without it every failure looked fatal.
-    const err = new Error(json.message || `${path} failed`);
+    const message = json.message
+      || (res.status === 429 ? 'Too many attempts. Please wait a few minutes and try again.' : null)
+      || `${path} failed`;
+    const err = new Error(message);
     err.status = res.status;
     throw err;
   }

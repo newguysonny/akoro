@@ -93,10 +93,16 @@ const BASE = {
   // Log every limit hit (hardening plan: layer + route + key type). Without
   // this, a 429 storm is invisible in the logs — the client sees rejections,
   // the server sees nothing.
-  handler: (req, res, options) => {
+  // express-rate-limit v8 calls handler(req, res, next, options). The old
+  // signature read `next` as options, so res.json(undefined) sent an EMPTY 429
+  // body — clients then failed with "Unexpected end of JSON input".
+  handler: (req, res, _next, options) => {
     const key = req.user?.id ? `user:${req.user.id}` : req.rateLimitId ? `session:${req.rateLimitId}` : `ip:${req.ip}`;
     console.warn(`[ratelimit] 429 ${req.method} ${req.originalUrl} key=${key} limit=${req.rateLimit?.limit}`);
-    res.status(options.statusCode || 429).json(options.message);
+    res.status(options?.statusCode || 429).json(options?.message || {
+      success: false, code: "rate_limited",
+      message: "Too many requests. Please slow down and try again shortly.",
+    });
   },
 };
 
@@ -126,7 +132,10 @@ export const strictLimit = rateLimit({
   windowMs: 15 * 60 * 1000,
   max:      lim('STRICT', 5),
   keyGenerator: ipKey,
-  message: { success: false, message: 'Too many attempts. Please try again in 15 minutes.' },
+  // Only FAILED attempts count: signing in five times in a row should not lock
+  // the learner out of their own account.
+  skipSuccessfulRequests: true,
+  message: { success: false, code: 'rate_limited', message: 'Too many attempts. Please try again in 15 minutes.' },
 });
 
 /**
