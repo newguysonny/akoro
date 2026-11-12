@@ -38,6 +38,8 @@ import { safeCompare } from "../../lib/safeCompare.js";
 import { isDocumentGoal } from "../self-tooling/toolSimilarity.js";
 import { cleanupPlan } from "./cleanup.js";
 import { modelRegistry, availabilityOf } from "../../lib/modelRegistry.js";
+import { resolveContentAccess } from "../records/access.js";
+import { getExtraction } from "../records/extractLib.js";
 import { makeOpenCodeAdapter } from "../../lib/providers/opencode.js";
 
 const router = express.Router();
@@ -367,7 +369,20 @@ router.get("/content-parses", guard, asyncHandler(async (req, res) => {
     .eq("content_key", key).order("page_number", { ascending: true });
   if (error) return bad(res, error.message, 500);
   const pages = (data || []).map((p) => ({ page: p.page_number, model: p.model, chars: String(p.markdown || "").length, updatedAt: p.updated_at }));
-  res.json({ success: true, data: { key, count: pages.length, pages } });
+  // Mirror the reader's path: access resolution + what the cached GET returns.
+  let access = null;
+  if (req.query?.learner) {
+    try {
+      const learner = await resolveLearner(req.query.learner);
+      const a = await resolveContentAccess({ userId: learner.id, contentKey: key });
+      if (a.status) access = { status: a.status, message: a.message };
+      else {
+        const got = await getExtraction(a.contentKey);
+        access = { status: 200, contentKey: a.contentKey, name: a.name, pages: (got.pages || []).length };
+      }
+    } catch (e) { access = { error: String(e?.message || e) }; }
+  }
+  res.json({ success: true, data: { key, count: pages.length, pages, access } });
 }));
 
 router.get("/learner-tools", guard, asyncHandler(async (req, res) => {
