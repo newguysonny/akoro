@@ -493,7 +493,11 @@ router.post("/structured-test", guard, asyncHandler(async (req, res) => {
         ms: Date.now() - t0, ok: errors.length === 0, errors: errors.slice(0, 4),
         retries: logs.length, retryLog: logs.slice(0, 3),
         contentChars: content.length, content: content.slice(0, 400),
-        parsedOk: !!parsed, usage: out?.usage ?? null,
+        parsedOk: !!parsed,
+        parsedSummary: parsed && typeof parsed === "object"
+          ? Object.fromEntries(Object.entries(parsed).map(([k, v]) => [k, Array.isArray(v) ? v.length : typeof v === "string" ? v.length : typeof v]))
+          : null,
+        usage: out?.usage ?? null,
       });
     } catch (e) {
       runs.push({ id, provider: entry.provider, lane: entry.lane || null, apiModel: entry.apiModel,
