@@ -85,7 +85,7 @@ export default function SignupPage() {
           padding: '32px 28px', boxShadow: '0 4px 32px rgba(0,0,0,.08)', border: '1px solid #EDE8E1' }}>
           <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1A1A2E', margin: '0 0 6px' }}>Check your email</h1>
           <p style={{ fontSize: 14, color: '#6B6B80', margin: '0 0 20px' }}>
-            Enter the 6-digit code we sent to <strong>emailStep.email</strong>.
+            Enter the 6-digit code we sent to <strong>{emailStep.email}</strong>.
           </p>
           {formErr && (
             <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 10,
