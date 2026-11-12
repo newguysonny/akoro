@@ -1,11 +1,12 @@
 import AkoroLogo from '../../components/common/AkoroLogo.jsx';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext.jsx';
 import { SITE_URL } from '../../config/urls.js';
 
 const AMBER = '#E8884A';
 const RED   = '#EF4444';
+const mmss  = (s) => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
 
 function GoogleIcon() {
   return (
@@ -31,7 +32,15 @@ export default function SigninPage() {
   const [setupCode, setSetupCode] = useState('');
   const [code,      setCode]      = useState('');
   const [notice,    setNotice]    = useState('');
+  const [cooldown,  setCooldown]  = useState(0);   // seconds until "Resend code" is allowed
   const urlError = params.get('error');
+
+  // Tick the resend countdown down to zero.
+  useEffect(() => {
+    if (!emailStep || cooldown <= 0) return;
+    const id = setInterval(() => setCooldown(c => (c > 0 ? c - 1 : 0)), 1000);
+    return () => clearInterval(id);
+  }, [emailStep, cooldown === 0]);
 
   const finishLogin = async (data) => {
     const role = data?.user?.role || data?.role;
@@ -55,7 +64,10 @@ export default function SigninPage() {
       if (data?.twoFactorSetupRequired) { await startSetup(data.setupToken); return; }
       if (data?.twoFactorRequired) { setChallenge(data.challengeToken); return; }
       if (data?.codeRequired || data?.verificationRequired) {
-        if (data.challengeId) setEmailStep({ challengeId: data.challengeId, email: data.email || email, retryAfter: data.retryAfter || 0 });
+        if (data.challengeId) {
+          setEmailStep({ challengeId: data.challengeId, email: data.email || email, retryAfter: data.retryAfter || 0 });
+          setCooldown(data.retryAfter || data.resendSeconds || 60);
+        }
         else setFormErr(data.retryAfter ? `A code was sent recently — try again in ${data.retryAfter}s.` : 'Check your email for the code.');
         return;
       }
@@ -112,8 +124,8 @@ export default function SigninPage() {
     try {
       const d = await resendCode({ challengeId: emailStep.challengeId, email: emailStep.email });
       setEmailStep(s => ({ ...s, challengeId: d?.challengeId || s.challengeId, retryAfter: d?.retryAfter || 0 }));
-      if (d?.codeSent) setNotice('A new code is on its way.');
-      else setNotice(`You can request another code in ${d?.retryAfter ?? 60}s.`);
+      if (d?.codeSent) { setNotice('A new code is on its way.'); setCooldown(d.resendSeconds || 60); }
+      else setCooldown(d?.retryAfter || 60);
     } catch (err) { setFormErr(err.message); }
   };
 
@@ -194,9 +206,18 @@ export default function SigninPage() {
               {loading ? 'Verifying…' : 'Verify code'}
             </button>
           </form>
-          <button onClick={resendEmailCode} style={{ width: '100%', marginTop: 12, background: 'none', border: 'none',
-            color: '#6C3BFF', fontSize: 12.5, fontWeight: 800, cursor: 'pointer' }}>Resend code</button>
-          <button onClick={() => { setEmailStep(null); setCode(''); setFormErr(''); setNotice(''); }} style={{ width: '100%',
+          <div style={{ textAlign: 'center', marginTop: 16 }}>
+            <div style={{ fontSize: 12.5, color: '#9490A0', marginBottom: 6 }}>Didn't receive code?</div>
+            <button onClick={resendEmailCode} disabled={loading || cooldown > 0} style={{
+              background: 'none', border: 'none', fontFamily: "'DM Sans', sans-serif",
+              fontSize: 12.5, fontWeight: 800, padding: 0,
+              color: cooldown > 0 ? '#B7B3C4' : '#6C3BFF',
+              cursor: cooldown > 0 ? 'default' : 'pointer',
+            }}>
+              Resend code{cooldown > 0 ? ` · ${mmss(cooldown)}` : ''}
+            </button>
+          </div>
+          <button onClick={() => { setEmailStep(null); setCode(''); setFormErr(''); setNotice(''); setCooldown(0); }} style={{ width: '100%',
             marginTop: 8, background: 'none', border: 'none', color: '#9490A0', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
             ← Back to sign in
           </button>

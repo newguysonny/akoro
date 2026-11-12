@@ -25,6 +25,7 @@ const MAX_ATTEMPTS = 5;
 const SECRET = process.env.AUTH_CODE_SECRET || process.env.COOKIE_SECRET || process.env.JWT_PRIVATE_KEY || "akoro-dev-code-secret";
 
 export const CODE_TTL_MINUTES = TTL_MIN;
+export const CODE_RESEND_SECONDS = RESEND_SECONDS;
 
 export function emailCodesEnabled(portal) {
   if (!FLAG || ["off", "false", "0"].includes(FLAG)) return false;

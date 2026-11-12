@@ -46,7 +46,7 @@ import { urlFor } from "../../lib/urls.js";
 import { userFacingMessage } from "../../lib/userFacingError.js";
 import {
   issueEmailCode, verifyEmailCode, resendEmailCode, consumeEmailCode,
-  emailCodesEnabled, emailCodeBypassed, normaliseEmail, CODE_TTL_MINUTES,
+  emailCodesEnabled, emailCodeBypassed, normaliseEmail, CODE_TTL_MINUTES, CODE_RESEND_SECONDS,
 } from "./emailCodes.js";
 
 // ─── § CONSTANTS ──────────────────────────────────────────────────────────────
@@ -805,10 +805,10 @@ const authHandlers = {
           return res.status(503).json({ success: false, message: "Could not send the verification email. Try again." });
         }
         return res201(res, { verificationRequired: true, email: normaliseEmail(email), codeSent: false,
-          retryAfter: issued.retryAfter ?? null });
+          resendSeconds: CODE_RESEND_SECONDS, retryAfter: issued.retryAfter ?? null });
       }
       return res201(res, { verificationRequired: true, email: normaliseEmail(email), codeSent: true,
-        challengeId: issued.challengeId, expiresInMinutes: CODE_TTL_MINUTES });
+        resendSeconds: CODE_RESEND_SECONDS, challengeId: issued.challengeId, expiresInMinutes: CODE_TTL_MINUTES });
     }
 
     const payload = await issueTokenPair(res, user, portal);
@@ -871,7 +871,7 @@ const authHandlers = {
       }
       return res200(res, {
         ...(purpose === "signup" ? { verificationRequired: true } : { codeRequired: true }),
-        email: normaliseEmail(user.email), codeSent: !!issued.ok,
+        email: normaliseEmail(user.email), codeSent: !!issued.ok, resendSeconds: CODE_RESEND_SECONDS,
         ...(issued.challengeId ? { challengeId: issued.challengeId, expiresInMinutes: CODE_TTL_MINUTES } : {}),
         ...(issued.ok ? {} : { retryAfter: issued.retryAfter ?? null }),
       });
@@ -942,7 +942,7 @@ const authHandlers = {
       return res.status(503).json({ success: false, message: "Could not send the code. Try again." });
     }
     if (!issued.ok && ["invalid_code"].includes(issued.code)) return res400(res, "Request a new code by signing in again.");
-    return res200(res, { codeSent: !!issued.ok,
+    return res200(res, { codeSent: !!issued.ok, resendSeconds: CODE_RESEND_SECONDS,
       ...(issued.challengeId ? { challengeId: issued.challengeId, expiresInMinutes: CODE_TTL_MINUTES } : {}),
       ...(issued.ok ? {} : { retryAfter: issued.retryAfter ?? null }) });
   }),
