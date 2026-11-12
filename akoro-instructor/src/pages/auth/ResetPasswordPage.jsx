@@ -12,6 +12,10 @@ export default function ResetPasswordPage() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const token = params.get('token') || '';
+  const emailParam = params.get('email') || '';
+  const codeFlow = !token && !!emailParam;
+  const [email, setEmail] = useState(emailParam);
+  const [code, setCode] = useState('');
 
   const [password,  setPassword]  = useState('');
   const [confirm,   setConfirm]   = useState('');
@@ -35,7 +39,8 @@ export default function ResetPasswordPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setErr('');
-    if (!token)               { setErr('Invalid reset link. Please request a new one.'); return; }
+    if (!token && !codeFlow) { setErr('Invalid reset link. Please request a new one.'); return; }
+    if (!token && (!email || !/^\d{6}$/.test(code))) { setErr('Enter your email and the 6-digit code.'); return; }
     if (password.length < 8)  { setErr('Password must be at least 8 characters'); return; }
     if (password !== confirm)  { setErr("Passwords don't match"); return; }
     setLoading(true);
@@ -43,7 +48,7 @@ export default function ResetPasswordPage() {
       const res = await fetch(`${API}/api/auth/reset-password`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ token, password }),
+        body:    JSON.stringify(token ? { token, password } : { email, code, password }),
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json.message || 'Something went wrong');
@@ -62,7 +67,7 @@ export default function ResetPasswordPage() {
     background: C.surface, boxSizing: 'border-box',
   };
 
-  if (!token) return (
+  if (!token && !codeFlow) return (
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
       background: C.bg, fontFamily: C.font, padding: 24 }}>
       <div style={{ textAlign: 'center', maxWidth: 380 }}>
@@ -125,6 +130,20 @@ export default function ResetPasswordPage() {
             )}
 
             <form onSubmit={handleSubmit}>
+              {codeFlow && (
+                <>
+                  <div style={{ marginBottom: 14 }}>
+                    <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: 'var(--ak-text-sec, #1A1A2E)', marginBottom: 6 }}>Email</label>
+                    <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" style={inp}/>
+                  </div>
+                  <div style={{ marginBottom: 16 }}>
+                    <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: 'var(--ak-text-sec, #1A1A2E)', marginBottom: 6 }}>Code from the email</label>
+                    <input type="text" inputMode="numeric" maxLength={6} value={code}
+                      onChange={e => setCode(e.target.value.replace(/\D/g, ''))} placeholder="000000"
+                      style={{ ...inp, textAlign: 'center', letterSpacing: 8, fontSize: 20, fontWeight: 800 }}/>
+                  </div>
+                </>
+              )}
               <div style={{ marginBottom: 16 }}>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: C.ink, marginBottom: 6 }}>New password</label>
                 <div style={{ position: 'relative' }}>

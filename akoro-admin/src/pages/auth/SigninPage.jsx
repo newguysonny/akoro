@@ -21,11 +21,12 @@ function GoogleIcon() {
 export default function SigninPage() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
-  const { login, verifyTwoFactor, loginWithGoogle, logoutSilent, loading, clearError } = useAuth();
+  const { login, verifyEmail, verifyLogin, resendCode, verifyTwoFactor, loginWithGoogle, logoutSilent, loading, clearError } = useAuth();
   const [email,    setEmail]    = useState('');
   const [password, setPassword] = useState('');
   const [formErr,  setFormErr]  = useState('');
   const [challenge, setChallenge] = useState(null);   // 2FA challenge token
+  const [emailStep, setEmailStep] = useState(null);   // { challengeId, email, retryAfter }
   const [code,      setCode]      = useState('');
   const urlError = params.get('error');
 
@@ -49,6 +50,11 @@ export default function SigninPage() {
     try {
       const data = await login({ email, password });
       if (data?.twoFactorRequired) { setChallenge(data.challengeToken); return; }
+      if (data?.codeRequired || data?.verificationRequired) {
+        if (data.challengeId) setEmailStep({ challengeId: data.challengeId, email: data.email || email, retryAfter: data.retryAfter || 0 });
+        else setFormErr(data.retryAfter ? `A code was sent recently — try again in ${data.retryAfter}s.` : 'Check your email for the code.');
+        return;
+      }
       finishLogin(data);
     } catch (err) {
       setFormErr(err.message);
@@ -67,12 +73,66 @@ export default function SigninPage() {
     }
   };
 
+  const handleEmailCode = async (e) => {
+    e.preventDefault(); setFormErr('');
+    if (!/^\d{6}$/.test(code)) { setFormErr('Enter the 6-digit code'); return; }
+    try {
+      const data = await verifyLogin({ challengeId: emailStep.challengeId, code });
+      if (data?.twoFactorRequired) { setEmailStep(null); setChallenge(data.challengeToken); setCode(''); return; }
+      finishLogin(data);
+    } catch (err) { setFormErr(err.message); }
+  };
+  const resendEmailCode = async () => {
+    setFormErr('');
+    try {
+      const d = await resendCode({ challengeId: emailStep.challengeId });
+      setEmailStep(s => ({ ...s, challengeId: d?.challengeId || s.challengeId, retryAfter: d?.retryAfter || 0 }));
+      setFormErr(d?.codeSent ? 'A new code is on its way.' : `Try again in ${d?.retryAfter || 60}s.`);
+    } catch (err) { setFormErr(err.message); }
+  };
+
   const inp = {
     width: '100%', padding: '11px 14px', borderRadius: 12,
     border: '1.5px solid #EDE8E1', outline: 'none', fontSize: 14,
     fontFamily: "'DM Sans', sans-serif", color: '#1A1A2E', boxSizing: 'border-box',
     background: '#fff',
   };
+
+
+  if (emailStep) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: '#FAF8F5', padding: 24, fontFamily: "'DM Sans', sans-serif" }}>
+        <div style={{ width: '100%', maxWidth: 420, background: '#fff', borderRadius: 24,
+          padding: '32px 28px', boxShadow: '0 4px 32px rgba(0,0,0,.08)', border: '1px solid #EDE8E1' }}>
+          <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1A1A2E', margin: '0 0 6px' }}>Check your email</h1>
+          <p style={{ fontSize: 14, color: '#6B6B80', margin: '0 0 20px' }}>
+            Enter the 6-digit code we sent to <strong>emailStep.email</strong>.
+          </p>
+          {formErr && (
+            <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 10,
+              padding: '10px 14px', marginBottom: 16, fontSize: 13, fontWeight: 600, color: '#EF4444' }}>{formErr}</div>
+          )}
+          <form onSubmit={handleEmailCode}>
+            <input type="text" inputMode="numeric" autoFocus maxLength={6} value={code}
+              onChange={e => setCode(e.target.value.replace(/\D/g, ''))} placeholder="000000"
+              style={{ ...inp, textAlign: 'center', letterSpacing: 8, fontSize: 22, fontWeight: 800, marginBottom: 18 }}/>
+            <button type="submit" disabled={loading} style={{ width: '100%', padding: '13px', borderRadius: 14,
+              border: 'none', background: loading ? '#EDE8E1' : '#6C3BFF', color: loading ? '#9490A0' : '#fff',
+              fontSize: 14, fontWeight: 800, cursor: loading ? 'not-allowed' : 'pointer', fontFamily: "'DM Sans', sans-serif" }}>
+              {loading ? 'Verifying…' : 'Verify code'}
+            </button>
+          </form>
+          <button onClick={resendEmailCode} style={{ width: '100%', marginTop: 12, background: 'none', border: 'none',
+            color: '#6C3BFF', fontSize: 12.5, fontWeight: 800, cursor: 'pointer' }}>Resend code</button>
+          <button onClick={() => { setEmailStep(null); setCode(''); setFormErr(''); }} style={{ width: '100%',
+            marginTop: 8, background: 'none', border: 'none', color: '#9490A0', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+            ← Back to sign in
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{

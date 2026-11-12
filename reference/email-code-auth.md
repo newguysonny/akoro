@@ -36,9 +36,12 @@
 5. Update the admin/instructor portals' sign-in/sign-up screens, then widen to `student,instructor,admin` or `on`.
 
 ## Status of the UIs
-- **Learner (`akoro-learner`)**: signup, sign-in and reset code screens implemented.
-- **Admin / instructor**: still the legacy password-only screens; keep those portals out of `AUTH_EMAIL_CODES` until updated.
+- **Learner (`akoro-learner`)**: signup, sign-in, forgot and reset code screens.
+- **Admin (`akoro-admin`)**: sign-in and reset code screens (self-registration is disabled by design).
+- **Instructor (`akoro-instructor`)** and **School (`akoro-school`)**: sign-in, signup, forgot and reset code screens.
 - Google sign-in is unchanged and does not use email codes.
+
+Once all four builds are deployed, `AUTH_EMAIL_CODES=on` covers every portal (the school app reports both `school` and `site`). Seeded `@demo.akoro.app` accounts still bypass only the login code.
 
 ## Tester accounts
 

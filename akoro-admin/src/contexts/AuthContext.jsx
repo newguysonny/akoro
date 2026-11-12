@@ -90,6 +90,32 @@ export function AuthProvider({ children }) {
     finally { setLoading(false); }
   }, [saveUser]);
 
+  const verifyEmail = useCallback(async ({ challengeId, code }) => {
+    setLoading(true); setError(null);
+    try {
+      const { data } = await authFetch('/api/auth/verify-email', { challengeId, code });
+      if (data?.user) saveUser(data.user);
+      return data;
+    } catch (err) { setError(err.message); throw err; }
+    finally { setLoading(false); }
+  }, [saveUser]);
+
+  const verifyLogin = useCallback(async ({ challengeId, code }) => {
+    setLoading(true); setError(null);
+    try {
+      const { data } = await authFetch('/api/auth/verify-login', { challengeId, code });
+      if (data?.twoFactorRequired) return data;
+      if (data?.user) saveUser(data.user);
+      return data;
+    } catch (err) { setError(err.message); throw err; }
+    finally { setLoading(false); }
+  }, [saveUser]);
+
+  const resendCode = useCallback(async ({ challengeId }) => {
+    const { data } = await authFetch('/api/auth/resend-code', { challengeId });
+    return data;
+  }, []);
+
   const verifyTwoFactor = useCallback(async ({ challengeToken, code }) => {
     setLoading(true); setError(null);
     try {
@@ -170,7 +196,7 @@ export function AuthProvider({ children }) {
   return (
     <AuthContext.Provider value={{
       user, loading, initializing, error, isAuthenticated,
-      login, verifyTwoFactor, register, loginWithGoogle, logout, logoutSilent, refresh, restoreFromCallback,
+      login, verifyEmail, verifyLogin, resendCode, verifyTwoFactor, register, loginWithGoogle, logout, logoutSilent, refresh, restoreFromCallback,
       markOnboarded,
       clearError: () => setError(null),
     }}>
