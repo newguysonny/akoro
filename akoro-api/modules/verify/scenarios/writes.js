@@ -47,12 +47,14 @@ export const followUpDeliverIntoChat = {
     const notes = await ctx.db.count("notifications", { user_id: me.id, related_id: chatId });
     ctx.expect.gte("learner notified", notes, 1);
 
-    // Optional email channel: the same check-in must also be queued for email.
-    // This sandbox has no mail transport, so we assert the outbox job (stored
-    // before sending), not an actual delivery. Skipped only if the tester has
-    // email turned off.
+    // Optional email channel: the same check-in must also be queued for email,
+    // and — when this server has a mail transport (Resend/SendGrid, the same one
+    // verification codes use) — actually accepted for delivery. Skipped only if
+    // the tester has email turned off.
     const pref = (await ctx.db.rows("user_notification_preferences", { user_id: me.id }, { columns: "email_enabled, notify_agent_reminders", limit: 1 }))[0];
     const emailAllowed = pref ? (pref.email_enabled !== false && pref.notify_agent_reminders !== false) : true;
+    const transportConfigured = Boolean(process.env.RESEND_API_KEY || process.env.SENDGRID_API_KEY);
+    ctx.note(`email transport configured: ${transportConfigured}`);
     if (!emailAllowed) {
       ctx.note("email is disabled for this tester — email assertion skipped");
     } else {
@@ -61,9 +63,20 @@ export const followUpDeliverIntoChat = {
         const jobs = await ctx.db.rows("edu.outbox", { user_id: me.id, channel: "email" }, { columns: "id, payload", limit: 20 });
         return jobs.find((j) => String(j.payload?.subject || "").includes(ctx.marker)) || null;
       }, { timeoutMs: 30_000, everyMs: 3_000 });
-      if (emailJob) ctx.cleanup(() => ctx.db.deleteOwned("edu.outbox", { ownerColumn: "user_id", ownerId: me.id, filters: { id: emailJob.id } }));
       ctx.expect.ok("the check-in was also queued for email", !!emailJob, "no email outbox job for the delivered reminder");
-      if (emailJob) ctx.expect.eq("the email is addressed to the learner", emailJob.payload?.to, inbox);
+      if (emailJob) {
+        ctx.expect.eq("the email is addressed to the learner", emailJob.payload?.to, inbox);
+        if (transportConfigured) {
+          // The outbox clock sends every 15 s; Resend accepting it is the real
+          // proof the reminder reaches an inbox.
+          const sent = await ctx.until(async () => {
+            const [j] = await ctx.db.rows("edu.outbox", { id: emailJob.id }, { columns: "status, last_error", limit: 1 });
+            return j && ["sent", "failed"].includes(j.status) ? j : null;
+          }, { timeoutMs: 45_000, everyMs: 3_000 });
+          ctx.expect.eq("the reminder email was accepted by the provider", sent?.status, "sent", sent?.last_error || "still pending after 45 s");
+        }
+        ctx.cleanup(() => ctx.db.deleteOwned("edu.outbox", { ownerColumn: "user_id", ownerId: me.id, filters: { id: emailJob.id } }));
+      }
     }
   },
 };
