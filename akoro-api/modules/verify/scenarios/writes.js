@@ -46,6 +46,25 @@ export const followUpDeliverIntoChat = {
     ctx.expect.eq("follow-up marked delivered", status, "delivered");
     const notes = await ctx.db.count("notifications", { user_id: me.id, related_id: chatId });
     ctx.expect.gte("learner notified", notes, 1);
+
+    // Optional email channel: the same check-in must also be queued for email.
+    // This sandbox has no mail transport, so we assert the outbox job (stored
+    // before sending), not an actual delivery. Skipped only if the tester has
+    // email turned off.
+    const pref = (await ctx.db.rows("user_notification_preferences", { user_id: me.id }, { columns: "email_enabled, notify_agent_reminders", limit: 1 }))[0];
+    const emailAllowed = pref ? (pref.email_enabled !== false && pref.notify_agent_reminders !== false) : true;
+    if (!emailAllowed) {
+      ctx.note("email is disabled for this tester — email assertion skipped");
+    } else {
+      const inbox = (await ctx.db.rows("users", { id: me.id }, { columns: "email", limit: 1 }))[0]?.email;
+      const emailJob = await ctx.until(async () => {
+        const jobs = await ctx.db.rows("edu.outbox", { user_id: me.id, channel: "email" }, { columns: "id, payload", limit: 20 });
+        return jobs.find((j) => String(j.payload?.subject || "").includes(ctx.marker)) || null;
+      }, { timeoutMs: 30_000, everyMs: 3_000 });
+      if (emailJob) ctx.cleanup(() => ctx.db.deleteOwned("edu.outbox", { ownerColumn: "user_id", ownerId: me.id, filters: { id: emailJob.id } }));
+      ctx.expect.ok("the check-in was also queued for email", !!emailJob, "no email outbox job for the delivered reminder");
+      if (emailJob) ctx.expect.eq("the email is addressed to the learner", emailJob.payload?.to, inbox);
+    }
   },
 };
 
