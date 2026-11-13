@@ -1091,7 +1091,7 @@ export const requestStatusLifecycle = {
 
     const { reviewToolRequest } = await import("../../agent-tool-requests/service.js");
     const words = {
-      under_review: /under review|reviewing/i,
+      under_review: /under[ _]?review|in review|reviewing/i,
       planned: /plan/i,
       declined: /declin|not taken forward/i,
       implemented: /ready|available|implemented/i,
