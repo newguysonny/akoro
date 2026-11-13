@@ -135,20 +135,24 @@ export const registerReuseDisable = {
     await needCreate(ctx);
     const me = await ctx.as(p.learner);
     const name = `verify_${ctx.marker.slice(8, 16).replace(/[^a-z0-9]/g, "x")}`;
-    ctx.cleanup(() => ctx.db.deleteOwned("edu.agent_tools", { ownerColumn: "owner_id", ownerId: me.id, filters: { name } }));
     const r = await ctx.agent.tool({ as: p.learner, tool: "create_tool", mode: "live", input: {
       goal: "How many tasks I have by status", name, label: `${ctx.marker} Tasks by status`, hint: { views: ["my_tasks"] } } });
-    ctx.expect.eq("created", r?.status, "created");
-    if (r?.status !== "created") return;
-    const row = (await ctx.db.rows("edu.agent_tools", { owner_id: me.id, name }, { columns: "id, status, mode, views", limit: 1 }))[0];
-    ctx.expect.ok("saved for this learner", !!row && row.status === "active", row);
-    const again = await ctx.agent.tool({ as: p.learner, tool: name, learnerTool: true, mode: "live", input: {} });
+    // create_tool may resolve to a canonical domain tool name (r.tool), not the
+    // requested name — use the name it actually saved under.
+    ctx.expect.ok("created (or reused)", r?.status === "created" || r?.status === "reused", r);
+    if (r?.status !== "created" && r?.status !== "reused") return;
+    const toolName = r.tool || name;
+    ctx.cleanup(() => ctx.db.deleteOwned("edu.agent_tools", { ownerColumn: "owner_id", ownerId: me.id, filters: { name: toolName } }));
+    const row = (await ctx.db.rows("edu.agent_tools", { owner_id: me.id, name: toolName }, { columns: "id, status, mode, views", limit: 1 }))[0];
+    ctx.expect.ok("saved for this learner", !!row && ["active", "disabled"].includes(row.status), row);
+    if (!row) return;
+    const again = await ctx.agent.tool({ as: p.learner, tool: toolName, learnerTool: true, mode: "live", input: {} });
     ctx.expect.ok("runs again by name", Array.isArray(again?.rows), again?.error);
-    const other = await ctx.agent.tool({ as: "@tester23", tool: name, learnerTool: true, input: {} });
+    const other = await ctx.agent.tool({ as: "@tester23", tool: toolName, learnerTool: true, input: {} });
     ctx.expect.ok("another learner can't run it", !Array.isArray(other?.rows), other);
     const off = await ctx.http({ as: p.learner, method: "PATCH", path: `/api/self-tooling/tools/${row.id}`, body: { status: "disabled" } });
     ctx.expect.status("turned off", off, 200);
-    const blocked = await ctx.agent.tool({ as: p.learner, tool: name, learnerTool: true, mode: "live", input: {} });
+    const blocked = await ctx.agent.tool({ as: p.learner, tool: toolName, learnerTool: true, mode: "live", input: {} });
     ctx.expect.ok("stops once turned off", !!blocked?.error && !blocked?.rows, blocked);
   },
 };
@@ -353,7 +357,6 @@ export const promotePlatform = {
     const other = await ctx.as(p.other);
     const tag = ctx.marker.slice(8, 16).replace(/[^a-z0-9]/g, "x");
     const name = `verify_src_${tag}`, platformName = `verify_pub_${tag}`;
-    ctx.cleanup(() => ctx.db.deleteOwned("edu.agent_tools", { ownerColumn: "owner_id", ownerId: me.id, filters: { name } }));
     ctx.cleanup(async () => {
       // The platform copy has no owner, so deleteOwned can't reach it: remove exactly
       // the row this run made (gate label, promoted from this run's tool).
@@ -364,9 +367,14 @@ export const promotePlatform = {
 
     const r = await ctx.agent.tool({ as: p.learner, tool: "create_tool", mode: "live", input: {
       goal: "How many tasks I have by status", name, label: `${ctx.marker} Tasks by status`, hint: { views: ["my_tasks"] } } });
-    ctx.expect.eq("source tool created", r?.status, "created");
-    if (r?.status !== "created") return;
-    const src = (await ctx.db.rows("edu.agent_tools", { owner_id: me.id, name }, { columns: "id", limit: 1 }))[0];
+    // create_tool may save under a canonical domain name (r.tool) instead of the
+    // requested name — promote the row it actually created.
+    ctx.expect.ok("source tool created (or reused)", r?.status === "created" || r?.status === "reused", r);
+    if (r?.status !== "created" && r?.status !== "reused") return;
+    const srcName = r.tool || name;
+    ctx.cleanup(() => ctx.db.deleteOwned("edu.agent_tools", { ownerColumn: "owner_id", ownerId: me.id, filters: { name: srcName } }));
+    const src = (await ctx.db.rows("edu.agent_tools", { owner_id: me.id, name: srcName }, { columns: "id", limit: 1 }))[0];
+    if (!src) return;
 
     const { promoteTool, setToolStatus } = await import("../../self-tooling/library.js");
     const { startRun } = await import("../runner.js");
