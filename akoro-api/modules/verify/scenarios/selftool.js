@@ -1067,6 +1067,66 @@ export const bugReportDelivered = {
   },
 };
 
+// A tool request moved through every review status — notifications, agent chat
+// updates and the agent relaying each status on a real turn.
+export const requestStatusLifecycle = {
+  name: "selftool.request_status_lifecycle", area: "self-tooling", risk: "write", timeoutMs: 240_000,
+  description: "A tool request moved through EVERY review status (under review, planned, declined, implemented) notifies the learner and posts an agent chat update each time; on a real agent turn the learner asks for the status and the agent checks and reports it.",
+  params: { learner: { default: "@tester29" } },
+  async run(ctx, p) {
+    const me = await ctx.as(p.learner);
+    const title = `${ctx.marker} PDF-to-flashcards tool`;
+    const filed = await ctx.agent.tool({ as: p.learner, tool: "submit_tool_request", mode: "live", input: {
+      title,
+      description: "A tool that turns an uploaded PDF chapter into flashcards automatically, so revision starts from my own notes.",
+      category: "study_support", kind: "tool",
+    } });
+    ctx.expect.ok("tool request filed", filed?.submitted === true || filed?.duplicate === true, filed);
+    const rows = await ctx.db.rows("edu.agent_tool_requests", { requester_id: me.id, kind: "tool", title: { like: `${ctx.marker}%` } }, { columns: "id, kind, status, title", limit: 5 });
+    for (const r of rows) ctx.cleanup(() => ctx.db.deleteOwned("edu.agent_tool_requests", { ownerColumn: "requester_id", ownerId: me.id, filters: { id: r.id } }));
+    const req = rows[0];
+    if (!req) return;
+    ctx.cleanup(() => ctx.db.deleteOwned("notifications", { ownerColumn: "user_id", ownerId: me.id, filters: { related_id: req.id } }));
+    ctx.expect.eq("filed as a tool request, waiting", [req.kind, req.status], ["tool", "new"]);
+
+    const { reviewToolRequest } = await import("../../agent-tool-requests/service.js");
+    const words = {
+      under_review: /under review|reviewing/i,
+      planned: /plan/i,
+      declined: /declin|not taken forward/i,
+      implemented: /ready|available|implemented/i,
+    };
+
+    for (const status of ["under_review", "planned", "declined", "implemented"]) {
+      const out = await reviewToolRequest({ requestId: req.id, status, adminNote: `Verification: moved to ${status}`, admin: { id: null, label: "verification gate" } });
+      ctx.expect.eq(`${status}: saved`, out?.request?.status, status);
+      ctx.expect.ok(`${status}: requester notified`, out?.notified === true, out);
+      const notif = (await ctx.db.rows("notifications", { user_id: me.id, related_id: req.id }, { columns: "title, content", limit: 20 })).find((n) => words[status].test(String(n.title || "")));
+      ctx.expect.ok(`${status}: notification matches the status`, !!notif, notif);
+      const chat = (await ctx.db.rows("chat_messages", { user_id: me.id, role: "agent", text: { like: `%${ctx.marker}%` } }, { columns: "id, session_id, text", limit: 50 })).find((m) => words[status].test(String(m.text || "")));
+      ctx.expect.ok(`${status}: agent messaged the learner in chat`, !!chat, chat);
+      const check = await ctx.agent.tool({ as: p.learner, tool: "check_my_requests", mode: "live", input: {} });
+      const mine = (check?.requests || []).find((r) => String(r.title || "").startsWith(ctx.marker));
+      ctx.expect.eq(`${status}: check_my_requests shows it`, mine?.status, status);
+
+      // Real agent turn: the learner asks for the status; the agent must check and relay it.
+      const turn = await ctx.agent.chat({ as: p.learner, mode: "live", model: p.model,
+        prompt: `Use check_my_requests and tell me the current status of my request titled "${title}". Quote the status word exactly.` });
+      ctx.expect.eq(`${status}: turn answered`, turn.status, 200);
+      ctx.expect.ok(`${status}: agent checked the request`, (turn.tools || []).some((t) => t.tool === "check_my_requests"), (turn.tools || []).map((t) => t.tool));
+      ctx.expect.ok(`${status}: agent told the learner the status`, words[status].test(String(turn.reply || "")), String(turn.reply || "").slice(0, 200));
+      ctx.note(`TRANSCRIPT ${status} · Agent: ${String(turn.reply || "").replace(/\s+/g, " ").slice(0, 320)}`);
+    }
+
+    // The agent chat updates carry the run marker in the request title — clean them up.
+    const msgs = await ctx.db.rows("chat_messages", { user_id: me.id, role: "agent", text: { like: `%${ctx.marker}%` } }, { columns: "id, session_id", limit: 50 });
+    for (const m of msgs) {
+      ctx.cleanup(() => ctx.db.deleteOwned("chat_messages", { ownerColumn: "user_id", ownerId: me.id, filters: { id: m.id } }));
+      ctx.cleanup(() => ctx.db.deleteOwned("chat_sessions", { ownerColumn: "user_id", ownerId: me.id, filters: { id: m.session_id } }));
+    }
+  },
+};
+
 // The server runs a real (read-only) agent turn after the learner confirms a
 // change. Proven by the deterministic follow-up message id, not the model's words.
 export const decisionFollowUp = {
