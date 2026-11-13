@@ -158,10 +158,11 @@ export default function SettingsPage() {
           xpBalance:     data.agent?.xpEarned || 0,
           memberId:      data.id,
           memberSince:   data.memberSince,
-          notif: data.notif || {
+          notif: {
             email:true,sms:false,push:true,whatsapp:false,whatsappNumber:'',
             sessionReminders:true,sessionStarted:true,sessionCancelled:true,
-            announcements:true,qaReplies:true,
+            announcements:true,qaReplies:true,reminderEmails:true,
+            ...(data.notif || {}),
           },
         });
         if (data.agent) {
@@ -206,7 +207,7 @@ export default function SettingsPage() {
             memberId:user.id,memberSince:'—',
             notif:{ email:true,sms:false,push:true,whatsapp:false,whatsappNumber:'',
               sessionReminders:true,sessionStarted:true,sessionCancelled:true,
-              announcements:true,qaReplies:true },
+              announcements:true,qaReplies:true,reminderEmails:true },
           });
           setAgent({ name:'My Agent',emoji:'🤖',photoUrl:null,color:ORANGE,bg:'#FEF0E6',
             personality:'',studyLevel:'',yearGroup:'',examBoard:'',subjects:[],goal:'',

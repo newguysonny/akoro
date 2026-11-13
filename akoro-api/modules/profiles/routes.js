@@ -920,6 +920,8 @@ router.get("/me", authenticateToken, asyncHandler(async (req, res) => {
       sessionCancelled:notif.notify_session_cancelled,
       announcements:   notif.notify_new_announcements,
       qaReplies:       notif.notify_qa_replies,
+      // Optional email channel for the study agent's scheduled reminders.
+      reminderEmails:  notif.notify_agent_reminders !== false,
     } : null,
   });
 }));
@@ -1089,7 +1091,7 @@ router.patch("/me/notifications", authenticateToken, asyncHandler(async (req, re
   const {
     email, sms, push, whatsapp, whatsappNumber,
     sessionReminders, sessionStarted, sessionCancelled,
-    announcements, qaReplies,
+    announcements, qaReplies, reminderEmails,
   } = req.body;
 
   const row = {
@@ -1106,6 +1108,7 @@ router.patch("/me/notifications", authenticateToken, asyncHandler(async (req, re
   if (sessionCancelled!== undefined) row.notify_session_cancelled   = sessionCancelled;
   if (announcements   !== undefined) row.notify_new_announcements   = announcements;
   if (qaReplies       !== undefined) row.notify_qa_replies          = qaReplies;
+  if (reminderEmails  !== undefined) row.notify_agent_reminders     = reminderEmails;
 
   await db.from("user_notification_preferences")
     .upsert(row, { onConflict: "user_id" });
