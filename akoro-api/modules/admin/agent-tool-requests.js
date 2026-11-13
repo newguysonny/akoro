@@ -157,8 +157,8 @@ router.patch("/agent-tool-requests/:requestId", adminOnly, asyncHandler(async (r
     return res.status(422).json({ success: false, error: "Approve a capability request with Decide — it grants the capability and resumes the learner's build." });
   }
 
-  // A status change goes through the shared review, which also notifies the
-  // requester when a tool/component request becomes planned or implemented.
+  // A status change goes through the shared review, which notifies the requester
+  // (and their agent, in chat) for every review status — not just planned/implemented.
   if (update.status) {
     let out;
     try {

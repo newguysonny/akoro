@@ -92,8 +92,10 @@ export async function createLearnerToolRequest({ learnerId, body }) {
 
 /** Admins move a tool/component request through these; capability requests use the decide/grant flow. */
 const REVIEW_STATUSES = new Set(["new", "under_review", "planned", "declined", "implemented"]);
-/** Moving to one of these tells the requester (closing the loop). */
-const NOTIFY_STATUSES = new Set(["planned", "implemented"]);
+/** Moving to one of these tells the requester (closing the loop). Every review
+ *  transition except a return to "new" must reach the learner and their agent —
+ *  a status edit that the requester never hears about is a silent drop. */
+const NOTIFY_STATUSES = new Set(["under_review", "planned", "declined", "implemented"]);
 
 /** Post a proactive agent message into the learner's chat so the agent tells
  *  them directly — not only a notifications-bell entry. Best-effort by callers. */
@@ -113,11 +115,11 @@ async function informLearnerInChat({ userId, title, text }) {
 }
 
 /**
- * Review a tool/component request: set its status (and optional note) and, when it
- * moves to planned or implemented, notify the requester so the learner (and their
- * agent, via check_my_requests) learns it is on its way or ready. When it ships,
- * the agent also posts a message in their chat. Capability requests are left to
- * the decide/grant flow, which already resumes the build.
+ * Review a tool/component request: set its status (and optional note) and, for
+ * any move to under_review / planned / declined / implemented, notify the
+ * requester and post an agent message in their chat so the learner (and their
+ * agent, via check_my_requests) learns the outcome. Capability requests are left
+ * to the decide/grant flow, which already resumes the build.
  */
 export async function reviewToolRequest({ requestId, status, adminNote = null, admin = null }) {
   if (!requestId) throw Object.assign(new Error("requestId is required"), { status: 422 });
@@ -138,29 +140,46 @@ export async function reviewToolRequest({ requestId, status, adminNote = null, a
 
   let notified = false;
   if (NOTIFY_STATUSES.has(status) && status !== current.status && current.kind !== "capability" && updated?.requester_id) {
-    const ready = status === "implemented";
+    const note = updated.admin_note ? `: ${updated.admin_note}` : ".";
+    const copy = {
+      under_review: {
+        title: "Your request is under review",
+        bell:  `"${updated.title}" is being reviewed by the Akoro team${note}`,
+        chat:  `Quick update — the Akoro team is reviewing your request "${updated.title}"${note} I'll let you know when there's news.`,
+      },
+      planned: {
+        title: "Your requested feature is planned",
+        bell:  `"${updated.title}" is planned${note}`,
+        chat:  `Good news — "${updated.title}" is on the Akoro team's plan${note} I'll tell you when it's ready.`,
+      },
+      declined: {
+        title: "Your request was declined",
+        bell:  `"${updated.title}" was not taken forward${note}`,
+        chat:  `About your request "${updated.title}" — it wasn't taken forward${note} I can help another way if you like.`,
+      },
+      implemented: {
+        title: "Your requested feature is ready",
+        bell:  `"${updated.title}" is ready${updated.admin_note ? `: ${updated.admin_note}` : ". Ask your agent to use it."}`,
+        chat:  `Good news — the feature you asked for, "${updated.title}", is ready${note} Ask me to use it any time.`,
+      },
+    }[status];
+
     const { error: notifyError } = await db.from("notifications").insert({
       user_id: updated.requester_id,
       type: "agent_tool_request",
-      title: ready ? "Your requested feature is ready" : "Your requested feature is planned",
-      content: ready
-        ? `"${updated.title}" is ready${updated.admin_note ? `: ${updated.admin_note}` : ". Ask your agent to use it."}`
-        : `"${updated.title}" is planned${updated.admin_note ? `: ${updated.admin_note}` : "."}`,
+      title: copy.title,
+      content: copy.bell,
       related_id: requestId,
     });
     notified = !notifyError;
     if (notifyError) console.warn("[agent-tool-requests] notify failed:", notifyError.message);
 
-    // Shipped: the agent also tells the learner in their chat, not only the bell.
-    if (ready) {
-      try {
-        await informLearnerInChat({
-          userId: updated.requester_id,
-          title: "Your feature is ready",
-          text: `Good news — the feature you asked for, "${updated.title}", is ready${updated.admin_note ? `: ${updated.admin_note}` : "."} Ask me to use it any time.`,
-        });
-      } catch (e) { console.warn("[agent-tool-requests] chat message failed:", e?.message || e); }
-    }
+    // Tell the learner in their chat too, not only the bell — a status edit the
+    // requester never hears about is the bug this fixes. The agent relays it in
+    // conversation, so it is not discovered only by an eventual check_my_requests.
+    try {
+      await informLearnerInChat({ userId: updated.requester_id, title: copy.title, text: copy.chat });
+    } catch (e) { console.warn("[agent-tool-requests] chat message failed:", e?.message || e); }
   }
 
   return { request: updated, notified };
