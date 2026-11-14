@@ -44,6 +44,18 @@ test("the trace store can hold it: detail column + 'answered' outcome, in the ma
   assert.match(sql, /'answered'/);
 });
 
+test("saveComputation hint scoring treats goalTokens as the Set it is", () => {
+  assert.match(pipeline, /\[\.\.\.hintTokens\]\.filter\(\(t\) => goalTokens\(e\.goal\)\.has\(t\)\)/);
+  assert.doesNotMatch(pipeline, /hintTokens\.filter/);
+  assert.doesNotMatch(pipeline, /goalTokens\(e\.goal\)\.includes/);
+});
+
+test("the trace claims 'Saved a tool' only for a saved outcome", () => {
+  assert.equal(chatToolChange("save_computation", { status: "rejected", reason: "x" }), null);
+  assert.equal(chatToolChange("save_computation", { status: "none" }), null);
+  assert.equal(chatToolChange("save_computation", { status: "saved", label: "Goals completion rate" })?.label, "Saved a tool");
+});
+
 test("saveComputation saves the stashed computation — re-verified, never rebuilt", () => {
   assert.match(pipeline, /export async function saveComputation/);
   assert.match(pipeline, /\.eq\("outcome", "answered"\)/);

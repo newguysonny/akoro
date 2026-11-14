@@ -221,8 +221,8 @@ export function chatToolChange(tool, toolResult, input = {}) {
     if (toolResult.status === "answered" && !toolResult.dryRun) return { label: "Worked it out — one-off", title: clip(toolResult.label || "", ITEM_CHARS), fields: [] };
     return (toolResult.status === "needs_permission" || toolResult.status === "needs_consent") && !toolResult.dryRun ? { label: toolResult.drafted ? "Drafted a tool — waiting for your OK" : "Asked to build a tool — waiting for your OK", title: clip(toolResult.label || "", ITEM_CHARS), fields: [] } : null;
   }
-  if (tool === "save_computation" && toolResult.status === "saved") {
-    return { label: "Saved a tool", title: clip(toolResult.label || "", ITEM_CHARS), fields: [] };
+  if (tool === "save_computation") {
+    return toolResult.status === "saved" ? { label: "Saved a tool", title: clip(toolResult.label || "", ITEM_CHARS), fields: [] } : null;
   }
   // Read-only actions of the multi-action tools change nothing — no "Updated…" row.
   if (["study_buddy", "daily_challenge", "revision_circle"].includes(String(tool)) && ["list", "status", "ranking", "search", undefined, null, ""].includes(input?.action)) return null;

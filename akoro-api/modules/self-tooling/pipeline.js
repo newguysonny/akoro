@@ -778,7 +778,7 @@ export async function saveComputation({ learnerId, hint = null, callCapability }
   let pick = candidates[0];
   if (hint) {
     const hintTokens = goalTokens(hint);
-    const scored = candidates.map((e) => ({ e, score: hintTokens.filter((t) => goalTokens(e.goal).includes(t)).length })).sort((a, b) => b.score - a.score);
+    const scored = candidates.map((e) => ({ e, score: [...hintTokens].filter((t) => goalTokens(e.goal).has(t)).length })).sort((a, b) => b.score - a.score);
     if (scored[0].score > 0) pick = scored[0].e;
   }
   const d = pick.detail;
