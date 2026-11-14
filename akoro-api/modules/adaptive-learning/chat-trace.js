@@ -36,7 +36,7 @@ export const CHAT_TOOL_DISPLAY = Object.freeze({
   find_teacher:                   { category: "research", headline: "Looking up a teacher",                description: "Finding the teacher you asked about" },
   get_my_learning_sessions:       { category: "research", headline: "Reading your learning sessions",      description: "Looking at your recent teaching sessions" },
   create_task:                    { category: "action",   headline: "Creating a task",                     description: "Adding the task to your list", done: "Created a task" },
-  suggest_help:                   { category: "action",   headline: "Preparing a suggestion",              description: "Adding an idea to your suggestions inbox", done: "Added a suggestion" },
+  suggest_help:                   { category: "action",   headline: "Opening a new chat",                 description: "Starting a separate chat with a proactive idea", done: "Opened a new chat" },
   schedule_chat_follow_up:        { category: "action",   headline: "Scheduling a follow-up",              description: "Setting a time for me to check in with you", done: "Scheduled a follow-up" },
   list_scheduled_chat_follow_ups: { category: "research", headline: "Checking your scheduled check-ins",   description: "Listing the follow-ups already planned" },
   cancel_scheduled_chat_follow_up:{ category: "action",   headline: "Cancelling a follow-up",              description: "Removing a planned check-in", done: "Cancelled a follow-up" },

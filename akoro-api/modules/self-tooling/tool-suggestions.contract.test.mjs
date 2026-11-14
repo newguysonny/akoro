@@ -59,8 +59,8 @@ test("the sweep never nags: saved tools and recently-suggested computations are 
   assert.match(sweep, /MAX_SUGGESTIONS_PER_SWEEP = 2/);
 });
 
-test("the sweep runs daily beside the archive tick", () => {
+test("the sweep runs nightly in the planner window (21:25 Africa/Lagos)", () => {
   assert.match(queue, /sweepRepeatedComputations/);
   assert.match(queue, /registerTick\("self-tool-suggestions", toolIdeas\)/);
-  assert.match(queue, /cron\.schedule\("25 4 \* \* \*"/);
+  assert.match(queue, /cron\.schedule\("25 20 \* \* \*"/);
 });

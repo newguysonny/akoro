@@ -67,13 +67,19 @@ export function armSweep() {
   // Daily (04:10 UTC): learner tools unused for 60 days are archived (S4).
   const archive = async () => (await import("./pipeline.js")).archiveUnusedTools(Number(process.env.SELF_TOOLING_ARCHIVE_DAYS) || 60);
   registerTick("self-tool-archive", archive);
-  // Daily (04:25 UTC): repeated one-off computations become tool suggestions.
+  // Nightly (21:25 Africa/Lagos, inside the planner window): repeated
+  // one-off computations become tool suggestions in the Suggestions list.
   const toolIdeas = async () => (await import("./toolSuggestions.js")).sweepRepeatedComputations();
   registerTick("self-tool-suggestions", toolIdeas);
+  // Nightly (21:30 Africa/Lagos): suggest_help sweeps the day's chats; a hit
+  // lands as a NEW CHAT (the priority channel), never in the list.
+  const helpSweep = async () => (await import("../agent-proposals/suggestHelpSweep.js")).sweepSuggestHelpChats();
+  registerTick("suggest-help-sweep", helpSweep);
   if (cronSource() !== "cloudflare") {
     cron.schedule("*/15 * * * *", () => { sweepResumes().catch((e) => console.warn("[self-tool-resumes] sweep failed:", e.message)); });
     cron.schedule("10 4 * * *", () => { archive().then((r) => r.archived && console.log(`[self-tooling] archived ${r.archived} unused tool(s)`)).catch((e) => console.warn("[self-tooling] archive failed:", e.message)); });
-    cron.schedule("25 4 * * *", () => { toolIdeas().then((r) => r.suggested && console.log(`[self-tooling] suggested ${r.suggested} repeated-computation tool(s)`)).catch((e) => console.warn("[self-tooling] tool suggestions failed:", e.message)); });
+    cron.schedule("25 20 * * *", () => { toolIdeas().then((r) => r.suggested && console.log(`[self-tooling] suggested ${r.suggested} repeated-computation tool(s)`)).catch((e) => console.warn("[self-tooling] tool suggestions failed:", e.message)); });
+    cron.schedule("30 20 * * *", () => { helpSweep().then((r) => r.filed && console.log(`[suggest-help-sweep] opened ${r.filed} new chat(s)`)).catch((e) => console.warn("[suggest-help-sweep] sweep failed:", e.message)); });
   }
 }
 

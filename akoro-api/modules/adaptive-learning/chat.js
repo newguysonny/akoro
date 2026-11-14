@@ -377,7 +377,7 @@ export const CHAT_TOOLS = [
   },
   {
     name: "suggest_help",
-    description: "File one proactive suggestion for the learner's Suggestions list when you notice a way to help beyond this conversation: a task idea, a goal worth aiming at, or a conversation worth starting. Use sparingly — at most one per reply, only when genuinely useful, and never for something the learner already asked you to do. The learner chooses to accept it as a task or dismiss it; filing it changes nothing else.",
+    description: "Open a NEW CHAT for the learner with one proactive idea — a special suggestion that lands as its own conversation at the top of their chats, not in the Suggestions list, so it gets priority. File when you notice, in passing, a way to help beyond what they asked: something spotted in their data while doing another job (a weak topic, a pattern), something valuable but not for now (an exam months away, a next-term topic), something they put off or turned down for now but still need, or a goal worth aiming at — never create goals unasked; open this chat instead. At most one per reply, only when genuinely useful, and never for something the learner already asked you to do — do that instead. Filing changes nothing in this conversation; afterwards, tell them in one line that you've opened a chat about it.",
     input_schema: {
       type: "object",
       properties: {
@@ -2330,22 +2330,19 @@ async function runChatTool(name, input, studentId, { conversationId = null, role
     }
     case "suggest_help": {
       try {
-        const kind = ["task", "goal", "conversation"].includes(input?.kind) ? input.kind : "task";
+        const kind = ["task", "goal", "conversation"].includes(input?.kind) ? input.kind : "conversation";
         const title = String(input?.title || "").trim().slice(0, 140);
         const rationale = String(input?.rationale || "").trim().slice(0, 400);
         if (!title) return { error: "A suggestion needs a title" };
-        // Already open in the inbox (from chat or the planner): don't offer it twice.
-        const { openTitles, normalizeTitle } = await import("../agent-proposals/inbox.js");
-        if ((await openTitles(studentId)).has(normalizeTitle(title))) return { saved: false, duplicate: true, title, note: "This is already in their Suggestions — mention it instead of adding it again." };
-        const { data: agentRow } = await db.from("user_agents").select("id").eq("user_id", studentId).single();
-        const { data: suggestion, error } = await db.from("agent_suggestions").insert({
-          user_id: studentId, agent_id: agentRow?.id ?? null,
-          kind, title, rationale: rationale || null,
-          source: "chat", session_id: conversationId,
-        }).select().single();
-        if (error) return { error: error.message };
-        global.io?.to(`user:${studentId}`).emit("agent:suggestion", suggestion);
-        return { saved: true, suggestionId: suggestion.id, kind, title };
+        // A suggest_help filing is a special suggestion: it lands as a NEW
+        // CHAT at the top of their chats (priority), never in the Suggestions
+        // list — see modules/agent-proposals/suggestHelp.js (dedupe lives there).
+        const { openSuggestHelpChat } = await import("../agent-proposals/suggestHelp.js");
+        const out = await openSuggestHelpChat(studentId, { kind, title, rationale });
+        if (out.duplicate) return { saved: false, duplicate: true, title, note: "This idea is already open for them — mention it instead of filing it again." };
+        if (!out.delivered) return { error: out.error || "Could not open the chat" };
+        return { saved: true, delivered: "new_chat", chatId: out.chatId, kind, title,
+          note: `Tell the learner in one line that you've opened a new chat titled "${title}" — it's at the top of their chats.` };
       } catch (error) {
         return { error: error.message || "Could not save the suggestion" };
       }
