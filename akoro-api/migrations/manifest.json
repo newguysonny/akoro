@@ -261,7 +261,8 @@
     "2026-chat-message-meta-merge.sql",
     "2026-ai-runtime-roles.sql",
     "2026-email-verification-codes.sql",
-    "2026-agent-reminder-email.sql"
+    "2026-agent-reminder-email.sql",
+    "2026-self-tooling-disabled-actions.sql"
   ],
   "demo": [
     "2026-seed-school-passwords.sql",

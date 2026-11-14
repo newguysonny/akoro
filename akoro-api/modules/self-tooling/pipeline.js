@@ -237,7 +237,7 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
   async function buildDomain(spec) {
     // Add the requested breakdown as a NEW action (the generic source handles any
     // by_<field>), then re-verify the WHOLE action set before saving.
-    const { data: existing } = await edu().from("agent_tools").select("id, status, params_schema, verification")
+    const { data: existing } = await edu().from("agent_tools").select("id, status, params_schema, verification, disabled_actions")
       .eq("owner_id", learnerId).eq("name", spec.name).in("status", ["active", "disabled"]).maybeSingle();
     const have = new Set([...(existing?.params_schema?.action?.enum || []), ...carriedActions(spec.view)]);
     const extra = byActionForGoal(goal, spec.view) || aggregateForGoal(goal, spec.view);
@@ -248,6 +248,12 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
     const spec2 = { ...spec, actions, params: { ...spec.params, action: { ...spec.params.action, enum: actions } } };
     const covered = actions.every((a) => have.has(a));
     if (existing?.status === "active" && !replaceRaw && covered) {
+      // Asking again for an action the learner switched off turns it back on.
+      const want = inferAction(goal, actions, spec.view);
+      const offNow = Array.isArray(existing.disabled_actions) ? existing.disabled_actions : [];
+      if (offNow.includes(want)) {
+        await edu().from("agent_tools").update({ disabled_actions: offNow.filter((a) => a !== want), updated_at: new Date().toISOString() }).eq("id", existing.id).eq("owner_id", learnerId);
+      }
       return finish("reused", { status: "reused", tool: spec.name, label: spec.label, actions,
         note: `You already have "${spec.label}" — it IS available in this chat: call ${spec.name} with action=(${actions.join("|")}) to answer. Nothing was added or changed and every answer it had still works. Never tell the learner to open Settings.` });
     }
@@ -263,6 +269,10 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
     }
     const action = inferAction(goal, actions, spec.view);
     const out = await tryRun(def, spec2.params, { action }, ctxD);
+    // Actions the learner switched off stay off across a rebuild — except the
+    // ones this goal is asking for, which the ask itself turns back on.
+    const carriedOff = (Array.isArray(existing?.disabled_actions) ? existing.disabled_actions : [])
+      .filter((a) => actions.includes(a) && a !== action && a !== extra);
     // The build-consent gate: a BRAND-NEW domain tool is only drafted — saved
     // OFF with a card asking the learner to keep it. Extending a tool the
     // learner already has active keeps the consent they already gave; an
@@ -273,7 +283,7 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
       const { data: row, error } = await edu().from("agent_tools").insert({
         owner_id: learnerId, scope: "learner", audience, name: spec.name, label: spec.label,
         goal: `${spec.label}: ${actions.join(", ")}`, mode: "code", definition: def, params_schema: spec2.params,
-        capabilities: [], views: [spec.view], domain: spec.view, actions,
+        capabilities: [], views: [spec.view], domain: spec.view, actions, disabled_actions: carriedOff,
         verification: { verdict: "pass", at: new Date().toISOString(), assertions: checks.map((c) => ({ name: `action:${c.action}`, passed: c.ok })), samples: [], awaitingBuild: true },
         status: "disabled", usage_count: 0,
       }).select("id").single();
@@ -300,7 +310,7 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
     const { data: row, error } = await edu().from("agent_tools").insert({
       owner_id: learnerId, scope: "learner", audience, name: spec.name, label: spec.label,
       goal: `${spec.label}: ${actions.join(", ")}`, mode: "code", definition: def, params_schema: spec2.params,
-      capabilities: [], views: [spec.view], domain: spec.view, actions,
+      capabilities: [], views: [spec.view], domain: spec.view, actions, disabled_actions: carriedOff,
       verification: { verdict: "pass", at: new Date().toISOString(), assertions: checks.map((c) => ({ name: `action:${c.action}`, passed: c.ok })), samples: [] },
       status: "active", usage_count: 1, last_used_at: new Date().toISOString(),
     }).select("id").single();
@@ -627,9 +637,21 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
 }
 
 /** A saved tool as an OpenAI function. */
+/** The actions a tool row carries (its domain action set), or []. */
+export const toolActions = (t) => (Array.isArray(t?.actions) && t.actions.length ? t.actions
+  : (Array.isArray(t?.params_schema?.action?.enum) ? t.params_schema.action.enum : []));
+/** Actions the learner has NOT switched off — the only ones the model may see or run. */
+export const visibleActions = (t) => {
+  const off = new Set(Array.isArray(t?.disabled_actions) ? t.disabled_actions : []);
+  return toolActions(t).filter((a) => !off.has(a));
+};
+
 export function toolDef(t) {
+  const off = new Set(Array.isArray(t?.disabled_actions) ? t.disabled_actions : []);
+  const acts = toolActions(t);
+  if (acts.length && !acts.some((a) => !off.has(a))) return null;   // every action switched off — offer nothing
   const props = Object.fromEntries(Object.entries(paramProps(t.params_schema)).map(([k, p]) => [k, {
-    ...(Array.isArray(p.enum) ? { type: typeof p.enum[0] === "number" ? "number" : "string", enum: p.enum } : { type: p.type }),
+    ...(Array.isArray(p.enum) ? { type: typeof p.enum[0] === "number" ? "number" : "string", enum: k === "action" ? p.enum.filter((a) => !off.has(a)) : p.enum } : { type: p.type }),
     ...(p.description ? { description: String(p.description).slice(0, 200) } : {}),
   }]));
   const origin = t.scope === "platform" ? "an Akoro tool for every learner, runs on this learner's own data" : "a tool the learner's agent built";
@@ -643,13 +665,13 @@ export function toolDef(t) {
  */
 export async function learnerToolDefs(learnerId, audience = "learner") {
   const [{ data: mine }, { data: platform }] = await Promise.all([
-    edu().from("agent_tools").select("name, label, goal, params_schema, scope")
+    edu().from("agent_tools").select("name, label, goal, params_schema, scope, actions, disabled_actions")
       .eq("owner_id", learnerId).eq("status", "active").order("last_used_at", { ascending: false, nullsFirst: false }).limit(LIMITS.inCatalogue),
-    edu().from("agent_tools").select("name, label, goal, params_schema, scope")
+    edu().from("agent_tools").select("name, label, goal, params_schema, scope, actions, disabled_actions")
       .eq("scope", "platform").eq("audience", audience).eq("status", "active").order("usage_count", { ascending: false }).limit(LIMITS.inCatalogue),
   ]);
   const own = new Set((mine || []).map((t) => t.name));
-  return [...(mine || []), ...(platform || []).filter((t) => !own.has(t.name))].map(toolDef);
+  return [...(mine || []), ...(platform || []).filter((t) => !own.has(t.name))].map(toolDef).filter(Boolean);
 }
 
 /**
@@ -677,6 +699,11 @@ export async function runLearnerTool(name, input, learnerId, { callCapability, c
   if (!t) return null;
   const platform = t.scope === "platform";
   if (t.status !== "active") return { error: platform ? "This Akoro tool is turned off for now." : "This tool is turned off — rebuild it or turn it back on in Settings → Agent → My tools." };
+  // An action the learner switched off (or deleted) must not run even if the
+  // model asks for it by name — the catalogue already hides it (toolDef).
+  if (input?.action && toolActions(t).length && !visibleActions(t).includes(input.action)) {
+    return { error: "That action is turned off for this tool — turn it back on in Settings → Agent → My tools." };
+  }
   // Re-check on EVERY call: a revoked grant or removed view takes effect at once (§7.10).
   for (const c of t.capabilities || []) {
     const cap = CAPABILITIES[c];
@@ -720,21 +747,47 @@ export async function archiveUnusedTools(days = 60) {
 }
 
 export async function listMyTools(learnerId) {
-  const { data, error } = await edu().from("agent_tools").select("id, name, label, goal, mode, status, usage_count, last_used_at, created_at")
+  const { data, error } = await edu().from("agent_tools").select("id, name, label, goal, mode, status, usage_count, last_used_at, created_at, domain, actions, disabled_actions")
     .eq("owner_id", learnerId).in("status", ["active", "disabled"]).order("created_at", { ascending: false }).limit(50);
   if (error) throw new Error("Couldn't load your tools");
-  return data || [];
+  return (data || []).map((t) => ({ ...t, actions: Array.isArray(t.actions) ? t.actions : [], disabled_actions: Array.isArray(t.disabled_actions) ? t.disabled_actions : [] }));
 }
 
 export async function updateMyTool(learnerId, id, patch) {
+  const { data: row } = await edu().from("agent_tools")
+    .select("id, name, label, status, domain, actions, params_schema, disabled_actions")
+    .eq("owner_id", learnerId).eq("id", id).in("status", ["active", "disabled"]).maybeSingle();
+  if (!row) throw Object.assign(new Error("Tool not found"), { status: 404 });
   const allowed = {};
   if (typeof patch?.label === "string" && patch.label.trim().length >= 2) allowed.label = patch.label.trim().slice(0, 60);
   if (["active", "disabled"].includes(patch?.status)) allowed.status = patch.status;
   if (patch?.delete === true) allowed.status = "archived";
+
+  // Per-action management (domain tools): switch ONE action off or on, or
+  // delete it from the set. Deleting the last action archives the tool — an
+  // empty domain is no tool at all.
+  const acts = toolActions(row);
+  let nextActions = null, nextOff = null;
+  if (typeof patch?.deleteAction === "string" && patch.deleteAction) {
+    if (!acts.includes(patch.deleteAction)) throw Object.assign(new Error("That action doesn't exist on this tool"), { status: 400 });
+    nextActions = acts.filter((a) => a !== patch.deleteAction);
+    nextOff = (Array.isArray(row.disabled_actions) ? row.disabled_actions : []).filter((a) => a !== patch.deleteAction);
+    if (!nextActions.length) allowed.status = "archived";
+  } else if (typeof patch?.action === "string" && ["active", "disabled"].includes(patch?.actionStatus)) {
+    if (!acts.includes(patch.action)) throw Object.assign(new Error("That action doesn't exist on this tool"), { status: 400 });
+    const off = new Set(Array.isArray(row.disabled_actions) ? row.disabled_actions : []);
+    if (patch.actionStatus === "disabled") off.add(patch.action); else off.delete(patch.action);
+    nextOff = [...off];
+  }
+  if (nextActions) {
+    allowed.actions = nextActions;
+    allowed.params_schema = { ...(row.params_schema || {}), action: { ...(row.params_schema?.action || {}), enum: nextActions } };
+  }
+  if (nextOff) allowed.disabled_actions = nextOff;
   if (!Object.keys(allowed).length) throw Object.assign(new Error("Nothing to change"), { status: 400 });
   const { data, error } = await edu().from("agent_tools").update({ ...allowed, updated_at: new Date().toISOString(), ...(allowed.status !== "active" ? { fail_streak: 0 } : {}) })
-    .eq("owner_id", learnerId).eq("id", id).in("status", ["active", "disabled"]).select("id, name, label, status").maybeSingle();
+    .eq("owner_id", learnerId).eq("id", row.id).in("status", ["active", "disabled"]).select("id, name, label, status, domain, actions, disabled_actions").maybeSingle();
   if (error) throw new Error("Couldn't update the tool");
   if (!data) throw Object.assign(new Error("Tool not found"), { status: 404 });
-  return data;
+  return { ...data, actions: Array.isArray(data.actions) ? data.actions : [], disabled_actions: Array.isArray(data.disabled_actions) ? data.disabled_actions : [] };
 }
