@@ -787,7 +787,7 @@ export async function saveComputation({ learnerId, hint = null, callCapability }
   const { count } = await edu().from("agent_tools").select("id", { count: "exact", head: true }).eq("owner_id", learnerId).in("status", ["active", "disabled"]);
   if ((count || 0) >= LIMITS.maxTools) return { status: "full", error: `The learner already has ${LIMITS.maxTools} tools — one must be removed in Settings before another can be saved.` };
   const ctx = { learnerId, callCapability, audience: "learner" };
-  const v = validateDefinition(d.definition, d.params_schema || {}, { audience: "learner", learnerId, assume: [] });
+  const v = await validateDefinition(d.definition, d.params_schema || {}, { audience: "learner", learnerId, assume: [] });
   if (!v.ok) return { status: "stale", error: "That computation can no longer be saved — what it reads has changed. Build it again with create_tool." };
   const check = await verifyTool(d.definition, d.params_schema || {}, d.samples || [], ctx);
   if (check.verdict !== "pass") return { status: "stale", error: "That computation no longer checks out — build it again with create_tool." };

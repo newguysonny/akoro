@@ -56,6 +56,10 @@ test("the trace claims 'Saved a tool' only for a saved outcome", () => {
   assert.equal(chatToolChange("save_computation", { status: "saved", label: "Goals completion rate" })?.label, "Saved a tool");
 });
 
+test("saveComputation awaits validateDefinition (it is async — an un-awaited Promise reads as stale)", () => {
+  assert.match(pipeline, /const v = await validateDefinition\(d\.definition/);
+});
+
 test("saveComputation saves the stashed computation — re-verified, never rebuilt", () => {
   assert.match(pipeline, /export async function saveComputation/);
   assert.match(pipeline, /\.eq\("outcome", "answered"\)/);
