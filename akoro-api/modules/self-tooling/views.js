@@ -31,7 +31,7 @@ export const DATA_VIEWS = Object.freeze({
     fields: { title: text({ sort: false }), priority: text(), status: text(), task_type: text(), due_at: time(), completed_at: time(), created_at: time() },
   },
   my_goals: {
-    description: "The learner's own goals: title, category, target date, exam, status.",
+    description: "The learner's own goals: title, category, target date, exam, status. Status is one of active | paused | achieved | dismissed. A goal counts as completed ONLY when its status is 'achieved' — there is no 'completed' status and no completed date or flag in this view; 'dismissed' means given up, not completed.",
     keywords: ["goal", "aim", "target", "achieve"],
     scope: "self", source: { schema: "edu", table: "learner_goals", owner: "user_id" }, ref: "id",
     fields: { title: text({ sort: false }), category: text(), metric: text(), target_date: date(), exam: text(), status: text(), source: text(), created_at: time() },

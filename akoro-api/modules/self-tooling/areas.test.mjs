@@ -8,7 +8,7 @@ import "../../test-env.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { VIEW_AREA, capabilityArea, deriveToolArea } from "./areas.js";
-import { DATA_VIEWS } from "./views.js";
+import { DATA_VIEWS, describeView } from "./views.js";
 import { AREAS } from "../agent-capabilities/examples.js";
 
 test("every Data View has exactly one curated area, and every area used exists", () => {
@@ -42,4 +42,11 @@ test("primary = the main read (last view read); the write's area is secondary", 
   // Nothing readable → the write's area, else "other". Never invented.
   assert.equal(deriveToolArea({ views: [], capabilities: ["tasks.delete"] }).area, "plans");
   assert.equal(deriveToolArea({}).area, "other");
+});
+
+test("my_goals pins what 'completed' means (status 'achieved' — there is no 'completed' status)", () => {
+  const d = DATA_VIEWS.my_goals.description;
+  assert.match(d, /achieved/);
+  assert.match(d, /no 'completed' status/);
+  assert.match(describeView("my_goals", DATA_VIEWS.my_goals).description, /achieved/);
 });
