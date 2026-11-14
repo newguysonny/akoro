@@ -38,7 +38,7 @@ export default function ConfirmChangeCard({ confirm, onDone = null }) {
       // card is not kept. No client-driven continuation is needed.
       const r = unwrap(await apiPost(`/api/self-tooling/confirmations/${state.confirmationId}/${what}`, {}));
       setState((s) => ({ ...s, ...r }));
-      if (onDone) onDone(what === 'confirm' ? (state.kind === 'permission' ? 'approved' : 'confirmed') : 'rejected', { ...state, ...r });
+      if (onDone) onDone(what === 'confirm' ? ((state.kind === 'permission' || state.kind === 'build') ? 'approved' : 'confirmed') : 'rejected', { ...state, ...r });
     } catch (e) { setErr(e?.message || 'Could not do that.'); }
     finally { setBusy(false); }
   };
@@ -46,6 +46,7 @@ export default function ConfirmChangeCard({ confirm, onDone = null }) {
   const items = state.items || [];
   const result = state.result;
   if (state.kind === 'permission') return <PermissionCard state={state} expired={expired} busy={busy} err={err} act={act} />;
+  if (state.kind === 'build') return <BuildCard state={state} expired={expired} busy={busy} err={err} act={act} />;
   return (
     <div style={{ marginTop: 10, padding: '12px 13px', borderRadius: 14, background: 'var(--ak-surface)', border: `1px solid ${state.status === 'pending' && !expired ? `${BRAND}55` : 'var(--ak-border)'}`, fontFamily: NUNITO }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -115,6 +116,47 @@ function PermissionCard({ state, expired, busy, err, act }) {
           {built ? `Approved — “${result.label || state.title}” is ${state.drafted ? 'on' : 'built'} and saved in your tools.`
             : state.status === 'consumed' ? `Approved, but it couldn't be built: ${result?.reason || 'try asking again'}.`
               : state.status === 'rejected' ? (state.drafted ? 'Not now — the draft was discarded.' : 'Not allowed — nothing was built.') : 'Expired — ask your agent again.'}
+        </div>
+      )}
+      {err && <div style={{ fontSize: 12, fontWeight: 800, color: '#EF4444', marginTop: 6 }}>{err}</div>}
+    </div>
+  );
+}
+
+function BuildCard({ state, expired, busy, err, act }) {
+  const result = state.result;
+  const pending = state.status === 'pending' && !expired;
+  const kept = state.status === 'consumed' && result?.status === 'created';
+  const items = state.items || [];
+  return (
+    <div style={{ marginTop: 10, padding: '12px 13px', borderRadius: 14, background: 'var(--ak-surface)', border: `1px solid ${pending ? `${BRAND}55` : 'var(--ak-border)'}`, fontFamily: NUNITO }} data-build-card="">
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ width: 30, height: 30, borderRadius: 10, background: `${BRAND}12`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <Icon name="ti-tool" size={16} color={BRAND} />
+        </span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 13.5, fontWeight: 900, color: 'var(--ak-text)' }}>{`Keep “${state.title || 'your new tool'}”?`}</div>
+          <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--ak-text-muted)' }}>Your agent built this tool to answer you. It&apos;s off until you allow it.</div>
+        </div>
+      </div>
+      {pending && <>
+        {state.goal && <div style={{ marginTop: 9, fontSize: 12.5, fontWeight: 700, color: 'var(--ak-text)', lineHeight: 1.5 }}>{state.goal}</div>}
+        <div style={{ marginTop: 8, fontSize: 11.5, fontWeight: 800, color: 'var(--ak-text-muted)' }}>{state.writes ? 'Right now it would change:' : (items.length ? 'It just answered:' : 'Nothing matched right now.')}</div>
+        {items.length > 0 && (
+          <ul style={{ margin: '4px 0 0', paddingLeft: 18, fontSize: 12.5, fontWeight: 700, color: 'var(--ak-text)', lineHeight: 1.6 }}>
+            {items.slice(0, 20).map((it, i) => <li key={i}>{it}</li>)}
+            {state.more > 0 && <li style={{ color: 'var(--ak-text-muted)' }}>…and {state.more} more</li>}
+          </ul>
+        )}
+        <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--ak-text-muted)', marginTop: 8 }}>{state.action || 'It only reads your own data.'}</div>
+        <ApprovalButtons busy={busy} onAllow={() => act('confirm')} onReject={() => act('reject')} />
+      </>}
+      {!pending && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 9, fontSize: 12, fontWeight: 800, color: kept ? '#10B981' : 'var(--ak-text-muted)' }}>
+          <Icon name={kept ? 'ti-circle-check' : 'ti-circle-x'} size={14} />
+          {kept ? `Kept — “${result.label || state.title}” is saved in your tools.`
+            : state.status === 'consumed' ? `Approved, but it couldn't be switched on: ${result?.reason || 'try asking again'}.`
+              : state.status === 'rejected' ? 'Not kept — the draft was discarded.' : 'Expired — ask your agent again.'}
         </div>
       )}
       {err && <div style={{ fontSize: 12, fontWeight: 800, color: '#EF4444', marginTop: 6 }}>{err}</div>}

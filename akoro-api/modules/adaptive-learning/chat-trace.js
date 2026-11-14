@@ -217,7 +217,7 @@ export function chatToolChange(tool, toolResult, input = {}) {
   if (toolResult.success === false || toolResult.error || toolResult.needsClarification || toolResult.disabled || toolResult.enabled === false) return null;
   // create_tool: "Built a tool" only when one was built; a draft waiting for Approve says so, anything else changed nothing.
   if (tool === "create_tool" && toolResult.status !== "created") {
-    return toolResult.status === "needs_permission" && !toolResult.dryRun ? { label: toolResult.drafted ? "Drafted a tool — waiting for your OK" : "Asked to build a tool — waiting for your OK", title: clip(toolResult.label || "", ITEM_CHARS), fields: [] } : null;
+    return (toolResult.status === "needs_permission" || toolResult.status === "needs_consent") && !toolResult.dryRun ? { label: toolResult.drafted ? "Drafted a tool — waiting for your OK" : "Asked to build a tool — waiting for your OK", title: clip(toolResult.label || "", ITEM_CHARS), fields: [] } : null;
   }
   // Read-only actions of the multi-action tools change nothing — no "Updated…" row.
   if (["study_buddy", "daily_challenge", "revision_circle"].includes(String(tool)) && ["list", "status", "ranking", "search", undefined, null, ""].includes(input?.action)) return null;

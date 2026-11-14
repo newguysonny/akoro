@@ -15,8 +15,8 @@ import { validateDefinition, runDefinition } from "./interpreters.js";
 import { validateParams, coerceInput, paramProps, wellFormedParams } from "./bind.js";
 import { buildDefinition, registrySlice } from "./builder.js";
 import { createExpect, repeatVerdict } from "../verify/assertions.js";
-import { escalate } from "./escalation.js";
-import { proposeWrite, proposePermission } from "./confirmations.js";
+import { escalate, rowsText } from "./escalation.js";
+import { proposeWrite, proposePermission, proposeBuild } from "./confirmations.js";
 import { codeEnabled } from "./sandbox/index.js";
 import { basisColumns, currentActionBasis } from "../agent-runtime/actionBasis.js";
 import { isDocumentGoal, similarGoal, goalTokens } from "./toolSimilarity.js";
@@ -237,7 +237,7 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
   async function buildDomain(spec) {
     // Add the requested breakdown as a NEW action (the generic source handles any
     // by_<field>), then re-verify the WHOLE action set before saving.
-    const { data: existing } = await edu().from("agent_tools").select("id, status, params_schema")
+    const { data: existing } = await edu().from("agent_tools").select("id, status, params_schema, verification")
       .eq("owner_id", learnerId).eq("name", spec.name).in("status", ["active", "disabled"]).maybeSingle();
     const have = new Set([...(existing?.params_schema?.action?.enum || []), ...carriedActions(spec.view)]);
     const extra = byActionForGoal(goal, spec.view) || aggregateForGoal(goal, spec.view);
@@ -261,6 +261,34 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
       return { status: "created", dryRun: true, tool: spec.name, label: spec.label, mode: "code", actions, verified: true,
         note: `DRY RUN — verified every action (${actions.join(", ")}) but did not save.` };
     }
+    const action = inferAction(goal, actions, spec.view);
+    const out = await tryRun(def, spec2.params, { action }, ctxD);
+    // The build-consent gate: a BRAND-NEW domain tool is only drafted — saved
+    // OFF with a card asking the learner to keep it. Extending a tool the
+    // learner already has active keeps the consent they already gave; an
+    // unapproved draft of it is simply replaced by the new draft.
+    const existingDraft = existing?.status === "disabled" && !!existing?.verification?.awaitingBuild;
+    if (audience === "learner" && !resumed && (!existing || existingDraft)) {
+      if (existing?.id) await edu().from("agent_tools").update({ status: "archived", updated_at: new Date().toISOString() }).eq("id", existing.id).eq("owner_id", learnerId);
+      const { data: row, error } = await edu().from("agent_tools").insert({
+        owner_id: learnerId, scope: "learner", audience, name: spec.name, label: spec.label,
+        goal: `${spec.label}: ${actions.join(", ")}`, mode: "code", definition: def, params_schema: spec2.params,
+        capabilities: [], views: [spec.view], domain: spec.view, actions,
+        verification: { verdict: "pass", at: new Date().toISOString(), assertions: checks.map((c) => ({ name: `action:${c.action}`, passed: c.ok })), samples: [], awaitingBuild: true },
+        status: "disabled", usage_count: 0,
+      }).select("id").single();
+      if (error) return finish("failed", reject(`Couldn't save the tool: ${error.message}`));
+      ev.tool_id = row.id; ev.mode = "code"; ev.capabilities = [];
+      ev.stages_tried.push("consent");
+      const card = await proposeBuild({ learnerId, conversationId, toolId: row.id,
+        proposed: { name: spec.name, label: spec.label, goal, run: { action } },
+        does: "It only reads your own data.", items: out.ok ? rowsText(out.rows || []).split("\n").map((s) => s.replace(/^• /, "")) : [] });
+      await finish("escalated", {});
+      return { status: "needs_consent", drafted: true, tool: spec.name, label: spec.label, mode: "code", actions,
+        confirmation: card.confirmation,
+        result: out.ok ? { rows: out.rows, total: out.total } : { error: out.error },
+        note: `The tool is built and checked, but it is NOT on: it is drafted and OFF, and a card is asking the learner to Keep it. ` + "`result`" + ` is its answer for this request — use it now, and be honest about anything it cannot do. In your own words: say you've built "${spec.label}", what it does, and that tapping Keep on the card saves it in their tools; if they want it different, you'll rebuild it. Never say it is saved or on.` };
+    }
     // Retire ONLY after verification passes: a rejected rebuild must never take
     // the learner's working domain tool away.
     if (existing?.id && !replaceRaw) {
@@ -278,8 +306,6 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
     }).select("id").single();
     if (error) return finish("failed", reject(`Couldn't save the tool: ${error.message}`));
     ev.tool_id = row.id; ev.mode = "code"; ev.capabilities = [];
-    const action = inferAction(goal, actions, spec.view);
-    const out = await tryRun(def, spec2.params, { action }, ctxD);
     await finish("created", {});
     // Say what changed and that nothing regressed — the model repeats this to the
     // learner in plain words instead of a bare "Saved".
@@ -381,6 +407,8 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
     // A draft of this name the learner never approved (the card expired) makes way for this one.
     await edu().from("agent_tools").update({ status: "archived", updated_at: new Date().toISOString() })
       .eq("owner_id", learnerId).eq("name", name).eq("status", "disabled").not("verification->awaitingPermission", "is", null);
+    await edu().from("agent_tools").update({ status: "archived", updated_at: new Date().toISOString() })
+      .eq("owner_id", learnerId).eq("name", name).eq("status", "disabled").not("verification->awaitingBuild", "is", null);
     const { data: mine } = await edu().from("agent_tools").select("name").eq("owner_id", learnerId).in("status", ["active", "disabled"]).limit(LIMITS.maxTools + 1);
     if ((mine || []).some((t) => t.name === name)) return reject(`You already have a tool called ${name} — call it, or pick another name.`);
     if ((mine || []).length >= LIMITS.maxTools) return finish("rejected", reject(`You have ${LIMITS.maxTools} tools — delete one in Settings → Agent → My tools first.`));
@@ -539,6 +567,27 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
     return { ...out, tool: name, label, drafted: true };
   }
 
+  /** Save a brand-new built tool switched OFF and ask the learner on a card to keep it. */
+  async function draftBuildAndAsk({ def, runNow }) {
+    const { data: row, error } = await edu().from("agent_tools").insert({ owner_id: learnerId, scope: "learner", audience, ...def,
+      domain: (def.views || [])[0] || null, actions: def.params_schema?.action?.enum || null,
+      status: "disabled", verification: { ...def.verification, awaitingBuild: true }, usage_count: 0 }).select("id").single();
+    if (error) return finish("failed", reject(`Couldn't save the draft: ${error.message}`));
+    ev.tool_id = row.id; ev.mode = def.mode; ev.capabilities = def.capabilities;
+    ev.stages_tried.push("consent");
+    const items = runNow.ok ? (runNow.write ? (runNow.write.targets || []).map((t) => t.label)
+      : rowsText(runNow.rows || []).split("\n").map((s) => s.replace(/^• /, ""))) : [];
+    const card = await proposeBuild({ learnerId, conversationId, toolId: row.id,
+      proposed: { name, label, goal, run: input?.run && typeof input.run === "object" ? input.run : {} },
+      does: runNow.write ? "It can change your data — only ever after you confirm each change on a card." : "It only reads your own data.",
+      writes: !!runNow.write, items, more: runNow.write?.more || 0 });
+    await finish("escalated", {});
+    return { status: "needs_consent", drafted: true, tool: name, label, mode: def.mode, confirmation: card.confirmation,
+      result: runNow.ok ? (runNow.write ? await writeOutcome({ learnerId, dry: true, tool: { label }, write: runNow.write })
+        : { rows: runNow.rows, total: runNow.total, truncated: runNow.truncated }) : { error: runNow.error },
+      note: `The tool is built and checked, but it is NOT on: it is drafted and OFF, and a card is asking the learner to Keep it. ` + "`result`" + ` is its answer for this request — use it now, and be honest about anything it cannot do. In your own words: say you've built "${label}", what it does, and that tapping Keep on the card saves it in their tools; if they want it different — another grouping, range or field — say you'll rebuild it, and call create_tool again with the same name and ` + "`replace`" + ` set to "${name}". Never say it is saved or on.${droppedNote}` };
+  }
+
   async function register({ stage, built, v, check }) {
     ev.mode = stage;
     ev.capabilities = v.uses.capabilities;
@@ -555,6 +604,11 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
           : { rows: runNow.rows, total: runNow.total, truncated: runNow.truncated }) : { error: runNow.error },
         note: "DRY RUN — the tool was built and verified but NOT saved. Answer the learner from `result`." + droppedNote };
     }
+    // The build-consent gate: a brand-new learner tool is drafted OFF and the
+    // learner commits it on a card. The build above already ran and verified —
+    // it is the silent dry run that makes the card's ask honest. (Resumed
+    // builds were approved on a card or by an admin; draftCap has its own card.)
+    if (audience === "learner" && !resumed) return draftBuildAndAsk({ def, runNow });
     const { data: row, error } = await edu().from("agent_tools").insert({ owner_id: learnerId, scope: "learner", audience, ...def, domain: (def.views || [])[0] || null, actions: def.params_schema?.action?.enum || null, usage_count: runNow.ok ? 1 : 0, last_used_at: new Date().toISOString() }).select("id").single();
     if (error) return finish("failed", reject(`Couldn't save the tool: ${error.message}`));
     ev.tool_id = row.id;
@@ -596,6 +650,22 @@ export async function learnerToolDefs(learnerId, audience = "learner") {
   ]);
   const own = new Set((mine || []).map((t) => t.name));
   return [...(mine || []), ...(platform || []).filter((t) => !own.has(t.name))].map(toolDef);
+}
+
+/**
+ * Turn on a tool the learner kept on its build card (confirmations.confirmBuild):
+ * flips a build-consent draft (verification.awaitingBuild) to active and retires
+ * same-view domain siblings, exactly as a direct save would have. → the tool
+ * row, or null when the draft is gone or was never awaiting consent.
+ */
+export async function activateBuiltTool(learnerId, toolId) {
+  const { data: t } = await edu().from("agent_tools").select("id, name, label, views, params_schema, verification")
+    .eq("id", toolId).eq("owner_id", learnerId).eq("status", "disabled").maybeSingle();
+  if (!t?.verification?.awaitingBuild) return null;
+  const { awaitingBuild, ...kept } = t.verification;
+  await edu().from("agent_tools").update({ status: "active", verification: { ...kept, approvedAt: new Date().toISOString() }, updated_at: new Date().toISOString() }).eq("id", t.id);
+  if (t.params_schema?.action?.enum && t.views?.[0]) await retireSameView(learnerId, t.views[0], t.name);
+  return t;
 }
 
 /** Run a saved tool — the learner's own, else a platform one. → result, or null when there's no such tool. */

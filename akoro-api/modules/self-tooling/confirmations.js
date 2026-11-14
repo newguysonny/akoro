@@ -33,11 +33,11 @@ const toLearner = (description) => String(description || "").replace(/\bthe lear
 
 const publicConfirmation = (row) => ({
   confirmationId: row.id,
-  kind: row.tool_arguments?.kind === "permission" ? "permission" : "change",
+  kind: row.tool_arguments?.kind === "permission" ? "permission" : row.tool_arguments?.kind === "build" ? "build" : "change",
   // The chat it was made in: the app shows a waiting change only there.
   sessionId: row.session_id && row.session_id !== "none" ? row.session_id : null,
   // A permission card for a drafted tool: its goal, and the items are what it would change right now.
-  ...(row.tool_arguments?.kind === "permission" ? { goal: row.preview?.goal || null, drafted: !!row.tool_arguments?.toolId } : {}),
+  ...((row.tool_arguments?.kind === "permission" || row.tool_arguments?.kind === "build") ? { goal: row.preview?.goal || null, drafted: !!row.tool_arguments?.toolId, ...(row.tool_arguments?.kind === "build" ? { writes: !!row.preview?.writes } : {}) } : {}),
   status: row.status,
   title: row.preview?.title || null,
   action: row.preview?.action || null,
@@ -164,6 +164,7 @@ export async function confirmWrite({ id, userId, callTool, buildTool = null, pos
     throw httpError(410, "This confirmation expired — ask your agent again.");
   }
   if (row.tool_arguments?.kind === "permission") return confirmPermission(row, { userId, buildTool, postIntoChat, toolDeps });
+  if (row.tool_arguments?.kind === "build") return confirmBuild(row, { userId, postIntoChat, toolDeps });
   const { cap, refs, args: values = null } = row.tool_arguments || {};
   const runner = WRITE_RUNNERS[cap];
   // Re-check BEFORE claiming: a revoked grant means nothing is changed.
@@ -209,7 +210,7 @@ export async function rejectWrite({ id, userId, postIntoChat = null }) {
   const { data } = await edu().from(TABLE).update({ status: "rejected", rejected_at: new Date().toISOString(), updated_at: new Date().toISOString() })
     .eq("id", id).eq("principal_id", userId).eq("status", "pending").select("*").maybeSingle();
   // Not now on a drafted tool: the draft goes (it was never on).
-  const draft = row.tool_arguments?.kind === "permission" ? row.tool_arguments.toolId : null;
+  const draft = (row.tool_arguments?.kind === "permission" || row.tool_arguments?.kind === "build") ? row.tool_arguments.toolId : null;
   if (data && draft) await edu().from("agent_tools").update({ status: "archived", updated_at: new Date().toISOString() }).eq("id", draft).eq("owner_id", userId).eq("status", "disabled");
   // Server-side continuation on decline too: acknowledge it in the chat.
   if (postIntoChat && data) {
@@ -219,6 +220,91 @@ export async function rejectWrite({ id, userId, postIntoChat = null }) {
     kickDecisionFollowUp({ userId, conversationId, outcomeText: "I declined the change; nothing was altered.", confirmationId: id });
   }
   return publicConfirmation(data || row);
+}
+
+/**
+ * A brand-new tool the agent built is saved OFF (pipeline's build-consent
+ * gate): this card is where the learner commits it. The tool was already
+ * built and verified — the dry run behind the card is what it answered with —
+ * so the preview shows the goal and real sample lines, and Keep simply turns
+ * the draft on. Nothing about the learner's data changes by keeping a reader;
+ * a tool that can write still proposes every change on its own card.
+ */
+export async function proposeBuild({ learnerId, conversationId = null, proposed, toolId, does = null, writes = false, items = [], more = 0 }) {
+  if (!toolId) throw new Error("a build card needs its drafted tool");
+  const args = { kind: "build", toolId, proposed };
+  const digest = agentToolArgumentsDigest({ kind: "build", name: proposed.name, goal: proposed.goal, toolId });
+  const bucket = Math.floor(Date.now() / PERMISSION_TTL_MS);
+  const preview = { title: proposed.label, action: does || "It only reads your own data.", goal: proposed.goal, writes: !!writes,
+    items: (items || []).slice(0, 20), more: Math.max(0, (items || []).length - 20) + (more || 0) };
+  const row = {
+    id: randomUUID(), capability_jti: JTI, session_id: conversationId || "none", principal_id: learnerId,
+    tool_name: `selftool:build:${proposed.name}`, tool_arguments: args, arguments_digest: digest, preview,
+    proposal_key: createHash("sha256").update(`${learnerId}:build:${digest}:${bucket}`).digest("hex"),
+    status: "pending", expires_at: new Date(Date.now() + PERMISSION_TTL_MS).toISOString(),
+    ...basisColumns(currentActionBasis() || { basis: "explicit" }),
+  };
+  let { data, error } = await edu().from(TABLE).insert(row).select("*").maybeSingle();
+  if (error?.code === "23505") {
+    ({ data, error } = await edu().from(TABLE).select("*").eq("capability_jti", JTI).eq("proposal_key", row.proposal_key).maybeSingle());
+    if (!error && data && data.status !== "pending") {
+      ({ data, error } = await edu().from(TABLE).insert({ ...row, id: randomUUID(), proposal_key: `${row.proposal_key}:${randomUUID()}` }).select("*").maybeSingle());
+    }
+  }
+  if (error || !data) throw new Error("couldn't prepare the build card");
+  return {
+    status: "needs_consent", confirmation: publicConfirmation(data),
+    note: `The tool "${proposed.label}" is built and checked but OFF — the learner sees a card asking them to Keep it, and only their tap saves it in their tools. In your own words: you've built it, here's what it does, tap Keep on the card to save it. Never say it's saved or on, and never approve for them.`,
+  };
+}
+
+/**
+ * The learner tapped Keep on a build card: turn the drafted tool on (the
+ * activation lives in pipeline, which owns the tool lifecycle), then run it
+ * once as this learner — a write inside it still proposes its own change
+ * card, so keeping a tool never changes data by itself.
+ */
+async function confirmBuild(row, { userId, postIntoChat, toolDeps }) {
+  const { proposed = {}, toolId } = row.tool_arguments || {};
+  if (!toolId) {
+    await edu().from(TABLE).update({ status: "rejected", rejected_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", row.id).eq("status", "pending");
+    throw httpError(403, "This card has no tool to keep, so nothing was saved.");
+  }
+  const now = new Date().toISOString();
+  const { data: claimed, error } = await edu().from(TABLE).update({ status: "consumed", confirmed_at: now, consumed_at: now, updated_at: now })
+    .eq("id", row.id).eq("principal_id", userId).eq("status", "pending").select("*").maybeSingle();
+  if (error) throw new Error("couldn't approve");
+  if (!claimed) throw httpError(409, "Already handled");
+  const conversationId = row.session_id && row.session_id !== "none" ? row.session_id : null;
+  let out;
+  try {
+    const pipe = await import("./pipeline.js");
+    const activate = toolDeps?.activateTool || pipe.activateBuiltTool;
+    const runTool = toolDeps?.runTool || pipe.runLearnerTool;
+    const t = await activate(userId, toolId);
+    if (!t) out = { status: "failed", reason: "the draft is gone — ask me to build it again." };
+    else {
+      try {
+        const ran = await runTool(t.name, proposed.run && typeof proposed.run === "object" ? proposed.run : {}, userId, { callCapability: toolDeps?.callCapability, conversationId });
+        out = { status: "created", tool: t.name, label: t.label, result: ran || {} };
+      } catch (e) { out = { status: "created", tool: t.name, label: t.label, result: { error: e.message } }; }
+    }
+  } catch (e) { out = { status: "failed", reason: e.message }; }
+  const next = out?.result?.confirmation || null;
+  const result = { status: out?.status || "failed", tool: out?.tool || null, label: out?.label || proposed.label || null,
+    reason: out?.status === "created" ? null : String(out?.reason || "something went wrong").slice(0, 240),
+    found: next ? (next.items || []).length : null, at: new Date().toISOString() };
+  await edu().from(TABLE).update({ preview: { ...claimed.preview, result }, updated_at: new Date().toISOString() }).eq("id", row.id);
+  if (postIntoChat) {
+    const text = out?.status !== "created"
+      ? `You kept it, but I couldn't switch "${result.label}" on: ${result.reason} Ask me again and I'll rebuild it.`
+      : next ? `Thanks — "${result.label}" is saved in your tools. It would change: ${(next.items || []).slice(0, 5).join(", ")}${(next.items || []).length > 5 ? "…" : ""}. Nothing has changed yet — confirm on the card when you're ready.`
+        : `Thanks — "${result.label}" is saved in your tools, ready whenever you ask.`;
+    await postIntoChat({ userId, conversationId, title: result.label || "Your tool", text, kind: "agent_tool_built",
+      messageId: `00000000-0000-4000-8000-${createHash("sha256").update(row.id).digest("hex").slice(0, 12)}` }).catch(() => {});
+    kickDecisionFollowUp({ userId, conversationId, outcomeText: `I approved keeping the tool "${result.label || "the tool"}". ${text}`, confirmationId: row.id });
+  }
+  return { ...publicConfirmation({ ...claimed, preview: { ...claimed.preview, result } }), next };
 }
 
 /**
