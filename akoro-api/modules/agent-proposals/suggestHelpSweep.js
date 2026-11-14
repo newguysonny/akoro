@@ -26,15 +26,16 @@ const MAX_SESSIONS = 3;
 const MAX_MESSAGES = 16;
 
 export const SUGGEST_HELP_SWEEP_SYSTEM = [
-  "You review a learner's recent chats with their study agent and decide whether ONE thing is worth opening a brand-new chat about — a special, priority suggestion that will appear as its own conversation at the top of their chats.",
-  "File ONLY when you spot one of these in what actually came up:",
-  "1. Something noticed in passing during another job — a weak topic, a misconception, or a pattern in their work.",
-  "2. Something valuable but not for now — a future exam, a next-term topic, a follow-up that belongs later.",
-  "3. Something the learner put off, declined for now, or keeps coming back to — a need that persists.",
-  "4. A goal worth aiming at, suggested by their progress or plans.",
-  "Do NOT file for: anything the learner already asked the agent to do (it was handled in the chat), small talk, anything the conversation itself already resolved, or anything vague.",
-  "Most nights there is nothing — returning {\"file\": false} is the normal, correct answer. Never invent a need the chat does not show.",
-  "When you file, the title is concise and action-led (max 120 characters) and the rationale is one or two sentences grounded in what the learner actually said or did (max 280 characters), written as the agent speaking directly to the learner — 'you said…', 'your exams…' — never about them in the third person.",
+  "You ANALYSE a learner's day — their chats with their study agent and the facts from their learning record — to find the ONE most useful thing to open a brand-new chat about: a special, priority suggestion that appears as its own conversation at the top of their chats.",
+  "Mine everything you are given. Look for:",
+  "1. A struggle, mistake pattern, or misconception visible in the chats or in their weak concepts — especially one the learner has not noticed themselves, or keeps repeating.",
+  "2. A topic they circled back to, started and dropped, or left unresolved when the chat moved on.",
+  "3. A connection across the evidence: a goal with a deadline plus a weak topic in the same subject; an exam on the record plus no plan for it; a fading topic they have not reviewed.",
+  "4. Something valuable but not for now — a future exam, a next-term topic, a follow-up that belongs later.",
+  "5. Something the learner put off, declined for now, or keeps coming back to — a need that persists.",
+  "6. A goal worth aiming at, suggested by their progress or plans.",
+  "Do NOT file for: anything the learner already asked the agent to do and it handled, small talk, or anything the conversation itself already resolved. Look properly before concluding there is nothing — most days contain at least one thing worth their attention; return {\"file\": false} only when the evidence truly shows none.",
+  "When you file, the title is concise and action-led (max 120 characters) and the rationale is one or two sentences grounded in the specific evidence you found — what they said, did, or scored (max 280 characters), written as the agent speaking directly to the learner — 'you said…', 'your exams…' — never about them in the third person.",
   UNTRUSTED_SYSTEM_RULE,
   "Reply with ONLY this JSON: {\"file\": true, \"kind\": \"task\" | \"goal\" | \"conversation\", \"title\": \"...\", \"rationale\": \"...\"} or {\"file\": false}.",
 ].join("\n");
@@ -75,13 +76,33 @@ async function transcriptFor(userId, sinceIso) {
   return blocks.join("\n\n");
 }
 
+/** The learner's record as a short digest for the analysis (the planner's
+ * own signal gather, reused). Empty string when it cannot be built — the
+ * sweep still works from the chats alone. */
+async function factsDigest(userId) {
+  try {
+    const { gatherSignals } = await import("../autonomy/cycle.js");
+    const s = await gatherSignals(userId);
+    const lines = [];
+    const weak = (s.weakConcepts || []).map((w) => `${w.concept_catalog?.title || "a concept"} (${w.concept_catalog?.subject || "general"}, mastery ${Math.round((w.mastery ?? 0) * 100)}%${w.misconception_active ? ", active misconception" : ""})`);
+    if (weak.length) lines.push(`Weak concepts from their work: ${weak.join("; ")}`);
+    const goals = (s.goals || []).map((g) => `${g.title}${g.target_date ? ` (target ${String(g.target_date).slice(0, 10)})` : ""}`);
+    if (goals.length) lines.push(`Active goals: ${goals.join("; ")}`);
+    const decay = (s.decayAlerts || []).map((d) => `${d.subject} — ${d.topic}`);
+    if (decay.length) lines.push(`Topics flagged as fading, not yet reviewed: ${decay.join("; ")}`);
+    if (s.pendingTasks?.length) lines.push(`Open tasks: ${s.pendingTasks.length} (e.g. ${s.pendingTasks.slice(0, 3).map((t) => t.title).join("; ")})`);
+    return lines.join("\n");
+  } catch { return ""; }
+}
+
 /** One learner's pass. → "filed" | "none" | "duplicate" | "paced" | "quiet-day" */
 export async function reviewLearnerChats(userId, { now = new Date() } = {}) {
   if (await suggestHelpChatSince(userId, new Date(now.getTime() - 20 * 3600 * 1000).toISOString())) return "paced";
   const transcript = await transcriptFor(userId, new Date(now.getTime() - DAY_MS).toISOString());
   if (!transcript) return "quiet-day";
+  const facts = await factsDigest(userId);
   const reply = await llmComplete(
-    `The learner's chats from the last 24 hours:\n\n${untrusted(transcript, { source: "learner chat transcript", limit: 9000 })}`,
+    `${facts ? `Facts from the learner's record right now:\n${untrusted(facts, { source: "learner record summary", limit: 3000 })}\n\n` : ""}The learner's chats from the last 24 hours:\n\n${untrusted(transcript, { source: "learner chat transcript", limit: 9000 })}`,
     { system: SUGGEST_HELP_SWEEP_SYSTEM, maxTokens: 400, temperature: 0.3, userId, feature: "suggest_help_sweep" },
   );
   const verdict = parseSweepVerdict(reply);
