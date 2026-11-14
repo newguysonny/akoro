@@ -790,7 +790,7 @@ export async function saveComputation({ learnerId, hint = null, callCapability }
   const v = await validateDefinition(d.definition, d.params_schema || {}, { audience: "learner", learnerId, assume: [] });
   if (!v.ok) return { status: "stale", error: "That computation can no longer be saved — what it reads has changed. Build it again with create_tool." };
   const check = await verifyTool(d.definition, d.params_schema || {}, d.samples || [], ctx);
-  if (check.verdict !== "pass") return { status: "stale", error: "That computation no longer checks out — build it again with create_tool." };
+  if (check.verdict !== "PASS") return { status: "stale", error: "That computation no longer checks out — build it again with create_tool." };
   const def = { name: d.name, label: d.label, goal: d.goal, mode: d.mode || d.definition?.kind || "spec",
     definition: d.definition, params_schema: d.params_schema || {},
     capabilities: v.uses.capabilities, views: [...new Set(v.uses.views)],

@@ -60,6 +60,11 @@ test("saveComputation awaits validateDefinition (it is async — an un-awaited P
   assert.match(pipeline, /const v = await validateDefinition\(d\.definition/);
 });
 
+test("saveComputation compares the verify verdict in the case verifyTool returns (PASS)", () => {
+  assert.match(pipeline, /check\.verdict !== "PASS"/);
+  assert.doesNotMatch(pipeline, /check\.verdict !== "pass"/);
+});
+
 test("saveComputation saves the stashed computation — re-verified, never rebuilt", () => {
   assert.match(pipeline, /export async function saveComputation/);
   assert.match(pipeline, /\.eq\("outcome", "answered"\)/);
