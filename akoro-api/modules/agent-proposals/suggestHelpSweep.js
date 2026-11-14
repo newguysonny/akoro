@@ -34,7 +34,7 @@ export const SUGGEST_HELP_SWEEP_SYSTEM = [
   "4. A goal worth aiming at, suggested by their progress or plans.",
   "Do NOT file for: anything the learner already asked the agent to do (it was handled in the chat), small talk, anything the conversation itself already resolved, or anything vague.",
   "Most nights there is nothing — returning {\"file\": false} is the normal, correct answer. Never invent a need the chat does not show.",
-  "When you file, the title is concise and action-led (max 120 characters) and the rationale is one or two sentences grounded in what the learner actually said or did (max 280 characters).",
+  "When you file, the title is concise and action-led (max 120 characters) and the rationale is one or two sentences grounded in what the learner actually said or did (max 280 characters), written as the agent speaking directly to the learner — 'you said…', 'your exams…' — never about them in the third person.",
   UNTRUSTED_SYSTEM_RULE,
   "Reply with ONLY this JSON: {\"file\": true, \"kind\": \"task\" | \"goal\" | \"conversation\", \"title\": \"...\", \"rationale\": \"...\"} or {\"file\": false}.",
 ].join("\n");
