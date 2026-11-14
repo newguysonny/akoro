@@ -67,9 +67,13 @@ export function armSweep() {
   // Daily (04:10 UTC): learner tools unused for 60 days are archived (S4).
   const archive = async () => (await import("./pipeline.js")).archiveUnusedTools(Number(process.env.SELF_TOOLING_ARCHIVE_DAYS) || 60);
   registerTick("self-tool-archive", archive);
+  // Daily (04:25 UTC): repeated one-off computations become tool suggestions.
+  const toolIdeas = async () => (await import("./toolSuggestions.js")).sweepRepeatedComputations();
+  registerTick("self-tool-suggestions", toolIdeas);
   if (cronSource() !== "cloudflare") {
     cron.schedule("*/15 * * * *", () => { sweepResumes().catch((e) => console.warn("[self-tool-resumes] sweep failed:", e.message)); });
     cron.schedule("10 4 * * *", () => { archive().then((r) => r.archived && console.log(`[self-tooling] archived ${r.archived} unused tool(s)`)).catch((e) => console.warn("[self-tooling] archive failed:", e.message)); });
+    cron.schedule("25 4 * * *", () => { toolIdeas().then((r) => r.suggested && console.log(`[self-tooling] suggested ${r.suggested} repeated-computation tool(s)`)).catch((e) => console.warn("[self-tooling] tool suggestions failed:", e.message)); });
   }
 }
 
