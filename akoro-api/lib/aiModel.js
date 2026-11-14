@@ -37,7 +37,7 @@ export { InsufficientCoins };
 const providerOverrides = new AsyncLocalStorage();
 /** Run fn with { openai?, anthropic?, openai_compatible?, opencode? } adapters ({ create(params, reqOpts, entry) }) in place of the real ones. */
 /** Kinds worth trying on the fallback model (transport/quota, not a bad request). */
-const RETRYABLE = new Set(["rate_limited", "auth", "upstream_5xx", "timeout", "http_402", "http_429", "http_500", "http_502", "http_503", "http_504"]);
+const RETRYABLE = new Set(["rate_limited", "auth", "upstream_5xx", "timeout", "connection", "http_402", "http_429", "http_500", "http_502", "http_503", "http_504"]);
 function retryableFailure(err) {
   const kind = errorKindOf(err);
   return RETRYABLE.has(kind) || /rate.?limit|quota|balance|capacity|overload|insufficient/i.test(String(err?.message || ""));
@@ -292,6 +292,49 @@ async function meteredCreate(params = {}) {
       }
       if (!started) throw lastError;
     }
+
+    // A transport failure can also land AFTER the stream has opened — a
+    // gateway cutting a quota-exhausted stream, a dropped socket. That error
+    // surfaces mid-iteration, past the ladder above, and used to kill the
+    // reply outright ("connection dropped"). Until any content has flowed
+    // the reply can still be restarted on the next ladder model; once text
+    // is out, restarting would duplicate it, so the error stands.
+    const restartable = (async function* (first) {
+      let current = first;
+      let sawContent = false;
+      for (;;) {
+        try {
+          for await (const chunk of current) {
+            if (chunk?.choices?.[0]?.delta?.content) sawContent = true;
+            yield chunk;
+          }
+          return;
+        } catch (e) {
+          if (sawContent) throw e;
+          const ladder = entry && retryableFailure(e) ? fallbackLadder(entry, { role: params.__role || "chat", ROLES }) : [];
+          if (!ladder.length) throw e;
+          report(null, { streamed: true, ok: false, errorKind: errorKindOf(e) });
+          let hopped = false;
+          for (const target of ladder) {
+            console.warn(`[ai] ${entry.id} stream cut (${errorKindOf(e)}) — restarting on ${target.id}`);
+            try {
+              current = await serve(target, {
+                ...clean, model: target.apiModel,
+                ...(bills ? { stream_options: { include_usage: true, ...(clean.stream_options || {}) } } : {}),
+              }, reqOpts);
+              entry = target;
+              hopped = true;
+              break;
+            } catch (e2) {
+              report(null, { streamed: true, ok: false, errorKind: errorKindOf(e2), as: target.id });
+            }
+          }
+          if (!hopped) throw e;
+        }
+      }
+    })(source);
+    if (source?.controller) restartable.controller = source.controller;
+    source = restartable;
 
     const fallback = { prompt_tokens: estimateTokens(clean.messages), completion_tokens: Math.min(clean.max_tokens || 700, 700) };
     const metered = meterStreamUsage(source, (usage, ttfbMs) => {

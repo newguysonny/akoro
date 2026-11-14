@@ -30,6 +30,7 @@ export class ProviderUnavailableError extends Error {
     super(message);
     this.name = "ProviderUnavailableError";
     this.statusCode = 503;
+    this.status = 503; // alias: most error classifiers read .status, not .statusCode
     this.code = "provider_unavailable";
     this.expose = true;
     this.retryAfterSec = retryAfterSec;

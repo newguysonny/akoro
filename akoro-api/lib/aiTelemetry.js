@@ -100,11 +100,18 @@ export function recordAiCall({
 
 /** Coarse error label — the class of failure, never the message. */
 export function errorKindOf(err) {
-  const status = err?.status ?? err?.response?.status;
+  // SDK errors carry .status, axios errors .response.status, and our own
+  // typed breaker errors (ProviderUnavailableError) carry .statusCode —
+  // read all three, or a fail-fast 503 from an open breaker classifies as
+  // a bare "error" and the failover ladder in lib/aiModel.js never runs.
+  const status = err?.status ?? err?.response?.status ?? err?.statusCode;
   if (status === 429) return "rate_limited";
   if (status === 401 || status === 403) return "auth";
   if (status >= 500) return "upstream_5xx";
   if (err?.name === "AbortError") return "aborted";
   if (/timeout/i.test(err?.message ?? "")) return "timeout";
+  // Transport failures with no HTTP status at all: a dropped socket, a
+  // gateway cutting a stream mid-flight (the OpenAI SDK's APIConnectionError).
+  if (err?.name === "APIConnectionError" || err?.code === "ERR_STREAM_PREMATURE_CLOSE" || /connection|socket|econnreset|epipe|network|fetch failed|premature close/i.test(err?.message ?? "")) return "connection";
   return status ? `http_${status}` : "error";
 }
