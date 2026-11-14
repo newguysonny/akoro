@@ -41,6 +41,7 @@ export const AREA_KEYWORDS = Object.freeze({
   blogs: ["blog", "blogs", "publish", "post about", "article"],
   proactive: ["suggestion", "suggestions", "proposed", "you suggested", "while i was away", "auto reply", "autonomy"],
   building: ["tool", "tools", "build me", "make a tool", "save that", "keep that"],
+  support: ["bug", "report a bug", "bug report", "broken", "not working", "doesn't work", "glitch", "something's wrong", "something is wrong", "akoro support"],
   activities: ["activity", "activities", "assignment", "classwork", "homework"],
 });
 
