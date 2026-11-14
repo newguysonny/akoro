@@ -128,7 +128,7 @@ import { getLearnerProfileContext } from "./learner-profile-context.js";
 import { validateLearnerTaskInput } from "./learner-task-validation.js";
 import { listChats, readChat, postToChat, ownedChatId, searchChats } from "./chat-history-tools.js";
 import { schemaLookup } from "../self-tooling/registry.js";
-import { createTool, runLearnerTool, learnerToolDefs, forcedSelfTool } from "../self-tooling/pipeline.js";
+import { createTool, runLearnerTool, learnerToolDefs, forcedSelfTool, saveComputation } from "../self-tooling/pipeline.js";
 import { agreesToBuild } from "../self-tooling/capabilities.js";
 import { selfToolingEnabled, selfToolingAllowedFor } from "../self-tooling/access.js";
 import { createLearnerToolRequest } from "../agent-tool-requests/service.js";
@@ -451,9 +451,18 @@ export const CHAT_TOOLS = [
     },
   },
   {
+    name: "save_computation",
+    featureGate: "self_tooling",
+    description: "Self-tooling (preview): SAVE a one-off computation the agent worked out earlier (a create_tool outcome of 'answered') as the learner's permanent tool — ONLY when the learner explicitly asks to save or keep it ('save that', 'keep that tool'), or when their message comes from tapping a tool suggestion. It saves the exact verified computation; it does not rebuild. Pass `hint` with the tool's label or goal words when the one to save isn't the most recent one-off. Outcomes: saved (it's in their tools now — confirm in plain words); exists (already saved — just call it by name); none (no recent one-off to save — build it with create_tool instead); full (their tool list is full — say so). Never call this unasked.",
+    input_schema: {
+      type: "object",
+      properties: { hint: { type: "string", description: "The one-off's label or goal words, when it isn't the most recent." } },
+    },
+  },
+  {
     name: "create_tool",
     featureGate: "self_tooling",
-    description: "Self-tooling (preview): BUILD a new tool when no existing tool answers the learner's question or does what they ask (it reads their own data; when schema_lookup lists a write such as deleting or completing their tasks, the tool changes only the rows the learner confirms on a card) (call schema_lookup first to see what it can use). It is built safely from the learner's own data, checked and RUN at once — the answer comes back in `result`. A brand-new tool is drafted OFF and only saved when the learner taps Keep on its card. Outcomes: created (answer from result; next time call the tool by name); offer (a change they can allow — ask if they want it built) / offer_request (a change nothing can make yet — offer to ask the Akoro team); requested (the request was sent — say exactly what `tell` says); needs_permission (a change to the learner's own data they can allow themselves — a card is shown; tell them you don't have that ability yet but will build it as soon as they approve on the card; nothing is built or changed yet); escalated (it needs a permission only an admin can give — a request was made; tell the learner in plain words that you've asked, and that the answer will come back in this chat); needs_consent (a brand-new tool: built and checked, but drafted OFF — a card asks the learner to Keep it; answer from `result` now, say in plain words what it does and anything it can't do, and invite changes; never say it is saved or on); rejected (say plainly it can't be done and why). To FIX one of the learner's saved tools that gives a wrong or self-contradictory answer, call create_tool again with the same name/label and `replace` set to that tool's name — the old tool is archived and a corrected one is built and run. Prefer ONE tool per data domain: for another breakdown of the SAME data, call create_tool again with the same name and the goal 'by <field>' — it adds that action and re-checks the existing ones; do NOT build a separate tool for a count/list/breakdown of data you already have a tool for. If schema_lookup shows a needed capability as needs_approval, pass it in hint.capabilities so the request names it. Never describe how it was built; never show internal names.",
+    description: "Self-tooling (preview): BUILD a new tool when no existing tool answers the learner's question or does what they ask (it reads their own data; when schema_lookup lists a write such as deleting or completing their tasks, the tool changes only the rows the learner confirms on a card) (call schema_lookup first to see what it can use). It is built safely from the learner's own data, checked and RUN at once — the answer comes back in `result`. A brand-new tool is drafted OFF and only saved when the learner taps Keep on its card. Outcomes: created (answer from result; next time call the tool by name); offer (a change they can allow — ask if they want it built) / offer_request (a change nothing can make yet — offer to ask the Akoro team); requested (the request was sent — say exactly what `tell` says); needs_permission (a change to the learner's own data they can allow themselves — a card is shown; tell them you don't have that ability yet but will build it as soon as they approve on the card; nothing is built or changed yet); escalated (it needs a permission only an admin can give — a request was made; tell the learner in plain words that you've asked, and that the answer will come back in this chat); needs_consent (a brand-new tool: built and checked, but drafted OFF — a card asks the learner to Keep it; answer from `result` now, say in plain words what it does and anything it can't do, and invite changes; never say it is saved or on); answered (a pure computed read that takes no inputs at run time: worked out and verified, the answer is in `result` — it was NOT saved and no card is shown; answer from result and mention it wasn't saved; if the learner asks to save or keep it, call save_computation); rejected (say plainly it can't be done and why). To FIX one of the learner's saved tools that gives a wrong or self-contradictory answer, call create_tool again with the same name/label and `replace` set to that tool's name — the old tool is archived and a corrected one is built and run. Prefer ONE tool per data domain: for another breakdown of the SAME data, call create_tool again with the same name and the goal 'by <field>' — it adds that action and re-checks the existing ones; do NOT build a separate tool for a count/list/breakdown of data you already have a tool for. If schema_lookup shows a needed capability as needs_approval, pass it in hint.capabilities so the request names it. Never describe how it was built; never show internal names.",
     input_schema: {
       type: "object",
       properties: {
@@ -1483,7 +1492,7 @@ async function resolveLearnerSchoolContext(studentId) {
  * flag the scratchpad, and by the agent console's DRY mode, which answers
  * these with what they WOULD do instead of doing it (lib/dryRunContext.js).
  */
-export const SIDE_EFFECT_TOOLS = ["set_agent_auto_reply", "create_task", "suggest_help", "schedule_chat_follow_up", "post_to_chat", "create_tool", "cancel_scheduled_chat_follow_up", "submit_tool_request", "submit_bug_report", "prepare_activity", "revise_activity_draft",
+export const SIDE_EFFECT_TOOLS = ["set_agent_auto_reply", "create_task", "suggest_help", "schedule_chat_follow_up", "post_to_chat", "create_tool", "save_computation", "cancel_scheduled_chat_follow_up", "submit_tool_request", "submit_bug_report", "prepare_activity", "revise_activity_draft",
           "create_goal", "update_goal_progress", "save_blog_draft", "publish_blog", "update_agent_network_settings", "block_agent", "log_past_question_practice",
           "challenge_agent", "class_battle", "post_challenge_request", "accept_challenge_request", "cancel_challenge_request", "rematch_battle", "request_guide_review", "message_agent", "reply_to_agent", "start_study_prep_session", "cancel_study_prep_session",
           "consult_peer_agents", "discard_activity_draft", "schedule_activity_routine", "cancel_activity_routine", "run_teaching_tool"];
@@ -2422,6 +2431,16 @@ async function runChatTool(name, input, studentId, { conversationId = null, role
       } catch (error) {
         console.warn("[self-tooling] create_tool failed:", error?.stack || error?.message || error);
         return { status: "rejected", reason: "Building the tool failed unexpectedly — try again." };
+      }
+    }
+    case "save_computation": {
+      if (!SELF_TOOLING_ROLES.has(role)) return { error: "Saving tools is for learners and instructors." };
+      if (!(await selfToolingAllowedFor(studentId))) return { error: "Building new tools isn't turned on for this account yet." };
+      try {
+        return await saveComputation({ learnerId: studentId, hint: input?.hint || null, conversationId, ...selfToolDeps(studentId, role === "instructor" ? "instructor" : "student") });
+      } catch (error) {
+        console.warn("[self-tooling] save_computation failed:", error?.stack || error?.message || error);
+        return { status: "rejected", reason: "Saving the tool failed unexpectedly — try again." };
       }
     }
     case "list_chats": {

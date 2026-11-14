@@ -42,6 +42,7 @@ export const CHAT_TOOL_DISPLAY = Object.freeze({
   cancel_scheduled_chat_follow_up:{ category: "action",   headline: "Cancelling a follow-up",              description: "Removing a planned check-in", done: "Cancelled a follow-up" },
   get_past_question_practice:     { category: "research", headline: "Checking your past-question practice", description: "Adding up attempts and accuracy" },
   create_tool:                    { category: "action",   headline: "Building a tool",                    description: "Making and checking a new tool for you", done: "Built a tool" },
+  save_computation:               { category: "action",   headline: "Saving a tool",                      description: "Keeping a worked-out answer as a tool for you", done: "Saved a tool" },
   schema_lookup:                  { category: "research", headline: "Checking what I can look at",          description: "Seeing what a new tool could use" },
   list_chats:                     { category: "research", headline: "Checking your chats",                 description: "Listing your conversations" },
   read_chat:                      { category: "research", headline: "Reading another chat",                description: "Picking up what was said there" },
@@ -217,7 +218,11 @@ export function chatToolChange(tool, toolResult, input = {}) {
   if (toolResult.success === false || toolResult.error || toolResult.needsClarification || toolResult.disabled || toolResult.enabled === false) return null;
   // create_tool: "Built a tool" only when one was built; a draft waiting for Approve says so, anything else changed nothing.
   if (tool === "create_tool" && toolResult.status !== "created") {
+    if (toolResult.status === "answered" && !toolResult.dryRun) return { label: "Worked it out — one-off", title: clip(toolResult.label || "", ITEM_CHARS), fields: [] };
     return (toolResult.status === "needs_permission" || toolResult.status === "needs_consent") && !toolResult.dryRun ? { label: toolResult.drafted ? "Drafted a tool — waiting for your OK" : "Asked to build a tool — waiting for your OK", title: clip(toolResult.label || "", ITEM_CHARS), fields: [] } : null;
+  }
+  if (tool === "save_computation" && toolResult.status === "saved") {
+    return { label: "Saved a tool", title: clip(toolResult.label || "", ITEM_CHARS), fields: [] };
   }
   // Read-only actions of the multi-action tools change nothing — no "Updated…" row.
   if (["study_buddy", "daily_challenge", "revision_circle"].includes(String(tool)) && ["list", "status", "ranking", "search", undefined, null, ""].includes(input?.action)) return null;

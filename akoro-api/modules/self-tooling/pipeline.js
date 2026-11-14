@@ -603,7 +603,8 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
     ev.capabilities = v.uses.capabilities;
     const verification = { verdict: check.verdict, at: new Date().toISOString(),
       assertions: check.assertions.map((a) => ({ name: a.name, passed: a.passed })), samples: built.samples || [] };
-    const runNow = await tryRun(built.definition, params, input?.run && typeof input.run === "object" ? input.run : (built.samples || [])[0] || {}, ctx);
+    const runInput = input?.run && typeof input.run === "object" ? input.run : (built.samples || [])[0] || {};
+    const runNow = await tryRun(built.definition, params, runInput, ctx);
     const def = { name, label, goal, mode: stage, definition: built.definition, params_schema: params,
       capabilities: v.uses.capabilities, views: [...new Set(v.uses.views)], verification };
     if (draftCap) return draftAndAsk({ def, runNow });
@@ -613,6 +614,18 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
         result: runNow.ok ? (runNow.write ? await writeOutcome({ learnerId, dry: true, tool: { label }, write: runNow.write })
           : { rows: runNow.rows, total: runNow.total, truncated: runNow.truncated }) : { error: runNow.error },
         note: "DRY RUN — the tool was built and verified but NOT saved. Answer the learner from `result`." + droppedNote };
+    }
+    // Option 2 (answer-only): a pure computed read is answered from the
+    // verified run above and NOT saved — no draft, no card. The verified
+    // definition is stashed on the event so an explicit "save that" (or the
+    // daily repeated-computation sweep) can save this exact tool later.
+    if (audience === "learner" && !resumed && isAnswerOnlyRead(def, runNow)) {
+      ev.detail = { name, label, goal, mode: stage, definition: built.definition, params_schema: params,
+        capabilities: v.uses.capabilities, views: def.views, samples: built.samples || [], runInput };
+      await finish("answered", {});
+      return { status: "answered", ephemeral: true, tool: name, label, mode: stage, verified: true,
+        result: { rows: runNow.rows, total: runNow.total, truncated: runNow.truncated },
+        note: `ONE-OFF — you worked out the answer and it is in \`result\`; the tool was NOT saved and the learner was not asked to keep it. Answer from result in plain words, and mention it wasn't saved as a tool. If the learner asks to save or keep it, call save_computation. Never say the tool is in their tools.${droppedNote}` };
     }
     // The build-consent gate: a brand-new learner tool is drafted OFF and the
     // learner commits it on a card. The build above already ran and verified —
@@ -640,6 +653,16 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
 /** The actions a tool row carries (its domain action set), or []. */
 export const toolActions = (t) => (Array.isArray(t?.actions) && t.actions.length ? t.actions
   : (Array.isArray(t?.params_schema?.action?.enum) ? t.params_schema.action.enum : []));
+/** Parameter names a tool declares (either params_schema shape). */
+export const toolParamNames = (ps) => Object.keys((ps && typeof ps === "object") ? (ps.properties || ps) : {});
+/**
+ * Option 2 (answer-only): a pure computed READ — the run worked, changed
+ * nothing, and the tool takes NO inputs at run time (everything is fixed by
+ * the goal's wording) — is answered from its verified dry run and NOT saved.
+ * Writes and parameterized tools still go through build + Keep.
+ */
+export const isAnswerOnlyRead = (def, run) => !!run?.ok && !run?.write && toolParamNames(def?.params_schema).length === 0;
+
 /** Actions the learner has NOT switched off — the only ones the model may see or run. */
 export const visibleActions = (t) => {
   const off = new Set(Array.isArray(t?.disabled_actions) ? t.disabled_actions : []);
@@ -722,6 +745,54 @@ export async function runLearnerTool(name, input, learnerId, { callCapability, c
   if (!r.ok) return { error: fail >= 3 && !platform ? "This tool failed three times in a row and was turned off — rebuild it." : `The tool couldn't run: ${r.error}` };
   if (r.write) return writeOutcome({ learnerId, conversationId, dry, tool: t, write: r.write });
   return { tool: t.label, rows: r.rows, total: r.total, truncated: r.truncated };
+}
+
+/**
+ * Save a previously ANSWERED one-off computation as a real tool — the
+ * learner's explicit "save that", or the message a tool suggestion sends
+ * when tapped. The stashed definition is re-verified and saved ACTIVE (the
+ * ask itself is the consent); nothing is rebuilt, so the saved tool computes
+ * exactly what the learner already saw. `hint` picks among recent one-offs
+ * by goal words; without it, the most recent is saved.
+ */
+export async function saveComputation({ learnerId, hint = null, callCapability }) {
+  const since = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString();
+  const { data: events } = await edu().from("self_tool_events")
+    .select("id, goal, detail, created_at").eq("user_id", learnerId).eq("outcome", "answered")
+    .gte("created_at", since).order("created_at", { ascending: false }).limit(25);
+  const candidates = (events || []).filter((e) => e.detail && e.detail.definition && e.detail.name);
+  if (!candidates.length) return { status: "none", note: "No recent one-off computation to save. If the learner still wants the tool, build it with create_tool." };
+  let pick = candidates[0];
+  if (hint) {
+    const hintTokens = goalTokens(hint);
+    const scored = candidates.map((e) => ({ e, score: hintTokens.filter((t) => goalTokens(e.goal).includes(t)).length })).sort((a, b) => b.score - a.score);
+    if (scored[0].score > 0) pick = scored[0].e;
+  }
+  const d = pick.detail;
+  const { data: existing } = await edu().from("agent_tools").select("id").eq("owner_id", learnerId).eq("name", d.name).in("status", ["active", "disabled"]).maybeSingle();
+  if (existing) return { status: "exists", tool: d.name, label: d.label, note: `"${d.label}" is already in the learner's tools — just call it by name.` };
+  const { count } = await edu().from("agent_tools").select("id", { count: "exact", head: true }).eq("owner_id", learnerId).in("status", ["active", "disabled"]);
+  if ((count || 0) >= LIMITS.maxTools) return { status: "full", error: `The learner already has ${LIMITS.maxTools} tools — one must be removed in Settings before another can be saved.` };
+  const ctx = { learnerId, callCapability, audience: "learner" };
+  const v = validateDefinition(d.definition, d.params_schema || {}, { audience: "learner", learnerId, assume: [] });
+  if (!v.ok) return { status: "stale", error: "That computation can no longer be saved — what it reads has changed. Build it again with create_tool." };
+  const check = await verifyTool(d.definition, d.params_schema || {}, d.samples || [], ctx);
+  if (check.verdict !== "pass") return { status: "stale", error: "That computation no longer checks out — build it again with create_tool." };
+  const def = { name: d.name, label: d.label, goal: d.goal, mode: d.mode || d.definition?.kind || "spec",
+    definition: d.definition, params_schema: d.params_schema || {},
+    capabilities: v.uses.capabilities, views: [...new Set(v.uses.views)],
+    verification: { verdict: check.verdict, at: new Date().toISOString(), assertions: check.assertions.map((a) => ({ name: a.name, passed: a.passed })), samples: d.samples || [] } };
+  const { data: row, error } = await edu().from("agent_tools").insert({ owner_id: learnerId, scope: "learner", audience: "learner", ...def,
+    domain: (def.views || [])[0] || null, actions: def.params_schema?.action?.enum || null,
+    usage_count: 1, last_used_at: new Date().toISOString() }).select("id").single();
+  if (error) return { status: "failed", error: `Couldn't save the tool: ${error.message}` };
+  if (def.params_schema?.action?.enum && def.views?.[0]) await retireSameView(learnerId, def.views[0], d.name);
+  await logEvent({ user_id: learnerId, goal: d.goal, outcome: "created", mode: def.mode, stages_tried: [], capabilities: def.capabilities, tool_id: row.id, reason: "saved one-off computation", builder_calls: 0, ms: 0 });
+  const run = await tryRun(def.definition, def.params_schema, d.runInput || {}, ctx);
+  return { status: "saved", tool: d.name, label: d.label,
+    result: run.ok ? { rows: run.rows, total: run.total } : { error: run.error },
+    note: `Saved "${d.label}" as the learner's tool — it is in My tools now and can be called by name. Confirm in plain words.`,
+    __newTool: toolDef({ ...def, scope: "learner" }) };
 }
 
 /**
