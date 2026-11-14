@@ -121,7 +121,7 @@ export const TOOL_EXAMPLES = Object.freeze({
   create_tool: e("building", "Make a tool that times my practice."),
   save_computation: e("building", "Save that tool so I can reuse it."),
   submit_tool_request: e("building", "Request a tool that reads my school timetable."),
-  check_my_requests: e("building", "Did the admins build my request?", "Is my tool request ready?"),
+  check_my_requests: e("support", "Did the admins build my request?", "Is my tool request ready?"),
   submit_bug_report: e("support", "Report that — my library count shows the wrong number."),
 
   // Activities (instructor)
