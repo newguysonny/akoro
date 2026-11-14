@@ -24,14 +24,14 @@ const asyncHandler = (fn) => (req, res, next) => Promise.resolve(fn(req, res, ne
 router.get("/tools", authenticateToken, asyncHandler(async (req, res) => {
   const enabled = await selfToolingAllowedFor(req.user.id);
   const tools = enabled ? await listMyTools(req.user.id) : [];
-  res.json({ success: true, data: { enabled, tools: tools.map((t) => ({ id: t.id, label: t.label, goal: t.goal, status: t.status, uses: t.usage_count, lastUsedAt: t.last_used_at, createdAt: t.created_at, domain: t.domain || null, actions: t.actions || [], disabledActions: t.disabled_actions || [] })) } });
+  res.json({ success: true, data: { enabled, tools: tools.map((t) => ({ id: t.id, label: t.label, goal: t.goal, status: t.status, uses: t.usage_count, lastUsedAt: t.last_used_at, createdAt: t.created_at, domain: t.domain || null, actions: t.actions || [], disabledActions: t.disabled_actions || [], area: t.area || null, secondaryAreas: t.secondary_areas || [], tags: t.tags || [] })) } });
 }));
 
 router.patch("/tools/:id", authenticateToken, asyncHandler(async (req, res) => {
   if (!/^[0-9a-f-]{36}$/i.test(req.params.id)) return res.status(400).json({ success: false, error: "Bad tool id" });
   try {
     const t = await updateMyTool(req.user.id, req.params.id, req.body || {});
-    res.json({ success: true, data: { id: t.id, label: t.label, status: t.status, domain: t.domain || null, actions: t.actions || [], disabledActions: t.disabled_actions || [] } });
+    res.json({ success: true, data: { id: t.id, label: t.label, status: t.status, domain: t.domain || null, actions: t.actions || [], disabledActions: t.disabled_actions || [], area: t.area || null, secondaryAreas: t.secondary_areas || [], tags: t.tags || [] } });
   } catch (e) {
     res.status(e.status || 500).json({ success: false, error: e.message });
   }

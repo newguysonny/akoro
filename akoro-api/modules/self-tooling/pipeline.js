@@ -20,6 +20,7 @@ import { proposeWrite, proposePermission, proposeBuild } from "./confirmations.j
 import { codeEnabled } from "./sandbox/index.js";
 import { basisColumns, currentActionBasis } from "../agent-runtime/actionBasis.js";
 import { isDocumentGoal, similarGoal, goalTokens } from "./toolSimilarity.js";
+import { deriveToolArea } from "./areas.js";
 import { DOMAINS, domainForGoal, genericDomain, genericReadGoal, inferAction, verifyDomainActions, byActionForGoal, aggregateForGoal, bestSelfView, MAX_DOMAIN_ACTIONS } from "./domains.js";
 
 const edu = () => db.schema("edu");
@@ -284,6 +285,7 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
         owner_id: learnerId, scope: "learner", audience, name: spec.name, label: spec.label,
         goal: `${spec.label}: ${actions.join(", ")}`, mode: "code", definition: def, params_schema: spec2.params,
         capabilities: [], views: [spec.view], domain: spec.view, actions, disabled_actions: carriedOff,
+        area: deriveToolArea({ views: [spec.view] }).area, secondary_areas: [],
         verification: { verdict: "pass", at: new Date().toISOString(), assertions: checks.map((c) => ({ name: `action:${c.action}`, passed: c.ok })), samples: [], awaitingBuild: true },
         status: "disabled", usage_count: 0,
       }).select("id").single();
@@ -311,6 +313,7 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
       owner_id: learnerId, scope: "learner", audience, name: spec.name, label: spec.label,
       goal: `${spec.label}: ${actions.join(", ")}`, mode: "code", definition: def, params_schema: spec2.params,
       capabilities: [], views: [spec.view], domain: spec.view, actions, disabled_actions: carriedOff,
+      area: deriveToolArea({ views: [spec.view] }).area, secondary_areas: [],
       verification: { verdict: "pass", at: new Date().toISOString(), assertions: checks.map((c) => ({ name: `action:${c.action}`, passed: c.ok })), samples: [] },
       status: "active", usage_count: 1, last_used_at: new Date().toISOString(),
     }).select("id").single();
@@ -607,6 +610,8 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
     const runNow = await tryRun(built.definition, params, runInput, ctx);
     const def = { name, label, goal, mode: stage, definition: built.definition, params_schema: params,
       capabilities: v.uses.capabilities, views: [...new Set(v.uses.views)], verification };
+    // One taxonomy: the area is derived from the main read, never chosen.
+    Object.assign(def, deriveToolArea(def));
     if (draftCap) return draftAndAsk({ def, runNow });
     if (dry) {
       await finish("created", {});
@@ -686,15 +691,23 @@ export function toolDef(t) {
  * tools an admin promoted to everyone (most used first). The learner's own
  * tool wins a name clash; built-in names never reach here (§7.10).
  */
-export async function learnerToolDefs(learnerId, audience = "learner") {
+export async function learnerToolDefsWithAreas(learnerId, audience = "learner") {
+  const cols = "name, label, goal, params_schema, scope, actions, disabled_actions, views, capabilities, area";
   const [{ data: mine }, { data: platform }] = await Promise.all([
-    edu().from("agent_tools").select("name, label, goal, params_schema, scope, actions, disabled_actions")
+    edu().from("agent_tools").select(cols)
       .eq("owner_id", learnerId).eq("status", "active").order("last_used_at", { ascending: false, nullsFirst: false }).limit(LIMITS.inCatalogue),
-    edu().from("agent_tools").select("name, label, goal, params_schema, scope, actions, disabled_actions")
+    edu().from("agent_tools").select(cols)
       .eq("scope", "platform").eq("audience", audience).eq("status", "active").order("usage_count", { ascending: false }).limit(LIMITS.inCatalogue),
   ]);
   const own = new Set((mine || []).map((t) => t.name));
-  return [...(mine || []), ...(platform || []).filter((t) => !own.has(t.name))].map(toolDef).filter(Boolean);
+  const rows = [...(mine || []), ...(platform || []).filter((t) => !own.has(t.name))];
+  // Rows built before areas were stored derive theirs on the fly — nothing is area-less.
+  const areas = new Map(rows.map((t) => [t.name, t.area || deriveToolArea(t).area]));
+  return { defs: rows.map(toolDef).filter(Boolean), areas };
+}
+
+export async function learnerToolDefs(learnerId, audience = "learner") {
+  return (await learnerToolDefsWithAreas(learnerId, audience)).defs;
 }
 
 /**
@@ -782,6 +795,7 @@ export async function saveComputation({ learnerId, hint = null, callCapability }
     definition: d.definition, params_schema: d.params_schema || {},
     capabilities: v.uses.capabilities, views: [...new Set(v.uses.views)],
     verification: { verdict: check.verdict, at: new Date().toISOString(), assertions: check.assertions.map((a) => ({ name: a.name, passed: a.passed })), samples: d.samples || [] } };
+  Object.assign(def, deriveToolArea(def));
   const { data: row, error } = await edu().from("agent_tools").insert({ owner_id: learnerId, scope: "learner", audience: "learner", ...def,
     domain: (def.views || [])[0] || null, actions: def.params_schema?.action?.enum || null,
     usage_count: 1, last_used_at: new Date().toISOString() }).select("id").single();
@@ -818,10 +832,11 @@ export async function archiveUnusedTools(days = 60) {
 }
 
 export async function listMyTools(learnerId) {
-  const { data, error } = await edu().from("agent_tools").select("id, name, label, goal, mode, status, usage_count, last_used_at, created_at, domain, actions, disabled_actions")
+  const { data, error } = await edu().from("agent_tools").select("id, name, label, goal, mode, status, usage_count, last_used_at, created_at, domain, actions, disabled_actions, views, area, secondary_areas, tags")
     .eq("owner_id", learnerId).in("status", ["active", "disabled"]).order("created_at", { ascending: false }).limit(50);
   if (error) throw new Error("Couldn't load your tools");
-  return (data || []).map((t) => ({ ...t, actions: Array.isArray(t.actions) ? t.actions : [], disabled_actions: Array.isArray(t.disabled_actions) ? t.disabled_actions : [] }));
+  return (data || []).map((t) => ({ ...t, actions: Array.isArray(t.actions) ? t.actions : [], disabled_actions: Array.isArray(t.disabled_actions) ? t.disabled_actions : [],
+    area: t.area || deriveToolArea(t).area, secondary_areas: Array.isArray(t.secondary_areas) ? t.secondary_areas : [], tags: Array.isArray(t.tags) ? t.tags : [] }));
 }
 
 export async function updateMyTool(learnerId, id, patch) {
@@ -832,6 +847,9 @@ export async function updateMyTool(learnerId, id, patch) {
   const allowed = {};
   if (typeof patch?.label === "string" && patch.label.trim().length >= 2) allowed.label = patch.label.trim().slice(0, 60);
   if (["active", "disabled"].includes(patch?.status)) allowed.status = patch.status;
+  if (Array.isArray(patch?.tags)) {
+    allowed.tags = [...new Set(patch.tags.map((x) => String(x || "").trim().slice(0, 24)).filter(Boolean))].slice(0, 8);
+  }
   if (patch?.delete === true) allowed.status = "archived";
 
   // Per-action management (domain tools): switch ONE action off or on, or
@@ -857,8 +875,9 @@ export async function updateMyTool(learnerId, id, patch) {
   if (nextOff) allowed.disabled_actions = nextOff;
   if (!Object.keys(allowed).length) throw Object.assign(new Error("Nothing to change"), { status: 400 });
   const { data, error } = await edu().from("agent_tools").update({ ...allowed, updated_at: new Date().toISOString(), ...(allowed.status !== "active" ? { fail_streak: 0 } : {}) })
-    .eq("owner_id", learnerId).eq("id", row.id).in("status", ["active", "disabled"]).select("id, name, label, status, domain, actions, disabled_actions").maybeSingle();
+    .eq("owner_id", learnerId).eq("id", row.id).in("status", ["active", "disabled"]).select("id, name, label, status, domain, actions, disabled_actions, area, secondary_areas, tags").maybeSingle();
   if (error) throw new Error("Couldn't update the tool");
   if (!data) throw Object.assign(new Error("Tool not found"), { status: 404 });
-  return { ...data, actions: Array.isArray(data.actions) ? data.actions : [], disabled_actions: Array.isArray(data.disabled_actions) ? data.disabled_actions : [] };
+  return { ...data, actions: Array.isArray(data.actions) ? data.actions : [], disabled_actions: Array.isArray(data.disabled_actions) ? data.disabled_actions : [],
+    secondary_areas: Array.isArray(data.secondary_areas) ? data.secondary_areas : [], tags: Array.isArray(data.tags) ? data.tags : [] };
 }

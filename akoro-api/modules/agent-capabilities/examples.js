@@ -118,6 +118,7 @@ export const TOOL_EXAMPLES = Object.freeze({
   // Tools the agent builds
   schema_lookup: e("building", "(used while building a tool — checks what data a tool may read)"),
   create_tool: e("building", "Make a tool that times my practice."),
+  save_computation: e("building", "Save that tool so I can reuse it."),
   submit_tool_request: e("building", "Request a tool that reads my school timetable."),
 
   // Activities (instructor)

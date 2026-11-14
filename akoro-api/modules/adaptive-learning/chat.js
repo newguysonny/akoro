@@ -128,7 +128,8 @@ import { getLearnerProfileContext } from "./learner-profile-context.js";
 import { validateLearnerTaskInput } from "./learner-task-validation.js";
 import { listChats, readChat, postToChat, ownedChatId, searchChats } from "./chat-history-tools.js";
 import { schemaLookup } from "../self-tooling/registry.js";
-import { createTool, runLearnerTool, learnerToolDefs, forcedSelfTool, saveComputation } from "../self-tooling/pipeline.js";
+import { createTool, runLearnerTool, learnerToolDefs, learnerToolDefsWithAreas, forcedSelfTool, saveComputation } from "../self-tooling/pipeline.js";
+import { AREAS, areaSelectionEnabled, areasForMessage, filterDefsByAreas, toolArea } from "./toolSelection.js";
 import { agreesToBuild } from "../self-tooling/capabilities.js";
 import { selfToolingEnabled, selfToolingAllowedFor } from "../self-tooling/access.js";
 import { createLearnerToolRequest } from "../agent-tool-requests/service.js";
@@ -313,8 +314,8 @@ export const CHAT_TOOLS = [
   },
   {
     name: "get_agent_capabilities",
-    description: "Return the current feature-aware capability inventory when the learner asks what you can do, your abilities, or your limitations. Use this tool before answering those questions. Do not claim web access, historical past-paper access, autonomous task completion, or a feature absent from the result.",
-    input_schema: { type: "object", properties: {}, required: [] },
+    description: "Return the current feature-aware capability inventory when the learner asks what you can do, your abilities, or your limitations. Use this tool before answering those questions. Do not claim web access, historical past-paper access, autonomous task completion, or a feature absent from the result. Tools are loaded by area in a conversation: if a request needs a tool you do not have, call this with `area` naming the area to load its tools (built-in and the learner's own), then continue the request.",
+    input_schema: { type: "object", properties: { area: { type: "string", description: "Optional area id to load that area's tools into this conversation: profile, progress, teaching, plans, files, chats, network, blogs, proactive, building, activities, other." } }, required: [] },
   },
   {
     name: "check_progress",
@@ -1775,12 +1776,27 @@ async function runChatTool(name, input, studentId, { conversationId = null, role
       } catch (error) { return { revised: false, error: error.message || "Could not revise the draft" }; }
     }
     case "get_agent_capabilities": {
+      // Area loading (runtime selection): with { area }, load that area's
+      // tools into this conversation and hand their defs back (__addTools)
+      // so this same turn can use them.
+      const wantArea = String(input?.area || "").trim().toLowerCase();
+      if (wantArea) {
+        if (!AREAS[wantArea]) return { error: `Unknown area "${wantArea}". Areas: ${Object.keys(AREAS).join(", ")}.` };
+        stickyAreasFor(conversationId).add(wantArea);
+        const builtIns = openAiChatTools().filter((t) => toolArea(t.function.name) === wantArea);
+        const { defs: ownDefs, areas: ownAreas } = await learnerToolDefsWithAreas(studentId, role === "instructor" ? "instructor" : "learner").catch(() => ({ defs: [], areas: new Map() }));
+        const adds = [...builtIns, ...ownDefs.filter((d) => ownAreas.get(d.function.name) === wantArea)];
+        return { loaded: wantArea, areaLabel: AREAS[wantArea], tools: adds.map((d) => d.function.name),
+          note: `The ${AREAS[wantArea]} tools are loaded for this conversation now — continue the learner's request with them.`,
+          __addTools: adds };
+      }
       // Default-on keys consult the kill-switch semantics, not strict equality,
       // so the card must never deny an ability the runtime has.
       const enabled = (key) => ["AKORO_EXAM_PREP_CONFIDENCE_ENABLED", "AKORO_ADAPTIVE_WORKFLOWS_ENABLED", "AKORO_STUDY_PREP_ENABLED"].includes(key)
         ? String(process.env[key] ?? "true").toLowerCase() !== "false"
         : String(process.env[key] || "").toLowerCase() === "true";
       return {
+        areas: Object.entries(AREAS).map(([id, label]) => ({ id, label })),
         sections: [
           { title: "Study support", items: ["Explain and quiz you on what you have taught it — it is your protégé", "Tell you honestly what you haven\u2019t taught it yet, point you to sources and ask you to teach it", "Ask NaNa, its teaching guide, when you insist on something it wasn\u2019t taught (and say so)", "Help draft and improve study notes, essays, and revision plans", "Show safe study profile, learning overview, knowledge-map, saved-study-knowledge, guide-preference, and Online/Offline status when asked",
             // same default-on semantics as the tool's featureGate
@@ -4237,6 +4253,22 @@ const STOPPED_REPLY = "(Stopped before finishing.)";
 const activeTurnStops = new Map();   // `${userId}:${turnId}` → { stop: boolean }
 const turnStopKey = (userId, turnId) => `${userId}:${turnId}`;
 
+// Runtime area selection (toolSelection.js): the areas active for a
+// conversation stick for its life. In-memory and per instance, like the turn
+// stops above — a lost set only means the next turn re-derives the areas
+// from the learner's message and the loader.
+const conversationAreas = new Map();   // conversationId → Set<area>
+function stickyAreasFor(conversationId) {
+  if (!conversationId) return new Set();
+  let set = conversationAreas.get(conversationId);
+  if (!set) {
+    if (conversationAreas.size >= 1000) conversationAreas.delete(conversationAreas.keys().next().value);
+    set = new Set();
+    conversationAreas.set(conversationId, set);
+  }
+  return set;
+}
+
 function openAiChatTools({ allowToolRequest = true, selfTooling = true } = {}) {
   return getLearnerChatTools({ allowToolRequest, selfTooling }).map((tool) => ({
     type: "function",
@@ -4504,6 +4536,14 @@ async function runAgentToolLoop({ systemContent, messages, studentId, conversati
         const def = toolResult.__newTool;
         delete toolResult.__newTool;
         if (!tools.some((t) => t.function?.name === def.function.name)) tools.push(def);
+      }
+      // get_agent_capabilities loaded an area: offer its tools for the rest of this turn.
+      if (toolResult && typeof toolResult === "object" && Array.isArray(toolResult.__addTools)) {
+        const adds = toolResult.__addTools;
+        delete toolResult.__addTools;
+        for (const def of adds) {
+          if (def?.function?.name && !tools.some((t) => t.function?.name === def.function.name)) tools.push(def);
+        }
       }
       // A failure says what to do next: the documented alternative for the job, else tell the learner plainly.
       if (tool !== UPDATE_PLAN_TOOL.name && toolFailed(toolResult) && toolResult && typeof toolResult === "object" && !Array.isArray(toolResult)) {
@@ -5178,11 +5218,70 @@ router.post("/agent", async (req, res) => {
       create: (body) => openai.chat.completions.create({ ...body, __role: "background", __payer: "platform", __feature: "chat_intent", __userId: req.user.id, __timeoutMs: 45_000, __maxRetries: 0 }),   // the turn waits 4 s (intentStep.js); a slow answer is ignored, never counted against the shared breaker
     });
     mark("intent");
+    // The turn's forced tool, computed before the tool list: runtime area
+    // selection must include the forced tool's area (the loop refuses a
+    // required tool it cannot see). Learners: capability questions are
+    // answered from the live catalogue. Instructors: an activity request (or
+    // a confirmation continuing one) MUST produce a prepare_activity call —
+    // left on "auto" the model detours into writing sample questions as
+    // prose or re-asking for details the conversation already has. The force
+    // covers iteration 0 only; the tool's own clarify() handles anything
+    // genuinely missing.
+    const forcedTool = role === "student"
+      ? (requiresAgentCapabilitiesTool(userMessage) ? "get_agent_capabilities"
+        // Other players' results in the learner's battles: go through
+        // create_tool (it builds, or asks an admin for the permission) —
+        // left on auto the model sometimes said "I can't see that" instead.
+        // A change to their own tasks: schema_lookup first, so the agent offers to build it.
+        : forceSelfTool ? forceSelfTool
+        // Identity questions about the learner's OWN school/class/subjects/
+        // teachers/progress are fact questions about data the model cannot
+        // see — the live 2026-10-01 transcript had tools=0 and an invented
+        // subject list. Force the matching read tool on iteration 0.
+        : (requiredLearnerDataTool(userMessage)
+          // Test/exam preparation is the study-prep session workflow; left
+          // on auto the model interviews the learner for topics/format/
+          // duration instead of starting it (live 2026-10-01 transcript:
+          // "let's plan for a test" twice, tools=0 both times). Only while
+          // the feature gate keeps the study-prep tools in the list.
+          ?? (studyPrepEnabled ? requiredStudyPrepTool(userMessage, dialogue) : null)))
+      : draftFollowUp ? "revise_activity_draft"
+      : ((instructorTools.length && requiresActivityPreparation(userMessage, dialogue))
+        ? "prepare_activity" : null);
+    // Runtime area selection (toolSelection.js): the always-on core plus the
+    // areas active for this conversation — the message's areas, areas loaded
+    // earlier in the conversation, and the forced tool's area. Built-in and
+    // learner-built tools are selected together, in one move. No active area
+    // (a vague opener) → the full list: selection narrows only when
+    // something points at an area.
+    let turnTools = instructorTools;
+    let selectionNote = "";
+    if (role === "student") {
+      const { defs: learnerDefs, areas: learnerAreas } = selfToolOn
+        ? await learnerToolDefsWithAreas(req.user.id).catch(() => ({ defs: [], areas: new Map() }))
+        : { defs: [], areas: new Map() };
+      const allTools = openAiChatTools({
+        allowToolRequest: hasExplicitToolRequestConsent(userMessage, { previousAgentText: lastAgentText(fit.kept) }),
+        selfTooling: selfToolOn,
+      }).concat(learnerDefs);
+      turnTools = allTools;
+      if (areaSelectionEnabled()) {
+        const active = new Set([...stickyAreasFor(conversationId), ...areasForMessage(userMessage)]);
+        if (forcedTool) active.add(toolArea(forcedTool));
+        if (active.size) {
+          const sticky = stickyAreasFor(conversationId);
+          for (const a of active) sticky.add(a);
+          turnTools = filterDefsByAreas(allTools, active, (name) => learnerAreas.get(name) || toolArea(name));
+          selectionNote = `\n\n## Tools loaded for this conversation\nLoaded areas: ${[...active].join(", ")}, plus the always-on core. Your other tools exist but are not loaded in this conversation. If the learner's request needs a tool you do not have, call get_agent_capabilities with { area: "<area id>" } to load that area's tools, then continue the request. Area ids: ${Object.keys(AREAS).join(", ")}.`;
+        }
+      }
+    }
     const turnSystem = systemContent
       + (summaryNow ? `\n\n## Earlier in this chat (summary)\n${summaryNow}` : "")
       + renderIntent(intent)
       // Phase 22 Part E: a multi-step request gets a starting plan to adopt (kept only if the agent adopts it).
-      + (intent?.multiStep ? renderDraftPlan(intent.steps, conversation?.scratchpad || null) : "");
+      + (intent?.multiStep ? renderDraftPlan(intent.steps, conversation?.scratchpad || null) : "")
+      + selectionNote;
     const ledgerIn = conversation?.scratchpad ? { ...conversation.scratchpad, progressSummary: summaryNow, summaryMark } : (summaryNow ? { progressSummary: summaryNow, summaryMark } : null);
     const recorder = (await recordsRealTraffic(req.user.id).catch(() => false))
       ? createEpisodeRecorder({ surface: "agent_chat", role, system: turnSystem, source: "real",
@@ -5200,37 +5299,14 @@ router.post("/agent", async (req, res) => {
       conversationId,
       turnId,
       status: wantsStream ? status : null,
-      tools: role === "student" ? openAiChatTools({
-        allowToolRequest: hasExplicitToolRequestConsent(userMessage, { previousAgentText: lastAgentText(fit.kept) }),
-        selfTooling: selfToolOn,
-      }).concat(selfToolOn ? await learnerToolDefs(req.user.id).catch(() => []) : []) : instructorTools,
+      tools: turnTools,
       // Learners: capability questions are answered from the live catalogue.
       // Instructors: an activity request (or a confirmation continuing one)
       // MUST produce a prepare_activity call — left on "auto" the model
       // detours into writing sample questions as prose or re-asking for
       // details the conversation already has. The force covers iteration 0
       // only; the tool's own clarify() handles anything genuinely missing.
-      requiredTool: role === "student"
-        ? (requiresAgentCapabilitiesTool(userMessage) ? "get_agent_capabilities"
-          // Other players' results in the learner's battles: go through
-          // create_tool (it builds, or asks an admin for the permission) —
-          // left on auto the model sometimes said "I can't see that" instead.
-          // A change to their own tasks: schema_lookup first, so the agent offers to build it.
-          : forceSelfTool ? forceSelfTool
-          // Identity questions about the learner's OWN school/class/subjects/
-          // teachers/progress are fact questions about data the model cannot
-          // see — the live 2026-10-01 transcript had tools=0 and an invented
-          // subject list. Force the matching read tool on iteration 0.
-          : (requiredLearnerDataTool(userMessage)
-            // Test/exam preparation is the study-prep session workflow; left
-            // on auto the model interviews the learner for topics/format/
-            // duration instead of starting it (live 2026-10-01 transcript:
-            // "let's plan for a test" twice, tools=0 both times). Only while
-            // the feature gate keeps the study-prep tools in the list.
-            ?? (studyPrepEnabled ? requiredStudyPrepTool(userMessage, dialogue) : null)))
-        : draftFollowUp ? "revise_activity_draft"
-        : ((instructorTools.length && requiresActivityPreparation(userMessage, dialogue))
-          ? "prepare_activity" : null),
+      requiredTool: forcedTool,
       role,
       trace,
       isAborted,
