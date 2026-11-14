@@ -13,14 +13,14 @@
  *                             cycle's prompt reads ("wrong time", …)
  *
  * The one inbox (chat suggestions + planner proposals, Grand Plan §7.16.8):
- *   GET    /inbox                — both, newest first, duplicates shown once
- *   POST   /inbox/:ref/accept    — ref "s:<id>" | "p:<id>"; does what the kind says
- *   POST   /inbox/:ref/dismiss   — { reason } kept for either source
+ *   GET    /inbox                — all three sources, newest first, duplicates shown once
+ *   POST   /inbox/:ref/accept    — ref "s:<id>" | "p:<id>" | "i:<id>"; does what the kind says
+ *   POST   /inbox/:ref/dismiss   — { reason } kept for any source
  */
 import { Router } from "express";
 import db from "../../db.js";
 import { authenticateToken } from "../auth/routes.js";
-import { loadInbox, parseRef, approveProposal, dismissProposal, acceptChatSuggestion, dismissChatSuggestion, DISMISS_REASONS } from "./inbox.js";
+import { loadInbox, parseRef, approveProposal, dismissProposal, acceptChatSuggestion, dismissChatSuggestion, acceptInboxIdea, dismissInboxIdea, DISMISS_REASONS } from "./inbox.js";
 
 const router = Router();
 const edu = () => db.schema("edu");
@@ -75,7 +75,9 @@ router.post("/inbox/:ref/accept", authenticateToken, asyncHandler(async (req, re
   const ref = parseRef(req.params.ref);
   if (!ref) return bad(res, "Unknown suggestion.");
   try {
-    ok(res, ref.source === "chat" ? await acceptChatSuggestion(req.user.id, ref.id) : await approveProposal(req.user.id, ref.id));
+    ok(res, ref.source === "chat" ? await acceptChatSuggestion(req.user.id, ref.id)
+      : ref.source === "idea" ? await acceptInboxIdea(req.user.id, ref.id)
+      : await approveProposal(req.user.id, ref.id));
   } catch (e) { sendError(res, e, "Could not accept the suggestion"); }
 }));
 
@@ -84,6 +86,7 @@ router.post("/inbox/:ref/dismiss", authenticateToken, asyncHandler(async (req, r
   if (!ref) return bad(res, "Unknown suggestion.");
   try {
     if (ref.source === "chat") { const s = await dismissChatSuggestion(req.user.id, ref.id, req.body?.reason); return ok(res, { dismissed: true, reason: s.dismiss_reason }); }
+    if (ref.source === "idea") { return ok(res, await dismissInboxIdea(req.user.id, ref.id, req.body?.reason)); }
     ok(res, await dismissProposal(req.user.id, ref.id, req.body?.reason));
   } catch (e) { sendError(res, e, "Could not dismiss the suggestion"); }
 }));

@@ -1,6 +1,6 @@
 /**
  * modules/agent-proposals/inboxCore.js — the one inbox's pure rules (no db):
- * merging both sources, refs, dismiss reasons, title normalisation.
+ * merging all three sources, refs, dismiss reasons, title normalisation.
  */
 import { READY } from "../autonomy/readyKinds.js";
 import { RULES } from "../agent-runtime/actionBasis.js";
@@ -8,12 +8,17 @@ export const DISMISS_REASONS = Object.freeze(["not_useful", "wrong_time", "too_m
 export const reasonOf = (r) => (DISMISS_REASONS.includes(r) ? r : "other");
 export const normalizeTitle = (t) => String(t || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 
-/** Both sources as one list, newest first, the same title offered twice shown once. */
-export function mergeInbox({ suggestions = [], proposals = [] } = {}) {
+/** All three sources as one list — Suggestions, newest first, the same title offered twice shown once. */
+export function mergeInbox({ suggestions = [], proposals = [], ideas = [] } = {}) {
   const items = [
     ...suggestions.map((s) => ({
       ref: `s:${s.id}`, id: s.id, source: "chat", kind: s.kind || "task",
       title: s.title, why: s.rationale || null, createdAt: s.created_at, expiresAt: null,
+    })),
+    ...ideas.map((i) => ({
+      ref: `i:${i.id}`, id: i.id, source: "idea", kind: "idea",
+      title: i.title, why: i.why || null, createdAt: i.created_at, expiresAt: i.expires_at || null,
+      icon: i.icon || "chat", context: i.context || {},
     })),
     ...proposals.map((p) => ({
       ref: `p:${p.id}`, id: p.id, source: "planner", kind: p.kind,
@@ -33,8 +38,8 @@ export function mergeInbox({ suggestions = [], proposals = [] } = {}) {
   });
 }
 
-/** "s:<uuid>" | "p:<uuid>" → { source, id } or null. */
+/** "s:<uuid>" | "p:<uuid>" | "i:<uuid>" → { source, id } or null. */
 export function parseRef(ref) {
-  const m = /^([sp]):([0-9a-f-]{36})$/i.exec(String(ref || ""));
-  return m ? { source: m[1] === "s" ? "chat" : "planner", id: m[2] } : null;
+  const m = /^([spi]):([0-9a-f-]{36})$/i.exec(String(ref || ""));
+  return m ? { source: { s: "chat", p: "planner", i: "idea" }[m[1].toLowerCase()], id: m[2] } : null;
 }

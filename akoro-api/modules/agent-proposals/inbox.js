@@ -4,9 +4,11 @@
  *
  *   chat     public.agent_suggestions — `suggest_help` during a conversation
  *   planner  edu.agent_proposals      — the background cycle (Full Autonomy)
+ *   idea     edu.agent_ideas          — buildable briefs (§7.16.4); accepting
+ *                                       starts the brief as a chat message
  *
- * Items carry a ref ("s:<id>" | "p:<id>") so one accept / dismiss door serves
- * both. The same suggestion offered by both sources shows once (newest kept),
+ * Items carry a ref ("s:<id>" | "p:<id>" | "i:<id>") so one accept / dismiss
+ * door serves all three — one list, named Suggestions. The same suggestion offered by both sources shows once (newest kept),
  * and each source checks the other before adding a duplicate (openTitles).
  *
  * Accepting does what the kind says: a task becomes a task, a goal a goal
@@ -44,25 +46,29 @@ const fail = (message, status = 400) => Object.assign(new Error(message), { stat
 export async function loadInbox(userId) {
   await edu().from("agent_proposals").update({ status: "expired", decided_at: now() })
     .eq("user_id", userId).eq("status", PENDING).lt("expires_at", now());
-  const [s, p] = await Promise.all([
+  const [s, p, i] = await Promise.all([
     db.from("agent_suggestions").select("*").eq("user_id", userId).eq("status", "open")
       .order("created_at", { ascending: false }).limit(50),
     edu().from("agent_proposals").select("*").eq("user_id", userId).eq("status", PENDING)
       .order("created_at", { ascending: false }).limit(50),
+    edu().from("agent_ideas").select("*").eq("user_id", userId).eq("status", "live")
+      .gt("expires_at", now()).order("created_at", { ascending: false }).limit(6),
   ]);
-  if (s.error || p.error) throw fail("Could not load your suggestions", 503);
-  return mergeInbox({ suggestions: s.data || [], proposals: p.data || [] });
+  if (s.error || p.error || i.error) throw fail("Could not load your suggestions", 503);
+  return mergeInbox({ suggestions: s.data || [], proposals: p.data || [], ideas: i.data || [] });
 }
 
 /** Normalised titles open in either inbox — each source skips what the other already offers. */
 export async function openTitles(userId) {
-  const [s, p] = await Promise.all([
+  const [s, p, i] = await Promise.all([
     db.from("agent_suggestions").select("title").eq("user_id", userId).eq("status", "open").limit(100)
       .then((r) => r.data ?? []).catch(() => []),
     edu().from("agent_proposals").select("title").eq("user_id", userId).eq("status", PENDING).limit(100)
       .then((r) => r.data ?? []).catch(() => []),
+    edu().from("agent_ideas").select("title").eq("user_id", userId).eq("status", "live").gt("expires_at", now()).limit(100)
+      .then((r) => r.data ?? []).catch(() => []),
   ]);
-  return new Set([...s, ...p].map((r) => normalizeTitle(r.title)).filter(Boolean));
+  return new Set([...s, ...p, ...i].map((r) => normalizeTitle(r.title)).filter(Boolean));
 }
 
 /* ── chat suggestions ─────────────────────────────────────────────────── */
@@ -115,6 +121,31 @@ export async function dismissChatSuggestion(userId, id, reason) {
   if (error) throw fail("Could not dismiss the suggestion", 503);
   if (!data?.length) throw fail("Suggestion not found", 404);
   return data[0];
+}
+
+/* ── ideas ────────────────────────────────────────────────────────────── */
+
+/**
+ * Accept one idea: claim it (live → used) and hand its brief back as the
+ * conversation to start — the same shape as a conversation suggestion, so
+ * the app sends it as the learner's own chat message (the §7.16.4 path).
+ */
+export async function acceptInboxIdea(userId, id) {
+  const { data: claimed } = await edu().from("agent_ideas")
+    .update({ status: "used", decided_at: now() })
+    .eq("id", id).eq("user_id", userId).eq("status", "live").select("*").maybeSingle();
+  if (!claimed) throw fail("That idea is gone — it was used, dismissed or expired.", 404);
+  return { kind: "conversation", prompt: claimed.brief || claimed.title, idea: { id: claimed.id, title: claimed.title } };
+}
+
+/** Dismiss one idea. The reason is accepted for a uniform door; ideas keep no reason column. */
+export async function dismissInboxIdea(userId, id, reason) {
+  const { data, error } = await edu().from("agent_ideas")
+    .update({ status: "dismissed", decided_at: now() })
+    .eq("id", id).eq("user_id", userId).eq("status", "live").select("id").maybeSingle();
+  if (error) throw fail("Could not dismiss the idea", 503);
+  if (!data) throw fail("That idea is gone — it was used, dismissed or expired.", 404);
+  return { dismissed: true, reason: reasonOf(reason) };
 }
 
 /* ── planner proposals ────────────────────────────────────────────────── */
