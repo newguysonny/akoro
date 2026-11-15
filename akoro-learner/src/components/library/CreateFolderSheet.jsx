@@ -104,7 +104,7 @@ export default function CreateFolderSheet({ open, onClose, onCreated }) {
   return (
     <>
       <div onClick={() => !busy && onClose?.()} style={{ position: 'fixed', inset: 0, zIndex: 2000, background: 'rgba(6,6,18,.55)', backdropFilter: 'blur(5px)' }} />
-      <div role="dialog" aria-label="Create a folder"
+      <div className="ak-bottom-sheet" role="dialog" aria-label="Create a folder"
         style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 2100, background: 'var(--ak-surface)', borderRadius: '22px 22px 0 0', padding: '0 20px 46px', boxShadow: '0 -8px 40px rgba(0,0,0,.14)', animation: 'sheet-up .3s cubic-bezier(.32,1.2,.64,1)', fontFamily: "'Nunito',sans-serif", maxHeight: '86vh', overflowY: 'auto' }}>
 
         {/* Head */}

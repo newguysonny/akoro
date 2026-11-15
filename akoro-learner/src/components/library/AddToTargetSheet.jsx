@@ -60,6 +60,7 @@ export default function AddToTargetSheet({ item, onClose, onPickFolder, onPickCo
         .ats-hint{font-size:.76rem;color:var(--ak-text-sub,#6B7280);font-weight:600;margin-top:1px}
         .ats-btn{border:1px solid var(--ak-border2,#E5E7EB);border-radius:10px;padding:9px 16px;font-weight:800;font-size:.85rem;font-family:inherit;background:var(--ak-surface,#fff);color:var(--ak-text,#111827);cursor:pointer}
         .ats-btn:disabled{opacity:.55;cursor:default}
+        @media (min-width:769px){.ats-overlay{align-items:center;padding:24px 16px}.ats-sheet{border-radius:20px}}
       `}</style>
       <div className="ats-sheet" role="dialog" aria-modal="true" aria-label={mode === 'rename' ? 'Rename' : mode === 'delete' ? 'Delete' : 'Add to…'}>
         <div className="ats-handle" />

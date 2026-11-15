@@ -494,8 +494,8 @@ function ScoreCard({ grade, questions, ai, text }) {
 function LastCheck({ check, total, questions, onAnswer, onSubmit, onClose, submitting, err, mid, dark }) {
   const issues = check.unanswered.length + check.blanks.length;
   return (
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 400, background: 'rgba(10,10,25,.45)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
-      <div onClick={(e) => e.stopPropagation()} role="dialog" aria-label="Hand in your assignment"
+    <div className="ak-sheet-overlay" onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 400, background: 'rgba(10,10,25,.45)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+      <div className="ak-sheet-panel" onClick={(e) => e.stopPropagation()} role="dialog" aria-label="Hand in your assignment"
         style={{ width: '100%', maxWidth: 520, background: 'var(--ak-surface)', borderRadius: '22px 22px 0 0', padding: '10px 20px calc(env(safe-area-inset-bottom, 0px) + 18px)', boxShadow: '0 -12px 32px rgba(17,24,39,.18)', fontFamily: "'Nunito',sans-serif", maxHeight: '85vh', overflowY: 'auto' }}>
         <div style={{ width: 38, height: 4, borderRadius: 2, background: 'var(--ak-border)', margin: '0 auto 14px' }}/>
         <h3 style={{ fontSize: 17, fontWeight: 900, color: 'var(--ak-text)', margin: '0 0 4px' }}>{issues ? 'Before you hand it in' : 'Ready to hand it in?'}</h3>

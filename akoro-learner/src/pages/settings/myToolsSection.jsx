@@ -168,9 +168,9 @@ export default function MyToolsSection() {
       </Section>
       {err && <div style={{ padding: '6px 14px 10px', fontSize: 12, color: '#EF4444', fontFamily: NUNITO }}>{err}</div>}
       {sheet && (
-        <div onClick={() => setSheet(false)}
+        <div className="ak-sheet-overlay" onClick={() => setSheet(false)}
           style={{ position: 'fixed', inset: 0, background: 'rgba(24,20,44,.45)', zIndex: 900, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
-          <div onClick={(e) => e.stopPropagation()}
+          <div className="ak-sheet-panel" onClick={(e) => e.stopPropagation()}
             style={{ background: 'var(--ak-surface)', width: '100%', maxWidth: 430, margin: 10, borderRadius: 20, padding: '10px 8px 14px', boxShadow: '0 12px 40px rgba(24,20,44,.25)' }}>
             <div style={{ width: 40, height: 4.5, borderRadius: 99, background: 'var(--ak-border)', margin: '2px auto 6px' }} />
             <button type="button" onClick={() => { setSheet(false); setDraftLabel(open.label); setRenaming(true); }}

@@ -50,7 +50,7 @@ export default function ConfirmHost() {
         position: 'fixed', inset: 0, zIndex: 3000,
         background: 'rgba(6,6,18,.6)', backdropFilter: 'blur(5px)',
       }} />
-      <div style={{
+      <div className="ak-bottom-sheet" style={{
         position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 3100,
         background: 'var(--ak-surface)', borderRadius: '22px 22px 0 0',
         padding: '0 20px 44px', boxShadow: '0 -8px 40px rgba(0,0,0,.16)',

@@ -404,7 +404,7 @@ function SessionChatView({
       {confirmClose&&(
         <><div onClick={()=>setConfirmClose(false)}
           style={{ position:"absolute",inset:0,zIndex:100,background:"rgba(0,0,0,.65)",backdropFilter:"blur(4px)" }}/>
-        <div style={{ position:"absolute",bottom:0,left:0,right:0,zIndex:101,
+        <div className="ak-bottom-sheet-in" style={{ position:"absolute",bottom:0,left:0,right:0,zIndex:101,
           background:"var(--ak-surface)",borderRadius:"20px 20px 0 0",padding:"28px 22px 36px",
           fontFamily:"'Nunito',sans-serif",animation:"sheet-up .25s ease" }}>
           <div style={{ width:36,height:4,borderRadius:2,background:"var(--ak-tag-bg)",margin:"0 auto 22px" }}/>

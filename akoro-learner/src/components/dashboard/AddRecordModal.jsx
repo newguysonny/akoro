@@ -221,7 +221,7 @@ export default function AddRecordModal({ open, onClose, user, onOpenRecord, onRe
   return (
     <>
       <div onClick={onClose} style={{ position:'fixed', inset:0, zIndex:2000, background:'rgba(6,6,18,.55)', backdropFilter:'blur(5px)' }}/>
-      <div style={{ position:'fixed', bottom:0, left:0, right:0, zIndex:2100, background:'var(--ak-surface)', borderRadius:'22px 22px 0 0', padding:'0 20px 46px', boxShadow:'0 -8px 40px rgba(0,0,0,.14)', animation:'sheet-up .3s cubic-bezier(.32,1.2,.64,1)', fontFamily:"'Nunito',sans-serif", maxHeight:'82vh', overflowY:'auto' }}>
+      <div className="ak-bottom-sheet" style={{ position:'fixed', bottom:0, left:0, right:0, zIndex:2100, background:'var(--ak-surface)', borderRadius:'22px 22px 0 0', padding:'0 20px 46px', boxShadow:'0 -8px 40px rgba(0,0,0,.14)', animation:'sheet-up .3s cubic-bezier(.32,1.2,.64,1)', fontFamily:"'Nunito',sans-serif", maxHeight:'82vh', overflowY:'auto' }}>
         <div style={{ width:38, height:4, borderRadius:2, background:'var(--ak-border3)', margin:'14px auto 16px' }}/>
         <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:10 }}>
           <div>

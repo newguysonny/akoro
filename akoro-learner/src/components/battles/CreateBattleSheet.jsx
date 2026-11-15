@@ -233,7 +233,7 @@ export default function CreateBattleSheet({ onClose, onCreated }) {
     <>
       <style>{ANIM_CSS}</style>
       <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 2000, background: 'rgba(6,6,18,.55)', backdropFilter: 'blur(5px)' }} />
-      <div style={SHEET}>
+      <div className="ak-bottom-sheet" style={SHEET}>
         {/* Sticky, not absolute: the sheet scrolls, and a close button that
             scrolls out of reach on a long form is the same as not having one.
             The backdrop dismisses too, but it's off screen once you scroll. */}

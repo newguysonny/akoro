@@ -74,7 +74,7 @@ export default function InstallInstructionsSheet({ open, onClose, platform }) {
   const instructions = INSTALL_INSTRUCTIONS[platform] || INSTALL_INSTRUCTIONS.unknown;
 
   return (
-    <div
+    <div className="ak-sheet-overlay"
       role="dialog"
       aria-modal="true"
       aria-label="Install instructions"
@@ -86,7 +86,7 @@ export default function InstallInstructionsSheet({ open, onClose, platform }) {
         fontFamily: "'Nunito', system-ui, sans-serif",
       }}
     >
-      <div
+      <div className="ak-sheet-panel"
         style={{
           width: '100%', maxWidth: 480, maxHeight: '82vh', overflowY: 'auto',
           background: 'var(--ak-surface, #fff)', color: 'var(--ak-text, #1A1A2E)',

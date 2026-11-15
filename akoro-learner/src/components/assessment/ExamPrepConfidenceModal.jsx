@@ -61,8 +61,8 @@ export default function ExamPrepConfidenceModal({ onClose, onStartTeach, initial
 
   const close = () => { if (!busy) onClose?.(); };
   return (
-    <div role="dialog" aria-modal="true" aria-label="Exam-prep confidence check" style={overlay}>
-      <div style={sheet}>
+    <div className="ak-sheet-overlay" role="dialog" aria-modal="true" aria-label="Exam-prep confidence check" style={overlay}>
+      <div className="ak-sheet-panel" style={sheet}>
         <div style={header}>
           <div><div style={{ fontSize:16, fontWeight:900, color:'var(--ak-text)' }}>Exam-prep confidence check</div><div style={caption}>Generated exam-style practice · not a historical past paper</div></div>
           <button type="button" onClick={close} aria-label="Close" style={closeButton}>×</button>

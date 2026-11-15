@@ -10,7 +10,7 @@ export default function ConceptTrackerModal({ onClose }) {
   const load = async () => { try { setError(''); setData(await apiGet('/api/adaptive/chat/concept-tracker', { cache:false })); } catch (err) { setError(err?.message || 'Concept tracker is unavailable.'); } };
   useEffect(()=>{ load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const clearNotes = async () => { setClearing(true); try { await apiDelete('/api/adaptive/chat/concept-tracker/confusion-notes'); await load(); } catch (err) { setError(err?.message || 'Notes could not be cleared.'); } finally { setClearing(false); } };
-  return <div role="dialog" aria-modal="true" aria-label="Learning tracker" style={overlay}><div style={sheet}>
+  return <div className="ak-sheet-overlay" role="dialog" aria-modal="true" aria-label="Learning tracker" style={overlay}><div className="ak-sheet-panel" style={sheet}>
     <div style={header}><div><div style={{fontSize:16,fontWeight:900,color:'var(--ak-text)'}}>Learning tracker</div><div style={caption}>A compact view of reviewed learning evidence</div></div><button onClick={onClose} style={close} aria-label="Close">×</button></div>
     {error&&<div role="alert" style={errorBox}>{error}</div>}
     {!data&&!error&&<p style={body}>Loading tracker…</p>}

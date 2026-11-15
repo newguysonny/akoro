@@ -125,8 +125,8 @@ export default function OrderHistoryPage() {
 
       {/* Refund confirmation */}
       {refundOrder && (
-        <div onClick={() => !busy && setRefundOrder(null)} style={{ position: 'fixed', inset: 0, zIndex: 3000, background: 'rgba(0,0,0,.4)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
-          <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 480, background: 'var(--ak-surface)', borderRadius: '18px 18px 0 0', padding: '20px 18px calc(20px + env(safe-area-inset-bottom,0px))' }}>
+        <div className="ak-sheet-overlay" onClick={() => !busy && setRefundOrder(null)} style={{ position: 'fixed', inset: 0, zIndex: 3000, background: 'rgba(0,0,0,.4)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+          <div className="ak-sheet-panel" onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 480, background: 'var(--ak-surface)', borderRadius: '18px 18px 0 0', padding: '20px 18px calc(20px + env(safe-area-inset-bottom,0px))' }}>
             <div style={{ fontSize: 17, fontWeight: 900, color: 'var(--ak-text)', marginBottom: 6 }}>Request a refund?</div>
             <p style={{ fontSize: 13.5, color: 'var(--ak-text-muted)', lineHeight: 1.6, margin: '0 0 14px' }}>
               You’ll lose access to <strong style={{ color: 'var(--ak-text)' }}>{refundOrder.title}</strong>{refundOrder.kind === 'order' ? ' (all items in this order)' : ''}, and {ngn(refundOrder.amount_ngn)} will be refunded to your payment method.

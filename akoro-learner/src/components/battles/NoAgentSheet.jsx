@@ -77,7 +77,7 @@ export default function NoAgentSheet({ open, onClose, onCreated, defaultName = '
   return (
     <>
       <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 2200, background: 'rgba(6,6,18,.6)', backdropFilter: 'blur(5px)' }} />
-      <div style={SHEET}>
+      <div className="ak-bottom-sheet" style={SHEET}>
         <div style={{ width: 38, height: 4, borderRadius: 2, background: 'var(--ak-border3)', margin: '14px auto 20px' }} />
         <p style={{ fontSize: 16, fontWeight: 900, color: 'var(--ak-text)', margin: '0 0 6px' }}><Icon name="ti-robot" size={16}/> First, meet your agent</p>
         <p style={{ fontSize: 12.5, color: 'var(--ak-text-muted)', margin: '0 0 20px', lineHeight: 1.55 }}>

@@ -1743,7 +1743,7 @@ function AgentChatTab({
       )}
       {taskOpen&&(
         <><div onClick={closeTaskSheet} style={{ position:"fixed",inset:0,zIndex:2000,background:"rgba(6,6,18,.55)",backdropFilter:"blur(5px)" }}/>
-        <div style={{ position:"fixed",bottom:0,left:0,right:0,zIndex:2100,background:"var(--ak-surface)",borderRadius:"22px 22px 0 0",padding:"0 20px 52px",boxShadow:"0 -8px 40px rgba(0,0,0,.14)",animation:"sheet-up .3s cubic-bezier(.32,1.2,.64,1)",fontFamily:"'Nunito',sans-serif",maxHeight:"80vh",overflowY:"auto" }}>
+        <div className="ak-bottom-sheet" style={{ position:"fixed",bottom:0,left:0,right:0,zIndex:2100,background:"var(--ak-surface)",borderRadius:"22px 22px 0 0",padding:"0 20px 52px",boxShadow:"0 -8px 40px rgba(0,0,0,.14)",animation:"sheet-up .3s cubic-bezier(.32,1.2,.64,1)",fontFamily:"'Nunito',sans-serif",maxHeight:"80vh",overflowY:"auto" }}>
           <div style={{ width:38,height:4,borderRadius:2,background:"var(--ak-border3)",margin:"14px auto 20px" }}/>
           <p style={{ fontSize:16,fontWeight:900,color:"var(--ak-text)",margin:"0 0 6px" }}>{tEditing?<><Icon name="ti-edit" size={13}/> Edit task</>:<><Icon name="ti-clipboard" size={13}/> {t('agent.assign_to')} {agentName}</>}</p>
           <p style={{ fontSize:12,color:"var(--ak-text-muted)",margin:"0 0 20px",lineHeight:1.5 }}>{t('agent.assign_sub')}</p>
@@ -1785,7 +1785,7 @@ function AgentChatTab({
         const showReasons=askWhy===it.ref;
         return (
         <><div onClick={closeIdeaSheet} style={{ position:"fixed",inset:0,zIndex:2000,background:"rgba(6,6,18,.55)",backdropFilter:"blur(5px)" }}/>
-        <div style={{ position:"fixed",bottom:0,left:0,right:0,zIndex:2100,background:"var(--ak-surface)",borderRadius:"22px 22px 0 0",padding:"0 20px 40px",boxShadow:"0 -8px 40px rgba(0,0,0,.14)",animation:"sheet-up .3s cubic-bezier(.32,1.2,.64,1)",fontFamily:"'Nunito',sans-serif",maxHeight:"84vh",overflowY:"auto" }}>
+        <div className="ak-bottom-sheet" style={{ position:"fixed",bottom:0,left:0,right:0,zIndex:2100,background:"var(--ak-surface)",borderRadius:"22px 22px 0 0",padding:"0 20px 40px",boxShadow:"0 -8px 40px rgba(0,0,0,.14)",animation:"sheet-up .3s cubic-bezier(.32,1.2,.64,1)",fontFamily:"'Nunito',sans-serif",maxHeight:"84vh",overflowY:"auto" }}>
           <div style={{ width:38,height:4,borderRadius:2,background:"var(--ak-border3)",margin:"14px auto 16px" }}/>
           <div style={{ display:"flex",alignItems:"center",gap:6,flexWrap:"wrap" }}>
             <><span style={{ display:"inline-flex",alignItems:"center",gap:4,fontSize:9.5,fontWeight:900,padding:"2px 8px",borderRadius:20,background:`${accent}12`,border:`1px solid ${accent}35`,color:accent,letterSpacing:.3,textTransform:"uppercase" }}><Icon name={kindIcon} size={10}/>{t(kindKey)}</span>{planner&&<span style={{ fontSize:10,color:"var(--ak-text-muted)",fontWeight:700 }}>{t('agent.proposals_from_review')}</span>}{isIdea&&it.context?.label&&<span style={{ display:"inline-flex",alignItems:"center",gap:4,fontSize:10.5,fontWeight:800,color:"var(--ak-text-muted)",background:"var(--ak-surface-hover)",borderRadius:20,padding:"2px 8px" }}><Icon name={IDEA_FROM[it.context.kind]||"ti-sparkles"} size={10}/> {it.context.label}</span>}<span style={{ fontSize:10,color:"var(--ak-text-muted)",fontWeight:600 }}>{relTime(it.createdAt)}</span></>

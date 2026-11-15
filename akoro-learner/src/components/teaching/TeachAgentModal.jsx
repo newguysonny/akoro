@@ -1038,10 +1038,10 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
       )}
 
       {switchOpen && (
-        <div onClick={() => !switching && setSwitchOpen(false)}
+        <div className="ak-sheet-overlay" onClick={() => !switching && setSwitchOpen(false)}
           style={{ position:"fixed",inset:0,zIndex:3200,background:"rgba(6,6,18,.6)",
             backdropFilter:"blur(5px)",display:"flex",alignItems:"flex-end",justifyContent:"center" }}>
-          <div onClick={e => e.stopPropagation()}
+          <div className="ak-sheet-panel" onClick={e => e.stopPropagation()}
             style={{ background:"var(--ak-surface)",width:"100%",maxWidth:540,maxHeight:"78vh",overflowY:"auto",
               borderRadius:"22px 22px 0 0",fontFamily:"'Nunito',sans-serif",
               animation:"sheet-up .28s cubic-bezier(.34,1.4,.6,1)",border:"1px solid var(--ak-border)" }}>

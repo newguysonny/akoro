@@ -339,6 +339,7 @@ export default function PharmDProgram({ onClose, focus, onFocusConsumed,
         /* Action sheet */
         .pd-sheet-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.55);display:flex;align-items:flex-end;justify-content:center;z-index:40}
         .pd-sheet{width:100%;max-width:430px;background:var(--ak-surface,#fff);border-radius:20px 20px 0 0;padding:10px 0 max(18px, env(safe-area-inset-bottom));max-height:80vh;overflow-y:auto}
+        @media (min-width:769px){.pd-sheet-overlay{align-items:center;padding:24px 16px}.pd-sheet{border-radius:20px}}
         .pd-sheet-handle{width:36px;height:4px;border-radius:100px;background:var(--ak-border2,#E5E7EB);margin:6px auto 14px}
         .pd-sheet-head{display:flex;align-items:center;gap:12px;padding:0 20px 16px;border-bottom:1px solid var(--ak-border,#F3F4F6)}
         .pd-sheet-art{width:48px;height:48px;border-radius:10px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:.85rem;color:#fff}

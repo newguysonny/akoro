@@ -206,8 +206,8 @@ function NewActivitySheet({ community, onClose, onCreated }) {
   });
 
   return (
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 2500, background: 'var(--ak-overlay)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
-      <div onClick={(e) => e.stopPropagation()} style={{ background: 'var(--ak-surface)', width: '100%', maxWidth: 540, maxHeight: '88vh', overflowY: 'auto', borderRadius: '22px 22px 0 0', fontFamily: "'Nunito',sans-serif", animation: 'sheet-up .28s cubic-bezier(.34,1.4,.6,1)' }}>
+    <div className="ak-sheet-overlay" onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 2500, background: 'var(--ak-overlay)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+      <div className="ak-sheet-panel" onClick={(e) => e.stopPropagation()} style={{ background: 'var(--ak-surface)', width: '100%', maxWidth: 540, maxHeight: '88vh', overflowY: 'auto', borderRadius: '22px 22px 0 0', fontFamily: "'Nunito',sans-serif", animation: 'sheet-up .28s cubic-bezier(.34,1.4,.6,1)' }}>
         <style>{`
           @keyframes sheet-up{from{transform:translateY(40px);opacity:.4}to{transform:translateY(0);opacity:1}}
           .ak-cm-field:focus{outline:2px solid ${BRAND};outline-offset:1px}

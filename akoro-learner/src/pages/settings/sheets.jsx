@@ -36,7 +36,7 @@ function AvatarPickerSheet({ type, current, onClose, onSavePhoto, onSaveEmoji, c
       <div onClick={onClose}
         style={{ position:'fixed',inset:0,zIndex:3000,
           background:'rgba(0,0,0,.55)',backdropFilter:'blur(4px)' }}/>
-      <div style={{ position:'fixed',bottom:0,left:0,right:0,zIndex:3100,
+      <div className="ak-bottom-sheet" style={{ position:'fixed',bottom:0,left:0,right:0,zIndex:3100,
         background:'var(--ak-surface)',borderRadius:'22px 22px 0 0',
         padding:'0 18px 40px',boxShadow:'0 -8px 40px rgba(0,0,0,.2)',
         animation:'sheet-up .3s ease',fontFamily:"'Nunito',sans-serif",
@@ -153,7 +153,7 @@ function SubjectsSheet({ current, onClose, onSave, accentColor=BRAND }) {
     <>
       <div onClick={onClose} style={{ position:'fixed',inset:0,zIndex:3000,
         background:'rgba(0,0,0,.55)',backdropFilter:'blur(4px)' }}/>
-      <div style={{ position:'fixed',bottom:0,left:0,right:0,zIndex:3100,
+      <div className="ak-bottom-sheet" style={{ position:'fixed',bottom:0,left:0,right:0,zIndex:3100,
         background:'var(--ak-surface)',borderRadius:'22px 22px 0 0',padding:'0 18px 40px',
         boxShadow:'0 -8px 40px rgba(0,0,0,.2)',animation:'sheet-up .3s ease',
         fontFamily:"'Nunito',sans-serif",maxHeight:'88vh',overflowY:'auto' }}>
@@ -262,7 +262,7 @@ function GenericSheet({ field,label,type,options,value,onClose,onSave }) {
     <>
       <div onClick={onClose} style={{ position:'fixed',inset:0,zIndex:3000,
         background:'rgba(0,0,0,.55)',backdropFilter:'blur(4px)' }}/>
-      <div style={{ position:'fixed',bottom:0,left:0,right:0,zIndex:3100,
+      <div className="ak-bottom-sheet" style={{ position:'fixed',bottom:0,left:0,right:0,zIndex:3100,
         background:'var(--ak-surface)',borderRadius:'22px 22px 0 0',padding:'0 18px 40px',
         boxShadow:'0 -8px 40px rgba(0,0,0,.2)',animation:'sheet-up .3s ease',
         fontFamily:"'Nunito',sans-serif",maxHeight:'85vh',overflowY:'auto' }}>
@@ -399,7 +399,7 @@ function LogoutModal({ onClose, onConfirm }) {
     <>
       <div onClick={onClose} style={{ position:'fixed',inset:0,zIndex:3000,
         background:'rgba(0,0,0,.55)',backdropFilter:'blur(4px)' }}/>
-      <div style={{ position:'fixed',bottom:0,left:0,right:0,zIndex:3100,
+      <div className="ak-bottom-sheet" style={{ position:'fixed',bottom:0,left:0,right:0,zIndex:3100,
         background:'var(--ak-surface)',borderRadius:'22px 22px 0 0',
         padding:'28px 18px 40px',animation:'sheet-up .3s ease',
         fontFamily:"'Nunito',sans-serif",textAlign:'center' }}>
@@ -471,7 +471,7 @@ function TwoFactorSheet({ mode, onClose, onDone }) {
     <>
       <div onClick={onClose} style={{ position:'fixed',inset:0,zIndex:3000,
         background:'rgba(0,0,0,.55)',backdropFilter:'blur(4px)' }}/>
-      <div style={{ position:'fixed',bottom:0,left:0,right:0,zIndex:3100,
+      <div className="ak-bottom-sheet" style={{ position:'fixed',bottom:0,left:0,right:0,zIndex:3100,
         background:'var(--ak-surface)',borderRadius:'22px 22px 0 0',
         padding:'0 18px 40px',boxShadow:'0 -8px 40px rgba(0,0,0,.2)',
         animation:'sheet-up .3s ease',fontFamily:"'Nunito',sans-serif",
@@ -615,7 +615,7 @@ function AlarmSoundSheet({ current, customName, onClose, onSave, onUpload, onCle
       <div onClick={() => { stopPreview(); onClose(); }}
         style={{ position: 'fixed', inset: 0, zIndex: 3000,
           background: 'rgba(0,0,0,.55)', backdropFilter: 'blur(4px)' }}/>
-      <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 3100,
+      <div className="ak-bottom-sheet" style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 3100,
         background: 'var(--ak-surface)', borderRadius: '22px 22px 0 0',
         padding: '0 18px 40px', boxShadow: '0 -8px 40px rgba(0,0,0,.2)',
         animation: 'sheet-up .3s ease', fontFamily: "'Nunito',sans-serif",
