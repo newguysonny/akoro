@@ -102,6 +102,7 @@ const SUGG_KIND = {
   quiz_from_records: ["agent.kind_quiz", "ti-list-check"], teach_weak_topic: ["agent.kind_teach", "ti-school"], study_plan: ["agent.kind_plan", "ti-calendar-event"],
   revision_battle: ["agent.kind_check", "ti-swords"], follow_up_question: ["agent.kind_follow_up", "ti-message-circle"], goal_nudge: ["agent.kind_goal_step", "ti-target"],
   fix_it: ["agent.kind_fix_it", "ti-tool"],
+  idea: ["agent.ideas", "ti-bulb"],
 };
 
 /* Ideas: the icon for what it builds, and for where it came from. */
@@ -667,7 +668,7 @@ function AgentChatTab({
   const [dismissReasons,setDismissReasons]=useState(["not_useful","wrong_time","too_much","already_doing"]);
   const [inboxBusyRef,setInboxBusyRef]=useState(null);
   const [askWhy,setAskWhy]=useState(null);   // the ref whose dismiss reasons are showing
-  const [ideaSheet,setIdeaSheet]=useState(null);   // { type:"inbox"|"idea", item } — the idea bottom sheet's subject
+  const [ideaSheet,setIdeaSheet]=useState(null);   // { type:"inbox", item } — the bottom sheet's subject (ideas arrive via the inbox too)
   const [sheetLike,setSheetLike]=useState(false);  // "More like this" tapped in the open sheet
   const openIdeaSheet=(type,item)=>{ setIdeaSheet({type,item}); setSheetLike(false); };
   const closeIdeaSheet=()=>{ setIdeaSheet(null); setAskWhy(null); };
@@ -686,9 +687,6 @@ function AgentChatTab({
   const suggestionCount=inbox.length;
   const refetchInbox=async()=>{ try{ const d=await apiGet('/api/agent/proposals/inbox'); setInbox(Array.isArray(d?.data)?d.data:[]); if(Array.isArray(d?.reasons)) setDismissReasons(d.reasons.filter(r=>r!=="other")); }catch{} };
   useEffect(()=>{ refetchInbox(); },[]);
-  // Ideas (§7.16.4): buildable briefs the agent brings overnight. "Do it" sends the brief as
-  // the learner's own chat message — the ordinary, already-tested path from there.
-  const [ideas,setIdeas]=useState([]);
   // Needs you (Phase 18 item 2): one list of what waits for the learner, from the server.
   const needsYou=useNeedsYou();
   // Ratings on replies (Phase 18 item 4): the learner's own, never shown to the agent.
@@ -706,24 +704,6 @@ function AgentChatTab({
     if(href.includes('inbox=')){ setTaskFilter('suggestions'); return; }
     if(href==='/app?tab=agent'||href==='/?tab=agent'){ setInnerTab('chat'); return; }
     if(href) navigate(href);
-  };
-  const [ideaBusy,setIdeaBusy]=useState(null);
-  const refetchIdeas=async()=>{ try{ const d=await apiGet('/api/agent/ideas'); setIdeas(Array.isArray(d?.data)?d.data:[]); }catch{} };
-  useEffect(()=>{ refetchIdeas(); },[]);
-  const runIdea=async(idea)=>{
-    if(ideaBusy) return;
-    setIdeaBusy(idea.id); setListError("");
-    try {
-      const d=await apiPost(`/api/agent/ideas/${encodeURIComponent(idea.id)}/use`,{});
-      setIdeas(prev=>prev.filter(x=>x.id!==idea.id));
-      setInnerTab("chat"); sendMessage(d?.data?.brief||idea.brief);
-    } catch(e){ setListError(e?.message||t('agent.proposal_failed')); refetchIdeas(); }
-    finally{ setIdeaBusy(null); }
-  };
-  const dropIdea=async(idea)=>{
-    if(ideaBusy) return;
-    setIdeas(prev=>prev.filter(x=>x.id!==idea.id));
-    try { await apiPost(`/api/agent/ideas/${encodeURIComponent(idea.id)}/dismiss`,{}); } catch { refetchIdeas(); }
   };
   const acceptIdea=async(it)=>{
     if(inboxBusyRef) return;
@@ -1671,8 +1651,8 @@ function AgentChatTab({
             ))}
           </div>
           <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 16px 8px" }}>
-            <div style={{ display:"flex",gap:6,flexWrap:"wrap" }}>{[["pending",t('agent.to_do')],["done",t('agent.done')],["needs",t('agent.needs_you')],["suggestions",t('agent.suggestions')],["ideas",t('agent.ideas')]].map(([k,l])=><button key={k} onClick={()=>{ setTaskFilter(k); if(k==="needs") needsYou.reload(); }} style={{ padding:"5px 12px",borderRadius:20,border:`1.5px solid ${taskFilter===k?BRAND:"var(--ak-border2)"}`,background:taskFilter===k?`${BRAND}10`:"transparent",color:taskFilter===k?BRAND:"var(--ak-text-muted)",fontSize:11.5,fontWeight:700,cursor:"pointer",fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",gap:5 }}>{k==="ideas"&&<Icon name="ti-bulb" size={12}/>}{k==="needs"&&<Icon name="ti-bell-ringing" size={12}/>}{l}{k==="needs"&&needsYou.count>0&&<span style={{ fontSize:9,fontWeight:900,background:taskFilter===k?BRAND:"var(--ak-border)",color:taskFilter===k?"#fff":"var(--ak-text-muted)",borderRadius:8,padding:"1px 5px" }}>{needsYou.count}</span>}{k==="ideas"&&ideas.length>0&&<span style={{ fontSize:9,fontWeight:900,background:taskFilter===k?BRAND:"var(--ak-border)",color:taskFilter===k?"#fff":"var(--ak-text-muted)",borderRadius:8,padding:"1px 5px" }}>{ideas.length}</span>}{k==="suggestions"&&suggestionCount>0&&<span style={{ fontSize:9,fontWeight:900,background:taskFilter===k?BRAND:"var(--ak-border)",color:taskFilter===k?"#fff":"var(--ak-text-muted)",borderRadius:8,padding:"1px 5px" }}>{suggestionCount}</span>}</button>)}</div>
-            {taskFilter!=="suggestions"&&taskFilter!=="ideas"&&taskFilter!=="needs"&&<button onClick={openNewTask} style={{ display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:20,border:"none",background:`linear-gradient(135deg,${BRAND},#4C1DCC)`,color:"#fff",fontSize:11.5,fontWeight:800,cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>
+            <div style={{ display:"flex",gap:6,flexWrap:"wrap" }}>{[["pending",t('agent.to_do')],["done",t('agent.done')],["needs",t('agent.needs_you')],["suggestions",t('agent.suggestions')]].map(([k,l])=><button key={k} onClick={()=>{ setTaskFilter(k); if(k==="needs") needsYou.reload(); }} style={{ padding:"5px 12px",borderRadius:20,border:`1.5px solid ${taskFilter===k?BRAND:"var(--ak-border2)"}`,background:taskFilter===k?`${BRAND}10`:"transparent",color:taskFilter===k?BRAND:"var(--ak-text-muted)",fontSize:11.5,fontWeight:700,cursor:"pointer",fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",gap:5 }}>{k==="needs"&&<Icon name="ti-bell-ringing" size={12}/>}{l}{k==="needs"&&needsYou.count>0&&<span style={{ fontSize:9,fontWeight:900,background:taskFilter===k?BRAND:"var(--ak-border)",color:taskFilter===k?"#fff":"var(--ak-text-muted)",borderRadius:8,padding:"1px 5px" }}>{needsYou.count}</span>}{k==="suggestions"&&suggestionCount>0&&<span style={{ fontSize:9,fontWeight:900,background:taskFilter===k?BRAND:"var(--ak-border)",color:taskFilter===k?"#fff":"var(--ak-text-muted)",borderRadius:8,padding:"1px 5px" }}>{suggestionCount}</span>}</button>)}</div>
+            {taskFilter!=="suggestions"&&taskFilter!=="needs"&&<button onClick={openNewTask} style={{ display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:20,border:"none",background:`linear-gradient(135deg,${BRAND},#4C1DCC)`,color:"#fff",fontSize:11.5,fontWeight:800,cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>
               <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>{t('agent.new_task')}
             </button>}
           </div>
@@ -1685,26 +1665,14 @@ function AgentChatTab({
           <div style={{ flex:1,padding:"0 16px 16px",display:"flex",flexDirection:"column",gap:8 }}>
             {taskFilter==="needs"?(
               <NeedsYouList state={needsYou} onOpen={openNeed}/>
-            ):taskFilter==="ideas"?(
-              ideas.length===0?<div style={{ textAlign:"center",padding:"32px 16px",color:"var(--ak-text-muted)" }}><Icon name="ti-bulb" size={40} color="var(--ak-text-muted)" style={{opacity:.3}}/><p style={{ fontSize:13,fontWeight:700,marginTop:8,maxWidth:260,marginInline:"auto",lineHeight:1.5 }}>{t('agent.ideas_empty')}</p></div>
-              :(<div data-ideas="">{ideas.map(idea=>(
-                <button key={idea.id} type="button" data-idea={idea.id} onClick={()=>openIdeaSheet("idea",idea)} style={{ display:"flex",gap:11,alignItems:"center",width:"100%",textAlign:"left",padding:"12px 13px",borderRadius:14,border:"1px solid var(--ak-border)",background:"var(--ak-surface)",marginBottom:8,cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>
-                  <span style={{ width:36,height:36,borderRadius:11,background:`${BRAND}12`,color:BRAND,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}><Icon name={IDEA_ICON[idea.icon]||"ti-bulb"} size={17} color={BRAND}/></span>
-                  <span style={{ flex:1,minWidth:0 }}>
-                    <span style={{ display:"block",fontSize:13.5,fontWeight:800,color:"var(--ak-text)",lineHeight:1.4 }}>{idea.title}</span>
-                    {idea.why&&<span style={{ display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden",fontSize:12,color:"var(--ak-text-sub)",marginTop:3,lineHeight:1.45 }}>{idea.why}</span>}
-                    {idea.context?.label&&<span style={{ display:"inline-flex",alignItems:"center",gap:4,fontSize:10.5,fontWeight:800,color:"var(--ak-text-muted)",background:"var(--ak-surface-hover)",borderRadius:20,padding:"2px 8px",marginTop:6 }}><Icon name={IDEA_FROM[idea.context.kind]||"ti-sparkles"} size={10}/> {idea.context.label}</span>}
-                  </span>
-                  <Icon name="ti-chevron-right" size={16} color="var(--ak-text-muted)" style={{ flexShrink:0 }}/>
-                </button>
-              ))}<p style={{ fontSize:11.5,color:"var(--ak-text-muted)",fontWeight:600,margin:"6px 2px 0",lineHeight:1.5 }}>{t('agent.ideas_note')}</p></div>)
             ):taskFilter==="suggestions"?(
               suggestionCount===0?<div style={{ textAlign:"center",padding:"32px 16px",color:"var(--ak-text-muted)" }}><Icon name="ti-bulb" size={40} color="var(--ak-text-muted)" style={{opacity:.3}}/><p style={{ fontSize:13,fontWeight:700,marginTop:8,maxWidth:260,marginInline:"auto",lineHeight:1.5 }}>{t('agent.suggestions_empty')}</p></div>
               :(<>{inbox.map(it=>{
                 const planner=it.source==="planner";
+                const isIdea=it.source==="idea";
                 const accent=planner?GOLD:BRAND;
-                const kindKey=SUGG_KIND[it.kind]?.[0]||"agent.sugg_task";
-                const kindIcon=SUGG_KIND[it.kind]?.[1]||"ti-clipboard";
+                const kindKey=isIdea?"agent.ideas":(SUGG_KIND[it.kind]?.[0]||"agent.sugg_task");
+                const kindIcon=isIdea?(IDEA_ICON[it.icon]||"ti-bulb"):(SUGG_KIND[it.kind]?.[1]||"ti-clipboard");
                 return (
                 <button key={it.ref} type="button" onClick={()=>openIdeaSheet("inbox",it)} style={{ display:"block",width:"100%",textAlign:"left",padding:"12px 14px",borderRadius:14,background:"var(--ak-surface)",border:"1px solid var(--ak-border)",marginBottom:8,cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>
                   <span style={{ display:"flex",alignItems:"center",gap:6,marginBottom:6,flexWrap:"wrap" }}>
@@ -1715,6 +1683,7 @@ function AgentChatTab({
                   </span>
                   <span style={{ display:"block",fontSize:13.5,fontWeight:700,color:"var(--ak-text)",lineHeight:1.45 }}>{it.title}</span>
                   {it.why&&<span style={{ display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden",fontSize:12,color:"var(--ak-text-sub)",marginTop:3,lineHeight:1.5 }}>{it.why}</span>}
+                  {isIdea&&it.context?.label&&<span style={{ display:"inline-flex",alignItems:"center",gap:4,fontSize:10.5,fontWeight:800,color:"var(--ak-text-muted)",background:"var(--ak-surface-hover)",borderRadius:20,padding:"2px 8px",marginTop:6 }}><Icon name={IDEA_FROM[it.context.kind]||"ti-sparkles"} size={10}/> {it.context.label}</span>}
                 </button>
                 );
               })}</>)
@@ -1780,23 +1749,23 @@ function AgentChatTab({
           </div>
         </div></>
       )}
-      {ideaSheet&&(()=>{ const {type,item:it}=ideaSheet; const isInbox=type==="inbox";
-        const planner=isInbox&&it.source==="planner";
+      {ideaSheet&&(()=>{ const {item:it}=ideaSheet;
+        const planner=it.source==="planner";
+        const isIdea=it.source==="idea";
         const accent=planner?GOLD:BRAND;
-        const kindKey=isInbox?(SUGG_KIND[it.kind]?.[0]||"agent.sugg_task"):null;
-        const kindIcon=isInbox?(SUGG_KIND[it.kind]?.[1]||"ti-clipboard"):(IDEA_ICON[it.icon]||"ti-bulb");
-        const busy=isInbox?inboxBusyRef===it.ref:ideaBusy===it.id;
-        const anyBusy=isInbox?!!inboxBusyRef:!!ideaBusy;
-        const ctaLabel=isInbox?(it.yes||t(it.kind==="conversation"||it.kind==="follow_up_question"?'agent.sugg_start_chat':it.kind==="goal"||it.kind==="goal_nudge"?'agent.sugg_add_goal':planner?'agent.proposal_approve':'agent.suggestion_accept')):t('agent.ideas_do');
-        const lines=isInbox?includedLines(it):[[t('agent.included_idea_chat'),t('agent.included_idea_chat_sub')],[t('agent.included_idea_expiry'),null]];
-        const showReasons=isInbox&&askWhy===it.ref;
+        const kindKey=isIdea?"agent.ideas":(SUGG_KIND[it.kind]?.[0]||"agent.sugg_task");
+        const kindIcon=isIdea?(IDEA_ICON[it.icon]||"ti-bulb"):(SUGG_KIND[it.kind]?.[1]||"ti-clipboard");
+        const busy=inboxBusyRef===it.ref;
+        const anyBusy=!!inboxBusyRef;
+        const ctaLabel=isIdea?t('agent.ideas_do'):(it.yes||t(it.kind==="conversation"||it.kind==="follow_up_question"?'agent.sugg_start_chat':it.kind==="goal"||it.kind==="goal_nudge"?'agent.sugg_add_goal':planner?'agent.proposal_approve':'agent.suggestion_accept'));
+        const lines=isIdea?[[t('agent.included_idea_chat'),t('agent.included_idea_chat_sub')],[t('agent.included_idea_expiry'),null]]:includedLines(it);
+        const showReasons=askWhy===it.ref;
         return (
         <><div onClick={closeIdeaSheet} style={{ position:"fixed",inset:0,zIndex:2000,background:"rgba(6,6,18,.55)",backdropFilter:"blur(5px)" }}/>
         <div style={{ position:"fixed",bottom:0,left:0,right:0,zIndex:2100,background:"var(--ak-surface)",borderRadius:"22px 22px 0 0",padding:"0 20px 40px",boxShadow:"0 -8px 40px rgba(0,0,0,.14)",animation:"sheet-up .3s cubic-bezier(.32,1.2,.64,1)",fontFamily:"'Nunito',sans-serif",maxHeight:"84vh",overflowY:"auto" }}>
           <div style={{ width:38,height:4,borderRadius:2,background:"var(--ak-border3)",margin:"14px auto 16px" }}/>
           <div style={{ display:"flex",alignItems:"center",gap:6,flexWrap:"wrap" }}>
-            {isInbox?(<><span style={{ display:"inline-flex",alignItems:"center",gap:4,fontSize:9.5,fontWeight:900,padding:"2px 8px",borderRadius:20,background:`${accent}12`,border:`1px solid ${accent}35`,color:accent,letterSpacing:.3,textTransform:"uppercase" }}><Icon name={kindIcon} size={10}/>{t(kindKey)}</span>{planner&&<span style={{ fontSize:10,color:"var(--ak-text-muted)",fontWeight:700 }}>{t('agent.proposals_from_review')}</span>}<span style={{ fontSize:10,color:"var(--ak-text-muted)",fontWeight:600 }}>{relTime(it.createdAt)}</span></>)
-            :(<><span style={{ display:"inline-flex",alignItems:"center",gap:4,fontSize:9.5,fontWeight:900,padding:"2px 8px",borderRadius:20,background:`${BRAND}12`,border:`1px solid ${BRAND}30`,color:BRAND,letterSpacing:.3,textTransform:"uppercase" }}><Icon name={kindIcon} size={10}/>{t('agent.ideas')}</span>{it.context?.label&&<span style={{ display:"inline-flex",alignItems:"center",gap:4,fontSize:10.5,fontWeight:800,color:"var(--ak-text-muted)",background:"var(--ak-surface-hover)",borderRadius:20,padding:"2px 8px" }}><Icon name={IDEA_FROM[it.context.kind]||"ti-sparkles"} size={10}/> {it.context.label}</span>}</>)}
+            <><span style={{ display:"inline-flex",alignItems:"center",gap:4,fontSize:9.5,fontWeight:900,padding:"2px 8px",borderRadius:20,background:`${accent}12`,border:`1px solid ${accent}35`,color:accent,letterSpacing:.3,textTransform:"uppercase" }}><Icon name={kindIcon} size={10}/>{t(kindKey)}</span>{planner&&<span style={{ fontSize:10,color:"var(--ak-text-muted)",fontWeight:700 }}>{t('agent.proposals_from_review')}</span>}{isIdea&&it.context?.label&&<span style={{ display:"inline-flex",alignItems:"center",gap:4,fontSize:10.5,fontWeight:800,color:"var(--ak-text-muted)",background:"var(--ak-surface-hover)",borderRadius:20,padding:"2px 8px" }}><Icon name={IDEA_FROM[it.context.kind]||"ti-sparkles"} size={10}/> {it.context.label}</span>}<span style={{ fontSize:10,color:"var(--ak-text-muted)",fontWeight:600 }}>{relTime(it.createdAt)}</span></>
           </div>
           <p style={{ fontSize:17,fontWeight:900,color:"var(--ak-text)",margin:"10px 0 0",lineHeight:1.3 }}>{it.title}</p>
           {it.why&&<p style={{ fontSize:13,color:"var(--ak-text-sub)",margin:"7px 0 0",lineHeight:1.55 }}>{it.why}</p>}
@@ -1807,7 +1776,7 @@ function AgentChatTab({
               <span style={{ fontSize:13,fontWeight:700,color:"var(--ak-text)",lineHeight:1.45 }}>{head}{sub&&<span style={{ display:"block",fontSize:11.5,color:"var(--ak-text-muted)",fontWeight:600,marginTop:1 }}>{sub}</span>}</span>
             </div>
           ))}
-          {isInbox&&it.preview&&<div style={{ marginTop:8 }}><ProposalPreview preview={it.preview}/></div>}
+          {it.preview&&<div style={{ marginTop:8 }}><ProposalPreview preview={it.preview}/></div>}
           {showReasons?(
           <div style={{ marginTop:18 }}>
             <p style={{ fontSize:11.5,fontWeight:800,color:"var(--ak-text-sub)",margin:"0 0 7px" }}>{t('agent.dismiss_why')}</p>
@@ -1821,8 +1790,8 @@ function AgentChatTab({
           ):(
           <>
           <div style={{ display:"flex",gap:10,marginTop:20 }}>
-            <button type="button" onClick={()=>{ if(isInbox){ setAskWhy(it.ref); } else { closeIdeaSheet(); dropIdea(it); } }} disabled={anyBusy} style={{ padding:"13px 20px",borderRadius:999,border:"1.5px solid var(--ak-border2)",background:"var(--ak-surface)",fontSize:13.5,fontWeight:800,color:"var(--ak-text)",cursor:anyBusy?"wait":"pointer",fontFamily:"'Nunito',sans-serif" }}>{isInbox?t('agent.dismiss_btn'):t('agent.ideas_not')}</button>
-            <button type="button" onClick={()=>{ closeIdeaSheet(); if(isInbox) acceptIdea(it); else runIdea(it); }} disabled={anyBusy} style={{ flex:1,padding:"13px",borderRadius:999,border:"none",background:anyBusy?"var(--ak-border)":`linear-gradient(135deg,${BRAND},#4C1DCC)`,fontSize:13.5,fontWeight:800,color:"#fff",cursor:anyBusy?"wait":"pointer",fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:7 }}>
+            <button type="button" onClick={()=>{ setAskWhy(it.ref); }} disabled={anyBusy} style={{ padding:"13px 20px",borderRadius:999,border:"1.5px solid var(--ak-border2)",background:"var(--ak-surface)",fontSize:13.5,fontWeight:800,color:"var(--ak-text)",cursor:anyBusy?"wait":"pointer",fontFamily:"'Nunito',sans-serif" }}>{t('agent.dismiss_btn')}</button>
+            <button type="button" onClick={()=>{ closeIdeaSheet(); acceptIdea(it); }} disabled={anyBusy} style={{ flex:1,padding:"13px",borderRadius:999,border:"none",background:anyBusy?"var(--ak-border)":`linear-gradient(135deg,${BRAND},#4C1DCC)`,fontSize:13.5,fontWeight:800,color:"#fff",cursor:anyBusy?"wait":"pointer",fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:7 }}>
               {busy?<Spinner size={13} color="#fff"/>:<svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>}{ctaLabel}
             </button>
           </div>
@@ -1830,7 +1799,7 @@ function AgentChatTab({
             <button type="button" onClick={()=>setSheetLike(true)} style={{ flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:7,padding:"10px 0",borderRadius:999,border:`1.5px solid ${sheetLike?BRAND:"var(--ak-border2)"}`,background:sheetLike?`${BRAND}10`:"var(--ak-surface)",color:sheetLike?BRAND:"var(--ak-text-sub)",fontSize:12.5,fontWeight:800,cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>
               <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M7 10v12H4a1 1 0 0 1-1-1V11a1 1 0 0 1 1-1h3zm0 0 4.2-7.1c1.5 0 2.6 1.3 2.3 2.8L12.6 10H19a2 2 0 0 1 2 2.4l-1.2 7.6a2 2 0 0 1-2 1.6H7"/></svg>{t('agent.more_like_this')}
             </button>
-            <button type="button" onClick={()=>{ closeIdeaSheet(); if(isInbox) dismissIdea(it,"not_useful"); else dropIdea(it); }} disabled={anyBusy} style={{ flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:7,padding:"10px 0",borderRadius:999,border:"1.5px solid var(--ak-border2)",background:"var(--ak-surface)",color:"var(--ak-text-sub)",fontSize:12.5,fontWeight:800,cursor:anyBusy?"wait":"pointer",fontFamily:"'Nunito',sans-serif" }}>
+            <button type="button" onClick={()=>{ closeIdeaSheet(); dismissIdea(it,"not_useful"); }} disabled={anyBusy} style={{ flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:7,padding:"10px 0",borderRadius:999,border:"1.5px solid var(--ak-border2)",background:"var(--ak-surface)",color:"var(--ak-text-sub)",fontSize:12.5,fontWeight:800,cursor:anyBusy?"wait":"pointer",fontFamily:"'Nunito',sans-serif" }}>
               <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 14V2h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-3zm0 0-4.2 7.1c-1.5 0-2.6-1.3-2.3-2.8l.9-4.3H5a2 2 0 0 1-2-2.4l1.2-7.6A2 2 0 0 1 6.2 2.4H17"/></svg>{t('agent.not_interested')}
             </button>
           </div>
