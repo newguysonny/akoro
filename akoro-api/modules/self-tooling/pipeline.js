@@ -24,6 +24,7 @@ import { deriveToolArea } from "./areas.js";
 import { DOMAINS, domainForGoal, genericDomain, genericReadGoal, inferAction, verifyDomainActions, byActionForGoal, aggregateForGoal, bestSelfView, MAX_DOMAIN_ACTIONS } from "./domains.js";
 import { mergedLibraryEnabled, LIBRARY_MERGED_ACTIONS, libraryBuildIsCovered } from "./mergedLibrary.js";
 import { mergedChatsEnabled, CHATS_MERGED_ACTIONS, chatsBuildIsCovered } from "./mergedChats.js";
+import { MERGED_DOMAIN_LIST } from "./mergedDomains.js";
 
 const edu = () => db.schema("edu");
 const NAME = /^[a-z][a-z0-9_]{2,47}$/;
@@ -344,6 +345,13 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
     if (mergedChatsEnabled() && spec.view === "my_chats" && !resumed && !replaced && chatsBuildIsCovered(actions)) {
       return finish("reused", { status: "reused", tool: spec.name, label: spec.label, actions: CHATS_MERGED_ACTIONS,
         note: `This is built in now: ${spec.name} is already in this chat with action=(count|list|search) — count gives the exact total, list shows recent chats with their chatIds, search finds chats by what was talked about. Nothing needs building, drafting or keeping. Answer the learner's question by calling ${spec.name} with the action they need.` });
+    }
+    // The config-driven merged domains (mergedDomains.js): a build adding
+    // nothing beyond the merged action set is not a build at all.
+    const mCfg = MERGED_DOMAIN_LIST.find((c) => c.view === spec.view && c.enabled());
+    if (mCfg && !resumed && !replaced && mCfg.buildIsCovered(actions)) {
+      return finish("reused", { status: "reused", tool: spec.name, label: spec.label, actions: mCfg.mergedActions,
+        note: `This is built in now: ${spec.name} is already in this chat with action=(${mCfg.mergedActions.join("|")}). Nothing needs building, drafting or keeping. Answer the learner's question by calling ${spec.name} with the action they need.` });
     }
     const def = { kind: "code", steps: [{ id: spec.step, view: spec.view }], source: spec.source };
     const ctxD = { learnerId, callCapability: undefined };
@@ -875,6 +883,24 @@ export async function runChatsViewAction(action, input, learnerId) {
   if (!r.ok) return { error: `Your chats couldn't be read just now: ${r.error}` };
   return { tool: spec.label, rows: r.rows, total: r.total, truncated: r.truncated, via: "chat records" };
 }
+function mergedSpecFor(name) {
+  return DOMAINS[name] || genericDomain(name);
+}
+export async function getMergedToolState(learnerId, name) {
+  const { data: t } = await edu().from("agent_tools").select("id, status, actions, disabled_actions, params_schema")
+    .eq("owner_id", learnerId).eq("name", name).in("status", ["active", "disabled"]).maybeSingle();
+  if (!t) return null;
+  const acts = Array.isArray(t.actions) && t.actions.length ? t.actions : (t.params_schema?.action?.enum || []);
+  return { id: t.id, status: t.status, actions: acts, disabledActions: Array.isArray(t.disabled_actions) ? t.disabled_actions : [] };
+}
+export async function runMergedViewAction(name, action, input, learnerId) {
+  const spec = mergedSpecFor(name);
+  if (!spec) return { error: "That tool isn't available right now." };
+  const def = { kind: "code", steps: [{ id: spec.step, view: spec.view }], source: spec.source };
+  const r = await tryRun(def, spec.params, { ...(input || {}), action }, { learnerId, callCapability: undefined });
+  if (!r.ok) return { error: `That couldn't be read just now: ${r.error}` };
+  return { tool: spec.label, rows: r.rows, total: r.total, truncated: r.truncated, via: `${spec.label} records` };
+}
 
 // Merged domains (library, chats): the platform owns the merged action set,
 // so My tools presents ONLY the learner's own delta actions — and a merged
@@ -883,6 +909,7 @@ export async function runChatsViewAction(action, input, learnerId) {
 const MERGED_ROW_DOMAINS = [
   { domain: "my_library", mergedActions: LIBRARY_MERGED_ACTIONS, enabled: mergedLibraryEnabled },
   { domain: "my_chats", mergedActions: CHATS_MERGED_ACTIONS, enabled: mergedChatsEnabled },
+  ...MERGED_DOMAIN_LIST.map((c) => ({ domain: c.view, mergedActions: c.mergedActions, enabled: c.enabled })),
 ];
 export function mergedRowRule(row) {
   return MERGED_ROW_DOMAINS.find((r) => r.domain === row?.domain && r.enabled()) || null;
