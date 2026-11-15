@@ -228,6 +228,14 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
   // The entry point chooses (config.chatState); without an Ask adapter there
   // is nothing to ask with, so the session chat shows.
   const readerChat = config?.chatState === "agent" || !content?.ask ? "agent" : "ask";
+  // Lazy session start: in the reader's Ask state the teaching session does
+  // not start at all — no socket, no start_adaptive_session — until the
+  // learner actually goes to the session: an Agent session entry (readerChat
+  // "agent"), closing the reader onto the session chat, or sending a reader
+  // selection to the chat. Sessions with no Ask surface start immediately,
+  // exactly as before.
+  const [sessionLive, setSessionLive] = useState(() => readerChat === "agent");
+  useEffect(() => { if (readerChat === "agent") setSessionLive(true); }, [readerChat]);
   const openReader      = () => { if (!content || content.state === 'ready') setReaderOpen(true); };
   // Opened from a link that names a study tool: the reader opens on it, once, when the material is ready.
   const openToolDone = useRef(false);
@@ -240,7 +248,7 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
   // and flash the cited box (or seek the recording). The key re-fires a
   // jump to the same place; closing clears it so a reopen doesn't replay it.
   const [readerJump, setReaderJump] = useState(null);
-  const closeReader     = () => { setReaderOpen(false); setReaderJump(null); };
+  const closeReader     = () => { setReaderOpen(false); setReaderJump(null); if (readerChat === "ask") setSessionLive(true); };
   const jumpToCitation = (cite) => {
     if (!cite || !content || content.state !== 'ready') return;
     setReaderJump({ cite, key: Date.now() });
@@ -267,7 +275,7 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
     const q = makeQuote(text, pageNumber);
     if (!q) return;
     setQuote(q);
-    if (isMobileView) setReaderOpen(false);
+    if (isMobileView) { setReaderOpen(false); setSessionLive(true); }
   };
 
   // ── Learn suggestions — now the reader Ask panel's suggestions ──────────
@@ -289,6 +297,7 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
   const fmt = s => `${String(Math.floor(s/60)).padStart(2,"0")}:${String(s%60).padStart(2,"0")}`;
 
   useEffect(() => {
+    if (!sessionLive) return undefined;
     // Connect WebSocket — the session lives entirely here. Import the socket
     // client directly (don't depend on a global window.io that may be unset
     // in some builds).
@@ -640,7 +649,7 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
       wsRef.current?.disconnect();
       clearInterval(timerRef.current);
     };
-  }, []);
+  }, [sessionLive]);
 
   // ── Minimize = park, not end ────────────────────────────────────────────
   // The history is durable either way (every turn is appended server-side),
