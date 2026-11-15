@@ -95,6 +95,15 @@ test("past questions config: accuracy is the platform action", () => {
   assert.equal(c.buildIsCovered(["by_exam"]), false);
 });
 
+test("weak topics config: list is the platform action", () => {
+  const c = MERGED_DOMAINS.my_weak_topics;
+  assert.equal(c.view, "my_weak_topics");
+  assert.deepEqual(c.platformActions, ["list"]);
+  assert.deepEqual(c.def().function.parameters.properties.action.enum, ["count", "list", "by_subject", "search"]);
+  assert.equal(c.buildIsCovered(["list", "count"]), true);
+  assert.equal(c.buildIsCovered(["by_confidence"]), false);
+});
+
 test("wiring: pipeline guard loop, generic runners, registry", () => {
   const src = read("./pipeline.js");
   assert.match(src, /MERGED_DOMAIN_LIST\.find\(\(c\) => c\.view === spec\.view && c\.enabled\(\)\)/);
@@ -112,4 +121,5 @@ test("wiring: chat.js assembles and dispatches merged domains generically", () =
   assert.match(src, /applyMergedDomain\(allTools, req\.user\.id, MERGED_DOMAINS\.my_tasks, \["list_tasks"\], selfToolOn\)/);
   // the learning-history force must be remapped to the merged sessions tool
   assert.match(src, /forcedTool = "my_study_sessions";/);
+  assert.match(src, /A forced \(required\) tool must survive area selection/);
 });

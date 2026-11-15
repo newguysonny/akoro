@@ -104,6 +104,16 @@ export const MERGED_DOMAINS = {
     platformActions: ["accuracy"],
     description: "Your past-question practice — one tool for all of it. Actions: count = how many practice records you have; list = your practice records; by_subject = records per subject; accuracy = attempted, correct and accuracy grouped by exam and subject (pass query as a subject name to filter it); search = practice records whose subject matches query. Never invent practice results.",
   }),
+  my_weak_topics: makeMergedDomain({
+    name: "my_weak_topics",
+    view: "my_weak_topics",
+    area: "progress",
+    envVar: "AKORO_MERGED_WEAK",
+    actionOrder: ["count", "list", "by_subject", "search"],
+    baseActions: ["count", "by_subject", "search"],
+    platformActions: ["list"],
+    description: "Your weak topics — one tool for all of it. Actions: list = the topics you find hardest, weakest first, with confidence levels (pass query as a subject name to filter); count = how many weak-topic records you have; by_subject = records per subject; search = weak-topic records whose topic matches query. Never invent a weak topic.",
+  }),
 
 
 };

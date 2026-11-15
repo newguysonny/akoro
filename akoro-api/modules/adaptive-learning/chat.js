@@ -1636,6 +1636,27 @@ async function getPastQuestionPracticeTool(studentId, input) {
           : { bySubject: [], totals: { attempted: 0, correct: 0 }, message: "No past-question practice recorded yet." };
       } catch (error) { return asToolError("your past-question practice")(error); }
 }
+async function getWeakTopicsTool(studentId, input) {
+      const { data: agentRow } = await db.schema("edu").from("student_agents")
+        .select("id").eq("student_id", studentId).single();
+      if (!agentRow) return { weak_topics: [], message: "No knowledge profile yet — start a session!" };
+      // What the learner has taught their agent (agent_knowledge — the same
+      // store as the knowledge map and learning sessions), weakest first. It
+      // read the learner's saved notes instead, where confidence defaults to
+      // 60%, so "my weak topics" came back empty next to a map showing some.
+      let q = db.schema("edu").from("agent_knowledge")
+        .select("topic, subject, confidence")
+        .eq("agent_id", agentRow.id).order("confidence", { ascending: true }).limit(60);
+      if (input.subject) q = q.ilike("subject", String(input.subject).trim());
+      const { data, error } = await q;
+      if (error) return { error: "Couldn't load your topics just now." };
+      const seen = new Set();
+      const weak = (data ?? []).filter((t) => (Number(t.confidence) || 0) < 0.6)
+        .filter((t) => { const k = `${t.subject}|${String(t.topic || "").toLowerCase().trim()}`; if (seen.has(k)) return false; seen.add(k); return true; })
+        .slice(0, 8)
+        .map((t) => ({ topic: t.topic, subject: t.subject, confidence: Math.round((Number(t.confidence) || 0) * 100) + "%" }));
+      return weak.length ? { weak_topics: weak } : { weak_topics: [], message: (data ?? []).length ? "Nothing weak right now — every topic you've taught is above 60%." : "Nothing taught yet in that subject." };
+}
 async function listMyGoalsTool(studentId) {
   try {
     const { goals, error } = await listGoals(studentId);
@@ -1958,7 +1979,7 @@ async function runChatTool(name, input, studentId, { conversationId = null, role
         else if (wantArea === "chats" && role !== "instructor") adds = await applyChatsMerge(adds, studentId, true);
         else if (wantArea === "plans" && role !== "instructor") { adds = await applyMergedDomain(adds, studentId, MERGED_DOMAINS.my_tasks, ["list_tasks"], true); adds = await applyMergedDomain(adds, studentId, MERGED_DOMAINS.my_goals, ["list_my_goals"], true); }
         else if (wantArea === "teaching" && role !== "instructor") { adds = await applyMergedDomain(adds, studentId, MERGED_DOMAINS.my_study_notes, ["search_my_study_knowledge"], true); adds = await applyMergedDomain(adds, studentId, MERGED_DOMAINS.my_study_sessions, ["get_my_learning_sessions"], true); }
-        else if (wantArea === "progress" && role !== "instructor") adds = await applyMergedDomain(adds, studentId, MERGED_DOMAINS.my_past_questions, ["get_past_question_practice"], true);
+        else if (wantArea === "progress" && role !== "instructor") { adds = await applyMergedDomain(adds, studentId, MERGED_DOMAINS.my_past_questions, ["get_past_question_practice"], true); adds = await applyMergedDomain(adds, studentId, MERGED_DOMAINS.my_weak_topics, ["get_weak_topics"], true); }
         return { loaded: wantArea, areaLabel: AREAS[wantArea], tools: adds.map((d) => d.function.name),
           note: `The ${AREAS[wantArea]} tools are loaded for this conversation now — continue the learner's request with them.`,
           __addTools: adds };
@@ -2797,27 +2818,8 @@ async function runChatTool(name, input, studentId, { conversationId = null, role
         note: "These are the learner's OWN leaderboard positions only — nothing here is about other players or particular battles.",
       };
     }
-    case "get_weak_topics": {
-      const { data: agentRow } = await db.schema("edu").from("student_agents")
-        .select("id").eq("student_id", studentId).single();
-      if (!agentRow) return { weak_topics: [], message: "No knowledge profile yet — start a session!" };
-      // What the learner has taught their agent (agent_knowledge — the same
-      // store as the knowledge map and learning sessions), weakest first. It
-      // read the learner's saved notes instead, where confidence defaults to
-      // 60%, so "my weak topics" came back empty next to a map showing some.
-      let q = db.schema("edu").from("agent_knowledge")
-        .select("topic, subject, confidence")
-        .eq("agent_id", agentRow.id).order("confidence", { ascending: true }).limit(60);
-      if (input.subject) q = q.ilike("subject", String(input.subject).trim());
-      const { data, error } = await q;
-      if (error) return { error: "Couldn't load your topics just now." };
-      const seen = new Set();
-      const weak = (data ?? []).filter((t) => (Number(t.confidence) || 0) < 0.6)
-        .filter((t) => { const k = `${t.subject}|${String(t.topic || "").toLowerCase().trim()}`; if (seen.has(k)) return false; seen.add(k); return true; })
-        .slice(0, 8)
-        .map((t) => ({ topic: t.topic, subject: t.subject, confidence: Math.round((Number(t.confidence) || 0) * 100) + "%" }));
-      return weak.length ? { weak_topics: weak } : { weak_topics: [], message: (data ?? []).length ? "Nothing weak right now — every topic you've taught is above 60%." : "Nothing taught yet in that subject." };
-    }
+    case "get_weak_topics":
+      return getWeakTopicsTool(studentId, input);
     case "get_learning_overview":
       return getLearningOverview(studentId).catch(asToolError("your learning overview"));
     case "get_knowledge_map":
@@ -3084,6 +3086,36 @@ async function runChatTool(name, input, studentId, { conversationId = null, role
           : request.reopened ? "You had reported this before; it is re-opened and back with the Akoro team."
           : `You already reported this${when ? ` on ${when}` : ""}; it is still ${String(request.status).replace(/_/g, " ")}.`,
       };
+    }
+    case "my_weak_topics": {
+      // The merged Weak topics tool: list is the platform handler (weakest
+      // first, confidence under 0.6, deduped), count/by_subject/search
+      // are platform view reads, anything beyond them is the learner's
+      // own delta action.
+      if (MERGED_DOMAINS.my_weak_topics.enabled()) {
+        return dispatchMerged(MERGED_DOMAINS.my_weak_topics, input, {
+          studentId,
+          platform: { list: async () => ({ success: true, ...(await getWeakTopicsTool(studentId, { subject: input?.subject || input?.query })), via: "built-in list" }) },
+          runDelta: async () => {
+            if (SELF_TOOLING_ROLES.has(role) && (await selfToolingAllowedFor(studentId))) {
+              const out = await runLearnerTool(name, input, studentId, {
+                callCapability: (tool, args) => executeChatTool(tool, args, studentId, { role, channel: "self_tooling" }),
+                conversationId, dry: isDryRun(), audience: toolAudience(role),
+              });
+              if (out) return { ...out, via: "your saved action" };
+            }
+            return null;
+          },
+        });
+      }
+      if (SELF_TOOLING_ROLES.has(role) && (await selfToolingAllowedFor(studentId))) {
+        const out = await runLearnerTool(name, input, studentId, {
+          callCapability: (tool, args) => executeChatTool(tool, args, studentId, { role, channel: "self_tooling" }),
+          conversationId, dry: isDryRun(), audience: toolAudience(role),
+        });
+        if (out) return out;
+      }
+      return { error: "That tool isn't available right now." };
     }
     case "my_past_questions": {
       // The merged Past questions tool: accuracy is the platform handler
@@ -5560,6 +5592,7 @@ router.post("/agent", async (req, res) => {
       allTools = await applyMergedDomain(allTools, req.user.id, MERGED_DOMAINS.my_study_notes, ["search_my_study_knowledge"], selfToolOn);
       allTools = await applyMergedDomain(allTools, req.user.id, MERGED_DOMAINS.my_study_sessions, ["get_my_learning_sessions"], selfToolOn);
       allTools = await applyMergedDomain(allTools, req.user.id, MERGED_DOMAINS.my_past_questions, ["get_past_question_practice"], selfToolOn);
+      allTools = await applyMergedDomain(allTools, req.user.id, MERGED_DOMAINS.my_weak_topics, ["get_weak_topics"], selfToolOn);
       turnTools = allTools;
       if (areaSelectionEnabled()) {
         const active = new Set([...stickyAreasFor(conversationId), ...areasForMessage(userMessage)]);
@@ -5568,7 +5601,16 @@ router.post("/agent", async (req, res) => {
         if (active.size) {
           const sticky = stickyAreasFor(conversationId);
           for (const a of active) sticky.add(a);
-          turnTools = filterDefsByAreas(allTools, active, (name) => learnerAreas.get(name) || toolArea(name) || (mergedLibraryEnabled() && name === "library_documents" ? "files" : undefined) || (mergedChatsEnabled() && name === "my_chats" ? "chats" : undefined) || (MERGED_DOMAINS.my_tasks.enabled() && name === "my_tasks" ? "plans" : undefined) || (MERGED_DOMAINS.my_goals.enabled() && name === "my_goals" ? "plans" : undefined) || (MERGED_DOMAINS.my_study_notes.enabled() && name === "my_study_notes" ? "teaching" : undefined) || (MERGED_DOMAINS.my_study_sessions.enabled() && name === "my_study_sessions" ? "teaching" : undefined) || (MERGED_DOMAINS.my_past_questions.enabled() && name === "my_past_questions" ? "progress" : undefined));
+          turnTools = filterDefsByAreas(allTools, active, (name) => learnerAreas.get(name) || toolArea(name) || (mergedLibraryEnabled() && name === "library_documents" ? "files" : undefined) || (mergedChatsEnabled() && name === "my_chats" ? "chats" : undefined) || (MERGED_DOMAINS.my_tasks.enabled() && name === "my_tasks" ? "plans" : undefined) || (MERGED_DOMAINS.my_goals.enabled() && name === "my_goals" ? "plans" : undefined) || (MERGED_DOMAINS.my_study_notes.enabled() && name === "my_study_notes" ? "teaching" : undefined) || (MERGED_DOMAINS.my_study_sessions.enabled() && name === "my_study_sessions" ? "teaching" : undefined) || (MERGED_DOMAINS.my_past_questions.enabled() && name === "my_past_questions" ? "progress" : undefined) || (MERGED_DOMAINS.my_weak_topics.enabled() && name === "my_weak_topics" ? "progress" : undefined));
+          // A forced (required) tool must survive area selection — the loop
+          // refuses a required tool it cannot see. A merged def can resolve
+          // to the learner tool's own derived area instead of its built-in
+          // area (sessions: progress, not teaching), so the forced area-add
+          // alone does not guarantee it survives the filter.
+          if (forcedTool && !turnTools.some((t) => t.function?.name === forcedTool)) {
+            const needed = allTools.find((t) => t.function?.name === forcedTool);
+            if (needed) turnTools = [...turnTools, needed];
+          }
           selectionNote = `\n\n## Tools loaded for this conversation\nLoaded areas: ${[...active].join(", ")}, plus the always-on core. Your other tools exist but are not loaded in this conversation. If the learner's request needs a tool you do not have, call get_agent_capabilities with { area: "<area id>" } to load that area's tools, then continue the request. Area ids: ${Object.keys(AREAS).join(", ")}.`;
         }
       }
