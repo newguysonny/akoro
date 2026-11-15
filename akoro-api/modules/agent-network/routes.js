@@ -33,7 +33,7 @@ import {
 import {
   challengeAgents, postChallengeRequest, searchChallengeRequests, acceptChallengeRequest, cancelChallengeRequest, rematch,
 } from "./challenges.js";
-import { messageAgent, inbox, replyToAgent } from "./messaging.js";
+import { messageAgent, inbox, inboxCount, replyToAgent } from "./messaging.js";
 import {
   requestBuddy, respondBuddy, listBuddies, buddyCheckin, endBuddy,
   joinDaily, skipDaily, dailyRanking, dailyStatus, createCircle, searchCircles, joinCircle, leaveCircle, weeklyLeague,
@@ -75,6 +75,7 @@ router.post("/challenge-requests/:id/accept", wrap((req) => acceptChallengeReque
 router.delete("/challenge-requests/:id", wrap((req) => cancelChallengeRequest(req.user.id, req.params.id)));
 router.post("/battles/:id/rematch", wrap((req) => rematch(req.user.id, req.params.id)));
 router.post("/messages", wrap((req) => messageAgent(req.user.id, req.body || {}, { deps: protegeDeps })));
+router.get("/inbox/count", wrap((req) => inboxCount(req.user.id)));
 router.get("/inbox", wrap((req) => inbox(req.user.id, { markRead: req.query.peek !== "1" })));
 router.post("/messages/:id/reply", wrap((req) => replyToAgent(req.user.id, req.params.id, req.body?.reply)));
 router.get("/buddies", wrap((req) => listBuddies(req.user.id)));

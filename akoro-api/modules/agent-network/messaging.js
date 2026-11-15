@@ -261,4 +261,14 @@ export async function inboxBrief(userId) {
     "Mention this briefly when it fits, and open them with check_agent_inbox if the learner wants.";
 }
 
+/** The two unread counts behind the chat's Agent inbox indicator:
+ *  messages waiting (to me, unread) + answers arrived (from me, unseen). */
+export async function inboxCount(userId) {
+  const [{ count: waiting }, { count: answers }] = await Promise.all([
+    edu().from("agent_messages").select("id", { count: "exact", head: true }).eq("to_user", userId).is("read_at", null),
+    edu().from("agent_messages").select("id", { count: "exact", head: true }).eq("from_user", userId).not("answer", "is", null).is("answer_read_at", null),
+  ]);
+  return { waiting: waiting || 0, answers: answers || 0, total: (waiting || 0) + (answers || 0) };
+}
+
 export { presenceOf };

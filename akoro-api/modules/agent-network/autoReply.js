@@ -117,7 +117,6 @@ export async function processInbox(userId, { deps = null, force = false, now = n
   if (!deps) deps = (await import("../adaptive-learning/chat.js")).protegeDeps;
 
   const actions = [];
-  const lines = [];
   for (const m of rows) {
     // Claim first: exactly one run handles a message.
     const { data: claimed } = await edu().from("agent_messages").update({ processed_at: now.toISOString() })
@@ -139,7 +138,8 @@ export async function processInbox(userId, { deps = null, force = false, now = n
         if (!screened.ok) throw new Error(`reply not sent (${screened.reason})`);
         await edu().from("agent_messages").update({ answer: screened.question, answer_source: source, status: "answered", answered_at: now.toISOString(), answer_read_at: null, auto_replied: true }).eq("id", m.id);
         await notifyUser({ userId: m.from_user, type: "agent_message", title: `💬 ${first(me?.full_name, me?.username)}'s agent replied to your agent`, content: screened.question.slice(0, 140), relatedId: m.id, link: appLink("tab=agent") }).catch(() => {});
-        lines.push(learnerText({ action, kind: m.kind, fromName, agentName, body: m.body, answer: screened.question }));
+        // No chat post for what the agent did on its own: it surfaces via the
+        // Agent inbox count (GET /agent-network/inbox/count) and check_agent_inbox.
         // The asker's agent started this on its own: tell its learner what came back.
         if (m.origin === "agent") import("./outreach.js").then((o) => o.reportOutreachAnswer(m.id)).catch(() => {});
         actions.push({ messageId: m.id, kind: m.kind, action, basis: { basis: "inferred", rule: `agent_message:${m.kind}` } });
@@ -162,7 +162,8 @@ export async function processInbox(userId, { deps = null, force = false, now = n
         if (!quiet) await notifyUser({ userId, type: "agent_message", title: m.kind === "friend_request" ? `${fromName} wants to be friends` : `${fromName}'s agent sent your agent a message`, content: String(m.body).slice(0, 140), relatedId: prop.id, link: appLink(`tab=agent${where?.chatId ? `&sessionId=${where.chatId}` : ""}`) }).catch(() => {});
         actions.push({ messageId: m.id, kind: m.kind, action, proposalId: prop.id });
       } else if (action === "tell_learner") {
-        lines.push(learnerText({ action, kind: m.kind, fromName, agentName, body: m.body, answer: m.answer || null }));
+        // Tell-only arrivals (suggestions, already-answered consults) no longer
+        // post into the chat — the inbox indicator counts them until opened.
         if (!m.answer) await edu().from("agent_messages").update({ status: "delivered" }).eq("id", m.id);
         actions.push({ messageId: m.id, kind: m.kind, action });
       } else {
@@ -175,8 +176,6 @@ export async function processInbox(userId, { deps = null, force = false, now = n
       actions.push({ messageId: m.id, kind: m.kind, action, error: String(e?.message || e).slice(0, 160) });
     }
   }
-  // What the agent did on its own, in one line-group (cards are their own messages).
-  if (lines.length) await post(userId, lines.join("\n\n"));
   return { processed: actions.filter((a) => !a.error).length, actions };
 }
 

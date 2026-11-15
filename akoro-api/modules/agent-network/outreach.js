@@ -175,20 +175,11 @@ export async function approveOutreach(userId, payload = {}, { deps = null } = {}
   return { sent: true, messageId: r.messageId, delivered: r.delivered, to: r.to, ...(r.answer ? { answer: r.answer } : {}) };
 }
 
-/** The other agent answered after the fact: one line in the asker's chat. Never throws. */
+/** The other agent answered after the fact. This used to post one line into
+ *  the asker's chat and mark the answer seen; answers now surface through the
+ *  Agent inbox count instead, and stay "unseen" until the learner actually
+ *  opens the inbox (check_agent_inbox marks them read). Kept as a no-op so
+ *  existing callers (auto-reply lane, manual replies) need no changes. */
 export async function reportOutreachAnswer(messageId) {
-  try {
-    const { data: m } = await edu().from("agent_messages").select("id, from_user, to_user, topic, answer, origin, kind").eq("id", messageId).maybeSingle();
-    if (!m?.answer || m.origin !== "agent") return { reported: false };
-    const { data: u } = await db.from("users").select("full_name, username").eq("id", m.to_user).maybeSingle();
-    const { post } = await import("./autoReply.js");
-    const text = m.kind === "friend_request" ? `${first(u?.full_name, u?.username)} answered your friend request: “${String(m.answer).slice(0, 300)}”`
-      : outreachLearnerText({ helperName: first(u?.full_name, u?.username), topic: m.topic, answer: m.answer });
-    const where = await post(m.from_user, text, { outreach: { messageId: m.id, answered: true } });
-    await edu().from("agent_messages").update({ answer_read_at: new Date().toISOString() }).eq("id", m.id);
-    return { reported: !!where };
-  } catch (e) {
-    console.warn("[agent-outreach] answer not reported:", String(e?.message || e).slice(0, 160));
-    return { reported: false };
-  }
+  return { reported: false };
 }

@@ -297,6 +297,7 @@ function AgentChatTab({
   // §13.4). `running` spans the WHOLE turn (loading only covers the wait for
   // the first step); while it is true the send arrow is a ■ stop button.
   const [running,      setRunning]      = useState(false);
+  const [inboxCount,   setInboxCount]   = useState(0);   // agent-network inbox: unread messages + unseen answers
   // What the protégé found in an upload can be ready before its reply is: it waits
   // and lands after the reply, so the reply never answers below it.
   const runningRef = useRef(false);
@@ -384,6 +385,22 @@ function AgentChatTab({
       .catch(() => {});
     return () => { gone = true; };
   }, [sessionId, messages.length, lastPhase]);
+  // The Agent inbox indicator (status row, right side): unread agent-network
+  // messages + answers the learner hasn't seen. Tell-only inbox reports no
+  // longer post into the chat — this count is how the learner knows. Refreshed
+  // when a turn settles (opening the inbox clears it server-side), on a timer,
+  // and when a decision card lands (socket handler below).
+  const refetchInboxCount = useCallback(async () => {
+    try { const d = await apiGet('/api/agent-network/inbox/count'); setInboxCount(d?.data?.total ?? 0); } catch {}
+  }, []);
+  useEffect(() => { refetchInboxCount(); }, [refetchInboxCount, sessionId, messages.length, lastPhase]);
+  useEffect(() => {
+    const iv = setInterval(refetchInboxCount, 60000);
+    const onVis = () => { if (document.visibilityState === "visible") refetchInboxCount(); };
+    document.addEventListener("visibilitychange", onVis);
+    return () => { clearInterval(iv); document.removeEventListener("visibilitychange", onVis); };
+  }, [refetchInboxCount]);
+  const openAgentInbox = () => { if (innerTab !== "chat") setInnerTab("chat"); if (!running) sendMessage("What's in my agent inbox?"); };
   const [drawerOpen,    setDrawerOpen]    = useState(false);
   const [sessionsLoading, setSessionsLoading] = useState(false);
   // A failed history load must never look like an EMPTY history — that exact
@@ -535,7 +552,7 @@ function AgentChatTab({
           });
         } catch { /* it is saved — opening the chat again shows it */ }
       };
-      socket.on("chat_follow_up_ready", (data) => { onReady(data); if (data?.proposalId) refetchInbox(); });
+      socket.on("chat_follow_up_ready", (data) => { onReady(data); if (data?.proposalId) refetchInbox(); refetchInboxCount(); });
       return () => { socket.off("chat_follow_up_ready", onReady); socket.off("connect", subscribe); };
     } catch { /* WS unavailable — the notification still links to the chat */ }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1305,6 +1322,12 @@ function AgentChatTab({
         <span style={{ fontSize:10.5,fontWeight:agentActivity?800:600,color:agentActivity?BRAND:"var(--ak-text-muted)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis" }}>
           {autonomyStatus}
         </span>
+        <style>{`@media (max-width:768px){.ak-inbox-word{display:none}}`}</style>
+        <button onClick={openAgentInbox} title={t('agent.inbox')} aria-label={t('agent.inbox')} style={{ marginLeft:"auto",flexShrink:0,display:"flex",alignItems:"center",gap:6,background:"none",border:"none",cursor:"pointer",padding:"2px 0",fontFamily:"'Nunito',sans-serif",color:inboxCount>0?BRAND:"var(--ak-text-muted)" }}>
+          <Icon name="ti-inbox" size={14}/>
+          <span className="ak-inbox-word" style={{ fontSize:11,fontWeight:800 }}>{t('agent.inbox')}</span>
+          <span style={{ fontSize:10,fontWeight:900,background:inboxCount>0?BRAND:"var(--ak-border)",color:inboxCount>0?"#fff":"var(--ak-text-muted)",borderRadius:8,padding:"1px 6px" }}>{inboxCount}</span>
+        </button>
       </div>
       {innerTab==="chat"&&(
         <>

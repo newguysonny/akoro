@@ -200,6 +200,7 @@ export const EN = {
   'agent.chat':          'Chat',
   'agent.tasks':         'Tasks',
   'agent.stats':         'Stats',
+'agent.inbox':         'Agent inbox',
   'agent.chats':         'Chats',
   'agent.new_chat':      'New chat',
   'agent.no_chats':      'No chats yet',
