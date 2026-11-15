@@ -64,6 +64,7 @@ export function mergedLibraryDef({ delta = [], disabled = [] } = {}) {
         + "action=count: how many documents they have. action=list: their documents with kind, size and when added. action=by_kind: how many documents per kind. "
         + "action=search: find documents by name or by what is inside them; the reply shows each as a link that opens it in the reader — pass `tool` to open a found document on the reader's quiz, flashcards, summary, notes or podcast. "
         + "count, list and by_kind read the Library records; search looks inside the documents themselves. "
+        + "The learner's taught study notes (topics they taught their agent, with confidence scores) are NOT Library documents — those live in my_study_notes; never answer a study-notes question from this tool. "
         + (delta.length ? `This learner also added their own action(s) to this tool: ${delta.join(", ")}. ` : "")
         + "Search again every time (the Library changes; an earlier answer in this chat may be out of date). Never invent a document — mention only what this returns, by name; never show record ids.",
       parameters: {

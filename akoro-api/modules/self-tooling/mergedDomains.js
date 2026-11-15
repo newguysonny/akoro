@@ -82,7 +82,17 @@ export const MERGED_DOMAINS = {
     actionOrder: ["count", "list", "by_subject", "search"],
     baseActions: ["count", "list", "by_subject"],
     platformActions: ["search"],
-    description: "Your saved study notes — what you have taught your agent, kept as notes. Actions: count = how many notes you have; list = your notes; by_subject = how many notes per subject; search = find notes by what they say — pass query. Never invent a note.",
+    description: "Your saved study notes — the topics you have taught your agent, each with a subject, topic and confidence score. These are NOT Library documents (uploads, links, pasted text — those live in library_documents); when the learner says 'study notes' or 'notes', they mean THIS tool. Actions: count = how many notes you have; list = your notes; by_subject = how many notes per subject; search = find notes by what they say — pass query. Never invent a note.",
+  }),
+  my_study_sessions: makeMergedDomain({
+    name: "my_study_sessions",
+    view: "my_learning_sessions",
+    area: "teaching",
+    envVar: "AKORO_MERGED_SESSIONS",
+    actionOrder: ["count", "list", "by_subject", "search", "overview"],
+    baseActions: ["count", "list", "by_subject", "search"],
+    platformActions: ["overview"],
+    description: "Your learning sessions — one tool for all of it. Actions: count = how many learning sessions you have; list = your session records; by_subject = sessions per subject; search = sessions whose subject or topic matches query; overview = your learning profile: your agent, what you have taught it by subject with confidence levels, and your most recent sessions. Never invent a session.",
   }),
 
 

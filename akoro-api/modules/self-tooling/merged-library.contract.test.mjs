@@ -15,6 +15,7 @@ test("the merged def offers base + platform actions, in the runtime shape", () =
   assert.deepEqual(def.function.parameters.properties.action.enum, ["count", "list", "by_kind", "search"]);
   assert.deepEqual(def.function.parameters.required, ["action"]);
   assert.match(def.function.description, /Never invent a document/);
+  assert.match(def.function.description, /NOT Library documents/); // taught notes live in my_study_notes
 });
 
 test("a learner's delta actions extend the enum; switched-off merged actions leave it", () => {

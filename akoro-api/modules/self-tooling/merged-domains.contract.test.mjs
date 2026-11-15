@@ -68,6 +68,24 @@ test("study notes config: search is the platform action, the rest are view reads
   assert.equal(c.buildIsCovered(["by_confidence"]), false);
 });
 
+test("sessions config: overview is a distinct platform action over the session view", () => {
+  const c = MERGED_DOMAINS.my_study_sessions;
+  assert.equal(c.view, "my_learning_sessions");
+  assert.deepEqual(c.platformActions, ["overview"]);
+  assert.deepEqual(c.def().function.parameters.properties.action.enum, ["count", "list", "by_subject", "search", "overview"]);
+  assert.equal(c.buildIsCovered(["count", "overview"]), true);
+  // the domain tool's name differs from its view — presentation keys on both
+  assert.equal(presentMergedToolRow({ name: "my_study_sessions", domain: "my_learning_sessions", actions: ["count", "list"], disabled_actions: [] }), null);
+  const computed = { name: "sessions_by_month", domain: "my_learning_sessions", actions: [], disabled_actions: [] };
+  assert.equal(presentMergedToolRow(computed), computed);
+});
+
+test("notes/library defs disambiguate each other (battery finding 2026-11-15)", () => {
+  const notes = MERGED_DOMAINS.my_study_notes.def();
+  assert.match(notes.function.description, /NOT Library documents/);
+  assert.match(notes.function.description, /they mean THIS tool/);
+});
+
 test("wiring: pipeline guard loop, generic runners, registry", () => {
   const src = read("./pipeline.js");
   assert.match(src, /MERGED_DOMAIN_LIST\.find\(\(c\) => c\.view === spec\.view && c\.enabled\(\)\)/);

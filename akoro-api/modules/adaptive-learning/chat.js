@@ -1537,6 +1537,73 @@ export function chatToolBasis({ basis = null, rule = null } = {}) {
 /** The library content search (the platform `search` action of the merged
  *  library tool, and the legacy search_my_library tool): the learner's own
  *  records only — chunk search plus a name match, reader-link shaped. */
+async function getMyLearningSessionsTool(studentId) {
+      try {
+        // The learner's own learning agent (one per learner, edu.student_agents).
+        const { data: agentRow } = await db.schema("edu").from("student_agents")
+          .select("id, name, level, total_sessions, total_turns, knowledge_score, subjects_learned")
+          .eq("student_id", studentId).limit(1).maybeSingle();
+        if (!agentRow?.id) return {
+          agent: null, subjects: [], recentSessions: [], recentLearning: [],
+          note: "This learner has no learning agent yet — it grows when they teach it in a learning session. Say exactly that; never invent subjects or topics.",
+        };
+        // What the learner has actually taught their agent, grouped by subject.
+        const { data: knowledge, error: kErr } = await db.schema("edu").from("agent_knowledge")
+          .select("subject, topic, confidence").eq("agent_id", agentRow.id).limit(400);
+        if (kErr) return { error: "Could not load your learning history: " + kErr.message };
+        const rowsBySubject = new Map();
+        for (const row of knowledge ?? []) {
+          const subject = row.subject || "General";
+          if (!rowsBySubject.has(subject)) rowsBySubject.set(subject, []);
+          rowsBySubject.get(subject).push(row);
+        }
+        const subjects = [];
+        for (const [subject, rows] of [...rowsBySubject.entries()].slice(0, 10)) {
+          const avg = rows.length ? rows.reduce((s, r) => s + (Number(r.confidence) || 0), 0) / rows.length : 0;
+          const mastery = await subjectMastery(agentRow.id, subject).catch(() => null);
+          const topics = [...new Map(rows.map((r) => [(r.topic || "").toLowerCase().trim(), r])).values()]
+            .slice(0, 6)
+            .map((r) => ({ topic: r.topic, confidence: Math.round((Number(r.confidence) || 0) * 100) + "%" }));
+          subjects.push({
+            subject, level: mastery?.level ?? null,
+            knowledgeItems: rows.length, avgConfidence: Math.round(avg * 100) + "%",
+            topics,
+          });
+        }
+        // The learning sessions themselves (the protégé teaching sessions).
+        const { data: sessions, error: sErr } = await db.schema("edu").from("adaptive_sessions")
+          .select("subject, topic, status, current_phase, started_at, completed_at")
+          // Never-started sessions have no started_at — nulls last, or they
+          // fill every "recent" slot ahead of the real ones.
+          .eq("student_id", studentId).order("started_at", { ascending: false, nullsFirst: false }).limit(8);
+        if (sErr) return { error: "Could not load your learning sessions: " + sErr.message };
+        // What the most recent sessions actually achieved.
+        const { data: deltas } = await db.schema("edu").from("session_knowledge_delta")
+          .select("subject, topic, concepts_learned, xp_earned, started_at")
+          .eq("agent_id", agentRow.id).order("started_at", { ascending: false }).limit(5);
+        return {
+          agent: {
+            name: agentRow.name || "My Learning Agent",
+            level: agentRow.level ?? 1,
+            totalSessions: agentRow.total_sessions ?? 0,
+            totalTurns: agentRow.total_turns ?? 0,
+            knowledgeScore: Number(agentRow.knowledge_score) || 0,
+            subjectsLearned: agentRow.subjects_learned ?? [],
+          },
+          subjects,
+          recentSessions: (sessions ?? []).map((s) => ({
+            subject: s.subject, topic: s.topic, status: s.status,
+            phase: s.current_phase, startedAt: s.started_at, completedAt: s.completed_at,
+          })),
+          recentLearning: (deltas ?? []).map((d) => ({
+            subject: d.subject, topic: d.topic,
+            conceptsLearned: Array.isArray(d.concepts_learned) ? d.concepts_learned.length : 0,
+            xpEarned: Number(d.xp_earned) || 0, at: d.started_at,
+          })),
+          note: "This is what the learner has actually learnt by teaching their agent — the school's subject CATALOGUE is a different question (list_school_subjects).",
+        };
+      } catch (error) { return { error: error.message || "Could not load your learning sessions right now" }; }
+}
 async function listMyGoalsTool(studentId) {
   try {
     const { goals, error } = await listGoals(studentId);
@@ -1858,7 +1925,7 @@ async function runChatTool(name, input, studentId, { conversationId = null, role
         if (wantArea === "files" && role !== "instructor") adds = await applyLibraryMerge(adds, studentId, true);
         else if (wantArea === "chats" && role !== "instructor") adds = await applyChatsMerge(adds, studentId, true);
         else if (wantArea === "plans" && role !== "instructor") { adds = await applyMergedDomain(adds, studentId, MERGED_DOMAINS.my_tasks, ["list_tasks"], true); adds = await applyMergedDomain(adds, studentId, MERGED_DOMAINS.my_goals, ["list_my_goals"], true); }
-        else if (wantArea === "teaching" && role !== "instructor") adds = await applyMergedDomain(adds, studentId, MERGED_DOMAINS.my_study_notes, ["search_my_study_knowledge"], true);
+        else if (wantArea === "teaching" && role !== "instructor") { adds = await applyMergedDomain(adds, studentId, MERGED_DOMAINS.my_study_notes, ["search_my_study_knowledge"], true); adds = await applyMergedDomain(adds, studentId, MERGED_DOMAINS.my_study_sessions, ["get_my_learning_sessions"], true); }
         return { loaded: wantArea, areaLabel: AREAS[wantArea], tools: adds.map((d) => d.function.name),
           note: `The ${AREAS[wantArea]} tools are loaded for this conversation now — continue the learner's request with them.`,
           __addTools: adds };
@@ -2057,73 +2124,8 @@ async function runChatTool(name, input, studentId, { conversationId = null, role
         return { matches: matches.filter((m) => m.fullName), searchedFor: name };
       } catch (error) { return { error: error.message || "Could not look up that teacher right now" }; }
     }
-    case "get_my_learning_sessions": {
-      try {
-        // The learner's own learning agent (one per learner, edu.student_agents).
-        const { data: agentRow } = await db.schema("edu").from("student_agents")
-          .select("id, name, level, total_sessions, total_turns, knowledge_score, subjects_learned")
-          .eq("student_id", studentId).limit(1).maybeSingle();
-        if (!agentRow?.id) return {
-          agent: null, subjects: [], recentSessions: [], recentLearning: [],
-          note: "This learner has no learning agent yet — it grows when they teach it in a learning session. Say exactly that; never invent subjects or topics.",
-        };
-        // What the learner has actually taught their agent, grouped by subject.
-        const { data: knowledge, error: kErr } = await db.schema("edu").from("agent_knowledge")
-          .select("subject, topic, confidence").eq("agent_id", agentRow.id).limit(400);
-        if (kErr) return { error: "Could not load your learning history: " + kErr.message };
-        const rowsBySubject = new Map();
-        for (const row of knowledge ?? []) {
-          const subject = row.subject || "General";
-          if (!rowsBySubject.has(subject)) rowsBySubject.set(subject, []);
-          rowsBySubject.get(subject).push(row);
-        }
-        const subjects = [];
-        for (const [subject, rows] of [...rowsBySubject.entries()].slice(0, 10)) {
-          const avg = rows.length ? rows.reduce((s, r) => s + (Number(r.confidence) || 0), 0) / rows.length : 0;
-          const mastery = await subjectMastery(agentRow.id, subject).catch(() => null);
-          const topics = [...new Map(rows.map((r) => [(r.topic || "").toLowerCase().trim(), r])).values()]
-            .slice(0, 6)
-            .map((r) => ({ topic: r.topic, confidence: Math.round((Number(r.confidence) || 0) * 100) + "%" }));
-          subjects.push({
-            subject, level: mastery?.level ?? null,
-            knowledgeItems: rows.length, avgConfidence: Math.round(avg * 100) + "%",
-            topics,
-          });
-        }
-        // The learning sessions themselves (the protégé teaching sessions).
-        const { data: sessions, error: sErr } = await db.schema("edu").from("adaptive_sessions")
-          .select("subject, topic, status, current_phase, started_at, completed_at")
-          // Never-started sessions have no started_at — nulls last, or they
-          // fill every "recent" slot ahead of the real ones.
-          .eq("student_id", studentId).order("started_at", { ascending: false, nullsFirst: false }).limit(8);
-        if (sErr) return { error: "Could not load your learning sessions: " + sErr.message };
-        // What the most recent sessions actually achieved.
-        const { data: deltas } = await db.schema("edu").from("session_knowledge_delta")
-          .select("subject, topic, concepts_learned, xp_earned, started_at")
-          .eq("agent_id", agentRow.id).order("started_at", { ascending: false }).limit(5);
-        return {
-          agent: {
-            name: agentRow.name || "My Learning Agent",
-            level: agentRow.level ?? 1,
-            totalSessions: agentRow.total_sessions ?? 0,
-            totalTurns: agentRow.total_turns ?? 0,
-            knowledgeScore: Number(agentRow.knowledge_score) || 0,
-            subjectsLearned: agentRow.subjects_learned ?? [],
-          },
-          subjects,
-          recentSessions: (sessions ?? []).map((s) => ({
-            subject: s.subject, topic: s.topic, status: s.status,
-            phase: s.current_phase, startedAt: s.started_at, completedAt: s.completed_at,
-          })),
-          recentLearning: (deltas ?? []).map((d) => ({
-            subject: d.subject, topic: d.topic,
-            conceptsLearned: Array.isArray(d.concepts_learned) ? d.concepts_learned.length : 0,
-            xpEarned: Number(d.xp_earned) || 0, at: d.started_at,
-          })),
-          note: "This is what the learner has actually learnt by teaching their agent — the school's subject CATALOGUE is a different question (list_school_subjects).",
-        };
-      } catch (error) { return { error: error.message || "Could not load your learning sessions right now" }; }
-    }
+    case "get_my_learning_sessions":
+      return getMyLearningSessionsTool(studentId);
     case "create_task": {
       if (!input?.title || !String(input.title).trim()) {
         return clarify("title", "What should the task be called?", { action: "create_task" });
@@ -3079,6 +3081,36 @@ async function runChatTool(name, input, studentId, { conversationId = null, role
           : request.reopened ? "You had reported this before; it is re-opened and back with the Akoro team."
           : `You already reported this${when ? ` on ${when}` : ""}; it is still ${String(request.status).replace(/_/g, " ")}.`,
       };
+    }
+    case "my_study_sessions": {
+      // The merged Study sessions tool: count/list/by_subject/search are
+      // platform view reads over the session records; overview is the
+      // platform profile handler (agent + taught subjects + recent
+      // sessions); anything beyond them is the learner's own delta action.
+      if (MERGED_DOMAINS.my_study_sessions.enabled()) {
+        return dispatchMerged(MERGED_DOMAINS.my_study_sessions, input, {
+          studentId,
+          platform: { overview: async () => ({ success: true, ...(await getMyLearningSessionsTool(studentId)), via: "built-in overview" }) },
+          runDelta: async () => {
+            if (SELF_TOOLING_ROLES.has(role) && (await selfToolingAllowedFor(studentId))) {
+              const out = await runLearnerTool(name, input, studentId, {
+                callCapability: (tool, args) => executeChatTool(tool, args, studentId, { role, channel: "self_tooling" }),
+                conversationId, dry: isDryRun(), audience: toolAudience(role),
+              });
+              if (out) return { ...out, via: "your saved action" };
+            }
+            return null;
+          },
+        });
+      }
+      if (SELF_TOOLING_ROLES.has(role) && (await selfToolingAllowedFor(studentId))) {
+        const out = await runLearnerTool(name, input, studentId, {
+          callCapability: (tool, args) => executeChatTool(tool, args, studentId, { role, channel: "self_tooling" }),
+          conversationId, dry: isDryRun(), audience: toolAudience(role),
+        });
+        if (out) return out;
+      }
+      return { error: "That tool isn't available right now." };
     }
     case "my_study_notes": {
       // The merged Study notes tool: search is the platform handler (finds
@@ -5488,6 +5520,7 @@ router.post("/agent", async (req, res) => {
       allTools = await applyMergedDomain(allTools, req.user.id, MERGED_DOMAINS.my_tasks, ["list_tasks"], selfToolOn);
       allTools = await applyMergedDomain(allTools, req.user.id, MERGED_DOMAINS.my_goals, ["list_my_goals"], selfToolOn);
       allTools = await applyMergedDomain(allTools, req.user.id, MERGED_DOMAINS.my_study_notes, ["search_my_study_knowledge"], selfToolOn);
+      allTools = await applyMergedDomain(allTools, req.user.id, MERGED_DOMAINS.my_study_sessions, ["get_my_learning_sessions"], selfToolOn);
       turnTools = allTools;
       if (areaSelectionEnabled()) {
         const active = new Set([...stickyAreasFor(conversationId), ...areasForMessage(userMessage)]);
@@ -5495,7 +5528,7 @@ router.post("/agent", async (req, res) => {
         if (active.size) {
           const sticky = stickyAreasFor(conversationId);
           for (const a of active) sticky.add(a);
-          turnTools = filterDefsByAreas(allTools, active, (name) => learnerAreas.get(name) || toolArea(name) || (mergedLibraryEnabled() && name === "library_documents" ? "files" : undefined) || (mergedChatsEnabled() && name === "my_chats" ? "chats" : undefined) || (MERGED_DOMAINS.my_tasks.enabled() && name === "my_tasks" ? "plans" : undefined) || (MERGED_DOMAINS.my_goals.enabled() && name === "my_goals" ? "plans" : undefined) || (MERGED_DOMAINS.my_study_notes.enabled() && name === "my_study_notes" ? "teaching" : undefined));
+          turnTools = filterDefsByAreas(allTools, active, (name) => learnerAreas.get(name) || toolArea(name) || (mergedLibraryEnabled() && name === "library_documents" ? "files" : undefined) || (mergedChatsEnabled() && name === "my_chats" ? "chats" : undefined) || (MERGED_DOMAINS.my_tasks.enabled() && name === "my_tasks" ? "plans" : undefined) || (MERGED_DOMAINS.my_goals.enabled() && name === "my_goals" ? "plans" : undefined) || (MERGED_DOMAINS.my_study_notes.enabled() && name === "my_study_notes" ? "teaching" : undefined) || (MERGED_DOMAINS.my_study_sessions.enabled() && name === "my_study_sessions" ? "teaching" : undefined));
           selectionNote = `\n\n## Tools loaded for this conversation\nLoaded areas: ${[...active].join(", ")}, plus the always-on core. Your other tools exist but are not loaded in this conversation. If the learner's request needs a tool you do not have, call get_agent_capabilities with { area: "<area id>" } to load that area's tools, then continue the request. Area ids: ${Object.keys(AREAS).join(", ")}.`;
         }
       }
