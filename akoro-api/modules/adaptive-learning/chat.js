@@ -1604,6 +1604,38 @@ async function getMyLearningSessionsTool(studentId) {
         };
       } catch (error) { return { error: error.message || "Could not load your learning sessions right now" }; }
 }
+async function getPastQuestionPracticeTool(studentId, input) {
+      try {
+        let q = db.schema("edu").from("past_question_attempts")
+          .select("exam, subject, year, attempted, correct, created_at").eq("user_id", studentId)
+          .order("created_at", { ascending: false }).limit(1000);
+        if (input?.subject) q = q.ilike("subject", String(input.subject).trim());
+        if (input?.exam) q = q.ilike("exam", String(input.exam).trim());
+        const days = Number(input?.days);
+        if (Number.isFinite(days) && days > 0) q = q.gte("created_at", new Date(Date.now() - days * 86_400_000).toISOString());
+        const { data, error } = await q;
+        if (error) return { error: "Couldn't load your past-question practice just now." };
+        const groups = new Map();
+        for (const r0 of data ?? []) {
+          const k = `${r0.exam}|${r0.subject || "—"}`;
+          const g = groups.get(k) || { exam: r0.exam, subject: r0.subject || null, attempted: 0, correct: 0, years: new Set(), lastPractised: r0.created_at };
+          g.attempted += Number(r0.attempted) || 0; g.correct += Number(r0.correct) || 0;
+          if (r0.year) g.years.add(r0.year);
+          if (r0.created_at > g.lastPractised) g.lastPractised = r0.created_at;
+          groups.set(k, g);
+        }
+        const bySubject = [...groups.values()].map((g) => ({
+          exam: g.exam, subject: g.subject, attempted: g.attempted, correct: g.correct,
+          accuracy: g.attempted ? `${Math.round((g.correct / g.attempted) * 100)}%` : null,
+          years: [...g.years].sort(), lastPractised: g.lastPractised,
+        })).sort((a, b) => b.attempted - a.attempted);
+        const attempted = bySubject.reduce((n, g) => n + g.attempted, 0);
+        const correct = bySubject.reduce((n, g) => n + g.correct, 0);
+        return bySubject.length
+          ? { bySubject, totals: { attempted, correct, accuracy: attempted ? `${Math.round((correct / attempted) * 100)}%` : null, sessions: (data ?? []).length } }
+          : { bySubject: [], totals: { attempted: 0, correct: 0 }, message: "No past-question practice recorded yet." };
+      } catch (error) { return asToolError("your past-question practice")(error); }
+}
 async function listMyGoalsTool(studentId) {
   try {
     const { goals, error } = await listGoals(studentId);
@@ -1926,6 +1958,7 @@ async function runChatTool(name, input, studentId, { conversationId = null, role
         else if (wantArea === "chats" && role !== "instructor") adds = await applyChatsMerge(adds, studentId, true);
         else if (wantArea === "plans" && role !== "instructor") { adds = await applyMergedDomain(adds, studentId, MERGED_DOMAINS.my_tasks, ["list_tasks"], true); adds = await applyMergedDomain(adds, studentId, MERGED_DOMAINS.my_goals, ["list_my_goals"], true); }
         else if (wantArea === "teaching" && role !== "instructor") { adds = await applyMergedDomain(adds, studentId, MERGED_DOMAINS.my_study_notes, ["search_my_study_knowledge"], true); adds = await applyMergedDomain(adds, studentId, MERGED_DOMAINS.my_study_sessions, ["get_my_learning_sessions"], true); }
+        else if (wantArea === "progress" && role !== "instructor") adds = await applyMergedDomain(adds, studentId, MERGED_DOMAINS.my_past_questions, ["get_past_question_practice"], true);
         return { loaded: wantArea, areaLabel: AREAS[wantArea], tools: adds.map((d) => d.function.name),
           note: `The ${AREAS[wantArea]} tools are loaded for this conversation now — continue the learner's request with them.`,
           __addTools: adds };
@@ -2457,38 +2490,8 @@ async function runChatTool(name, input, studentId, { conversationId = null, role
         return { error: error.message || "Could not schedule the chat follow-up" };
       }
     }
-    case "get_past_question_practice": {
-      try {
-        let q = db.schema("edu").from("past_question_attempts")
-          .select("exam, subject, year, attempted, correct, created_at").eq("user_id", studentId)
-          .order("created_at", { ascending: false }).limit(1000);
-        if (input?.subject) q = q.ilike("subject", String(input.subject).trim());
-        if (input?.exam) q = q.ilike("exam", String(input.exam).trim());
-        const days = Number(input?.days);
-        if (Number.isFinite(days) && days > 0) q = q.gte("created_at", new Date(Date.now() - days * 86_400_000).toISOString());
-        const { data, error } = await q;
-        if (error) return { error: "Couldn't load your past-question practice just now." };
-        const groups = new Map();
-        for (const r0 of data ?? []) {
-          const k = `${r0.exam}|${r0.subject || "—"}`;
-          const g = groups.get(k) || { exam: r0.exam, subject: r0.subject || null, attempted: 0, correct: 0, years: new Set(), lastPractised: r0.created_at };
-          g.attempted += Number(r0.attempted) || 0; g.correct += Number(r0.correct) || 0;
-          if (r0.year) g.years.add(r0.year);
-          if (r0.created_at > g.lastPractised) g.lastPractised = r0.created_at;
-          groups.set(k, g);
-        }
-        const bySubject = [...groups.values()].map((g) => ({
-          exam: g.exam, subject: g.subject, attempted: g.attempted, correct: g.correct,
-          accuracy: g.attempted ? `${Math.round((g.correct / g.attempted) * 100)}%` : null,
-          years: [...g.years].sort(), lastPractised: g.lastPractised,
-        })).sort((a, b) => b.attempted - a.attempted);
-        const attempted = bySubject.reduce((n, g) => n + g.attempted, 0);
-        const correct = bySubject.reduce((n, g) => n + g.correct, 0);
-        return bySubject.length
-          ? { bySubject, totals: { attempted, correct, accuracy: attempted ? `${Math.round((correct / attempted) * 100)}%` : null, sessions: (data ?? []).length } }
-          : { bySubject: [], totals: { attempted: 0, correct: 0 }, message: "No past-question practice recorded yet." };
-      } catch (error) { return asToolError("your past-question practice")(error); }
-    }
+    case "get_past_question_practice":
+      return getPastQuestionPracticeTool(studentId, input);
     case "schema_lookup": {
       if (!SELF_TOOLING_ROLES.has(role)) return { error: "Building tools is for learners and instructors." };
       if (!(await selfToolingAllowedFor(studentId))) return { error: "Building new tools isn't turned on for this account yet." };
@@ -3081,6 +3084,36 @@ async function runChatTool(name, input, studentId, { conversationId = null, role
           : request.reopened ? "You had reported this before; it is re-opened and back with the Akoro team."
           : `You already reported this${when ? ` on ${when}` : ""}; it is still ${String(request.status).replace(/_/g, " ")}.`,
       };
+    }
+    case "my_past_questions": {
+      // The merged Past questions tool: accuracy is the platform handler
+      // (attempted/correct/accuracy grouped by exam and subject),
+      // count/list/by_subject/search are platform view reads, anything
+      // beyond them is the learner's own delta action.
+      if (MERGED_DOMAINS.my_past_questions.enabled()) {
+        return dispatchMerged(MERGED_DOMAINS.my_past_questions, input, {
+          studentId,
+          platform: { accuracy: async () => ({ success: true, ...(await getPastQuestionPracticeTool(studentId, { subject: input?.subject || input?.query, exam: input?.exam, days: input?.days })), via: "built-in accuracy" }) },
+          runDelta: async () => {
+            if (SELF_TOOLING_ROLES.has(role) && (await selfToolingAllowedFor(studentId))) {
+              const out = await runLearnerTool(name, input, studentId, {
+                callCapability: (tool, args) => executeChatTool(tool, args, studentId, { role, channel: "self_tooling" }),
+                conversationId, dry: isDryRun(), audience: toolAudience(role),
+              });
+              if (out) return { ...out, via: "your saved action" };
+            }
+            return null;
+          },
+        });
+      }
+      if (SELF_TOOLING_ROLES.has(role) && (await selfToolingAllowedFor(studentId))) {
+        const out = await runLearnerTool(name, input, studentId, {
+          callCapability: (tool, args) => executeChatTool(tool, args, studentId, { role, channel: "self_tooling" }),
+          conversationId, dry: isDryRun(), audience: toolAudience(role),
+        });
+        if (out) return out;
+      }
+      return { error: "That tool isn't available right now." };
     }
     case "my_study_sessions": {
       // The merged Study sessions tool: count/list/by_subject/search are
@@ -5478,7 +5511,7 @@ router.post("/agent", async (req, res) => {
     // prose or re-asking for details the conversation already has. The force
     // covers iteration 0 only; the tool's own clarify() handles anything
     // genuinely missing.
-    const forcedTool = role === "student"
+    let forcedTool = role === "student"
       ? (requiresAgentCapabilitiesTool(userMessage) ? "get_agent_capabilities"
         // Other players' results in the learner's battles: go through
         // create_tool (it builds, or asks an admin for the permission) —
@@ -5499,6 +5532,11 @@ router.post("/agent", async (req, res) => {
       : draftFollowUp ? "revise_activity_draft"
       : ((instructorTools.length && requiresActivityPreparation(userMessage, dialogue))
         ? "prepare_activity" : null);
+    // Sessions merge: the learning-history force names the retired built-in.
+    // Point it at the merged tool — the loop refuses a required tool it
+    // cannot see (live battery 2026-11-15: "my learning sessions" asks
+    // errored with "The required Agent Chat tool is unavailable").
+    if (forcedTool === "get_my_learning_sessions" && MERGED_DOMAINS.my_study_sessions.enabled()) forcedTool = "my_study_sessions";
     // Runtime area selection (toolSelection.js): the always-on core plus the
     // areas active for this conversation — the message's areas, areas loaded
     // earlier in the conversation, and the forced tool's area. Built-in and
@@ -5521,14 +5559,16 @@ router.post("/agent", async (req, res) => {
       allTools = await applyMergedDomain(allTools, req.user.id, MERGED_DOMAINS.my_goals, ["list_my_goals"], selfToolOn);
       allTools = await applyMergedDomain(allTools, req.user.id, MERGED_DOMAINS.my_study_notes, ["search_my_study_knowledge"], selfToolOn);
       allTools = await applyMergedDomain(allTools, req.user.id, MERGED_DOMAINS.my_study_sessions, ["get_my_learning_sessions"], selfToolOn);
+      allTools = await applyMergedDomain(allTools, req.user.id, MERGED_DOMAINS.my_past_questions, ["get_past_question_practice"], selfToolOn);
       turnTools = allTools;
       if (areaSelectionEnabled()) {
         const active = new Set([...stickyAreasFor(conversationId), ...areasForMessage(userMessage)]);
         if (forcedTool) active.add(toolArea(forcedTool));
+        if (forcedTool === "my_study_sessions") active.add("teaching");
         if (active.size) {
           const sticky = stickyAreasFor(conversationId);
           for (const a of active) sticky.add(a);
-          turnTools = filterDefsByAreas(allTools, active, (name) => learnerAreas.get(name) || toolArea(name) || (mergedLibraryEnabled() && name === "library_documents" ? "files" : undefined) || (mergedChatsEnabled() && name === "my_chats" ? "chats" : undefined) || (MERGED_DOMAINS.my_tasks.enabled() && name === "my_tasks" ? "plans" : undefined) || (MERGED_DOMAINS.my_goals.enabled() && name === "my_goals" ? "plans" : undefined) || (MERGED_DOMAINS.my_study_notes.enabled() && name === "my_study_notes" ? "teaching" : undefined) || (MERGED_DOMAINS.my_study_sessions.enabled() && name === "my_study_sessions" ? "teaching" : undefined));
+          turnTools = filterDefsByAreas(allTools, active, (name) => learnerAreas.get(name) || toolArea(name) || (mergedLibraryEnabled() && name === "library_documents" ? "files" : undefined) || (mergedChatsEnabled() && name === "my_chats" ? "chats" : undefined) || (MERGED_DOMAINS.my_tasks.enabled() && name === "my_tasks" ? "plans" : undefined) || (MERGED_DOMAINS.my_goals.enabled() && name === "my_goals" ? "plans" : undefined) || (MERGED_DOMAINS.my_study_notes.enabled() && name === "my_study_notes" ? "teaching" : undefined) || (MERGED_DOMAINS.my_study_sessions.enabled() && name === "my_study_sessions" ? "teaching" : undefined) || (MERGED_DOMAINS.my_past_questions.enabled() && name === "my_past_questions" ? "progress" : undefined));
           selectionNote = `\n\n## Tools loaded for this conversation\nLoaded areas: ${[...active].join(", ")}, plus the always-on core. Your other tools exist but are not loaded in this conversation. If the learner's request needs a tool you do not have, call get_agent_capabilities with { area: "<area id>" } to load that area's tools, then continue the request. Area ids: ${Object.keys(AREAS).join(", ")}.`;
         }
       }

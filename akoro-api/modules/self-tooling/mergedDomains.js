@@ -94,6 +94,16 @@ export const MERGED_DOMAINS = {
     platformActions: ["overview"],
     description: "Your learning sessions — one tool for all of it. Actions: count = how many learning sessions you have; list = your session records; by_subject = sessions per subject; search = sessions whose subject or topic matches query; overview = your learning profile: your agent, what you have taught it by subject with confidence levels, and your most recent sessions. Never invent a session.",
   }),
+  my_past_questions: makeMergedDomain({
+    name: "my_past_questions",
+    view: "my_past_questions",
+    area: "progress",
+    envVar: "AKORO_MERGED_PASTQ",
+    actionOrder: ["count", "list", "by_subject", "accuracy", "search"],
+    baseActions: ["count", "list", "by_subject", "search"],
+    platformActions: ["accuracy"],
+    description: "Your past-question practice — one tool for all of it. Actions: count = how many practice records you have; list = your practice records; by_subject = records per subject; accuracy = attempted, correct and accuracy grouped by exam and subject (pass query as a subject name to filter it); search = practice records whose subject matches query. Never invent practice results.",
+  }),
 
 
 };

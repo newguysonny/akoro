@@ -86,6 +86,15 @@ test("notes/library defs disambiguate each other (battery finding 2026-11-15)", 
   assert.match(notes.function.description, /they mean THIS tool/);
 });
 
+test("past questions config: accuracy is the platform action", () => {
+  const c = MERGED_DOMAINS.my_past_questions;
+  assert.equal(c.view, "my_past_questions");
+  assert.deepEqual(c.platformActions, ["accuracy"]);
+  assert.deepEqual(c.def().function.parameters.properties.action.enum, ["count", "list", "by_subject", "accuracy", "search"]);
+  assert.equal(c.buildIsCovered(["accuracy", "count"]), true);
+  assert.equal(c.buildIsCovered(["by_exam"]), false);
+});
+
 test("wiring: pipeline guard loop, generic runners, registry", () => {
   const src = read("./pipeline.js");
   assert.match(src, /MERGED_DOMAIN_LIST\.find\(\(c\) => c\.view === spec\.view && c\.enabled\(\)\)/);
@@ -101,4 +110,6 @@ test("wiring: chat.js assembles and dispatches merged domains generically", () =
   assert.match(src, /case "my_tasks": \{/);
   assert.match(src, /case "list_tasks":\s*\n\s*return listTasksTool\(studentId\);/);
   assert.match(src, /applyMergedDomain\(allTools, req\.user\.id, MERGED_DOMAINS\.my_tasks, \["list_tasks"\], selfToolOn\)/);
+  // the learning-history force must be remapped to the merged sessions tool
+  assert.match(src, /forcedTool = "my_study_sessions";/);
 });
