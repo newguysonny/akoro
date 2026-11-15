@@ -50,6 +50,15 @@ test("My tools presentation covers the generic domains", () => {
   assert.deepEqual(shown.actions, ["by_priority"]);
 });
 
+test("goals config: merged set, def and My-tools presentation", () => {
+  const c = MERGED_DOMAINS.my_goals;
+  assert.equal(c.view, "my_goals");
+  assert.deepEqual(c.def().function.parameters.properties.action.enum, ["count", "list", "by_status", "search"]);
+  assert.equal(c.buildIsCovered(["list", "by_status"]), true);
+  assert.equal(c.buildIsCovered(["by_category"]), false);
+  assert.equal(presentMergedToolRow({ domain: "my_goals", actions: ["count", "list", "search"], disabled_actions: [] }), null);
+});
+
 test("wiring: pipeline guard loop, generic runners, registry", () => {
   const src = read("./pipeline.js");
   assert.match(src, /MERGED_DOMAIN_LIST\.find\(\(c\) => c\.view === spec\.view && c\.enabled\(\)\)/);

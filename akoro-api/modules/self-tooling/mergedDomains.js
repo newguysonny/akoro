@@ -64,6 +64,17 @@ export const MERGED_DOMAINS = {
     platformActions: ["list"],
     description: "Your tasks and to-dos — one tool for all of it. Actions: count = how many tasks you have in total (every status); list = your pending tasks, most important first, each with its taskId (use a taskId with the task tools, e.g. to mark one done); by_status = how many tasks per status; search = tasks whose title matches query. Never invent a task.",
   }),
+  my_goals: makeMergedDomain({
+    name: "my_goals",
+    view: "my_goals",
+    area: "plans",
+    envVar: "AKORO_MERGED_GOALS",
+    actionOrder: ["count", "list", "by_status", "search"],
+    baseActions: ["count", "by_status", "search"],
+    platformActions: ["list"],
+    description: "Your goals — one tool for all of it. Actions: count = how many goals you have in total; list = all your goals with their goalId, status, category and target date; by_status = how many goals per status (a goal counts as completed only when its status is achieved — there is no 'completed' status); search = goals whose title matches query. Never invent a goal.",
+  }),
+
 };
 
 export const MERGED_DOMAIN_LIST = Object.values(MERGED_DOMAINS);

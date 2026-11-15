@@ -62,8 +62,8 @@ test("Fix 1: My tools presents only delta actions for merged domains", () => {
   assert.equal(presentMergedToolRow({ domain: "my_chats", actions: ["count", "list", "search"], disabled_actions: [] }), null);
   const chats = presentMergedToolRow({ domain: "my_chats", actions: ["count", "list", "search", "by_month"], disabled_actions: [] });
   assert.deepEqual(chats.actions, ["by_month"]);
-  const other = { domain: "my_goals", actions: ["count"], disabled_actions: [] };
-  assert.equal(presentMergedToolRow(other), other); // untouched, same object
+  const other = { domain: "my_xp", actions: ["count"], disabled_actions: [] };
+  assert.equal(presentMergedToolRow(other), other); // unmerged domain: untouched, same object
 });
 
 test("wiring: pipeline carries the chats guard, runners and My-tools presentation", () => {
