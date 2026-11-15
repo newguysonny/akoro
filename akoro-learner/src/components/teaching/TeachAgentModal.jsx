@@ -1033,7 +1033,7 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
         // button inside the reader returns here).
         <>
           {sessionChat(false)}
-          {readerOpen && <SessionReaderModal {...readerProps} chatState={readerChat} onOpenChat={closeReader}/>}
+          {readerOpen && <SessionReaderModal {...readerProps} chatState={readerChat} onOpenChat={closeReader} onClose={readerChat === "ask" && onClose ? onClose : closeReader}/>}}
         </>
       ) : readerOpen ? (
         // Desktop/tablet: the Fortizo split — reader left, live session right.
