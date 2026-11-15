@@ -1907,7 +1907,7 @@ export default function SessionReaderModal({
 
         {/* Tab strip. First tab is the document itself. */}
         <div className="flex-shrink-0 border-b" style={{ borderColor: "var(--ak-border)", background: "var(--ak-tag-bg)" }}>
-          <PillsBar tabs={allTabs} showChatButton={isMobile}/>
+          <PillsBar tabs={allTabs} showChatButton={isMobile && chatState !== "ask"}/>
         </div>
 
         {/* Reader pane — kept mounted (just hidden) when a tool tab is active,
