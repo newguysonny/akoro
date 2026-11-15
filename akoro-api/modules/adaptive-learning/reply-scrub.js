@@ -50,3 +50,25 @@ export function promisedTeachTopic(reply) {
   const topic = m?.[1]?.replace(/\*+/g, "").trim();
   return topic && !/^(it|this|that|them|anything|this topic|that topic)$/i.test(topic) ? topic : null;
 }
+
+/**
+ * DeepSeek-style tool-call markup (DSML) sometimes arrives in the CONTENT
+ * channel instead of as parsed tool calls — the learner would see raw
+ * `<｜｜DSML｜｜ invoke …>` gibberish as the reply. The calls themselves are
+ * parsed and run by the provider when they are real; what is left in the text
+ * is never prose. Strip whole calls/invoke blocks first, then any stray DSML
+ * tag, then a truncated block's tail (a stream cut mid-block).
+ */
+const DSML_TAG = "<[／/]?[｜|]{2}DSML[｜|]{2}[^>]*>";
+export const hasDsmlMarkup = (text) => /<[｜|]{2}DSML[｜|]{2}/.test(String(text ?? ""));
+
+export function stripDsmlMarkup(text) {
+  let s = String(text ?? "");
+  if (!hasDsmlMarkup(s)) return s;
+  s = s.replace(new RegExp(`<[｜|]{2}DSML[｜|]{2}\\s*calls>[\\s\\S]*?<[／/][｜|]{2}DSML[｜|]{2}\\s*calls>`, "g"), "");
+  s = s.replace(new RegExp(`<[｜|]{2}DSML[｜|]{2}\\s*invoke\\b[^>]*>[\\s\\S]*?<[／/][｜|]{2}DSML[｜|]{2}\\s*invoke>`, "g"), "");
+  s = s.replace(new RegExp(DSML_TAG, "g"), "");
+  const cut = s.search(/<[｜|]{2}DSML[｜|]{2}/);
+  if (cut >= 0) s = s.slice(0, cut);
+  return s.replace(/\n{3,}/g, "\n\n").trim();
+}

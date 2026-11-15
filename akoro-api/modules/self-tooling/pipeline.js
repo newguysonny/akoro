@@ -182,6 +182,21 @@ async function verifyTool(def, params, samples, ctx) {
   return { verdict: repeatVerdict({ assertions: sink }), assertions: sink, runs, emptyEverywhere: runs.every((r) => r.ok && !r.rows.length) };
 }
 
+/** PURE: which of the learner's tools a free-form `replace` value means, or
+ * null when it matches none — or more than one (never guess between tools). */
+export function pickReplacement(rows, replaceRaw) {
+  const raw = String(replaceRaw || "").trim();
+  if (!raw) return null;
+  const slug = raw.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+  const byLabel = rows.filter((t) => String(t?.label || "").toLowerCase() === raw.toLowerCase());
+  if (byLabel.length === 1) return byLabel[0];
+  const bySlug = rows.filter((t) => t?.name === slug);
+  if (bySlug.length === 1) return bySlug[0];
+  const byPrefix = rows.filter((t) => slug && String(t?.name || "").startsWith(`${slug}_`));
+  if (byPrefix.length === 1) return byPrefix[0];
+  return null;
+}
+
 /** Percent outputs a definition declares: group percentOf (structural - the
  * interpreter derives part and whole from the same rows) and per-row compute
  * fn "percent". Verified above: in range, and for percentOf consistent with
@@ -249,6 +264,22 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
       if (old?.id) {
         if (!String(input?.name || "").trim()) name = old.name;
         replaced = old;
+      }
+    } catch { /* best-effort */ }
+  }
+  // The model often names the tool by its LABEL ("Goals percentage") when the
+  // stored name is a slug variant ("goals_percentage_fixed") — resolve those
+  // too, but only on a UNIQUE match: label (case-insensitive), the slugified
+  // label as a name, or a single name the slug prefixes. Ambiguity keeps the
+  // current behaviour (no swap) rather than retiring the wrong tool.
+  if (replaceRaw && !replaced && !dry && !resumed) {
+    try {
+      const { data: mine } = await edu().from("agent_tools").select("id, name, label, views, domain, params_schema")
+        .eq("owner_id", learnerId).in("status", ["active", "disabled"]).limit(50);
+      const pick = pickReplacement(mine || [], replaceRaw);
+      if (pick?.id) {
+        if (!String(input?.name || "").trim()) name = pick.name;
+        replaced = pick;
       }
     } catch { /* best-effort */ }
   }

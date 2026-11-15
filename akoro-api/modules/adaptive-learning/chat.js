@@ -22,7 +22,7 @@ import { buildSuggestionMessages, notTaughtFrom, guideChip, uploadsFrom, uploadC
 import { resolveAskTargetFor } from "../records/access.js";
 import { materialsFrom, collectMaterials } from "./chat-materials.js";
 import { renderRelevantMemory } from "./chat-memory.js";
-import { ensureNotTaughtOpener, promisedTeachTopic, scrubInternalIds } from "./reply-scrub.js";
+import { ensureNotTaughtOpener, promisedTeachTopic, scrubInternalIds, stripDsmlMarkup, hasDsmlMarkup } from "./reply-scrub.js";
 import { recurringTopics } from "../materials/structureCore.js";
 import { resolveMaterialsFolder } from "../materials/studySource.js";
 import { akoroMaterialFor } from "../materials/akoroMaterial.js";
@@ -473,7 +473,7 @@ export const CHAT_TOOLS = [
         params: { type: "object", description: "Optional inputs the learner might change next time (a year, a subject): { paramName: { type: string|number|integer|boolean, description, default } } (≤ 6). Never data — the tool reads the learner's data itself. Usually none or one." },
         run:    { type: "object", description: "Values for the params to answer THIS request with." },
         hint:   { type: "object", description: "Optional: { views: [...], capabilities: [...] } from schema_lookup." },
-        replace:{ type: "string", description: "Name (or id) of an existing saved tool to REBUILD in place — use when that tool gives a wrong or self-contradictory answer. The old tool is archived and a corrected one built. Use the same name." },
+        replace:{ type: "string", description: "An existing saved tool to REBUILD in place — its name, id, or exact label (e.g. \"Goals percentage\"); use when that tool gives a wrong or self-contradictory answer. The old tool is archived and a corrected one built. Use the same name." },
       },
       required: ["goal", "name", "label"],
     },
@@ -3856,12 +3856,21 @@ async function streamChat({ send, messages, model, max_tokens = 700, temperature
     ...(tools ? { tools, ...(toolChoice !== undefined ? { tool_choice: toolChoice } : {}) } : {}),
   });
   let full = "";
+  let muted = false;   // DSML markup started: keep collecting, stop painting (the final reply is scrubbed)
+  let tail = "";
   for await (const chunk of stream) {
     // The learner pressed stop (the connection closed): leaving the loop ends
     // the upstream stream; usage so far is still metered by meteredCreate.
     if (isAborted()) break;
     const delta = chunk.choices?.[0]?.delta?.content;
-    if (delta) { full += delta; send("delta", { text: delta }); }
+    if (delta) {
+      full += delta;
+      if (!muted) {
+        if (hasDsmlMarkup(tail + delta)) muted = true;
+        else send("delta", { text: delta });
+        tail = (tail + delta).slice(-16);
+      }
+    }
   }
   return full;
 }
@@ -3884,12 +3893,19 @@ async function streamDecision({ messages, tools, toolChoice, onText = null, isAb
     stream: true,
   });
   let content = "";
+  let dsmlMuted = false, dsmlTail = "";
   const calls = [];
   for await (const chunk of stream) {
     if (isAborted()) return { aborted: true, assistant: { role: "assistant", content } };
     const delta = chunk.choices?.[0]?.delta;
     if (!delta) continue;
-    if (delta.content) { content += delta.content; onText?.(delta.content); }
+    if (delta.content) {
+      content += delta.content;
+      // Same DSML guard as streamChat: once tool-call markup starts, stop
+      // painting it live; the composed reply is scrubbed before it is saved.
+      if (!dsmlMuted && hasDsmlMarkup(dsmlTail + delta.content)) dsmlMuted = true;
+      if (!dsmlMuted) { onText?.(delta.content); dsmlTail = (dsmlTail + delta.content).slice(-16); }
+    }
     for (const part of delta.tool_calls || []) {
       const index = part.index ?? calls.length;
       calls[index] ||= { id: "", type: "function", function: { name: "", arguments: "" } };
@@ -5383,7 +5399,7 @@ router.post("/agent", async (req, res) => {
     // saved transcript matches what the learner saw.
     if (stopped()) reply = reply.trim() ? `${reply.trim()}\n\n${STOPPED_REPLY}` : STOPPED_REPLY;
     // Internal ids the model saw in tool results never reach the learner (reply-scrub.js).
-    reply = scrubInternalIds(reply);
+    reply = scrubInternalIds(stripDsmlMarkup(reply));
     if (!stopped()) reply = ensureNotTaughtOpener(reply, prepared.toolExecutions);
     // …and a reply that promises the Teach me button without having called the
     // tool gets the button it promised (the same topic, the same links).
