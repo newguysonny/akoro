@@ -71,11 +71,24 @@ test("a brand-new domain tool is not even drafted until the learner wants their 
   const pipe = read("./pipeline.js");
   // The gate sits in buildDomain, ahead of the draft insert, and only the
   // learner's confirmed ownCopy hint (or an existing/resumed/replaced build) passes it.
-  assert.match(pipe, /if \(audience === "learner" && !resumed && !replaced && \(!existing \|\| existingDraft\) && hint\?\.ownCopy !== true\) \{\s+await finish\("offer_own_copy", \{\}\);/);
+  assert.match(pipe, /if \(audience === "learner" && !resumed && !replaced && \(!existing \|\| existingDraft\) && hint\?\.ownCopy !== true && !\(await ownCopyOfferOpen\(learnerId, spec\.view\)\)\) \{\s+await finish\("offer_own_copy", \{\}\);\s+await logEvent\(\{ user_id: learnerId, goal, outcome: "own_copy_offered", detail: \{ view: spec\.view, name: spec\.name \} \}\);/);
   assert.match(pipe, /status: "offer_own_copy", tool: spec\.name, label: spec\.label, actions,/);
   // The agent is told the outcome and the re-call contract.
   assert.match(read("../adaptive-learning/chat.js"), /offer_own_copy \(a built-in already covers this data/);
   assert.match(read("../adaptive-learning/chat.js"), /ownCopy: true/);
   // The trace names the ask honestly — nothing was built.
   assert.equal(chatToolChange("create_tool", { status: "offer_own_copy", label: "Library documents" }).label, "A built-in covers this — asked about their own copy");
+});
+
+test("the own-copy gate is stateful: an open offer lets the follow-up build proceed", () => {
+  const pipe = read("./pipeline.js");
+  // The offer is remembered per learner + view for a short window, in the
+  // events table (the same store the one-off computations use).
+  assert.match(pipe, /const OWN_COPY_OFFER_WINDOW_MS = 30 \* 60 \* 1000;/);
+  assert.match(pipe, /async function ownCopyOfferOpen\(learnerId, view\)/);
+  assert.match(pipe, /\.in\("outcome", \["own_copy_offered", "own_copy_accepted"\]\)/);
+  // Honouring closes the offer (one offer, one build) and never throws: a
+  // lookup failure falls back to asking, the pre-fix behaviour.
+  assert.match(pipe, /outcome: "own_copy_accepted", detail: \{ view \}/);
+  assert.match(pipe, /if \(!latest \|\| latest\.outcome !== "own_copy_offered"\) return false;/);
 });

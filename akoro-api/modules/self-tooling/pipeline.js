@@ -78,6 +78,34 @@ async function logEvent(row) {
   if (error) console.warn("[self-tooling] event not logged:", error.message);
 }
 
+const OWN_COPY_OFFER_WINDOW_MS = 30 * 60 * 1000;
+/**
+ * The own-copy gate remembers its own question. When it fires it logs an
+ * "own_copy_offered" event (the view in detail); a later build for the same
+ * view inside the window finds that offer still open and proceeds — the
+ * learner already said yes, and the model's follow-up create_tool call does
+ * not always carry hint.ownCopy (the re-ask loop seen live 2026-11-15: the
+ * agent asked the same question twice and nothing was built). Honouring the
+ * offer logs "own_copy_accepted", closing it: one offer, one build. Any
+ * lookup failure falls back to asking (the pre-fix behaviour).
+ */
+async function ownCopyOfferOpen(learnerId, view) {
+  try {
+    const since = new Date(Date.now() - OWN_COPY_OFFER_WINDOW_MS).toISOString();
+    const { data } = await edu().from("self_tool_events")
+      .select("outcome, detail, created_at").eq("user_id", learnerId)
+      .in("outcome", ["own_copy_offered", "own_copy_accepted"])
+      .gte("created_at", since).order("created_at", { ascending: false }).limit(10);
+    const viewOf = (e) => { try { const d = typeof e?.detail === "string" ? JSON.parse(e.detail) : e?.detail; return d?.view; } catch { return undefined; } };
+    const latest = (data || []).find((e) => viewOf(e) === view);
+    if (!latest || latest.outcome !== "own_copy_offered") return false;
+    await logEvent({ user_id: learnerId, goal: "(own-copy offer honoured)", outcome: "own_copy_accepted", detail: { view } });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 const SCHEDULING = /\b(spread|schedule|timetable|plan (out|my)|(per|a|each|every) (day|week)|skip(ping)? (sundays?|saturdays?|weekends?)|over the (next|coming) \d*\s*(days|weeks)|until (my|the) (exam|test))\b/i;
 /** Goals only code can express (plans over dates, N per day, skip days). */
 export const needsCode = (goal) => SCHEDULING.test(String(goal || ""));
@@ -377,8 +405,9 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
     // The build is verified and known-good by this point; asking costs nothing
     // saved. Extending/rebuilding a tool the learner already has and resumed
     // (already-approved) builds are not re-gated.
-    if (audience === "learner" && !resumed && !replaced && (!existing || existingDraft) && hint?.ownCopy !== true) {
+    if (audience === "learner" && !resumed && !replaced && (!existing || existingDraft) && hint?.ownCopy !== true && !(await ownCopyOfferOpen(learnerId, spec.view))) {
       await finish("offer_own_copy", {});
+      await logEvent({ user_id: learnerId, goal, outcome: "own_copy_offered", detail: { view: spec.view, name: spec.name } });
       // Delta wording: when the build's actions go beyond the domain's
       // standard set, the built-in does NOT cover the request — the note
       // names the extra as what their own copy would ADD and forbids
