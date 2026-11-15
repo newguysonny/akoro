@@ -344,6 +344,18 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
     // ones this goal is asking for, which the ask itself turns back on.
     const carriedOff = (Array.isArray(existing?.disabled_actions) ? existing.disabled_actions : [])
       .filter((a) => actions.includes(a) && a !== action && a !== extra);
+    // The own-copy gate (the hardened build rule): a domain tool serves data a
+    // built-in already covers, so a BRAND-NEW one is not even drafted until the
+    // learner says they want their own copy anyway — the personal tool appears
+    // only when the built-in runs out (or the learner insists on their own).
+    // The build is verified and known-good by this point; asking costs nothing
+    // saved. Extending/rebuilding a tool the learner already has and resumed
+    // (already-approved) builds are not re-gated.
+    if (audience === "learner" && !resumed && !replaced && (!existing || existingDraft) && hint?.ownCopy !== true) {
+      await finish("offer_own_copy", {});
+      return { status: "offer_own_copy", tool: spec.name, label: spec.label, actions,
+        note: `STOP — do not build yet, and do not call create_tool again in this turn. A built-in already covers this data: you have built-in tools that list, count and search it, so the learner needs no new tool for this. In plain words, tell the learner you can already do this, and ask if they want their OWN copy anyway — their own tool would live in My tools, with answers they can switch off, rename and extend (other breakdowns of the same data, for example). If their request already asks for MORE than the built-in does, name the extra when you ask. Only if they say yes, call create_tool again with the same goal and hint set to { "ownCopy": true }. If they say no, just answer their question with the built-in.` };
+    }
     // The build-consent gate: a BRAND-NEW domain tool is only drafted — saved
     // OFF with a card asking the learner to keep it. Extending a tool the
     // learner already has active keeps the consent they already gave; an

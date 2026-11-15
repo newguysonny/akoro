@@ -219,6 +219,7 @@ export function chatToolChange(tool, toolResult, input = {}) {
   // create_tool: "Built a tool" only when one was built; a draft waiting for Approve says so, anything else changed nothing.
   if (tool === "create_tool" && toolResult.status !== "created") {
     if (toolResult.status === "answered" && !toolResult.dryRun) return { label: "Worked it out — one-off", title: clip(toolResult.label || "", ITEM_CHARS), fields: [] };
+    if (toolResult.status === "offer_own_copy" && !toolResult.dryRun) return { label: "A built-in covers this — asked about their own copy", title: clip(toolResult.label || "", ITEM_CHARS), fields: [] };
     return (toolResult.status === "needs_permission" || toolResult.status === "needs_consent") && !toolResult.dryRun ? { label: toolResult.drafted ? "Drafted a tool — waiting for your OK" : "Asked to build a tool — waiting for your OK", title: clip(toolResult.label || "", ITEM_CHARS), fields: [] } : null;
   }
   if (tool === "save_computation") {
