@@ -74,6 +74,17 @@ export const MERGED_DOMAINS = {
     platformActions: ["list"],
     description: "Your goals — one tool for all of it. Actions: count = how many goals you have in total; list = all your goals with their goalId, status, category and target date; by_status = how many goals per status (a goal counts as completed only when its status is achieved — there is no 'completed' status); search = goals whose title matches query. Never invent a goal.",
   }),
+  my_study_notes: makeMergedDomain({
+    name: "my_study_notes",
+    view: "my_study_notes",
+    area: "teaching",
+    envVar: "AKORO_MERGED_NOTES",
+    actionOrder: ["count", "list", "by_subject", "search"],
+    baseActions: ["count", "list", "by_subject"],
+    platformActions: ["search"],
+    description: "Your saved study notes — what you have taught your agent, kept as notes. Actions: count = how many notes you have; list = your notes; by_subject = how many notes per subject; search = find notes by what they say — pass query. Never invent a note.",
+  }),
+
 
 };
 

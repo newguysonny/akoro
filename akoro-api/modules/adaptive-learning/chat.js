@@ -1858,6 +1858,7 @@ async function runChatTool(name, input, studentId, { conversationId = null, role
         if (wantArea === "files" && role !== "instructor") adds = await applyLibraryMerge(adds, studentId, true);
         else if (wantArea === "chats" && role !== "instructor") adds = await applyChatsMerge(adds, studentId, true);
         else if (wantArea === "plans" && role !== "instructor") { adds = await applyMergedDomain(adds, studentId, MERGED_DOMAINS.my_tasks, ["list_tasks"], true); adds = await applyMergedDomain(adds, studentId, MERGED_DOMAINS.my_goals, ["list_my_goals"], true); }
+        else if (wantArea === "teaching" && role !== "instructor") adds = await applyMergedDomain(adds, studentId, MERGED_DOMAINS.my_study_notes, ["search_my_study_knowledge"], true);
         return { loaded: wantArea, areaLabel: AREAS[wantArea], tools: adds.map((d) => d.function.name),
           note: `The ${AREAS[wantArea]} tools are loaded for this conversation now — continue the learner's request with them.`,
           __addTools: adds };
@@ -3078,6 +3079,35 @@ async function runChatTool(name, input, studentId, { conversationId = null, role
           : request.reopened ? "You had reported this before; it is re-opened and back with the Akoro team."
           : `You already reported this${when ? ` on ${when}` : ""}; it is still ${String(request.status).replace(/_/g, " ")}.`,
       };
+    }
+    case "my_study_notes": {
+      // The merged Study notes tool: search is the platform handler (finds
+      // notes by what they say), count/list/by_subject are platform view
+      // reads, anything beyond them is the learner's own delta action.
+      if (MERGED_DOMAINS.my_study_notes.enabled()) {
+        return dispatchMerged(MERGED_DOMAINS.my_study_notes, input, {
+          studentId,
+          platform: { search: async () => ({ success: true, ...(await searchMyStudyKnowledge(studentId, input).catch(asToolError("your saved study knowledge"))), via: "built-in search" }) },
+          runDelta: async () => {
+            if (SELF_TOOLING_ROLES.has(role) && (await selfToolingAllowedFor(studentId))) {
+              const out = await runLearnerTool(name, input, studentId, {
+                callCapability: (tool, args) => executeChatTool(tool, args, studentId, { role, channel: "self_tooling" }),
+                conversationId, dry: isDryRun(), audience: toolAudience(role),
+              });
+              if (out) return { ...out, via: "your saved action" };
+            }
+            return null;
+          },
+        });
+      }
+      if (SELF_TOOLING_ROLES.has(role) && (await selfToolingAllowedFor(studentId))) {
+        const out = await runLearnerTool(name, input, studentId, {
+          callCapability: (tool, args) => executeChatTool(tool, args, studentId, { role, channel: "self_tooling" }),
+          conversationId, dry: isDryRun(), audience: toolAudience(role),
+        });
+        if (out) return out;
+      }
+      return { error: "That tool isn't available right now." };
     }
     case "my_goals": {
       // The merged Goals tool: list is the platform handler (goalIds,
@@ -5457,6 +5487,7 @@ router.post("/agent", async (req, res) => {
       allTools = await applyChatsMerge(allTools, req.user.id, selfToolOn);
       allTools = await applyMergedDomain(allTools, req.user.id, MERGED_DOMAINS.my_tasks, ["list_tasks"], selfToolOn);
       allTools = await applyMergedDomain(allTools, req.user.id, MERGED_DOMAINS.my_goals, ["list_my_goals"], selfToolOn);
+      allTools = await applyMergedDomain(allTools, req.user.id, MERGED_DOMAINS.my_study_notes, ["search_my_study_knowledge"], selfToolOn);
       turnTools = allTools;
       if (areaSelectionEnabled()) {
         const active = new Set([...stickyAreasFor(conversationId), ...areasForMessage(userMessage)]);
@@ -5464,7 +5495,7 @@ router.post("/agent", async (req, res) => {
         if (active.size) {
           const sticky = stickyAreasFor(conversationId);
           for (const a of active) sticky.add(a);
-          turnTools = filterDefsByAreas(allTools, active, (name) => learnerAreas.get(name) || toolArea(name) || (mergedLibraryEnabled() && name === "library_documents" ? "files" : undefined) || (mergedChatsEnabled() && name === "my_chats" ? "chats" : undefined) || (MERGED_DOMAINS.my_tasks.enabled() && name === "my_tasks" ? "plans" : undefined) || (MERGED_DOMAINS.my_goals.enabled() && name === "my_goals" ? "plans" : undefined));
+          turnTools = filterDefsByAreas(allTools, active, (name) => learnerAreas.get(name) || toolArea(name) || (mergedLibraryEnabled() && name === "library_documents" ? "files" : undefined) || (mergedChatsEnabled() && name === "my_chats" ? "chats" : undefined) || (MERGED_DOMAINS.my_tasks.enabled() && name === "my_tasks" ? "plans" : undefined) || (MERGED_DOMAINS.my_goals.enabled() && name === "my_goals" ? "plans" : undefined) || (MERGED_DOMAINS.my_study_notes.enabled() && name === "my_study_notes" ? "teaching" : undefined));
           selectionNote = `\n\n## Tools loaded for this conversation\nLoaded areas: ${[...active].join(", ")}, plus the always-on core. Your other tools exist but are not loaded in this conversation. If the learner's request needs a tool you do not have, call get_agent_capabilities with { area: "<area id>" } to load that area's tools, then continue the request. Area ids: ${Object.keys(AREAS).join(", ")}.`;
         }
       }
