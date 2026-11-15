@@ -128,7 +128,8 @@ import { getLearnerProfileContext } from "./learner-profile-context.js";
 import { validateLearnerTaskInput } from "./learner-task-validation.js";
 import { listChats, readChat, postToChat, ownedChatId, searchChats } from "./chat-history-tools.js";
 import { schemaLookup } from "../self-tooling/registry.js";
-import { createTool, runLearnerTool, learnerToolDefs, learnerToolDefsWithAreas, forcedSelfTool, saveComputation } from "../self-tooling/pipeline.js";
+import { createTool, runLearnerTool, learnerToolDefs, learnerToolDefsWithAreas, forcedSelfTool, saveComputation, getLibraryToolState, runLibraryViewAction } from "../self-tooling/pipeline.js";
+import { mergedLibraryEnabled, mergedLibraryDef, libraryDeltaActions, LIBRARY_BASE_ACTIONS, LIBRARY_MERGED_ACTIONS } from "../self-tooling/mergedLibrary.js";
 import { AREAS, areaSelectionEnabled, areasForMessage, filterDefsByAreas, toolArea } from "./toolSelection.js";
 import { agreesToBuild } from "../self-tooling/capabilities.js";
 import { selfToolingEnabled, selfToolingAllowedFor } from "../self-tooling/access.js";
@@ -1531,6 +1532,43 @@ export function chatToolBasis({ basis = null, rule = null } = {}) {
   return actionBasis(given) || currentActionBasis() || { basis: "explicit", rule: null };
 }
 
+/** The library content search (the platform `search` action of the merged
+ *  library tool, and the legacy search_my_library tool): the learner's own
+ *  records only — chunk search plus a name match, reader-link shaped. */
+async function searchMyLibraryTool(studentId, input) {      // The learner's own records only (searchRecordChunks is user-scoped), plus a name match.
+      const q = String(input?.query || "").trim().slice(0, 200);
+      if (q.length < 3) return { records: [], note: "Give a topic or document name to look for." };
+      try {
+        const [hits, named] = await Promise.all([
+          searchRecordChunks({ userId: studentId, q, limit: 12 }).catch(() => []),
+          db.schema("edu").from("records").select("id, name").eq("user_id", studentId).is("deleted_at", null).ilike("name", `%${q.replace(/[%_]/g, "")}%`).limit(5)
+            .then((r) => r.data || []).catch(() => []),
+        ]);
+        const byId = new Map();
+        for (const n of named) byId.set(n.id, { recordId: n.id, name: n.name, snippet: null });
+        // A passage for a document also found by name fills it in (it used to be dropped as a
+        // duplicate, so "what do my Cell notes say about…" came back with no passage at all).
+        for (const h of hits) {
+          if (!h.recordId) continue;
+          const known = byId.get(h.recordId);
+          if (!known) byId.set(h.recordId, { recordId: h.recordId, name: h.name, snippet: h.snippet || null, page: h.pageNumber ?? null });
+          else if (!known.snippet && h.snippet) Object.assign(known, { snippet: h.snippet, page: h.pageNumber ?? null });
+        }
+        // Found by name only: look inside it for the question (works without embeddings too — lexical).
+        const words = q.replace(/[^\p{L}\p{N}\s]/gu, " ").split(/\s+/).filter((w) => w.length > 3).slice(0, 8).join(" ");
+        await Promise.all([...byId.values()].filter((r) => !r.snippet && words).slice(0, 2).map(async (r) => {
+          const inside = await searchRecordChunks({ userId: studentId, q: words, limit: 2, recordId: r.recordId }).catch(() => []);
+          if (inside[0]?.snippet) Object.assign(r, { snippet: inside[0].snippet, page: inside[0].pageNumber ?? null });
+        }));
+        const tool = ["quiz", "flashcards", "summary", "notes", "podcast"].includes(input?.tool) ? input.tool : null;
+        const records = [...byId.values()].slice(0, 5).map((r) => (tool ? { ...r, tool } : r));
+        return records.length
+          ? { records, ...(!tool && records.every((r) => !r.snippet) ? { note: "None of their passages matched the question — say that, and offer to open the document in the reader (it reads all of it). Never say you can't read or see inside their documents." } : {}),
+            ...(tool ? { note: `Each link opens the document in the reader on its ${tool} tool, which builds it from the whole document — point them there in one line; don't write the ${tool} in chat, don't comment on the document's title or contents, and don't say what you can or can't see inside it (the reader reads all of it).` } : {}) }
+          : { records: [], note: "Nothing in their Library matches — say so; don't invent a document." };
+      } catch (error) { return { error: "Their Library is unavailable right now" }; }
+}
+
 export async function executeChatTool(name, input, studentId, options = {}) {
   const b = chatToolBasis(options);
   const refused = isSideEffecting(name, input) ? basisRefusal(b, { action: name }) : null;
@@ -1785,7 +1823,8 @@ async function runChatTool(name, input, studentId, { conversationId = null, role
         stickyAreasFor(conversationId).add(wantArea);
         const builtIns = openAiChatTools().filter((t) => toolArea(t.function.name) === wantArea);
         const { defs: ownDefs, areas: ownAreas } = await learnerToolDefsWithAreas(studentId, role === "instructor" ? "instructor" : "learner").catch(() => ({ defs: [], areas: new Map() }));
-        const adds = [...builtIns, ...ownDefs.filter((d) => ownAreas.get(d.function.name) === wantArea)];
+        let adds = [...builtIns, ...ownDefs.filter((d) => ownAreas.get(d.function.name) === wantArea)];
+        if (wantArea === "files" && role !== "instructor") adds = await applyLibraryMerge(adds, studentId, true);
         return { loaded: wantArea, areaLabel: AREAS[wantArea], tools: adds.map((d) => d.function.name),
           note: `The ${AREAS[wantArea]} tools are loaded for this conversation now — continue the learner's request with them.`,
           __addTools: adds };
@@ -2771,40 +2810,8 @@ async function runChatTool(name, input, studentId, { conversationId = null, role
       return getKnowledgeMap(studentId, input).catch(asToolError("your knowledge map"));
     case "search_my_study_knowledge":
       return searchMyStudyKnowledge(studentId, input).catch(asToolError("your saved study knowledge"));
-    case "search_my_library": {
-      // The learner's own records only (searchRecordChunks is user-scoped), plus a name match.
-      const q = String(input?.query || "").trim().slice(0, 200);
-      if (q.length < 3) return { records: [], note: "Give a topic or document name to look for." };
-      try {
-        const [hits, named] = await Promise.all([
-          searchRecordChunks({ userId: studentId, q, limit: 12 }).catch(() => []),
-          db.schema("edu").from("records").select("id, name").eq("user_id", studentId).is("deleted_at", null).ilike("name", `%${q.replace(/[%_]/g, "")}%`).limit(5)
-            .then((r) => r.data || []).catch(() => []),
-        ]);
-        const byId = new Map();
-        for (const n of named) byId.set(n.id, { recordId: n.id, name: n.name, snippet: null });
-        // A passage for a document also found by name fills it in (it used to be dropped as a
-        // duplicate, so "what do my Cell notes say about…" came back with no passage at all).
-        for (const h of hits) {
-          if (!h.recordId) continue;
-          const known = byId.get(h.recordId);
-          if (!known) byId.set(h.recordId, { recordId: h.recordId, name: h.name, snippet: h.snippet || null, page: h.pageNumber ?? null });
-          else if (!known.snippet && h.snippet) Object.assign(known, { snippet: h.snippet, page: h.pageNumber ?? null });
-        }
-        // Found by name only: look inside it for the question (works without embeddings too — lexical).
-        const words = q.replace(/[^\p{L}\p{N}\s]/gu, " ").split(/\s+/).filter((w) => w.length > 3).slice(0, 8).join(" ");
-        await Promise.all([...byId.values()].filter((r) => !r.snippet && words).slice(0, 2).map(async (r) => {
-          const inside = await searchRecordChunks({ userId: studentId, q: words, limit: 2, recordId: r.recordId }).catch(() => []);
-          if (inside[0]?.snippet) Object.assign(r, { snippet: inside[0].snippet, page: inside[0].pageNumber ?? null });
-        }));
-        const tool = ["quiz", "flashcards", "summary", "notes", "podcast"].includes(input?.tool) ? input.tool : null;
-        const records = [...byId.values()].slice(0, 5).map((r) => (tool ? { ...r, tool } : r));
-        return records.length
-          ? { records, ...(!tool && records.every((r) => !r.snippet) ? { note: "None of their passages matched the question — say that, and offer to open the document in the reader (it reads all of it). Never say you can't read or see inside their documents." } : {}),
-            ...(tool ? { note: `Each link opens the document in the reader on its ${tool} tool, which builds it from the whole document — point them there in one line; don't write the ${tool} in chat, don't comment on the document's title or contents, and don't say what you can or can't see inside it (the reader reads all of it).` } : {}) }
-          : { records: [], note: "Nothing in their Library matches — say so; don't invent a document." };
-      } catch (error) { return { error: "Their Library is unavailable right now" }; }
-    }
+    case "search_my_library":
+      return searchMyLibraryTool(studentId, input);
     case "make_study_material": {
       // The learner's own records only; the result is a saved reader tab (edu.record_artifacts).
       const { makeStudyMaterial } = await import("../records/studyMaterial.js");
@@ -3063,6 +3070,37 @@ async function runChatTool(name, input, studentId, { conversationId = null, role
           : request.reopened ? "You had reported this before; it is re-opened and back with the Akoro team."
           : `You already reported this${when ? ` on ${when}` : ""}; it is still ${String(request.status).replace(/_/g, " ")}.`,
       };
+    }
+    case "library_documents": {
+      // The merged Library tool (pilot): search is the platform handler, the
+      // base actions are platform-served view reads, and anything beyond them
+      // is the learner's own delta action on their row. With the merge off,
+      // this is exactly the legacy learner-tool path below.
+      if (mergedLibraryEnabled()) {
+        const action = String(input?.action || "");
+        if (action === "search") return { ...(await searchMyLibraryTool(studentId, { query: input?.query, tool: input?.tool })), via: "built-in search" };
+        if (LIBRARY_BASE_ACTIONS.includes(action)) {
+          const st = await getLibraryToolState(studentId).catch(() => null);
+          if (st && st.disabledActions.includes(action)) return { error: "That action is turned off for this tool — turn it back on in Settings → Agent → My tools." };
+          return runLibraryViewAction(action, input, studentId);
+        }
+        if (SELF_TOOLING_ROLES.has(role) && (await selfToolingAllowedFor(studentId))) {
+          const out = await runLearnerTool(name, input, studentId, {
+            callCapability: (tool, args) => executeChatTool(tool, args, studentId, { role, channel: "self_tooling" }),
+            conversationId, dry: isDryRun(), audience: toolAudience(role),
+          });
+          if (out) return { ...out, via: "your saved action" };
+        }
+        return { error: `Unknown action "${action}" for the Library tool. Available: ${LIBRARY_MERGED_ACTIONS.join(", ")}.` };
+      }
+      if (SELF_TOOLING_ROLES.has(role) && (await selfToolingAllowedFor(studentId))) {
+        const out = await runLearnerTool(name, input, studentId, {
+          callCapability: (tool, args) => executeChatTool(tool, args, studentId, { role, channel: "self_tooling" }),
+          conversationId, dry: isDryRun(), audience: toolAudience(role),
+        });
+        if (out) return out;
+      }
+      return { error: `Unknown tool: ${name}` };
     }
     default: {
       // A tool the learner's agent built (self-tooling) — read-only, re-checked every call.
@@ -4271,6 +4309,21 @@ const turnStopKey = (userId, turnId) => `${userId}:${turnId}`;
 // stops above — a lost set only means the next turn re-derives the areas
 // from the learner's message and the loader.
 const conversationAreas = new Map();   // conversationId → Set<area>
+/** The library merge at def-assembly time: drop the legacy search_my_library
+ *  def and the learner's own library_documents def, and put ONE merged def in
+ *  their place — base + platform actions, plus the learner's visible delta
+ *  actions, minus any merged-set action they switched off. No-op when the
+ *  kill switch is off. */
+async function applyLibraryMerge(defs, learnerId, withDelta = true) {
+  if (!mergedLibraryEnabled()) return defs;
+  const st = withDelta ? await getLibraryToolState(learnerId).catch(() => null) : null;
+  const delta = st && st.status === "active" ? libraryDeltaActions(st) : [];
+  const disabled = st ? st.disabledActions.filter((a) => LIBRARY_MERGED_ACTIONS.includes(a)) : [];
+  const kept = (defs || []).filter((d) => !["search_my_library", "library_documents"].includes(d?.function?.name));
+  kept.push(mergedLibraryDef({ delta, disabled }));
+  return kept;
+}
+
 function stickyAreasFor(conversationId) {
   if (!conversationId) return new Set();
   let set = conversationAreas.get(conversationId);
@@ -5273,10 +5326,11 @@ router.post("/agent", async (req, res) => {
       const { defs: learnerDefs, areas: learnerAreas } = selfToolOn
         ? await learnerToolDefsWithAreas(req.user.id).catch(() => ({ defs: [], areas: new Map() }))
         : { defs: [], areas: new Map() };
-      const allTools = openAiChatTools({
+      let allTools = openAiChatTools({
         allowToolRequest: hasExplicitToolRequestConsent(userMessage, { previousAgentText: lastAgentText(fit.kept) }),
         selfTooling: selfToolOn,
       }).concat(learnerDefs);
+      allTools = await applyLibraryMerge(allTools, req.user.id, selfToolOn);
       turnTools = allTools;
       if (areaSelectionEnabled()) {
         const active = new Set([...stickyAreasFor(conversationId), ...areasForMessage(userMessage)]);
@@ -5284,7 +5338,7 @@ router.post("/agent", async (req, res) => {
         if (active.size) {
           const sticky = stickyAreasFor(conversationId);
           for (const a of active) sticky.add(a);
-          turnTools = filterDefsByAreas(allTools, active, (name) => learnerAreas.get(name) || toolArea(name));
+          turnTools = filterDefsByAreas(allTools, active, (name) => learnerAreas.get(name) || toolArea(name) || (mergedLibraryEnabled() && name === "library_documents" ? "files" : undefined));
           selectionNote = `\n\n## Tools loaded for this conversation\nLoaded areas: ${[...active].join(", ")}, plus the always-on core. Your other tools exist but are not loaded in this conversation. If the learner's request needs a tool you do not have, call get_agent_capabilities with { area: "<area id>" } to load that area's tools, then continue the request. Area ids: ${Object.keys(AREAS).join(", ")}.`;
         }
       }

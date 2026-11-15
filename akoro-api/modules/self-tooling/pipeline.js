@@ -22,6 +22,7 @@ import { basisColumns, currentActionBasis } from "../agent-runtime/actionBasis.j
 import { isDocumentGoal, similarGoal, goalTokens } from "./toolSimilarity.js";
 import { deriveToolArea } from "./areas.js";
 import { DOMAINS, domainForGoal, genericDomain, genericReadGoal, inferAction, verifyDomainActions, byActionForGoal, aggregateForGoal, bestSelfView, MAX_DOMAIN_ACTIONS } from "./domains.js";
+import { mergedLibraryEnabled, LIBRARY_MERGED_ACTIONS, libraryBuildIsCovered } from "./mergedLibrary.js";
 
 const edu = () => db.schema("edu");
 const NAME = /^[a-z][a-z0-9_]{2,47}$/;
@@ -328,6 +329,14 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
       return finish("reused", { status: "reused", tool: spec.name, label: spec.label, actions,
         note: `You already have "${spec.label}" — it IS available in this chat: call ${spec.name} with action=(${actions.join("|")}) to answer. Nothing was added or changed and every answer it had still works. Never tell the learner to open Settings.` });
     }
+    // The library merge: count/list/by_kind/search are the merged built-in's
+    // own actions now, so a build that adds nothing beyond them is not a
+    // build at all — the answer is already in the chat as library_documents.
+    // (Rebuilds and resumed builds keep the normal flow.)
+    if (mergedLibraryEnabled() && spec.view === "my_library" && !resumed && !replaced && libraryBuildIsCovered(actions)) {
+      return finish("reused", { status: "reused", tool: spec.name, label: spec.label, actions: LIBRARY_MERGED_ACTIONS,
+        note: `This is built in now: ${spec.name} is already in this chat with action=(count|list|by_kind|search) — count, list and by_kind read the Library records and search looks inside the documents. Nothing needs building, drafting or keeping. Answer the learner's question by calling ${spec.name} with the action they need.` });
+    }
     const def = { kind: "code", steps: [{ id: spec.step, view: spec.view }], source: spec.source };
     const ctxD = { learnerId, callCapability: undefined };
     const checks = await verifyDomainActions(spec2, (_spec, sample) => tryRun(def, spec2.params, sample, ctxD));
@@ -344,6 +353,7 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
     // ones this goal is asking for, which the ask itself turns back on.
     const carriedOff = (Array.isArray(existing?.disabled_actions) ? existing.disabled_actions : [])
       .filter((a) => actions.includes(a) && a !== action && a !== extra);
+    const existingDraft = existing?.status === "disabled" && !!existing?.verification?.awaitingBuild;
     // The own-copy gate (the hardened build rule): a domain tool serves data a
     // built-in already covers, so a BRAND-NEW one is not even drafted until the
     // learner says they want their own copy anyway — the personal tool appears
@@ -360,7 +370,6 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
     // OFF with a card asking the learner to keep it. Extending a tool the
     // learner already has active keeps the consent they already gave; an
     // unapproved draft of it is simply replaced by the new draft.
-    const existingDraft = existing?.status === "disabled" && !!existing?.verification?.awaitingBuild;
     if (audience === "learner" && !resumed && (!existing || existingDraft)) {
       if (existing?.id) await edu().from("agent_tools").update({ status: "archived", updated_at: new Date().toISOString() }).eq("id", existing.id).eq("owner_id", learnerId);
       const { data: row, error } = await edu().from("agent_tools").insert({
@@ -815,6 +824,27 @@ export async function activateBuiltTool(learnerId, toolId) {
 export const REBUILD_HONESTY = " This REBUILDS a tool the learner already had. In your reply, report only what you verified: if the old tool's answer was wrong and the new answer differs, say what changed; if you did not establish what was wrong with the old tool, say plainly that you couldn't confirm the fault - never invent a cause or a story about the old tool.";
 
 /** Run a saved tool — the learner's own, else a platform one. → result, or null when there's no such tool. */
+/** The learner's library domain row state for the merged def/dispatch, or
+ *  null when they have none. Only the fields the merge reads. */
+export async function getLibraryToolState(learnerId) {
+  const { data: t } = await edu().from("agent_tools").select("id, status, actions, disabled_actions, params_schema")
+    .eq("owner_id", learnerId).eq("name", "library_documents").in("status", ["active", "disabled"]).maybeSingle();
+  if (!t) return null;
+  const acts = Array.isArray(t.actions) && t.actions.length ? t.actions : (t.params_schema?.action?.enum || []);
+  return { id: t.id, status: t.status, actions: acts, disabledActions: Array.isArray(t.disabled_actions) ? t.disabled_actions : [] };
+}
+
+/** Serve a BASE library action (count/list/by_kind) platform-side: the real
+ *  domain source over the learner's own my_library rows, with NO tool row —
+ *  the merged built-in's records read. Same result shape as runLearnerTool. */
+export async function runLibraryViewAction(action, input, learnerId) {
+  const spec = DOMAINS.library_documents;
+  const def = { kind: "code", steps: [{ id: spec.step, view: spec.view }], source: spec.source };
+  const r = await tryRun(def, spec.params, { ...(input || {}), action }, { learnerId, callCapability: undefined });
+  if (!r.ok) return { error: `The Library couldn't be read just now: ${r.error}` };
+  return { tool: spec.label, rows: r.rows, total: r.total, truncated: r.truncated, via: "library records" };
+}
+
 export async function runLearnerTool(name, input, learnerId, { callCapability, conversationId = null, dry = false, audience = "learner" }) {
   if (!NAME.test(String(name || ""))) return null;
   let { data: t } = await edu().from("agent_tools").select("*").eq("owner_id", learnerId).eq("name", name).in("status", ["active", "disabled"]).maybeSingle();
