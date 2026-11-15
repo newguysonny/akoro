@@ -907,12 +907,18 @@ export async function runMergedViewAction(name, action, input, learnerId) {
 // row with no delta left is not listed at all (nothing of theirs to manage).
 // Pure helpers, exported for the contract tests.
 const MERGED_ROW_DOMAINS = [
-  { domain: "my_library", mergedActions: LIBRARY_MERGED_ACTIONS, enabled: mergedLibraryEnabled },
-  { domain: "my_chats", mergedActions: CHATS_MERGED_ACTIONS, enabled: mergedChatsEnabled },
-  ...MERGED_DOMAIN_LIST.map((c) => ({ domain: c.view, mergedActions: c.mergedActions, enabled: c.enabled })),
+  { domain: "my_library", name: "library_documents", mergedActions: LIBRARY_MERGED_ACTIONS, enabled: mergedLibraryEnabled },
+  { domain: "my_chats", name: "my_chats", mergedActions: CHATS_MERGED_ACTIONS, enabled: mergedChatsEnabled },
+  ...MERGED_DOMAIN_LIST.map((c) => ({ domain: c.view, name: c.name, mergedActions: c.mergedActions, enabled: c.enabled })),
 ];
 export function mergedRowRule(row) {
-  return MERGED_ROW_DOMAINS.find((r) => r.domain === row?.domain && r.enabled()) || null;
+  // The rule applies ONLY to the domain tool itself (matched by name, the
+  // same key the state lookups use). A computed tool that merely READS the
+  // merged view carries the view in its domain field too — hiding it would
+  // vanish the learner's tool from My tools (seen live 2026-11-15: a goals
+  // percentage tool, domain my_goals, disappeared from the list while
+  // still running fine).
+  return MERGED_ROW_DOMAINS.find((r) => r.domain === row?.domain && r.name === row?.name && r.enabled()) || null;
 }
 export function presentMergedToolRow(row) {
   const rule = mergedRowRule(row);

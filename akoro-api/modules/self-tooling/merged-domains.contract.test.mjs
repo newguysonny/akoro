@@ -45,8 +45,8 @@ test("every merged domain has its own kill switch, default on", () => {
 });
 
 test("My tools presentation covers the generic domains", () => {
-  assert.equal(presentMergedToolRow({ domain: "my_tasks", actions: ["count", "list", "search"], disabled_actions: [] }), null);
-  const shown = presentMergedToolRow({ domain: "my_tasks", actions: ["count", "list", "by_priority"], disabled_actions: [] });
+  assert.equal(presentMergedToolRow({ name: "my_tasks", domain: "my_tasks", actions: ["count", "list", "search"], disabled_actions: [] }), null);
+  const shown = presentMergedToolRow({ name: "my_tasks", domain: "my_tasks", actions: ["count", "list", "by_priority"], disabled_actions: [] });
   assert.deepEqual(shown.actions, ["by_priority"]);
 });
 
@@ -56,7 +56,16 @@ test("goals config: merged set, def and My-tools presentation", () => {
   assert.deepEqual(c.def().function.parameters.properties.action.enum, ["count", "list", "by_status", "search"]);
   assert.equal(c.buildIsCovered(["list", "by_status"]), true);
   assert.equal(c.buildIsCovered(["by_category"]), false);
-  assert.equal(presentMergedToolRow({ domain: "my_goals", actions: ["count", "list", "search"], disabled_actions: [] }), null);
+  assert.equal(presentMergedToolRow({ name: "my_goals", domain: "my_goals", actions: ["count", "list", "search"], disabled_actions: [] }), null);
+});
+
+test("study notes config: search is the platform action, the rest are view reads", () => {
+  const c = MERGED_DOMAINS.my_study_notes;
+  assert.equal(c.view, "my_study_notes");
+  assert.deepEqual(c.baseActions, ["count", "list", "by_subject"]);
+  assert.deepEqual(c.platformActions, ["search"]);
+  assert.equal(c.buildIsCovered(["count", "search"]), true);
+  assert.equal(c.buildIsCovered(["by_confidence"]), false);
 });
 
 test("wiring: pipeline guard loop, generic runners, registry", () => {
@@ -64,7 +73,7 @@ test("wiring: pipeline guard loop, generic runners, registry", () => {
   assert.match(src, /MERGED_DOMAIN_LIST\.find\(\(c\) => c\.view === spec\.view && c\.enabled\(\)\)/);
   assert.match(src, /export async function getMergedToolState/);
   assert.match(src, /export async function runMergedViewAction/);
-  assert.match(src, /MERGED_DOMAIN_LIST\.map\(\(c\) => \(\{ domain: c\.view, mergedActions: c\.mergedActions, enabled: c\.enabled \}\)\)/);
+  assert.match(src, /MERGED_DOMAIN_LIST\.map\(\(c\) => \(\{ domain: c\.view, name: c\.name, mergedActions: c\.mergedActions, enabled: c\.enabled \}\)\)/);
 });
 
 test("wiring: chat.js assembles and dispatches merged domains generically", () => {

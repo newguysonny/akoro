@@ -54,14 +54,16 @@ test("the chats merge has a kill switch", () => {
 });
 
 test("Fix 1: My tools presents only delta actions for merged domains", () => {
-  const lib = { domain: "my_library", actions: ["count", "list", "by_kind", "search", "sum_size"], disabled_actions: ["by_kind", "sum_size"] };
+  const lib = { name: "library_documents", domain: "my_library", actions: ["count", "list", "by_kind", "search", "sum_size"], disabled_actions: ["by_kind", "sum_size"] };
   const shownLib = presentMergedToolRow(lib);
   assert.deepEqual(shownLib.actions, ["sum_size"]);
   assert.deepEqual(shownLib.disabled_actions, ["sum_size"]); // base toggles are the platform's now
-  assert.equal(presentMergedToolRow({ domain: "my_library", actions: ["count", "list", "search"], disabled_actions: [] }), null);
-  assert.equal(presentMergedToolRow({ domain: "my_chats", actions: ["count", "list", "search"], disabled_actions: [] }), null);
-  const chats = presentMergedToolRow({ domain: "my_chats", actions: ["count", "list", "search", "by_month"], disabled_actions: [] });
+  assert.equal(presentMergedToolRow({ name: "library_documents", domain: "my_library", actions: ["count", "list", "search"], disabled_actions: [] }), null);
+  assert.equal(presentMergedToolRow({ name: "my_chats", domain: "my_chats", actions: ["count", "list", "search"], disabled_actions: [] }), null);
+  const chats = presentMergedToolRow({ name: "my_chats", domain: "my_chats", actions: ["count", "list", "search", "by_month"], disabled_actions: [] });
   assert.deepEqual(chats.actions, ["by_month"]);
+  const computed = { name: "goals_percentage_fresh", domain: "my_goals", actions: [], disabled_actions: [] };
+  assert.equal(presentMergedToolRow(computed), computed); // a computed tool over a merged view is NOT the domain tool
   const other = { domain: "my_xp", actions: ["count"], disabled_actions: [] };
   assert.equal(presentMergedToolRow(other), other); // unmerged domain: untouched, same object
 });
