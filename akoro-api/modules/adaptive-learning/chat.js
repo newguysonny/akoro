@@ -128,8 +128,9 @@ import { getLearnerProfileContext } from "./learner-profile-context.js";
 import { validateLearnerTaskInput } from "./learner-task-validation.js";
 import { listChats, readChat, postToChat, ownedChatId, searchChats } from "./chat-history-tools.js";
 import { schemaLookup } from "../self-tooling/registry.js";
-import { createTool, runLearnerTool, learnerToolDefs, learnerToolDefsWithAreas, forcedSelfTool, saveComputation, getLibraryToolState, runLibraryViewAction } from "../self-tooling/pipeline.js";
+import { createTool, runLearnerTool, learnerToolDefs, learnerToolDefsWithAreas, forcedSelfTool, saveComputation, getLibraryToolState, runLibraryViewAction, getChatsToolState, runChatsViewAction } from "../self-tooling/pipeline.js";
 import { mergedLibraryEnabled, mergedLibraryDef, libraryDeltaActions, LIBRARY_BASE_ACTIONS, LIBRARY_MERGED_ACTIONS } from "../self-tooling/mergedLibrary.js";
+import { mergedChatsEnabled, mergedChatsDef, chatsDeltaActions, CHATS_BASE_ACTIONS, CHATS_MERGED_ACTIONS } from "../self-tooling/mergedChats.js";
 import { AREAS, areaSelectionEnabled, areasForMessage, filterDefsByAreas, toolArea } from "./toolSelection.js";
 import { agreesToBuild } from "../self-tooling/capabilities.js";
 import { selfToolingEnabled, selfToolingAllowedFor } from "../self-tooling/access.js";
@@ -1825,6 +1826,7 @@ async function runChatTool(name, input, studentId, { conversationId = null, role
         const { defs: ownDefs, areas: ownAreas } = await learnerToolDefsWithAreas(studentId, role === "instructor" ? "instructor" : "learner").catch(() => ({ defs: [], areas: new Map() }));
         let adds = [...builtIns, ...ownDefs.filter((d) => ownAreas.get(d.function.name) === wantArea)];
         if (wantArea === "files" && role !== "instructor") adds = await applyLibraryMerge(adds, studentId, true);
+        else if (wantArea === "chats" && role !== "instructor") adds = await applyChatsMerge(adds, studentId, true);
         return { loaded: wantArea, areaLabel: AREAS[wantArea], tools: adds.map((d) => d.function.name),
           note: `The ${AREAS[wantArea]} tools are loaded for this conversation now — continue the learner's request with them.`,
           __addTools: adds };
@@ -3071,6 +3073,43 @@ async function runChatTool(name, input, studentId, { conversationId = null, role
           : `You already reported this${when ? ` on ${when}` : ""}; it is still ${String(request.status).replace(/_/g, " ")}.`,
       };
     }
+    case "my_chats": {
+      // The merged Chats tool: count is the platform view count (the true,
+      // uncapped total), list/search are the platform handlers (list carries
+      // chatIds, search matches message content — the view supplies
+      // neither), anything beyond them is the learner's own delta action on
+      // their row. With the merge off, the legacy learner-tool path below.
+      if (mergedChatsEnabled()) {
+        const action = String(input?.action || "count");
+        if (action === "list") {
+          const out = await listChats(studentId, { search: input?.query, limit: input?.limit, currentChatId: conversationId });
+          let totalChats;
+          try { const c = await runChatsViewAction("count", {}, studentId); totalChats = c?.rows?.[0]?.count; } catch {}
+          return { success: true, ...out, ...(Number.isFinite(totalChats) ? { totalChats } : {}), via: "built-in list" };
+        }
+        if (action === "search") {
+          const out = await searchChats(studentId, { query: input?.query, limit: input?.limit, currentChatId: conversationId });
+          return { success: true, ...out, via: "built-in search" };
+        }
+        if (CHATS_BASE_ACTIONS.includes(action)) return runChatsViewAction(action, input, studentId);
+        if (SELF_TOOLING_ROLES.has(role) && (await selfToolingAllowedFor(studentId))) {
+          const out = await runLearnerTool(name, input, studentId, {
+            callCapability: (tool, args) => executeChatTool(tool, args, studentId, { role, channel: "self_tooling" }),
+            conversationId, dry: isDryRun(), audience: toolAudience(role),
+          });
+          if (out) return { ...out, via: "your saved action" };
+        }
+        return { error: `Unknown action "${action}" for the Chats tool. Available: ${CHATS_MERGED_ACTIONS.join(", ")}.` };
+      }
+      if (SELF_TOOLING_ROLES.has(role) && (await selfToolingAllowedFor(studentId))) {
+        const out = await runLearnerTool(name, input, studentId, {
+          callCapability: (tool, args) => executeChatTool(tool, args, studentId, { role, channel: "self_tooling" }),
+          conversationId, dry: isDryRun(), audience: toolAudience(role),
+        });
+        if (out) return out;
+      }
+      return { error: "That tool isn't available right now." };
+    }
     case "library_documents": {
       // The merged Library tool (pilot): search is the platform handler, the
       // base actions are platform-served view reads, and anything beyond them
@@ -3079,11 +3118,7 @@ async function runChatTool(name, input, studentId, { conversationId = null, role
       if (mergedLibraryEnabled()) {
         const action = String(input?.action || "");
         if (action === "search") return { ...(await searchMyLibraryTool(studentId, { query: input?.query, tool: input?.tool })), via: "built-in search" };
-        if (LIBRARY_BASE_ACTIONS.includes(action)) {
-          const st = await getLibraryToolState(studentId).catch(() => null);
-          if (st && st.disabledActions.includes(action)) return { error: "That action is turned off for this tool — turn it back on in Settings → Agent → My tools." };
-          return runLibraryViewAction(action, input, studentId);
-        }
+        if (LIBRARY_BASE_ACTIONS.includes(action)) return runLibraryViewAction(action, input, studentId);
         if (SELF_TOOLING_ROLES.has(role) && (await selfToolingAllowedFor(studentId))) {
           const out = await runLearnerTool(name, input, studentId, {
             callCapability: (tool, args) => executeChatTool(tool, args, studentId, { role, channel: "self_tooling" }),
@@ -4314,11 +4349,19 @@ const conversationAreas = new Map();   // conversationId → Set<area>
  *  their place — base + platform actions, plus the learner's visible delta
  *  actions, minus any merged-set action they switched off. No-op when the
  *  kill switch is off. */
+async function applyChatsMerge(defs, learnerId, withDelta = true) {
+  if (!mergedChatsEnabled()) return defs;
+  const st = withDelta ? await getChatsToolState(learnerId).catch(() => null) : null;
+  const delta = st && st.status === "active" ? chatsDeltaActions(st) : [];
+  const kept = (defs || []).filter((d) => !["list_chats", "search_chats", "my_chats"].includes(d?.function?.name));
+  kept.push(mergedChatsDef({ delta }));
+  return kept;
+}
 async function applyLibraryMerge(defs, learnerId, withDelta = true) {
   if (!mergedLibraryEnabled()) return defs;
   const st = withDelta ? await getLibraryToolState(learnerId).catch(() => null) : null;
   const delta = st && st.status === "active" ? libraryDeltaActions(st) : [];
-  const disabled = st ? st.disabledActions.filter((a) => LIBRARY_MERGED_ACTIONS.includes(a)) : [];
+  const disabled = []; // base actions are platform-owned now (My tools shows delta only); stored base toggles no longer apply
   const kept = (defs || []).filter((d) => !["search_my_library", "library_documents"].includes(d?.function?.name));
   kept.push(mergedLibraryDef({ delta, disabled }));
   return kept;
@@ -5331,6 +5374,7 @@ router.post("/agent", async (req, res) => {
         selfTooling: selfToolOn,
       }).concat(learnerDefs);
       allTools = await applyLibraryMerge(allTools, req.user.id, selfToolOn);
+      allTools = await applyChatsMerge(allTools, req.user.id, selfToolOn);
       turnTools = allTools;
       if (areaSelectionEnabled()) {
         const active = new Set([...stickyAreasFor(conversationId), ...areasForMessage(userMessage)]);
@@ -5338,7 +5382,7 @@ router.post("/agent", async (req, res) => {
         if (active.size) {
           const sticky = stickyAreasFor(conversationId);
           for (const a of active) sticky.add(a);
-          turnTools = filterDefsByAreas(allTools, active, (name) => learnerAreas.get(name) || toolArea(name) || (mergedLibraryEnabled() && name === "library_documents" ? "files" : undefined));
+          turnTools = filterDefsByAreas(allTools, active, (name) => learnerAreas.get(name) || toolArea(name) || (mergedLibraryEnabled() && name === "library_documents" ? "files" : undefined) || (mergedChatsEnabled() && name === "my_chats" ? "chats" : undefined));
           selectionNote = `\n\n## Tools loaded for this conversation\nLoaded areas: ${[...active].join(", ")}, plus the always-on core. Your other tools exist but are not loaded in this conversation. If the learner's request needs a tool you do not have, call get_agent_capabilities with { area: "<area id>" } to load that area's tools, then continue the request. Area ids: ${Object.keys(AREAS).join(", ")}.`;
         }
       }

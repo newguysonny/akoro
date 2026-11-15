@@ -23,6 +23,7 @@ import { isDocumentGoal, similarGoal, goalTokens } from "./toolSimilarity.js";
 import { deriveToolArea } from "./areas.js";
 import { DOMAINS, domainForGoal, genericDomain, genericReadGoal, inferAction, verifyDomainActions, byActionForGoal, aggregateForGoal, bestSelfView, MAX_DOMAIN_ACTIONS } from "./domains.js";
 import { mergedLibraryEnabled, LIBRARY_MERGED_ACTIONS, libraryBuildIsCovered } from "./mergedLibrary.js";
+import { mergedChatsEnabled, CHATS_MERGED_ACTIONS, chatsBuildIsCovered } from "./mergedChats.js";
 
 const edu = () => db.schema("edu");
 const NAME = /^[a-z][a-z0-9_]{2,47}$/;
@@ -337,6 +338,13 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
       return finish("reused", { status: "reused", tool: spec.name, label: spec.label, actions: LIBRARY_MERGED_ACTIONS,
         note: `This is built in now: ${spec.name} is already in this chat with action=(count|list|by_kind|search) — count, list and by_kind read the Library records and search looks inside the documents. Nothing needs building, drafting or keeping. Answer the learner's question by calling ${spec.name} with the action they need.` });
     }
+    // The chats merge (same pattern as library): count/list/search are the
+    // merged built-in's own actions, so a build adding nothing beyond them
+    // is not a build at all.
+    if (mergedChatsEnabled() && spec.view === "my_chats" && !resumed && !replaced && chatsBuildIsCovered(actions)) {
+      return finish("reused", { status: "reused", tool: spec.name, label: spec.label, actions: CHATS_MERGED_ACTIONS,
+        note: `This is built in now: ${spec.name} is already in this chat with action=(count|list|search) — count gives the exact total, list shows recent chats with their chatIds, search finds chats by what was talked about. Nothing needs building, drafting or keeping. Answer the learner's question by calling ${spec.name} with the action they need.` });
+    }
     const def = { kind: "code", steps: [{ id: spec.step, view: spec.view }], source: spec.source };
     const ctxD = { learnerId, callCapability: undefined };
     const checks = await verifyDomainActions(spec2, (_spec, sample) => tryRun(def, spec2.params, sample, ctxD));
@@ -363,8 +371,17 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
     // (already-approved) builds are not re-gated.
     if (audience === "learner" && !resumed && !replaced && (!existing || existingDraft) && hint?.ownCopy !== true) {
       await finish("offer_own_copy", {});
-      return { status: "offer_own_copy", tool: spec.name, label: spec.label, actions,
-        note: `STOP — do not build yet, and do not call create_tool again in this turn. A built-in already covers this data: you have built-in tools that list, count and search it, so the learner needs no new tool for this. In plain words, tell the learner you can already do this, and ask if they want their OWN copy anyway — their own tool would live in My tools, with answers they can switch off, rename and extend (other breakdowns of the same data, for example). If their request already asks for MORE than the built-in does, name the extra when you ask. Only if they say yes, call create_tool again with the same goal and hint set to { "ownCopy": true }. If they say no, just answer their question with the built-in.` };
+      // Delta wording: when the build's actions go beyond the domain's
+      // standard set, the built-in does NOT cover the request — the note
+      // names the extra as what their own copy would ADD and forbids
+      // claiming the built-in can do it (the failure seen live 2026-11-15:
+      // the agent claimed the built-in could already break the library
+      // down by size when it could not).
+      const beyond = actions.filter((a) => !(spec.actions || []).includes(a));
+      const note = beyond.length
+        ? `STOP — do not build yet, and do not call create_tool again in this turn. A built-in covers the standard answers for this data (listing, counting, searching it), but it CANNOT do: ${beyond.join(", ")} — never claim it can, and never answer this request as if the built-in handled it. The learner's request asks for exactly that extra, and the extra is what their OWN copy would add: it would live in My tools with ${beyond.join(", ")} included, answers they can switch off, rename and extend. Ask them, naming ${beyond.join(", ")} as the extra their copy would have. Only if they say yes, call create_tool again with the same goal and hint set to { "ownCopy": true }. If they say no, answer what the built-in CAN cover and say plainly that ${beyond.join(", ")} needs their own copy.`
+        : `STOP — do not build yet, and do not call create_tool again in this turn. A built-in already covers this data: you have built-in tools that list, count and search it, so the learner needs no new tool for this. In plain words, tell the learner you can already do this, and ask if they want their OWN copy anyway — their own tool would live in My tools, with answers they can switch off, rename and extend (other breakdowns of the same data, for example). If their request already asks for MORE than the built-in does, name the extra when you ask. Only if they say yes, call create_tool again with the same goal and hint set to { "ownCopy": true }. If they say no, just answer their question with the built-in.`;
+      return { status: "offer_own_copy", tool: spec.name, label: spec.label, actions, note };
     }
     // The build-consent gate: a BRAND-NEW domain tool is only drafted — saved
     // OFF with a card asking the learner to keep it. Extending a tool the
@@ -844,6 +861,40 @@ export async function runLibraryViewAction(action, input, learnerId) {
   if (!r.ok) return { error: `The Library couldn't be read just now: ${r.error}` };
   return { tool: spec.label, rows: r.rows, total: r.total, truncated: r.truncated, via: "library records" };
 }
+export async function getChatsToolState(learnerId) {
+  const { data: t } = await edu().from("agent_tools").select("id, status, actions, disabled_actions, params_schema")
+    .eq("owner_id", learnerId).eq("name", "my_chats").in("status", ["active", "disabled"]).maybeSingle();
+  if (!t) return null;
+  const acts = Array.isArray(t.actions) && t.actions.length ? t.actions : (t.params_schema?.action?.enum || []);
+  return { id: t.id, status: t.status, actions: acts, disabledActions: Array.isArray(t.disabled_actions) ? t.disabled_actions : [] };
+}
+export async function runChatsViewAction(action, input, learnerId) {
+  const spec = genericDomain("my_chats");
+  const def = { kind: "code", steps: [{ id: spec.step, view: spec.view }], source: spec.source };
+  const r = await tryRun(def, spec.params, { ...(input || {}), action }, { learnerId, callCapability: undefined });
+  if (!r.ok) return { error: `Your chats couldn't be read just now: ${r.error}` };
+  return { tool: spec.label, rows: r.rows, total: r.total, truncated: r.truncated, via: "chat records" };
+}
+
+// Merged domains (library, chats): the platform owns the merged action set,
+// so My tools presents ONLY the learner's own delta actions — and a merged
+// row with no delta left is not listed at all (nothing of theirs to manage).
+// Pure helpers, exported for the contract tests.
+const MERGED_ROW_DOMAINS = [
+  { domain: "my_library", mergedActions: LIBRARY_MERGED_ACTIONS, enabled: mergedLibraryEnabled },
+  { domain: "my_chats", mergedActions: CHATS_MERGED_ACTIONS, enabled: mergedChatsEnabled },
+];
+export function mergedRowRule(row) {
+  return MERGED_ROW_DOMAINS.find((r) => r.domain === row?.domain && r.enabled()) || null;
+}
+export function presentMergedToolRow(row) {
+  const rule = mergedRowRule(row);
+  if (!rule) return row;
+  const delta = (Array.isArray(row.actions) ? row.actions : []).filter((a) => !rule.mergedActions.includes(a));
+  if (!delta.length) return null;
+  const off = (Array.isArray(row.disabled_actions) ? row.disabled_actions : []).filter((a) => !rule.mergedActions.includes(a));
+  return { ...row, actions: delta, disabled_actions: off };
+}
 
 export async function runLearnerTool(name, input, learnerId, { callCapability, conversationId = null, dry = false, audience = "learner" }) {
   if (!NAME.test(String(name || ""))) return null;
@@ -954,7 +1005,8 @@ export async function listMyTools(learnerId) {
     .eq("owner_id", learnerId).in("status", ["active", "disabled"]).order("created_at", { ascending: false }).limit(50);
   if (error) throw new Error("Couldn't load your tools");
   return (data || []).map((t) => ({ ...t, actions: Array.isArray(t.actions) ? t.actions : [], disabled_actions: Array.isArray(t.disabled_actions) ? t.disabled_actions : [],
-    area: t.area || deriveToolArea(t).area, secondary_areas: Array.isArray(t.secondary_areas) ? t.secondary_areas : [], tags: Array.isArray(t.tags) ? t.tags : [] }));
+    area: t.area || deriveToolArea(t).area, secondary_areas: Array.isArray(t.secondary_areas) ? t.secondary_areas : [], tags: Array.isArray(t.tags) ? t.tags : [] }))
+    .map(presentMergedToolRow).filter((t) => t !== null);
 }
 
 export async function updateMyTool(learnerId, id, patch) {
@@ -974,12 +1026,19 @@ export async function updateMyTool(learnerId, id, patch) {
   // delete it from the set. Deleting the last action archives the tool — an
   // empty domain is no tool at all.
   const acts = toolActions(row);
+  const mRule = mergedRowRule(row);
+  const targetedAction = typeof patch?.deleteAction === "string" && patch.deleteAction ? patch.deleteAction
+    : (typeof patch?.action === "string" && patch.action ? patch.action : null);
+  if (mRule && targetedAction && mRule.mergedActions.includes(targetedAction)) {
+    throw Object.assign(new Error("That action is built in — it can't be changed here"), { status: 400 });
+  }
   let nextActions = null, nextOff = null;
   if (typeof patch?.deleteAction === "string" && patch.deleteAction) {
     if (!acts.includes(patch.deleteAction)) throw Object.assign(new Error("That action doesn't exist on this tool"), { status: 400 });
     nextActions = acts.filter((a) => a !== patch.deleteAction);
     nextOff = (Array.isArray(row.disabled_actions) ? row.disabled_actions : []).filter((a) => a !== patch.deleteAction);
     if (!nextActions.length) allowed.status = "archived";
+    if (mRule && !nextActions.filter((a) => !mRule.mergedActions.includes(a)).length) allowed.status = "archived";
   } else if (typeof patch?.action === "string" && ["active", "disabled"].includes(patch?.actionStatus)) {
     if (!acts.includes(patch.action)) throw Object.assign(new Error("That action doesn't exist on this tool"), { status: 400 });
     const off = new Set(Array.isArray(row.disabled_actions) ? row.disabled_actions : []);
@@ -996,6 +1055,7 @@ export async function updateMyTool(learnerId, id, patch) {
     .eq("owner_id", learnerId).eq("id", row.id).in("status", ["active", "disabled"]).select("id, name, label, status, domain, actions, disabled_actions, area, secondary_areas, tags").maybeSingle();
   if (error) throw new Error("Couldn't update the tool");
   if (!data) throw Object.assign(new Error("Tool not found"), { status: 404 });
-  return { ...data, actions: Array.isArray(data.actions) ? data.actions : [], disabled_actions: Array.isArray(data.disabled_actions) ? data.disabled_actions : [],
+  const presented = { ...data, actions: Array.isArray(data.actions) ? data.actions : [], disabled_actions: Array.isArray(data.disabled_actions) ? data.disabled_actions : [],
     secondary_areas: Array.isArray(data.secondary_areas) ? data.secondary_areas : [], tags: Array.isArray(data.tags) ? data.tags : [] };
+  return presentMergedToolRow(presented) || presented;
 }
