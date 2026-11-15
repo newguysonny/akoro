@@ -82,7 +82,7 @@ test("document goals read my_library only, and replace a wrong-view duplicate", 
 test("create_tool can rebuild a saved tool in place (replace)", () => {
   const src = read("./pipeline.js");
   assert.match(src, /const replaceRaw = String\(input\?\.replace/, "reads the replace target");
-  assert.match(src, /status: "archived"[\s\S]{0,140}eq\("id", old\.id\)/, "archives the replaced tool");
+  assert.match(src, /status: "archived"[\s\S]{0,140}eq\("id", replaced\.id\)/, "retires the replaced tool at the save point (archiveReplaced)");
 });
 
 test("createTool builds deterministic domain tools and verifies every action", () => {

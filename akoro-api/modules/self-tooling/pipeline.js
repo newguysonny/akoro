@@ -202,10 +202,14 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
   const forbidden = forbiddenFor(goal);
   if (forbidden.length) return finish("rejected", reject(`Not allowed: ${forbidden.map((f) => f.description).join(" ")}`));
 
-  // Self-repair: rebuild a saved tool in place — archive the named/ided tool
-  // first, so the build below replaces it instead of being deduped back to it.
-  // Capture its identity + actions BEFORE archiving: a domain rebuild must carry
-  // forward the actions the old tool already had (e.g. by_size while adding by_name).
+  // Self-repair: rebuild a saved tool in place. Capture the named/ided tool
+  // now (its identity + actions: a domain rebuild must carry forward the
+  // actions the old tool already had, e.g. by_size while adding by_name) but
+  // archive it ONLY at the save point below, once the replacement is built,
+  // verified and saved — a build that fails, is rejected or is answered-only
+  // must never take the learner's working tool away. Until the swap, the
+  // dedupe and name checks below exclude this row so the build replaces it
+  // instead of being deduped back to it.
   const replaceRaw = String(input?.replace || "").trim();
   let replaced = null;
   if (replaceRaw && !dry && !resumed) {
@@ -215,13 +219,20 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
         : edu().from("agent_tools").select("id, name, views, domain, params_schema").eq("owner_id", learnerId).eq("name", replaceRaw);
       const { data: old } = await q.in("status", ["active", "disabled"]).maybeSingle();
       if (old?.id) {
-        await edu().from("agent_tools").update({ status: "archived", updated_at: new Date().toISOString() })
-          .eq("id", old.id).eq("owner_id", learnerId);
         if (!String(input?.name || "").trim()) name = old.name;
         replaced = old;
       }
     } catch { /* best-effort */ }
   }
+
+  /** Retire the replaced tool once its replacement is safely saved. */
+  const archiveReplaced = async (newRowId) => {
+    if (!replaced?.id || replaced.id === newRowId) return;
+    try {
+      await edu().from("agent_tools").update({ status: "archived", updated_at: new Date().toISOString() })
+        .eq("id", replaced.id).eq("owner_id", learnerId);
+    } catch { /* best-effort */ }
+  };
 
   /** Actions a replaced tool had, when it belongs to the domain being rebuilt. */
   const carriedActions = (view) => {
@@ -303,7 +314,7 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
     }
     // Retire ONLY after verification passes: a rejected rebuild must never take
     // the learner's working domain tool away.
-    if (existing?.id && !replaceRaw) {
+    if (existing?.id) {
       await edu().from("agent_tools").update({ status: "archived", updated_at: new Date().toISOString() }).eq("id", existing.id).eq("owner_id", learnerId);
     }
     // One tool per domain: retire other saved domain tools over the same view
@@ -319,6 +330,7 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
     }).select("id").single();
     if (error) return finish("failed", reject(`Couldn't save the tool: ${error.message}`));
     ev.tool_id = row.id; ev.mode = "code"; ev.capabilities = [];
+    await archiveReplaced(row.id);
     await finish("created", {});
     // Say what changed and that nothing regressed — the model repeats this to the
     // learner in plain words instead of a bare "Saved".
@@ -360,15 +372,16 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
   // never reused for this goal. That removes the near-duplicate path.
   if (!dry && !resumed) {
     try {
-      const { data: mine } = await edu().from("agent_tools").select("id, name, label, goal, views, domain, mode, params_schema")
+      const { data: mineRaw } = await edu().from("agent_tools").select("id, name, label, goal, views, domain, mode, params_schema")
         .eq("owner_id", learnerId).eq("status", "active").limit(200);
+      const mine = (mineRaw || []).filter((t) => t.id !== replaced?.id);
       const goalView = docGoal ? "my_library" : (dkey ? DOMAINS[dkey].view : bestSelfView(goal));
       const domainOf = (t) => t.domain || (Array.isArray(t.views) && t.views[0]) || null;
       const readGoal = !asksForChange(goal) && (genericReadGoal(goal) || !!aggregateForGoal(goal, goalView));
       // A read/aggregate goal over a view that already has a domain tool EXTENDS
       // that tool (the action is added); it never builds a near-duplicate.
       if (goalView && readGoal) {
-        const hasDomainTool = (mine || []).some((t) => domainOf(t) === goalView && isDomainTool(t));
+        const hasDomainTool = (mineRaw || []).some((t) => domainOf(t) === goalView && isDomainTool(t));
         if (hasDomainTool) {
           const spec = Object.values(DOMAINS).find((d) => d.view === goalView) || genericDomain(goalView);
           if (spec) return await buildDomain(spec);
@@ -422,9 +435,9 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
       .eq("owner_id", learnerId).eq("name", name).eq("status", "disabled").not("verification->awaitingPermission", "is", null);
     await edu().from("agent_tools").update({ status: "archived", updated_at: new Date().toISOString() })
       .eq("owner_id", learnerId).eq("name", name).eq("status", "disabled").not("verification->awaitingBuild", "is", null);
-    const { data: mine } = await edu().from("agent_tools").select("name").eq("owner_id", learnerId).in("status", ["active", "disabled"]).limit(LIMITS.maxTools + 1);
-    if ((mine || []).some((t) => t.name === name)) return reject(`You already have a tool called ${name} — call it, or pick another name.`);
-    if ((mine || []).length >= LIMITS.maxTools) return finish("rejected", reject(`You have ${LIMITS.maxTools} tools — delete one in Settings → Agent → My tools first.`));
+    const { data: mine } = await edu().from("agent_tools").select("id, name").eq("owner_id", learnerId).in("status", ["active", "disabled"]).limit(LIMITS.maxTools + 1);
+    if ((mine || []).some((t) => t.name === name && t.id !== replaced?.id)) return reject(`You already have a tool called ${name} — call it, or pick another name.`);
+    if ((mine || []).filter((t) => t.id !== replaced?.id).length >= LIMITS.maxTools) return finish("rejected", reject(`You have ${LIMITS.maxTools} tools — delete one in Settings → Agent → My tools first.`));
   }
 
   // What could it use?
@@ -624,7 +637,7 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
     // verified run above and NOT saved — no draft, no card. The verified
     // definition is stashed on the event so an explicit "save that" (or the
     // daily repeated-computation sweep) can save this exact tool later.
-    if (audience === "learner" && !resumed && isAnswerOnlyRead(def, runNow)) {
+    if (audience === "learner" && !resumed && !replaced && isAnswerOnlyRead(def, runNow)) {
       ev.detail = { name, label, goal, mode: stage, definition: built.definition, params_schema: params,
         capabilities: v.uses.capabilities, views: def.views, samples: built.samples || [], runInput };
       await finish("answered", {});
@@ -636,10 +649,11 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
     // learner commits it on a card. The build above already ran and verified —
     // it is the silent dry run that makes the card's ask honest. (Resumed
     // builds were approved on a card or by an admin; draftCap has its own card.)
-    if (audience === "learner" && !resumed) return draftBuildAndAsk({ def, runNow });
+    if (audience === "learner" && !resumed && !replaced) return draftBuildAndAsk({ def, runNow });
     const { data: row, error } = await edu().from("agent_tools").insert({ owner_id: learnerId, scope: "learner", audience, ...def, domain: (def.views || [])[0] || null, actions: def.params_schema?.action?.enum || null, usage_count: runNow.ok ? 1 : 0, last_used_at: new Date().toISOString() }).select("id").single();
     if (error) return finish("failed", reject(`Couldn't save the tool: ${error.message}`));
     ev.tool_id = row.id;
+    await archiveReplaced(row.id);
     // One tool per domain: a newly saved action tool retires older action tools
     // over the same view (write tools are untouched — they have no `action`).
     if (def.params_schema?.action?.enum && def.views?.[0]) await retireSameView(learnerId, def.views[0], name);

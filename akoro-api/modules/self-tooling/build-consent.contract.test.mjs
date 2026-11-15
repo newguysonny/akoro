@@ -14,7 +14,7 @@ const read = (p) => readFileSync(new URL(p, import.meta.url), "utf8");
 
 test("a brand-new built tool is drafted OFF behind a card, never saved active", () => {
   const src = read("./pipeline.js");
-  assert.match(src, /if \(audience === "learner" && !resumed\) return draftBuildAndAsk\(\{ def, runNow \}\);/);
+  assert.match(src, /if \(audience === "learner" && !resumed && !replaced\) return draftBuildAndAsk\(\{ def, runNow \}\);/);
   assert.match(src, /status: "disabled", verification: \{ \.\.\.def\.verification, awaitingBuild: true \}/);
   assert.match(src, /status: "needs_consent", drafted: true, tool: name, label, mode: def\.mode, confirmation: card\.confirmation/);
   // The drafted answer still comes back, so the learner sees what the tool does before deciding.
@@ -51,4 +51,18 @@ test("the agent is told the new outcome, and the app renders a Keep card for it"
   assert.match(card, /state\.kind === 'build'\) return <BuildCard/);
   assert.match(card, /data-build-card=""/);
   assert.match(card, /\(state\.kind === 'permission' \|\| state\.kind === 'build'\) \? 'approved' : 'confirmed'/);
+});
+
+test("a rebuild (replace) is a swap, not a new tool: saved active, old retired only at the save point", () => {
+  const src = read("./pipeline.js");
+  // Capture without archiving: the block that resolves `replace` must not retire the old row.
+  const cap = src.slice(src.indexOf("const replaceRaw"), src.indexOf("const archiveReplaced"));
+  assert.ok(!cap.includes('status: "archived"'), "the replace capture must not archive the old tool");
+  // A rebuild is an explicit save: neither the answer-only rule nor the consent gate may swallow it.
+  assert.match(src, /!resumed && !replaced && isAnswerOnlyRead\(def, runNow\)/);
+  // The old row is retired at the save points, once the replacement exists.
+  assert.match(src, /const archiveReplaced = async \(newRowId\)/);
+  assert.ok((src.match(/await archiveReplaced\(row\.id\)/g) || []).length >= 2, "both save paths retire the replaced tool");
+  // The rebuild is not deduped back to the tool it replaces, nor blocked by its name.
+  assert.match(src, /t\.id !== replaced\?\.id/);
 });
