@@ -1126,6 +1126,11 @@ export default function SessionReaderModal({
      the WHOLE document, answered with citations that jump here. Must be a
      stable object (memoized) — the tab loads its thread when it changes. */
   ask = null,
+  /* chatState — which chat sits beside the reader on desktop/tablet:
+     "ask" (the default) puts the Ask panel there; "agent" puts the
+     session chat (chatNode) there. Mobile ignores it — the reader keeps
+     its tabs and the session stays underneath, as before. */
+  chatState = "ask",
   /* tools — { generate(toolId, { scope, pageNumber, pageText, values }) } from
      the opener (library records): Summary / Quiz / Flashcards generated from
      the document with citations, instead of derived in the browser. */
@@ -1139,7 +1144,8 @@ export default function SessionReaderModal({
   jumpTo = null,
 }) {
   const isMobile = useIsMobileView();
-  const split = !isMobile && !!chatNode;
+  const sideAsk = !isMobile && chatState === "ask" && !!ask;
+  const split = !isMobile && (!!chatNode || sideAsk);
 
   /* Remember the reader's place (page + zoom) per document, so closing a
      topic — or a full refresh that sends the learner back to the course —
@@ -1399,6 +1405,9 @@ export default function SessionReaderModal({
   }
 
   function openCommunityTab(id) {
+    // In ask state on desktop/tablet the Ask panel is already beside the
+    // reader — there is no tab to open (a selection pin still lands above).
+    if (id === "ask" && sideAsk) { setSelection(null); setGenMenuOpen(false); return; }
     setCommunityTabsOpen((c) => (c.includes(id) ? c : [...c, id]));
     setActiveTabId(id);
     setFormTool(null);
@@ -2182,7 +2191,7 @@ export default function SessionReaderModal({
 
         {/* Ask — stays mounted while open, so an answer still streaming
             survives a look at the page it cites. */}
-        {ask && communityTabsOpen.includes("ask") && (
+        {ask && !sideAsk && communityTabsOpen.includes("ask") && (
           <div className="flex-1 min-h-0 px-4 py-4" style={{ background: "var(--ak-bg)", display: activeTabId === "ask" ? "flex" : "none", flexDirection: "column" }}>
             <ReaderAsk ask={ask} onCite={citeJump} pin={askPin} onPinClear={() => setAskPin(null)}/>
           </div>
@@ -2202,7 +2211,11 @@ export default function SessionReaderModal({
            full-screen modal and the session keeps running underneath. ============ */}
       {split && (
         <section className="flex flex-col flex-shrink-0 min-h-0 border-l" style={{ width: 400, maxWidth: "44vw", borderColor: "var(--ak-border)" }}>
-          {chatNode}
+          {sideAsk ? (
+            <div className="flex-1 min-h-0 px-4 py-4" style={{ background: "var(--ak-bg)", display: "flex", flexDirection: "column" }}>
+              <ReaderAsk ask={ask} onCite={citeJump} pin={askPin} onPinClear={() => setAskPin(null)}/>
+            </div>
+          ) : chatNode}
         </section>
       )}
 

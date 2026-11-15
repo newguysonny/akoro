@@ -56,7 +56,7 @@ const GREEN = '#2BB673';
 /* Sheet menus (reference sheetActionsFor). */
 const SHEET_ACTIONS = {
   topic: [
-    ['ti-share', 'Share'], ['ti-folder-plus', 'Add to folder'], ['ti-users', 'Add to community'], ['ti-download', 'Download'],
+    ['ti-robot', 'Agent session'], ['ti-share', 'Share'], ['ti-folder-plus', 'Add to folder'], ['ti-users', 'Add to community'], ['ti-download', 'Download'],
     ['ti-check', 'Mark as complete'], ['ti-book-2', 'Go to course'],
   ],
   course: [
@@ -80,6 +80,7 @@ export default function PharmDProgram({ onClose, focus, onFocusConsumed,
   const [view, setView] = useState(courseRoute ? 'folder' : 'browse');  // browse | folder
   const [code, setCode] = useState(courseRoute);   // the open course code
   const [sessionTopic, setSessionTopic] = useState(null);  // index into topics — the open topic session
+  const [sessionChat, setSessionChat] = useState('ask');   // the reader's chat state for the open topic
   const [now, nowActs] = useNowStudying(STUDENT_ID);      // the parked Now-Studying item
   const [sheet, setSheet] = useState(null);       // { kind:'course' } | { kind:'topic', idx }
   const [addToFolder, setAddToFolder] = useState(null);  // the topic being filed into folders
@@ -201,7 +202,8 @@ export default function PharmDProgram({ onClose, focus, onFocusConsumed,
 
   /* A topic opens its agent session (PharmDTopicSession) — the content
      reader modal is the main display, the teach session a chat-icon away. */
-  const openTopic = (i) => {
+  const openTopic = (i, chat = 'ask') => {
+    setSessionChat(chat);
     setSessionTopic(i);
     const t = topics[i];
     if (t) {
@@ -243,6 +245,10 @@ export default function PharmDProgram({ onClose, focus, onFocusConsumed,
 
   const runSheetAction = (kind, label, idx) => {
     setSheet(null);
+    if (kind === 'topic' && label === 'Agent session') {
+      openTopic(idx, 'agent');
+      return;
+    }
     if (kind === 'topic' && label === 'Add to folder') {
       const t = topics[idx];
       if (t) setAddToFolder(t);
@@ -458,6 +464,7 @@ export default function PharmDProgram({ onClose, focus, onFocusConsumed,
           <PharmDTopicSession
             topic={topics[sessionTopic]}
             course={courseData?.course}
+            chatState={sessionChat}
             onClose={() => setSessionTopic(null)}
           />
         )}

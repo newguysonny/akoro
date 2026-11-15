@@ -17,13 +17,14 @@ const KIND_ICONS = {
 };
 const DANGER = '#EF4444';
 
-export default function AddToTargetSheet({ item, onClose, onPickFolder, onPickCommunity, onRename, onDelete }) {
+export default function AddToTargetSheet({ item, onClose, onPickFolder, onPickCommunity, onRename, onDelete, onAgentSession }) {
   const [mode, setMode] = useState('actions');   // actions | rename | delete
   const [draft, setDraft] = useState(item?.title || '');
   const [busy, setBusy] = useState(false);
   if (!item) return null;
   const icon = KIND_ICONS[item.kind] || 'ti-file-text';
   // Rename/Delete only make sense for the learner's OWN uploaded files.
+  const canAgentSession = item.itemType === 'record' && typeof onAgentSession === 'function';
   const canRename = item.itemType === 'record' && typeof onRename === 'function';
   const canDelete = item.itemType === 'record' && typeof onDelete === 'function';
 
@@ -72,6 +73,15 @@ export default function AddToTargetSheet({ item, onClose, onPickFolder, onPickCo
 
         {mode === 'actions' && (
           <div className="ats-actions">
+            {canAgentSession && (
+              <button className="ats-action" onClick={() => { onAgentSession?.(item); onClose?.(); }}>
+                <span className="ats-icon" style={{ background: `${BRAND}14`, color: BRAND }}><Icon name="ti-robot" size={18}/></span>
+                <span>
+                  <span className="ats-label" style={{ display: 'block' }}>Agent session</span>
+                  <span className="ats-hint" style={{ display: 'block' }}>Teach your agent from this document</span>
+                </span>
+              </button>
+            )}
             <button className="ats-action" onClick={() => { onPickFolder?.(item); onClose?.(); }}>
               <span className="ats-icon" style={{ background: '#F59E0B14', color: '#F59E0B' }}><Icon name="ti-folder-plus" size={18}/></span>
               <span>

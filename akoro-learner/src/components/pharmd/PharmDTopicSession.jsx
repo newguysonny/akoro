@@ -68,7 +68,7 @@ const storeSid = (tid, sid) => {
   catch { /* private mode */ }
 };
 
-export default function PharmDTopicSession({ topic, course, onClose }) {
+export default function PharmDTopicSession({ topic, course, onClose, chatState = 'ask' }) {
   const [state, setState] = useState('loading');          // loading | ready | error
   const [err, setErr]     = useState('');
   const [pages, setPages] = useState([]);                 // [{ html:'', text }] — text drives the Generate tools
@@ -340,7 +340,8 @@ export default function PharmDTopicSession({ topic, course, onClose }) {
         topic: topicTitle,
         subject: courseLabel,
         reference,
-        readerFirst: true,     // the reader is the main display; the chat opens from its icon
+        readerFirst: chatState !== 'agent',     // the reader is the main display; the chat opens from its icon
+        chatState,
         ...(priorSid ? { sessionId: priorSid, mode: 'continuation' } : {}),
       }}
       content={content}

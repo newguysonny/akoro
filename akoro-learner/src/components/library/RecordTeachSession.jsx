@@ -44,7 +44,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import TeachAgentModal from '../teaching/TeachAgentModal.jsx';
 import { buildSessionReaderPages } from '../teaching/SessionReaderModal.jsx';
 import { officeReaderPages } from '../../lib/officePages.js';
-import { recordDownloadUrl, recordFileSrc, extractStoredRecordText, getRecordExtraction, getSharedExtraction, getRecordTranscript, getSharedTranscript, startRecordTranscription, getRecordTranscriptionStatus, getAskHistory, askRecord, getGuideHistory, guideReply, generateRecordTool, startRecordPodcast, getRecordPodcast, listRecordArtifacts, saveRecordArtifact, updateRecordArtifact, deleteRecordArtifact } from '../../services/recordsApi.js';
+import { recordDownloadUrl, recordFileSrc, extractStoredRecordText, getRecordExtraction, getSharedExtraction, getRecordTranscript, getSharedTranscript, startRecordTranscription, getRecordTranscriptionStatus, getAskHistory, askRecord, generateRecordTool, startRecordPodcast, getRecordPodcast, listRecordArtifacts, saveRecordArtifact, updateRecordArtifact, deleteRecordArtifact } from '../../services/recordsApi.js';
 import { Icon } from '../common/Icons.jsx';
 import { BRAND } from '../../constants.js';
 import ExtractionCard from './ExtractionCard.jsx';
@@ -110,6 +110,7 @@ const storeSid = (rid, sid) => {
 };
 
 export default function RecordTeachSession({ record, onClose, onMinimize, onOpened, onProgress,
+  chatState = 'ask',    // the reader's chat state: 'ask' (default) | 'agent' (opened via Agent session)
   openTool = null,      // a study tool to open the reader on (an Agent Chat link)
   openArtifact = null,  // a saved tab to open the reader on (made in Agent Chat)
   downloadUrl = null,   // records from the discovery feed ride a presigned
@@ -157,11 +158,6 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
   const ask = useMemo(() => (askKey ? {
     load: () => getAskHistory(askTarget),
     send: (opts) => askRecord({ ...askTarget, ...opts }),
-  } : null), [askKey]);   // eslint-disable-line react-hooks/exhaustive-deps
-  // Learning with Guide: the guide teacher's chat, taught from this document.
-  const guide = useMemo(() => (askKey ? {
-    load: () => getGuideHistory(askTarget),
-    send: (opts) => guideReply({ ...askTarget, ...opts }),
   } : null), [askKey]);   // eslint-disable-line react-hooks/exhaustive-deps
   // Study tools (summary / quiz / flashcards) generated from the document,
   // every item citing where it came from.
@@ -633,8 +629,6 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
     discussion: discussionCommunities ? { communities: discussionCommunities } : null,
     // Ask — the reader's whole-document Q&A with jump-to-source citations.
     ask,
-    // Learning with Guide — the guide teacher's chat, taught from this document.
-    guide,
     // Real Summary / Quiz / Flashcards over the document (cited).
     tools,
     // Generated tabs, notes and annotations — kept across visits.
@@ -670,7 +664,9 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
         // teaching chat, so opening a library PDF showed "Preparing your
         // teaching session…" (and stalled if the teach socket struggled)
         // instead of the document. The chat opens from the reader's icon.
-        readerFirst: true,
+        // An Agent session opening starts on the teaching chat instead.
+        readerFirst: chatState !== 'agent',
+        chatState,
         ...(openTool ? { openTool } : {}),
         ...(openArtifact ? { openArtifact } : {}),
         // The whole document: the session searches it every turn and the

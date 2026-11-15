@@ -40,139 +40,6 @@ function MicMeter({ level = 0 }) {
   );
 }
 
-/* ── Learning with Guide — the guide teacher and the human (no protégé) ─
-   Messages are held by the parent (TeachAgentModal) so toggling modes
-   preserves them; the guide's replies come from the API, taught from the
-   open document with citation chips that jump the reader (onCite).
-   Learn suggestions follow the Fortizo reference: a collapsible list under
-   a small uppercase header; picking one fills the composer rather than
-   firing a request. They come from the parent, drawn from the session's
-   material, or its topic when there is none (lib/learnSuggestions.js). */
-function GuideChat({ messages, guideName, guideEmoji, onSuggestion, suggestions = [], onCite = null }) {
-  const { t } = useLang();
-  const [suggestionsOpen, setSuggestionsOpen] = useState(true);
-  // The ⌥N hints only make sense with a hardware keyboard.
-  const [kbdHints] = useState(() =>
-    typeof window !== "undefined" && !!window.matchMedia?.("(hover: hover) and (pointer: fine)").matches);
-  const scrollRef = useRef(null);
-
-  useEffect(() => {
-    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-  }, [messages]);
-
-  useEffect(() => {
-    if (!kbdHints) return;
-    const onKeyDown = (e) => {
-      if (!e.altKey) return;
-      const n = parseInt(e.key, 10);
-      if (n >= 1 && n <= suggestions.length) {
-        e.preventDefault();
-        onSuggestion?.(suggestions[n - 1].label);
-      }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [kbdHints, onSuggestion, suggestions]);
-
-  const isEmpty = messages.length <= 1;
-
-  return (
-    <div ref={scrollRef} style={{ flex:1, overflowY:"auto", padding:"14px 16px",
-      display:"flex", flexDirection:"column", gap:8 }}>
-      {messages.map((m, i) => m.role === "system" ? (
-        <div key={i} style={{ textAlign:"center", fontSize:10.5, fontWeight:700,
-          color:"var(--ak-text-muted)", padding:"4px 14px", lineHeight:1.5 }}>{m.text}</div>
-      ) : m.role === "guide" ? (
-        <div key={i} style={{ display:"flex", alignItems:"flex-end", gap:8 }}>
-          <div style={{ width:28, height:28, borderRadius:"50%", background:AGENT_STYLES.nana.bg,
-            border:`1.5px solid ${AGENT_STYLES.nana.ring}`, flexShrink:0,
-            display:"flex", alignItems:"center", justifyContent:"center", fontSize:14 }}>
-            {guideEmoji || AGENT_STYLES.nana.emoji}
-          </div>
-          <div style={{ maxWidth:"84%", display:"flex", flexDirection:"column", alignItems:"flex-start", gap:1 }}>
-            <div style={{ padding:"9px 13px", borderRadius:"4px 18px 18px 18px",
-              background:AGENT_STYLES.nana.bg, border:`0.5px solid ${AGENT_STYLES.nana.ring}`,
-              color:AGENT_STYLES.nana.color, fontSize:13.5, lineHeight:1.6,
-              fontWeight:500, width:"100%", boxSizing:"border-box" }}>
-              {m.pending && !m.text
-                ? <span aria-label="Your guide is writing" style={{ letterSpacing:2, fontWeight:900 }}>···</span>
-                : m.citations?.length
-                  ? <Answer text={m.text} citations={m.citations} onCite={onCite || (() => {})}/>
-                  : <RichText text={m.text} />}
-            </div>
-            {!m.pending && <CopyMessageButton text={m.text} dark />}
-          </div>
-        </div>
-      ) : (
-        <div key={i} style={{ alignSelf:"flex-end", maxWidth:"84%", display:"flex", flexDirection:"column", alignItems:"flex-end", gap:1 }}>
-          <div style={{ padding:"9px 13px",
-            borderRadius:"18px 4px 18px 18px", background:"var(--ak-tag-bg)",
-            border:"1px solid var(--ak-border2)", color:"var(--ak-text)",
-            fontSize:13.5, lineHeight:1.6, whiteSpace:"pre-wrap", fontWeight:600 }}>
-            {(() => { const { quote: q, question } = parseQuoted(m.text); return <><QuoteChip quote={q} inBubble dark/>{question}</>; })()}
-          </div>
-          <CopyMessageButton text={m.text} dark />
-        </div>
-      ))}
-
-      {isEmpty && (
-        <div style={{ marginTop:6 }}>
-          <div style={{ display:"flex", flexDirection:"column", alignItems:"center",
-            textAlign:"center", paddingTop:10, paddingBottom:14 }}>
-            <div style={{ width:44, height:44, borderRadius:"50%", background:AGENT_STYLES.nana.bg,
-              border:`1.5px solid ${AGENT_STYLES.nana.ring}`, display:"flex", alignItems:"center",
-              justifyContent:"center", fontSize:20, marginBottom:10 }}>
-              {guideEmoji || AGENT_STYLES.nana.emoji}
-            </div>
-            <p style={{ fontSize:15, fontWeight:900, color:"var(--ak-text)", margin:"0 0 3px" }}>
-              {t('teaching.guide_title')}
-            </p>
-            <p style={{ fontSize:11.5, fontWeight:600, color:"var(--ak-text-muted)", margin:0 }}>
-              {guideName ? t('teaching.guide_sub').replace('{name}', guideName) : t('teaching.guide_sub')}
-            </p>
-          </div>
-
-          <button type="button" onClick={() => setSuggestionsOpen(o => !o)}
-            style={{ display:"flex", alignItems:"center", gap:6, background:"none", border:"none",
-              cursor:"pointer", padding:0, marginBottom:10, fontSize:10, fontWeight:800,
-              color:"var(--ak-text-sub)", letterSpacing:.8, textTransform:"uppercase",
-              fontFamily:"'Nunito',sans-serif" }}>
-            {t('teaching.learn_suggestions')}
-            <span style={{ display:"inline-flex", transform:suggestionsOpen ? "none" : "rotate(-90deg)", transition:"transform .18s" }}>
-              <ChevDownIcon size={12} color="var(--ak-text-sub)"/>
-            </span>
-          </button>
-          {suggestionsOpen && (
-            <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-              {suggestions.map((s, i) => (
-                <button key={s.id || i} type="button" onClick={() => onSuggestion?.(s.label, s.citation || null)}
-                  style={{ display:"flex", alignItems:"center", gap:10, textAlign:"left",
-                    padding:"10px 12px", borderRadius:12, background:"var(--ak-tag-bg)",
-                    border:"1px solid var(--ak-border2)", cursor:"pointer",
-                    fontFamily:"'Nunito',sans-serif" }}>
-                  <Icon name={s.icon} size={15} color="var(--ak-accent)"/>
-                  <span style={{ flex:1, fontSize:12.5, fontWeight:700, color:"var(--ak-text)" }}>{s.label}</span>
-                  {/* The page this suggestion is about: a chip that opens the reader there. */}
-                  {s.citation && toReaderCite(s.citation) && (
-                    <span role="button" tabIndex={0} className="folio-citation" aria-label={`Source: ${citeLabel(s.citation)}`}
-                      title={s.citation.quote ? `“${s.citation.quote}”` : 'Source'}
-                      onClick={(e) => { e.stopPropagation(); onCite?.(toReaderCite(s.citation)); }}
-                      onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); onCite?.(toReaderCite(s.citation)); } }}
-                      style={{ flexShrink:0, cursor: onCite ? 'pointer' : 'default' }}>
-                      <Icon name="ti-file-text" size={10}/> {citeLabel(s.citation)}
-                    </span>
-                  )}
-                  {kbdHints && <span style={{ fontSize:10, fontWeight:800, color:"var(--ak-text-muted)", flexShrink:0 }}>⌥{i + 1}</span>}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
 /**
  * The guide's ideas for the learner's next message — from the protégé's latest
  * reply (block.guide.ideas) or the session's opening (a "guide-ideas" block),
@@ -230,12 +97,6 @@ function SessionChatView({
   // the content is (record, lesson video…), one tap from the chat to the
   // reader and back. Absent → not rendered (plain teaching session).
   materialBox = null,
-  // Session mode toggle: "teach" (LEARN BY TEACHING — guide + protégé over
-  // the WebSocket) or "guide" (LEARNING WITH GUIDE — just the guide and the
-  // human, local UI only). `guide` carries the local messages + handlers.
-  chatMode = "teach",
-  onToggleChatMode,
-  guide = null,
   // Streaming token feedback — the Protégé / Guide reply for the turn in
   // flight, accumulated token-by-token by the host from student_token /
   // guide_token events. Non-null renders a live bubble with a caret.
@@ -253,7 +114,7 @@ function SessionChatView({
 
   useEffect(()=>{
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-  }, [blocks, loading, chatMode, guide?.messages?.length, liveStudent, liveGuide]);
+  }, [blocks, loading, liveStudent, liveGuide]);
 
   const handleKey = e => {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); onSend(); }
@@ -280,38 +141,15 @@ function SessionChatView({
           Summarize block landed. */}
       <div style={{
         padding: embedded ? "12px 16px 12px" : "calc(env(safe-area-inset-top, 0px) + 14px) 20px 12px",borderBottom:"1px solid var(--ak-border)" }}>
-        {/* Top bar: mode toggle + conn state <-> round session controls. */}
+        {/* Top bar: mode label + conn state <-> round session controls. */}
         <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginBottom:5 }}>
           <div style={{ display:"flex",alignItems:"center",gap:7,flexWrap:"wrap",minWidth:0 }}>
-            {onToggleChatMode && mode !== "decay" ? (
-              /* Mode toggle — LEARN BY TEACHING ↔ LEARNING WITH GUIDE */
-              <div style={{ display:"inline-flex",alignItems:"center",gap:2,borderRadius:20,
-                border:"1px solid var(--ak-border2)",background:"var(--ak-tag-bg)",padding:2 }}>
-                {[["teach", t('teaching.seg_teach')], ["guide", t('teaching.seg_guide')]].map(([key, label]) => {
-                  const on = chatMode === key;
-                  return (
-                    <div key={key} onClick={() => { if (!on) onToggleChatMode(); }} role="button"
-                      aria-pressed={on}
-                      title={key === "teach" ? t('teaching.mode_teach') : t('teaching.mode_guide')}
-                      style={{ display:"inline-flex",alignItems:"center",gap:5,padding:"3px 9px",borderRadius:16,
-                        cursor:on?"default":"pointer",background:on?`${sc}26`:"transparent",
-                        border:`1px solid ${on ? `${sc}66` : "transparent"}`,
-                        fontSize:9,fontWeight:900,letterSpacing:.5,color:on?sc:"var(--ak-text-muted)",
-                        whiteSpace:"nowrap",transition:"background .16s, color .16s" }}>
-                      {on && <span style={{ width:5,height:5,borderRadius:"50%",background:sc,animation:"pulse-dot 1.4s ease-in-out infinite" }}/>}
-                      {label}
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <>
+            <>
                 <div style={{ width:7,height:7,borderRadius:"50%",background:sc,animation:"pulse-dot 1.4s ease-in-out infinite" }}/>
                 <span style={{ fontSize:10.5,fontWeight:800,color:sc,letterSpacing:.5 }}>
                   {mode === "decay" ? t('teaching.mode_decay') : t('teaching.mode_teach')}
                 </span>
               </>
-            )}
             {connState !== "connected" && (
               <span style={{ display:"inline-flex",alignItems:"center",gap:5,
                 fontSize:9.5,fontWeight:800,letterSpacing:.4,
@@ -351,9 +189,7 @@ function SessionChatView({
           <div style={{ minWidth:0 }}>
             <p style={{ fontSize:15,fontWeight:900,color:"var(--ak-text)",margin:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{topic}</p>
             <p style={{ fontSize:11,fontWeight:600,color:"var(--ak-text-muted)",margin:0 }}>
-              {chatMode === "guide"
-                ? `${subject} · ${guideLabel || "NaNa Esumai"}`
-                : `${subject} · ${agentName}${guideLabel ? ` · ${guideLabel}` : " · NaNa Esumai · Sargeant"}`}
+              {`${subject} · ${agentName}${guideLabel ? ` · ${guideLabel}` : " · NaNa Esumai · Sargeant"}`}
             </p>
             {reference && (
               <div title={`Session reference: ${reference.name}`} style={{ display:"inline-flex",alignItems:"center",gap:4,maxWidth:"100%",marginTop:6,padding:"3px 7px",borderRadius:20,background:"rgba(52,211,153,.10)",border:"1px solid rgba(52,211,153,.25)",color:"var(--ak-success-text)" }}>
@@ -362,9 +198,9 @@ function SessionChatView({
               </div>
             )}
           </div>
-          {((onSwitchAgent && chatMode !== "guide") || (showSummarize && chatMode !== "guide")) && (
+          {(onSwitchAgent || showSummarize) && (
           <div style={{ display:"flex",alignItems:"center",gap:8 }}>
-            {onSwitchAgent && chatMode !== "guide" && (
+            {onSwitchAgent && (
               <div onClick={switching ? undefined : onSwitchAgent}
                 style={{ display:"flex",alignItems:"center",gap:5,background:"var(--ak-tag-bg)",
                   border:"1px solid var(--ak-border2)",borderRadius:12,padding:"7px 11px",
@@ -373,7 +209,7 @@ function SessionChatView({
                 <span style={{ fontSize:11,fontWeight:800,color:"var(--ak-text-sec)" }}>{switching ? t('teaching.switching') : t('teaching.switch')}</span>
               </div>
             )}
-            {showSummarize && chatMode !== "guide" && (
+            {showSummarize && (
               <div onClick={onSummarize}
                 style={{ display:"flex",alignItems:"center",gap:5,background:`${sc}22`,
                   border:`1px solid ${sc}44`,borderRadius:12,padding:"7px 12px",cursor:"pointer" }}>
@@ -388,7 +224,7 @@ function SessionChatView({
 
       {/* Live cognitive state — agent's understanding & confusion this turn.
           Guide mode has no protégé agent, so there is nothing to measure. */}
-      {chatMode !== "guide" && cognitive && (cognitive.understanding != null || cognitive.confusion != null) && (
+      {cognitive && (cognitive.understanding != null || cognitive.confusion != null) && (
         <div style={{ display:"flex",alignItems:"center",gap:14,padding:"9px 20px",
           borderBottom:"1px solid var(--ak-border)",background:"var(--ak-tag-bg)" }}>
           {[
@@ -416,16 +252,6 @@ function SessionChatView({
       )}
 
       {/* Blocks — or the local guide chat when toggled to LEARNING WITH GUIDE */}
-      {chatMode === "guide" ? (
-        <GuideChat
-          messages={guide?.messages || []}
-          guideName={guide?.guideName}
-          guideEmoji={guide?.guideEmoji}
-          onSuggestion={guide?.onSuggestion}
-          suggestions={guide?.suggestions || []}
-          onCite={onCite}
-        />
-      ) : (
       <div ref={scrollRef} style={{ flex:1,overflowY:"auto",padding:"14px 16px",
         display:"flex",flexDirection:"column",gap:8 }}>
         {blocks.map((b,i) => b.type === "lesson-check" ? (
@@ -469,7 +295,6 @@ function SessionChatView({
           </div>
         )}
       </div>
-      )}
 
       {/* Input bar */}
       <div style={{ padding: embedded ? "10px 14px 12px" : "10px 14px 28px",background:"var(--ak-tag-bg)",
@@ -477,7 +302,7 @@ function SessionChatView({
 
         {/* ── Voice Streaming mode — live transcript (teaching mode only —
             the guide session is UI-only, so it has no voice backend) ── */}
-        {chatMode !== "guide" && voiceStreaming && (
+        {voiceStreaming && (
           <div style={{ display:"flex",alignItems:"flex-start",gap:10,marginBottom:8 }}>
             {/* Pulsing mic indicator */}
             <div style={{ display:"flex",alignItems:"center",gap:7,flexShrink:0,
@@ -510,7 +335,7 @@ function SessionChatView({
         )}
 
         {/* ── Audio blob mode — timer ── */}
-        {chatMode !== "guide" && recording && !voiceStreaming && (
+        {recording && !voiceStreaming && (
           <div style={{ display:"flex",alignItems:"center",gap:10,marginBottom:8 }}>
             <div onClick={onToggleRecording}
               style={{ display:"flex",alignItems:"center",gap:7,flex:1,
@@ -536,25 +361,6 @@ function SessionChatView({
         {materialBox && (
           <div style={{ marginBottom:8 }}>{materialBox}</div>
         )}
-        {chatMode === "guide" ? (
-          <div style={{ marginBottom:8 }}>
-            <FortizoChatComposer
-              newlineOnTouchEnter
-              value={input}
-              onChange={onInputChange}
-              onSend={guide?.onSend ? () => guide.onSend(input) : undefined}
-              placeholder={quote ? 'Ask about this passage…' : t('teaching.guide_ph')}
-              quote={quote}
-              onQuoteClear={onQuoteClear}
-              bookAction={onOpenReader}
-              boardAction={onOpenBoard}
-              bookLabel="Open reading material"
-              modelLabel="Guide"
-              modelLabelDescription="Your guide leads this session"
-              sendDisabled={!input.trim() && !quote}
-            />
-          </div>
-        ) : (
         <div style={{ marginBottom:8 }}>
           <FortizoChatComposer
             value={input}
@@ -577,10 +383,9 @@ function SessionChatView({
             sendDisabled={!input.trim() && !quote}
           />
         </div>
-        )}
 
-        {/* Turn counter — teaching modes only; a guide session has no turn budget */}
-        {chatMode !== "guide" && (
+        {/* Turn counter */}
+        {
         <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between" }}>
           <span style={{ fontSize:10.5,fontWeight:600,color:"var(--ak-text-muted)" }}>
             {mode === "decay" ? t('teaching.reteach_turns') : mode === "continuation" ? t('teaching.continuation_turns') : t('teaching.teaching_turns')}: {userTurns} / 4
@@ -592,7 +397,7 @@ function SessionChatView({
             ))}
           </div>
         </div>
-        )}
+        }
       </div>
 
       {/* ── Confirm close modal ── */}

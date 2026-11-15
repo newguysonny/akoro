@@ -6,7 +6,6 @@ import { BRAND, RED, GREEN, GOLD, SUBJECTS, SUBJECT_COLORS, STUDENT_ID } from '.
 import { acquireActivityLock } from '../../utils/activityLock.js';
 import { useWakeLock } from '../../hooks/useWakeLock.js';
 import { API, apiGet, apiPost } from '../../services/api.js';
-import { guideReply } from '../../services/recordsApi.js';
 const AGENT_CONFIG = { name: '', emoji: '🤖', guideName: 'NaNa Esumai', guideEmoji: '🧠', guideRenderStyle: {} };
 import { XIcon, SparkleIcon, ZapIcon, BrainIcon, Icon } from '../common/Icons.jsx';
 import SessionChatView from './SessionChatView.jsx';
@@ -224,6 +223,11 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
   const [aiLearn, setAiLearn] = useState(null);   // { key, list }
   const learnKey = `${learnBase.title}|${learnBase.topic}|${learnBase.text.length}`;
   const learnSuggestions = aiLearn?.key === learnKey && aiLearn.list.length >= 3 ? aiLearn.list : localLearnSuggestions(learnBase);
+  // The reader's chat state: "ask" — the Ask panel beside the reader (the
+  // default for content); "agent" — the teaching session beside the reader.
+  // The entry point chooses (config.chatState); without an Ask adapter there
+  // is nothing to ask with, so the session chat shows.
+  const readerChat = config?.chatState === "agent" || !content?.ask ? "agent" : "ask";
   const openReader      = () => { if (!content || content.state === 'ready') setReaderOpen(true); };
   // Opened from a link that names a study tool: the reader opens on it, once, when the material is ready.
   const openToolDone = useRef(false);
@@ -266,85 +270,20 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
     if (isMobileView) setReaderOpen(false);
   };
 
-  // ── Session mode toggle (LEARN BY TEACHING ↔ LEARNING WITH GUIDE) ────────
-  // "guide": the guide teacher and the human, no protégé, no WebSocket. The
-  // guide's replies come from the API (POST /api/records/guide): taught from
-  // the open document with citations that jump the reader, and saved per
-  // learner per document (content.guide); a session without a document is
-  // taught from its topic. The live teaching session (if running) is kept
-  // intact underneath — toggling back restores it untouched.
-  const [chatMode,      setChatMode]      = useState("teach");
-  const [guideMessages, setGuideMessages] = useState([]);
-  const [guideBusy,     setGuideBusy]     = useState(false);
-  const guideLoadedRef  = useRef(false);
-  const guideApi        = content?.guide || null;
-  const guideOpening    = () => ({ role: "guide", text: t('teaching.guide_open').replace('{name}', guide.name) });
-  // A live teaching session takes the guide mode too (Phase 6, D24): NaNa teaches over the same session —
-  // her answers are evidence and the progress gate reads them. Without a live session (a document guide),
-  // the guide chat stays the reader's own (POST /api/records/guide).
-  const liveSession = () => !!(wsRef.current?.connected && sessionIdRef.current && !endedRef.current);
-  const patchPendingGuide = (patch) => setGuideMessages(prev => {
-    const next = [...prev];
-    const at = next.map((m) => m.pending).lastIndexOf(true);
-    if (at >= 0) next[at] = { ...next[at], ...patch };
-    return next;
-  });
-  const toggleChatMode  = () => {
-    const nextMode = chatMode === "teach" ? "guide" : "teach";
-    if (liveSession()) wsRef.current.emit("set_teaching_mode", { mode: nextMode === "guide" ? "learn_with_guide" : "teach_agent" });
-    setChatMode(m => (m === "teach" ? "guide" : "teach"));
-    setGuideMessages(prev => prev.length ? prev : [guideOpening()]);
-    // The learner's earlier guide lesson on this document, once.
-    if (guideApi && !guideLoadedRef.current) {
-      guideLoadedRef.current = true;
-      guideApi.load().then((past) => {
-        if (!past?.length) return;
-        setGuideMessages((cur) => [guideOpening(), ...past.map((m) => ({
-          role: m.role === "assistant" ? "guide" : "user", text: m.text, citations: m.citations || [],
-        })), ...cur.slice(1)]);
-      }).catch(() => {});
-    }
-  };
-  // Asked once per material, the first time the guide chat opens.
+  // ── Learn suggestions — now the reader Ask panel's suggestions ──────────
+  // The guide chat is gone; the grounded learn suggestions (local ones from
+  // the material at once, AI ones from the same text when they land) feed
+  // the Ask panel instead, via readerProps.ask.suggestions. Asked once per
+  // material, and only when this session has an Ask surface at all.
   useEffect(() => {
-    if (chatMode !== "guide" || aiLearn?.key === learnKey) return undefined;
+    if (!content?.ask || aiLearn?.key === learnKey) return undefined;
     let live = true;
     // With a library document open, the suggestions come from its own pages (each cites one).
     apiPost('/api/adaptive/chat/learn-suggestions', { ...learnSuggestionInput(learnBase), ...(config?.document ? { document: config.document } : {}) }, { timeout: 20000 })
       .then((r) => { if (live) setAiLearn({ key: learnKey, list: shapeLearnSuggestions(r?.suggestions, r?.cited) }); })
       .catch(() => { if (live) setAiLearn({ key: learnKey, list: [] }); });
     return () => { live = false; };
-  }, [chatMode, learnKey]);   // eslint-disable-line react-hooks/exhaustive-deps
-
-  const sendGuideMessage = (text) => {
-    const clean = withQuote(text, quote);
-    if (!clean || guideBusy) return;
-    const question = String(text || '').trim() || 'Explain this passage.';
-    const selection = quote ? { text: quote.text, ...(quote.pageNumber ? { pageNumber: quote.pageNumber } : {}) } : null;
-    const history = guideMessages.filter((m) => m.role === 'user' || m.role === 'guide').slice(1);
-    setInput("");
-    setQuote(null);
-    setGuideBusy(true);
-    setGuideMessages(prev => [...prev, { role: "user", text: clean }, { role: "guide", text: "", pending: true }]);
-    // Live session: the turn runs on the server (evidence, gate); the reply streams on guide_reply_token.
-    if (liveSession()) { wsRef.current.emit("teacher_message", { message: clean, mode: "learn_with_guide" }); return; }
-    const setReply = (patch) => setGuideMessages(prev => {
-      const next = [...prev];
-      const at = next.map((m) => m.pending).lastIndexOf(true);
-      if (at >= 0) next[at] = { ...next[at], ...patch };
-      return next;
-    });
-    let streamed = '';
-    const send = guideApi ? guideApi.send : (opts) => guideReply(opts);
-    send({
-      message: question, selection, guideName: guide.name, topic, subject,
-      ...(guideApi ? {} : { history }),
-      onDelta: (d) => { streamed += d; setReply({ text: streamed }); },
-    })
-      .then((r) => setReply({ text: r?.answer || streamed, citations: r?.citations || [], pending: false }))
-      .catch((e) => setReply({ role: "system", text: e?.message || t('teaching.guide_error'), pending: false }))
-      .finally(() => setGuideBusy(false));
-  };
+  }, [learnKey]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   const userTurns = blocks.filter(b => b.type === "user" && !b.faded).length;
   const fmt = s => `${String(Math.floor(s/60)).padStart(2,"0")}:${String(s%60).padStart(2,"0")}`;
@@ -497,23 +436,9 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
       ws.on("student_token", (d) => setLiveStudent(prev => (prev || "") + (d?.token ?? d?.text ?? "")));
       // The guide's tip isn't shown as it streams: it arrives as ideas on the protégé's reply (turn_complete).
       ws.on("guide_token",   () => {});
-      // Guide mode on the live session: NaNa's reply streams into the guide chat.
-      ws.on("guide_reply_token", (d) => setGuideMessages(prev => {
-        const next = [...prev];
-        const at = next.map((m) => m.pending).lastIndexOf(true);
-        if (at >= 0) next[at] = { ...next[at], text: (next[at].text || "") + (d?.token ?? "") };
-        return next;
-      }));
       ws.on("turn_complete", ({ blocks: newBlocks, currentPhase, teachingMode, assessment }) => {
         setLoading(false);
         clearLiveStream();
-        if (teachingMode === "learn_with_guide") {
-          const g = (newBlocks || []).find(b => b.type === "guide");
-          patchPendingGuide({ text: g?.text || "", citations: g?.citations || [], pending: false });
-          setGuideBusy(false);
-          ws.emit("get_state");
-          return;
-        }
         // A short-check turn (teaching.request_assessment): its result card sits just before the protégé's line about it.
         const checkBlock = assessment?.items?.length ? [{ type: "lesson-check", assessment, topic }] : [];
         if (newBlocks?.length || checkBlock.length) {
@@ -564,7 +489,7 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
       // The session ended itself (every part verified and the agent finished it, or a limit was reached).
       ws.on("session_ended", (d) => {
         endedRef.current = true;
-        setLoading(false); setGuideBusy(false);
+        setLoading(false);
         if (d?.endedBy && d.endedBy !== "learner") {
           setBlocks(prev => [...prev, { type: "session-complete", text: d.endedBy === "objective_met"
             ? `Every part is taught — the session is complete.${d.summary?.xpEarned ? ` +${d.summary.xpEarned} XP earned.` : ""}`
@@ -1017,20 +942,6 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
       onCite={content ? jumpToCitation : null}
       onOpenBoard={() => setBoardOpen(true)}
       materialBox={materialBox}
-      chatMode={chatMode}
-      onToggleChatMode={toggleChatMode}
-      guide={{
-        messages: guideMessages,
-        onSend: sendGuideMessage,
-        // A cited suggestion brings its passage along: the guide's answer starts from it.
-        onSuggestion: (label, citation) => {
-          setInput(label);
-          if (citation?.quote) { const q = makeQuote(citation.quote, citation.pageNumber ?? null); if (q) setQuote(q); }
-        },
-        suggestions: learnSuggestions,
-        guideName: guide.name,
-        guideEmoji: guide.emoji,
-      }}
       liveStudent={liveStudent}
       liveGuide={liveGuide}
     />
@@ -1089,8 +1000,9 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
     // connected to one of the learner's communities carries its chat
     // into the reader. Null (plain topic sessions) keeps the old reader.
     discussion: content.discussion || null,
-    // Ask (library records): whole-document Q&A with jump-to-source citations.
-    ask: content.ask || null,
+    // Ask (library records): whole-document Q&A with jump-to-source citations,
+    // plus the grounded learn suggestions for its dropdown.
+    ask: content.ask ? { ...content.ask, suggestions: learnSuggestions } : null,
     tools: content.tools || null,
     artifacts: content.artifacts || null,
     onClose: closeReader,
@@ -1112,11 +1024,11 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
         // button inside the reader returns here).
         <>
           {sessionChat(false)}
-          {readerOpen && <SessionReaderModal {...readerProps} onOpenChat={closeReader}/>}
+          {readerOpen && <SessionReaderModal {...readerProps} chatState={readerChat} onOpenChat={closeReader}/>}
         </>
       ) : readerOpen ? (
         // Desktop/tablet: the Fortizo split — reader left, live session right.
-        <SessionReaderModal {...readerProps} chatNode={sessionChat(true)}/>
+        <SessionReaderModal {...readerProps} chatState={readerChat} chatNode={readerChat === "agent" ? sessionChat(true) : null}/>
       ) : (
         sessionChat(false)
       )}

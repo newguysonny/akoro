@@ -250,6 +250,7 @@ export default function AgentSessionViewer({ course, lesson, onClose }) {
   return (
     <TeachAgentModal
       config={{
+        chatState: 'agent',
         topic: lessonTitle,
         subject: course?.subject || 'General',
         ...(priorSid ? { sessionId: priorSid, mode: 'continuation' } : {}),

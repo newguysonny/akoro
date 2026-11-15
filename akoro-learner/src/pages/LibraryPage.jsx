@@ -313,6 +313,7 @@ export default function LibraryPage() {
   const [loading, setLoading]   = useState(true);
   const [filter, setFilter]     = useState('all');
   const [viewer, setViewer]     = useState(null);   // the record open as a session
+  const [viewerChat, setViewerChat] = useState('ask');   // the reader's chat state for the open record
   // ?tool= from an Agent Chat link: the reader opens on that study tool (Quiz, Flashcards…).
   const [viewerTool, setViewerTool] = useState(null);
   const [viewerArtifact, setViewerArtifact] = useState(null);   // a saved tab to open on (made in Agent Chat)
@@ -511,8 +512,9 @@ export default function LibraryPage() {
 
   /* Opening a record starts a TEACHING session over it — same flow as
      "Start teaching", with the file itself as the material. Links stay links. */
-  const openRecord = (r) => {
+  const openRecord = (r, chatState = 'ask') => {
     if (!r) return;
+    setViewerChat(chatState);
     // Park on the Now-Studying bar first (same shape as the dashboard).
     const kindLabel = r.kind === 'link' ? t('records.tab_link') : r.kind === 'paste' ? t('records.tab_paste') : t('records.tab_upload');
     nowActs.setCurrent({
@@ -839,6 +841,10 @@ export default function LibraryPage() {
           onClose={() => setAddTarget(null)}
           onPickFolder={(snap) => { setAddToFolder(snap); setAddTarget(null); }}
           onPickCommunity={(snap) => { setAddToCommunity(snap); setAddTarget(null); }}
+          onAgentSession={(item) => {
+            const r = (records || []).find((x) => String(x.id) === item.itemRef);
+            if (r) openRecord(r, 'agent');
+          }}
           onRename={async (item, name) => {
             await renameRecord(item.itemRef, { name });
             setToast('File renamed');
@@ -870,6 +876,7 @@ export default function LibraryPage() {
       {viewer && (
         <RecordTeachSession
           record={viewer}
+          chatState={viewerChat}
           openTool={viewerTool}
           openArtifact={viewerArtifact}
           onClose={() => { setViewer(null); setViewerTool(null); setViewerArtifact(null); }}

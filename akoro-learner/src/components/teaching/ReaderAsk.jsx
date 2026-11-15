@@ -10,16 +10,16 @@
  *               → Promise<{ answer, citations }>
  * `pin` is a passage the learner chose with "Ask about this"
  * ({ pageNumber, text }); `onPinClear` drops it.
+ *
+ * `ask.suggestions` (optional) — questions grounded in THIS document
+ * ({ label, citation?, icon? }), drawn from its key terms and topics by
+ * the host (lib/learnSuggestions.js, the grounding the guide chat used).
+ * They render in a collapsible dropdown, the guide chat's old pattern;
+ * tapping one asks it. No suggestions → no dropdown.
  */
 import { useEffect, useRef, useState } from 'react';
 import { Icon } from '../common/Icons.jsx';
 import { answerBlocks, citeLabel, toReaderCite } from '../../lib/askAnswer.js';
-
-const SUGGESTIONS = [
-  'Summarise the main points of this document',
-  'What are the key terms and what do they mean?',
-  'What should I remember for a test on this?',
-];
 
 function CiteChip({ cite, onCite }) {
   const target = toReaderCite(cite);
@@ -88,6 +88,7 @@ export default function ReaderAsk({ ask, onCite, pin = null, onPinClear }) {
   const [input, setInput] = useState('');
   const [running, setRunning] = useState(false);
   const [status, setStatus] = useState('');
+  const [suggOpen, setSuggOpen] = useState(true);
   const abortRef = useRef(null);
   const listRef = useRef(null);
   const inputRef = useRef(null);
@@ -140,6 +141,10 @@ export default function ReaderAsk({ ask, onCite, pin = null, onPinClear }) {
     }
   };
 
+  const suggItems = (ask.suggestions || [])
+    .map((sg) => (typeof sg === 'string' ? { label: sg } : sg))
+    .filter((sg) => sg?.label);
+
   const onKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
   };
@@ -157,14 +162,41 @@ export default function ReaderAsk({ ask, onCite, pin = null, onPinClear }) {
         {loadState === 'loading' && <div className="text-xs" style={{ color: 'var(--ak-text-sub)' }}>Loading your questions…</div>}
         {loadState === 'error' && <div className="text-xs" style={{ color: 'var(--ak-danger-text)' }}>Couldn't load your earlier questions.</div>}
 
-        {loadState !== 'loading' && messages.length === 0 && (
-          <div className="flex flex-col gap-2 mb-3">
-            {SUGGESTIONS.map((s) => (
-              <button key={s} type="button" onClick={() => send(s)} disabled={running}
-                className="folio-gen-card text-left text-sm px-3 py-2 border rounded-lg" style={{ color: 'var(--ak-text)' }}>
-                {s}
-              </button>
-            ))}
+        {loadState !== 'loading' && messages.length === 0 && suggItems.length > 0 && (
+          <div className="mb-3">
+            <button type="button" onClick={() => setSuggOpen((o) => !o)} aria-expanded={suggOpen}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none',
+                cursor: 'pointer', padding: 0, marginBottom: 10, fontSize: 10, fontWeight: 800,
+                color: 'var(--ak-text-sub)', letterSpacing: .8, textTransform: 'uppercase',
+                fontFamily: "'Nunito',sans-serif" }}>
+              Suggestions from this document
+              <span style={{ display: 'inline-flex', transform: suggOpen ? 'none' : 'rotate(-90deg)', transition: 'transform .18s' }}>
+                <Icon name="ti-chevron-down" size={12}/>
+              </span>
+            </button>
+            {suggOpen && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {suggItems.map((sg, i) => (
+                  <button key={sg.id || i} type="button" onClick={() => send(sg.label)} disabled={running}
+                    style={{ display: 'flex', alignItems: 'center', gap: 10, textAlign: 'left',
+                      padding: '10px 12px', borderRadius: 12, background: 'var(--ak-tag-bg)',
+                      border: '1px solid var(--ak-border2)', cursor: 'pointer',
+                      fontFamily: "'Nunito',sans-serif", color: 'var(--ak-text)' }}>
+                    <Icon name={sg.icon || 'ti-bulb'} size={15}/>
+                    <span style={{ flex: 1, fontSize: 12.5, fontWeight: 700 }}>{sg.label}</span>
+                    {sg.citation && toReaderCite(sg.citation) && (
+                      <span role="button" tabIndex={0} className="folio-citation" aria-label={`Source: ${citeLabel(sg.citation)}`}
+                        title={sg.citation.quote ? `“${sg.citation.quote}”` : 'Source'}
+                        onClick={(e) => { e.stopPropagation(); onCite(toReaderCite(sg.citation)); }}
+                        onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); onCite(toReaderCite(sg.citation)); } }}
+                        style={{ flexShrink: 0, cursor: 'pointer' }}>
+                        <Icon name="ti-file-text" size={10}/> {citeLabel(sg.citation)}
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
