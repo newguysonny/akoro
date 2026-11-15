@@ -176,3 +176,34 @@ test("resolveTotal: an aggregate count row totals its count, not the row count",
   // A known matched count always wins (spec runs / group-by must use records).
   assert.equal(resolveTotal([{ subject: "Math", count: 3 }], 51), 51);
 });
+
+test("ops: group percentOf derives part and whole from the same rows", () => {
+  const goals = [{ status: "achieved" }, { status: "active" }, { status: "active" }];
+  const [g] = O.group(goals, { by: [], count: true, percentOf: [{ field: "status", is: "achieved", as: "completed_pct" }] });
+  assert.deepEqual([g.count, g.completed_pct_count, g.completed_pct_total, g.completed_pct], [3, 1, 3, 33.3]);
+  const all = O.group(goals, { by: [], percentOf: [{ field: "status", is: "active", as: "active_pct" }] });
+  assert.equal(all[0].active_pct, 66.7);
+  // per-group: each group's percentage is of ITS OWN rows
+  const mixed = [
+    { subject: "Maths", status: "achieved" }, { subject: "Maths", status: "active" },
+    { subject: "Science", status: "achieved" }, { subject: "Science", status: "achieved" },
+  ];
+  const bySubject = O.group(mixed, { by: ["subject"], percentOf: [{ field: "status", is: "achieved", as: "done_pct" }] });
+  assert.equal(bySubject.find((x) => x.subject === "Maths").done_pct, 50);
+  assert.equal(bySubject.find((x) => x.subject === "Science").done_pct, 100);
+});
+
+test("validation accepts percentOf on a real field and rejects a bad one", async () => {
+  const ok = await validateDefinition({ kind: "spec", from: "my_goals",
+    group: { by: [], count: true, percentOf: [{ field: "status", is: "achieved", as: "completed_pct" }] },
+    select: ["completed_pct_count", "count", "completed_pct"] }, {});
+  assert.equal(ok.ok, true, ok.errors.join("; "));
+  const badField = await validateDefinition({ kind: "spec", from: "my_goals",
+    group: { by: [], percentOf: [{ field: "nope", is: "x", as: "p" }] } }, {});
+  assert.equal(badField.ok, false);
+  assert.ok(badField.errors.some((e) => /percentOf field/.test(e)), badField.errors.join("; "));
+  const badShape = await validateDefinition({ kind: "recipe", steps: [{ id: "a", view: "my_goals" }],
+    then: [{ op: "from", ref: "a" }, { op: "group", by: [], percentOf: [{ field: "status" }] }] }, {});
+  assert.equal(badShape.ok, false);
+  assert.ok(badShape.errors.some((e) => /percentOf needs/.test(e)), badShape.errors.join("; "));
+});

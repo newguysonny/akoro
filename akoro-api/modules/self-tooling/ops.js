@@ -5,7 +5,10 @@
  *
  *   filter  where: [{ field, op, value }]   op: eq neq lt lte gt gte in contains startsWith isNull notNull within year month
  *   compute { as, fn, a, b }                fn: divide multiply add subtract round percent minutesBetween daysBetween
- *   group   { by: [field | {field, bucket}], count?, counts?, sum?, avg?, min?, max? }   bucket: day week month year
+ *   group   { by: [field | {field, bucket}], count?, counts?, sum?, avg?, min?, max?, percentOf? }   bucket: day week month year
+ *           percentOf: [{ field, is, as }] → per group, <as> = % of the group's rows where field == is
+ *           (1 decimal), <as>_count = matching rows, <as>_total = the group's rows — computed here,
+ *           never assembled by the builder from separate counts.
  *           count → rows per group; counts: [f] → count_<f>, rows where f has a value
  *   sort    { by, dir }        limit { n }        pick { fields }        rename { from, to }
  *   join    { left, right, on: [keys], type: inner|left }
@@ -98,7 +101,7 @@ export function bucketOf(v, bucket) {
   return `week of ${mon.toISOString().slice(0, 10)}`;
 }
 
-export function group(rows, { by = [], count = false, counts = [], sum = [], avg = [], min = [], max = [] }) {
+export function group(rows, { by = [], count = false, counts = [], sum = [], avg = [], min = [], max = [], percentOf = [] }) {
   const keys = by.map((b) => (typeof b === "string" ? { field: b } : b));
   const map = new Map();
   for (const r of rows) {
@@ -118,6 +121,14 @@ export function group(rows, { by = [], count = false, counts = [], sum = [], avg
     for (const f of avg) { const xs = rs.map((r) => num(r[f])).filter((x) => x != null); g[`avg_${f}`] = xs.length ? Math.round((xs.reduce((a, b) => a + b, 0) / xs.length) * 1000) / 1000 : null; }
     for (const f of min) g[`min_${f}`] = rs.map((r) => r[f]).filter((x) => x != null).sort(cmp)[0] ?? null;
     for (const f of max) g[`max_${f}`] = rs.map((r) => r[f]).filter((x) => x != null).sort(cmp).at(-1) ?? null;
+    // percentOf: the part and the whole come from THIS group's rows by construction,
+    // so the percentage can never divide the wrong column or a stale count.
+    for (const p of [].concat(percentOf || [])) {
+      const part = rs.filter((r) => matches(r, { field: p.field, op: "eq", value: p.is })).length;
+      g[p.as] = rs.length ? Math.round((part * 1000) / rs.length) / 10 : 0;
+      g[`${p.as}_count`] = part;
+      g[`${p.as}_total`] = rs.length;
+    }
     out.push(g);
   }
   return out;

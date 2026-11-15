@@ -22,7 +22,8 @@ Rules:
 - compute: { as, fn, a, b } with fn divide|multiply|add|subtract|round|percent|minutesBetween|daysBetween; a/b are field names or numbers (never nested — chain computes: first minutesBetween as "minutes", then divide "minutes" by 60).
 - Declared params you don't need can be ignored; never filter on a param just because it exists.
 - In a group, count:true gives "count" (every row). To count only rows that HAVE a value — e.g. graded students — use counts:["grade"], which gives "count_grade". avg/sum/min/max already ignore missing values.
-- group: { by: [field | {field, bucket: day|week|month|year}] (ALWAYS a list), count, counts:[fields], sum:[fields], avg:[fields], min:[fields], max:[fields] } → output fields: the by-fields (a bucketed one is named <field>_<bucket>, e.g. started_at_month), count, count_<f>, sum_<f>, avg_<f>, min_<f>, max_<f>.
+- group: { by: [field | {field, bucket: day|week|month|year}] (ALWAYS a list), count, counts:[fields], sum:[fields], avg:[fields], min:[fields], max:[fields], percentOf:[{field, is, as}] } → output fields: the by-fields (a bucketed one is named <field>_<bucket>, e.g. started_at_month), count, count_<f>, sum_<f>, avg_<f>, min_<f>, max_<f>, and per percentOf entry <as>, <as>_count, <as>_total.
+- PERCENTAGES OF ROWS: for any "what percentage / share of <rows> are <condition>" goal, use ONE group with percentOf — the interpreter counts the matching rows and all the rows itself, so the part and the whole can never be mixed up. by: [] gives one overall figure. NEVER assemble a row percentage from two separate counts, from a group-by-the-condition-field (each group comes out 100% of itself), or from a per-row percent compute. compute fn "percent" is ONLY for a ratio of two numeric fields on the SAME row (e.g. a score out of its total marks). Do not put a where filter for the condition on the same step — percentOf does the matching; a step filter is for OTHER conditions (e.g. this year).
 - sort: { by, dir: asc|desc }. limit ≤ 100. Use "$paramName" to use a declared param.
 - Also give 2 realistic sample inputs ("samples": [ {…}, {…} ]) matching the params.
 - A recipe or spec can only filter, compute per row, group, sort and join rows that EXIST. If the goal asks to make something new from them — a plan or schedule over dates, spreading items across days, "N per day", "skip Sundays", rules that depend on earlier choices — a recipe/spec can't do it: answer {"notExpressible": "needs scheduling logic"} rather than returning the rows unchanged.
@@ -33,6 +34,8 @@ const SPEC_FORMAT = `Format (a SPEC — one view):
 {"definition": {"kind":"spec","from":"<view>","where":[{"field","op","value"}],"compute":[…],"group":{…},"sort":[{"by","dir"}],"limit":20,"select":[…]}, "samples":[{…},{…}]}
 Example — past-question accuracy per subject this year:
 {"definition":{"kind":"spec","from":"my_past_questions","where":[{"field":"created_at","op":"within","value":"1y"}],"group":{"by":["subject"],"sum":["attempted","correct"]},"compute":[],"sort":[{"by":"sum_attempted","dir":"desc"}]},"samples":[{},{}]}
+Example — what percentage of my goals are completed (for goals, "completed" is status "achieved"):
+{"definition":{"kind":"spec","from":"my_goals","group":{"by":[],"count":true,"percentOf":[{"field":"status","is":"achieved","as":"completed_pct"}]},"select":["completed_pct_count","count","completed_pct"]},"samples":[{},{}]}
 Example — per group, how many rows HAVE a value vs all rows (e.g. graded vs assigned):
 {"definition":{"kind":"spec","from":"<view>","group":{"by":["<label field>"],"count":true,"counts":["<value field>"],"avg":["<value field>"]},"select":["<label field>","count","count_<value field>","avg_<value field>"]},"samples":[{},{}]}`;
 

@@ -164,7 +164,35 @@ async function verifyTool(def, params, samples, ctx) {
       expect.lte(`sample ${i + 1} time (ms)`, r.ms, LIMITS.runMs);
     }
   }
+  // Percentage sanity: a percent outside 0-100, or one that disagrees with the
+  // part/whole counts in its own row, is a wrong answer wearing a verified badge.
+  const pcts = percentFieldsOf(def);
+  if (pcts.length) for (const [i, r] of runs.entries()) {
+    if (!r.ok || !Array.isArray(r.rows)) continue;
+    for (const pf of pcts) for (const row of r.rows) {
+      const v = row?.[pf.field];
+      if (typeof v !== "number") continue;
+      expect.ok(`sample ${i + 1} percent ${pf.field} in range`, v >= 0 && v <= 100, `${pf.field} = ${v}`);
+      if (pf.count && typeof row[pf.count] === "number" && typeof row[pf.total] === "number") {
+        const want = row[pf.total] ? Math.round((row[pf.count] * 1000) / row[pf.total]) / 10 : 0;
+        expect.ok(`sample ${i + 1} percent ${pf.field} matches its counts`, Math.abs(v - want) <= 0.11, `${pf.field} = ${v} but ${pf.count}/${pf.total} gives ${want}`);
+      }
+    }
+  }
   return { verdict: repeatVerdict({ assertions: sink }), assertions: sink, runs, emptyEverywhere: runs.every((r) => r.ok && !r.rows.length) };
+}
+
+/** Percent outputs a definition declares: group percentOf (structural - the
+ * interpreter derives part and whole from the same rows) and per-row compute
+ * fn "percent". Verified above: in range, and for percentOf consistent with
+ * the counts it ships beside. */
+function percentFieldsOf(def) {
+  const out = [];
+  const scanGroup = (g) => { for (const pc of [].concat(g?.percentOf || [])) if (pc?.as) out.push({ field: pc.as, count: `${pc.as}_count`, total: `${pc.as}_total` }); };
+  const scanCompute = (c) => { for (const x of [].concat(c || [])) if (x?.fn === "percent" && x?.as) out.push({ field: x.as }); };
+  if (def?.kind === "spec") { scanGroup(def.group); scanCompute(def.compute); }
+  if (def?.kind === "recipe") for (const o of def.then || []) { if (o?.op === "group") scanGroup(o); if (o?.op === "compute") scanCompute(o); }
+  return out;
 }
 
 /** create_tool (§7.1). `builtIn`: names of built-in tools (never shadowed). */
@@ -344,7 +372,7 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
     return { status: "created", tool: spec.name, label: spec.label, mode: "code", actions, added, kept,
       verified: checks.filter((c) => c.ok).map((c) => c.action),
       result: out.ok ? { rows: out.rows, total: out.total } : { error: out.error },
-      note: `Saved "${spec.label}". ${summary} Tell the learner in plain words what was added and that the existing answers still work. Next time call ${spec.name} with action=.... The answer for this request is in result.` };
+      note: `Saved "${spec.label}". ${summary} Tell the learner in plain words what was added and that the existing answers still work. Next time call ${spec.name} with action=.... The answer for this request is in result.` + (replaced ? REBUILD_HONESTY : "") };
   }
 
   // 1) A curated domain; 2) a per-learner DYNAMIC domain for a read goal over one
@@ -662,7 +690,7 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
       status: "created", tool: name, label, mode: stage, verified: true,
       result: runNow.ok ? (runNow.write ? await writeOutcome({ learnerId, conversationId, dry: false, tool: { id: row.id, name, label }, write: runNow.write })
         : { rows: runNow.rows, total: runNow.total, truncated: runNow.truncated }) : { error: runNow.error },
-      note: `Saved as the learner's tool "${label}". \`result\` is its answer for this request — use it now. Next time, call ${name} directly.${droppedNote}`,
+      note: `Saved as the learner's tool "${label}". \`result\` is its answer for this request — use it now. Next time, call ${name} directly.${droppedNote}` + (replaced ? REBUILD_HONESTY : ""),
       __newTool: toolDef(def),
     };
   }
@@ -739,6 +767,9 @@ export async function activateBuiltTool(learnerId, toolId) {
   if (t.params_schema?.action?.enum && t.views?.[0]) await retireSameView(learnerId, t.views[0], t.name);
   return t;
 }
+
+/** Appended to a rebuild's result note: the agent reports only what it verified. */
+export const REBUILD_HONESTY = " This REBUILDS a tool the learner already had. In your reply, report only what you verified: if the old tool's answer was wrong and the new answer differs, say what changed; if you did not establish what was wrong with the old tool, say plainly that you couldn't confirm the fault - never invent a cause or a story about the old tool.";
 
 /** Run a saved tool — the learner's own, else a platform one. → result, or null when there's no such tool. */
 export async function runLearnerTool(name, input, learnerId, { callCapability, conversationId = null, dry = false, audience = "learner" }) {

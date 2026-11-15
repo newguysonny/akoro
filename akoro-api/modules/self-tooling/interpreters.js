@@ -52,6 +52,10 @@ function checkOp(errors, o, label, fields) {
     case "group":
       if (!Array.isArray(o.by)) errors.push(`${label}: group.by must be a list`);
       for (const b of [].concat(o.by || [])) if (b && typeof b === "object" && b.bucket && !valid.bucket(b.bucket)) errors.push(`${label}: bucket ${b.bucket}`);
+      for (const pc of [].concat(o.percentOf || [])) {
+        if (!pc || typeof pc.field !== "string" || !pc.field || typeof pc.as !== "string" || !/^[a-zA-Z][a-zA-Z0-9_]*$/.test(pc.as)) errors.push(`${label}: percentOf needs { field, is, as } with a plain field name for as`);
+        else if (pc.is == null || typeof pc.is === "object") errors.push(`${label}: percentOf.is is the single value the field must equal`);
+      }
       return;
     case "sort": if (!o.by) errors.push(`${label}: sort.by`); return;
     case "limit": if (!(Number(o.n) > 0)) errors.push(`${label}: limit.n`); return;
@@ -82,7 +86,7 @@ function normOp(o) {
 export function normalizeDefinition(def) {
   if (!def || typeof def !== "object") return def;
   if (def.where != null) def.where = asList(def.where);
-  if (def.group && typeof def.group === "object") { def.group.by = asList(def.group.by) || []; for (const k of ["sum", "avg", "min", "max", "counts"]) if (def.group[k] != null) def.group[k] = asList(def.group[k]); }
+  if (def.group && typeof def.group === "object") { def.group.by = asList(def.group.by) || []; for (const k of ["sum", "avg", "min", "max", "counts"]) if (def.group[k] != null) def.group[k] = asList(def.group[k]); if (def.group.percentOf != null) def.group.percentOf = asList(def.group.percentOf); }
   if (def.compute != null) def.compute = asList(def.compute);
   if (def.sort != null) def.sort = asList(def.sort);
   if (typeof def.select === "string") def.select = [def.select];
@@ -121,7 +125,9 @@ function flowOp(errors, o, cur, label) {
       by.forEach((b) => need(b.field, "group field"));
       for (const k of ["sum", "avg"]) for (const f of [].concat(o[k] || [])) needNum(f, `${k} field`);
       for (const k of ["min", "max", "counts"]) for (const f of [].concat(o[k] || [])) need(f, `${k} field`);
+      for (const pc of [].concat(o.percentOf || [])) need(pc?.field, "percentOf field");
       return new Map([
+        ...[].concat(o.percentOf || []).flatMap((pc) => [[pc.as, "number"], [`${pc.as}_count`, "integer"], [`${pc.as}_total`, "integer"]]),
         ...[].concat(o.counts || []).map((f) => [`count_${f}`, "integer"]),
         ...by.map((b) => (b.bucket ? [`${b.field}_${b.bucket}`, "string"] : [b.field, cur?.get(b.field) ?? null])),
         ...(o.count ? [["count", "integer"]] : []),
