@@ -3,8 +3,10 @@
  *
  * Loads the pilot course packages into Supabase: one Storage object
  * per topic PDF (public bucket "pharmd-courses") plus the matching
- * pharmd_topics rows. The programme/year/course structure is seeded
- * by the migration (2026-pharmd-courses.sql); this fills in topics.
+ * programme_materials rows in the UNIFIED Program Courses tables
+ * (the programme with source='pharmd', managed from the admin
+ * Program Courses section). The programme/section/course structure
+ * is seeded by the migrations; this fills in the materials.
  *
  * Two front doors share this engine:
  *   • scripts/upload-pharmd-courses.mjs — the CLI (local .env).
@@ -82,7 +84,7 @@ const isDir = (e) => (typeof e.isDirectory === "function" ? e.isDirectory() : e.
  * Idempotent: files upload with upsert and rows upsert on
  * (course_id, position) — re-running simply refreshes. A course
  * whose code isn't seeded yet is created under the programme's
- * first year with the next sort order, so future packages drop in
+ * first section with the next position, so future packages drop in
  * without touching SQL.
  *
  * Returns { ok, dryRun, courses, topics, bytes, failures[] } and
@@ -106,10 +108,20 @@ export async function runPharmdUpload({ dryRun = false, only = null, dir = DEFAU
     if (error && !/exist/i.test(error.message || "")) throw new Error(`bucket: ${error.message}`);
   }
 
-  const { data: programme } = await edu().from("pharmd_programmes")
-    .select("id, code, name").eq("code", PROGRAMME_CODE).maybeSingle();
+  // Unified target: the generic programme (source='pharmd'). The legacy
+  // pharmd_* rows are read only for source links, so content the first
+  // import connected keeps its identity (progress, parse cache).
+  const { data: legacyProgramme } = await edu().from("pharmd_programmes")
+    .select("id").eq("code", PROGRAMME_CODE).maybeSingle();
+  const { data: programme } = await edu().from("programmes")
+    .select("id, code, name").eq("source", "pharmd").eq("code", PROGRAMME_CODE).maybeSingle();
   if (!programme) {
-    throw new Error("the PHARMD programme row is missing — run the migrations first (the API applies them at boot)");
+    throw new Error("the unified PHARM.D programme row is missing — run the migrations first (the API applies them at boot)");
+  }
+  const { data: sections } = await edu().from("programme_sections")
+    .select("id, name, position").eq("programme_id", programme.id).order("position");
+  if (!sections?.length) {
+    throw new Error("the unified PHARM.D programme has no sections — run the migrations first");
   }
 
   const zips = readdirSync(dir).filter((f) => /\.zip$/i.test(f)).sort();
@@ -122,21 +134,23 @@ export async function runPharmdUpload({ dryRun = false, only = null, dir = DEFAU
     const code = zipName.replace(/\.zip$/i, "").trim();
     if (only && code.toLowerCase() !== only.toLowerCase()) continue;
 
-    // The course row: seeded by the migration, or created here for a
-    // new package (parked in the programme's first year).
-    let { data: course } = await edu().from("pharmd_courses")
-      .select("id, code, sort_order").eq("code", code).maybeSingle();
+    // The course row in the unified tables: seeded by the migrations,
+    // or created here for a new package (parked in the first section).
+    const { data: legacyCourse } = legacyProgramme
+      ? await edu().from("pharmd_courses").select("id, code").eq("code", code).maybeSingle()
+      : { data: null };
+    let { data: course } = await edu().from("programme_courses")
+      .select("id, code").eq("programme_id", programme.id).eq("code", code).maybeSingle();
     if (!course) {
-      const { data: year } = await edu().from("pharmd_years")
-        .select("id").eq("programme_id", programme.id).order("number").limit(1).maybeSingle();
-      if (!year) { failures.push(`${code}: no year to put it in`); continue; }
-      const { data: last } = await edu().from("pharmd_courses")
-        .select("sort_order").eq("year_id", year.id).order("sort_order", { ascending: false }).limit(1).maybeSingle();
+      const section = sections[0];
+      const { data: last } = await edu().from("programme_courses")
+        .select("position").eq("section_id", section.id).order("position", { ascending: false }).limit(1).maybeSingle();
       const row = {
-        programme_id: programme.id, year_id: year.id, code,
-        sort_order: (last?.sort_order ?? 0) + 1,
+        programme_id: programme.id, section_id: section.id, code, title: code,
+        status: "published", position: (last?.position ?? -1) + 1,
+        source_course_id: legacyCourse?.id ?? null,
       };
-      const { data: created, error } = await edu().from("pharmd_courses").insert(row).select("id, code, sort_order").single();
+      const { data: created, error } = await edu().from("programme_courses").insert(row).select("id, code").single();
       if (error) { failures.push(`${code}: ${error.message}`); continue; }
       course = created;
       log(`+ course ${code} created`);
@@ -151,21 +165,35 @@ export async function runPharmdUpload({ dryRun = false, only = null, dir = DEFAU
       if (!parsed) { failures.push(`${code}: unparseable name — ${entry.entryName}`); continue; }
       const path = topicPath(code, parsed.position, parsed.title);
       const buffer = entry.getData();
-      const file = {
-        course_id: course.id, position: parsed.position, title: parsed.title,
-        file_bucket: PHARMD_BUCKET, file_path: path,
-        file_name: entry.entryName.split("/").pop(),
-        file_size: buffer.length, file_mime: "application/pdf",
-        // Versioned content key input: a re-uploaded file gets a new identity,
-        // so the shared parse cache can never serve the old markdown.
-        file_hash: createHash("sha256").update(buffer).digest("hex").slice(0, 32),
-      };
+      // Versioned content key input: a re-uploaded file gets a new identity,
+      // so the shared parse cache can never serve the old markdown.
+      const fileHash = createHash("sha256").update(buffer).digest("hex").slice(0, 32);
       if (!dryRun) {
         const { error: upErr } = await db.storage.from(PHARMD_BUCKET)
           .upload(path, buffer, { contentType: "application/pdf", upsert: true });
         if (upErr) { failures.push(`${code} topic ${parsed.position}: ${upErr.message}`); continue; }
-        const { error: rowErr } = await edu().from("pharmd_topics")
-          .upsert(file, { onConflict: "course_id,position" });
+        // The material row — the topic's unified home. Upsert on
+        // (course_id, position) by hand: select, then update or insert.
+        // The public URL + file identity live on the material itself.
+        let legacyTopicId = null;
+        if (legacyCourse) {
+          const { data: lt } = await edu().from("pharmd_topics")
+            .select("id").eq("course_id", legacyCourse.id).eq("position", parsed.position).maybeSingle();
+          legacyTopicId = lt?.id ?? null;
+        }
+        const row = {
+          course_id: course.id, position: parsed.position, title: parsed.title,
+          type: "pdf", status: "published",
+          meta: `${(buffer.length / 1048576).toFixed(1)} MB`,
+          url: db.storage.from(PHARMD_BUCKET).getPublicUrl(path).data.publicUrl,
+          file_path: path, file_hash: fileHash,
+          source_topic_id: legacyTopicId,
+        };
+        const { data: existing } = await edu().from("programme_materials")
+          .select("id").eq("course_id", course.id).eq("position", parsed.position).maybeSingle();
+        const { error: rowErr } = existing
+          ? await edu().from("programme_materials").update(row).eq("id", existing.id)
+          : await edu().from("programme_materials").insert(row);
         if (rowErr) { failures.push(`${code} topic ${parsed.position}: ${rowErr.message}`); continue; }
       }
       count += 1; bytes += buffer.length;

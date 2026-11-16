@@ -26,6 +26,13 @@
  * the whole programme (the folder's done-checks).
  *
  * Mounted at /api/pharmd (app.js).
+ *
+ * UNIFIED READS: since migrations/2026-pharmd-unified.sql, the four data
+ * endpoints first try the generic Program Courses tables (the programme
+ * with source='pharmd') — the rows the admin Program Courses section
+ * edits — and fall back to the legacy pharmd_* tables only when no
+ * unified programme exists or AKORO_PHARMD_UNIFIED=false. See the
+ * "Unified read path" section below.
  */
 import { Router }             from "express";
 import db                     from "../../db.js";
@@ -49,8 +56,120 @@ const missing = (res, m) => res.status(404).json({ success: false, error: m });
 const publicFileUrl = (bucket, path) =>
   path ? db.storage.from(bucket || "pharmd-courses").getPublicUrl(path).data.publicUrl : null;
 
+/* ── Unified read path ─────────────────────────────────────────────────────
+   The generic tables are the source of truth: status gates at every level
+   (an unpublished programme/course/material never leaves), topic ids in
+   responses are MATERIAL ids, and progress lives in
+   edu.programme_material_progress (backfilled from pharmd_topic_progress).
+   Each serve* returns true when it answered (including a deliberate 404),
+   false when there is no unified programme and the legacy handler runs. */
+const UNIFIED_OFF = () => process.env.AKORO_PHARMD_UNIFIED === "false";
+const MIME_BY_TYPE = { pdf: "application/pdf", video: "video/mp4", audio: "audio/mpeg", note: "text/plain", link: "text/html", slides: "application/vnd.ms-powerpoint" };
+const parseMinutes = (meta) => { const m = String(meta || "").match(/^(\d+)\s*min\b/i); return m ? Number(m[1]) : null; };
+const parseSizeBytes = (meta) => {
+  const m = String(meta || "").match(/^([\d.]+)\s*(MB|KB|GB)\b/i);
+  if (!m) return null;
+  const mult = { KB: 1024, MB: 1048576, GB: 1073741824 }[m[2].toUpperCase()] || 1048576;
+  return Math.round(Number(m[1]) * mult);
+};
+
+async function unifiedProgrammeRow() {
+  const { data } = await edu().from("programmes")
+    .select("id, name, code, description, status")
+    .eq("source", "pharmd").eq("code", "PHARMD").maybeSingle();
+  return data ?? null;
+}
+
+async function serveUnifiedProgramme(res) {
+  const gp = await unifiedProgrammeRow();
+  if (!gp) return false;
+  if (gp.status !== "published") { missing(res, "That programme is not published"); return true; }
+  const [{ data: sections }, { data: courses }] = await Promise.all([
+    edu().from("programme_sections").select("id, name, position").eq("programme_id", gp.id).order("position"),
+    edu().from("programme_courses").select("id, section_id, code, title").eq("programme_id", gp.id).eq("status", "published").order("position"),
+  ]);
+  const ids = (courses ?? []).map((c) => c.id);
+  const { data: mats } = ids.length
+    ? await edu().from("programme_materials").select("course_id").in("course_id", ids).eq("status", "published")
+    : { data: [] };
+  const countByCourse = new Map();
+  for (const row of mats ?? []) countByCourse.set(row.course_id, (countByCourse.get(row.course_id) ?? 0) + 1);
+  ok(res, {
+    programme: { code: gp.code, name: gp.name, subtitle: gp.description || null },
+    years: (sections ?? []).map((sec, i) => ({
+      number: i + 1,
+      label: sec.name,
+      courses: (courses ?? []).filter((c) => c.section_id === sec.id).map((c) => ({
+        id: c.id, code: c.code, title: c.title || c.code, topics: countByCourse.get(c.id) ?? 0,
+      })),
+    })),
+  });
+  return true;
+}
+
+async function serveUnifiedCourse(res, code) {
+  const gp = await unifiedProgrammeRow();
+  if (!gp) return false;
+  if (gp.status !== "published") { missing(res, "Course not found"); return true; }
+  const { data: course } = await edu().from("programme_courses")
+    .select("id, code, title").eq("programme_id", gp.id).eq("code", code).eq("status", "published").maybeSingle();
+  if (!course) { missing(res, "Course not found"); return true; }
+  const { data: materials } = await edu().from("programme_materials")
+    .select("id, position, title, type, meta, url, file_path, file_hash")
+    .eq("course_id", course.id).eq("status", "published").order("position").order("created_at");
+  ok(res, {
+    course: { id: course.id, code: course.code, title: course.title || course.code },
+    topics: (materials ?? []).map((m) => ({
+      id: m.id,
+      position: m.position,
+      title: m.title,
+      read_minutes: parseMinutes(m.meta),
+      mime: MIME_BY_TYPE[m.type] || "application/pdf",
+      size: parseSizeBytes(m.meta),
+      file_url: m.url || (m.file_path ? publicFileUrl("pharmd-courses", m.file_path) : null),
+      file_hash: m.file_hash || null,
+      contentKey: m.file_path ? pharmdContentKey({ file_path: m.file_path, file_hash: m.file_hash }) : null,
+    })),
+  });
+  return true;
+}
+
+async function serveUnifiedProgress(req, res) {
+  const gp = await unifiedProgrammeRow();
+  if (!gp) return false;
+  const { data } = await edu().from("programme_material_progress")
+    .select("material_id").eq("user_id", req.user.id).eq("done", true);
+  ok(res, { done: (data ?? []).map((r) => r.material_id) });
+  return true;
+}
+
+async function serveUnifiedComplete(req, res) {
+  const gp = await unifiedProgrammeRow();
+  if (!gp) return false;
+  const done = req.body?.done !== false;
+  const { data: material } = await edu().from("programme_materials")
+    .select("id, course_id").eq("id", req.params.id).maybeSingle();
+  const { data: course } = material
+    ? await edu().from("programme_courses").select("id").eq("id", material.course_id).eq("programme_id", gp.id).maybeSingle()
+    : { data: null };
+  if (!material || !course) { missing(res, "Topic not found"); return true; }
+  if (done) {
+    const { error } = await edu().from("programme_material_progress").upsert({
+      user_id: req.user.id, material_id: material.id, done: true, updated_at: new Date().toISOString(),
+    }, { onConflict: "user_id,material_id" });
+    if (error) { bad(res, "Could not save that — try again."); return true; }
+  } else {
+    const { error } = await edu().from("programme_material_progress")
+      .delete().eq("user_id", req.user.id).eq("material_id", material.id);
+    if (error) { bad(res, "Could not save that — try again."); return true; }
+  }
+  ok(res, { topic_id: material.id, done });
+  return true;
+}
+
 /* ── Programme tree — the browse view ─────────────────────────── */
 router.get("/programme", asyncHandler(async (_req, res) => {
+  if (!UNIFIED_OFF() && (await serveUnifiedProgramme(res))) return;
   const { data: programme } = await edu().from("pharmd_programmes")
     .select("id, code, name, subtitle").eq("code", "PHARMD").maybeSingle();
   if (!programme) return bad(res, "No PHARM.D programme yet — run the migrations.");
@@ -87,6 +206,7 @@ router.get("/programme", asyncHandler(async (_req, res) => {
 
 /* ── One course + its topics — the folder view ────────────────── */
 router.get("/courses/:code", asyncHandler(async (req, res) => {
+  if (!UNIFIED_OFF() && (await serveUnifiedCourse(res, req.params.code))) return;
   const { data: course } = await edu().from("pharmd_courses")
     .select("id, code, title, programme_id").eq("code", req.params.code).maybeSingle();
   if (!course) return missing(res, "Course not found");
@@ -307,12 +427,14 @@ router.post("/ask", asyncHandler(async (req, res) => {
 }));
 
 router.get("/progress", asyncHandler(async (req, res) => {
+  if (!UNIFIED_OFF() && (await serveUnifiedProgress(req, res))) return;
   const { data } = await edu().from("pharmd_topic_progress")
     .select("topic_id").eq("user_id", req.user.id).eq("done", true);
   ok(res, { done: (data ?? []).map((r) => r.topic_id) });
 }));
 
 router.post("/topics/:id/complete", asyncHandler(async (req, res) => {
+  if (!UNIFIED_OFF() && (await serveUnifiedComplete(req, res))) return;
   const done = req.body?.done !== false;   // absent = true (an explicit "mark done")
   const { data: topic } = await edu().from("pharmd_topics")
     .select("id").eq("id", req.params.id).maybeSingle();

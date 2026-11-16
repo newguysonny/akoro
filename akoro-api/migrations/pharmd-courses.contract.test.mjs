@@ -86,7 +86,8 @@ test("uploader: public bucket, readable paths, idempotent writes", () => {
   // The engine (shared by the CLI and the admin console).
   assert.ok(engine.includes("createBucket(PHARMD_BUCKET, { public: true })"), "public bucket, ensured once");
   assert.ok(engine.includes("upsert: true"), "storage objects re-upload with upsert");
-  assert.ok(engine.includes('onConflict: "course_id,position"'), "topic rows upsert on (course_id, position)");
+  assert.ok(engine.includes('from("programme_materials")'), "topics land as materials in the unified tables");
+  assert.ok(engine.includes('.eq("course_id", course.id).eq("position", parsed.position)'), "material rows upsert on (course_id, position)");
   assert.ok(engine.includes("parseTopicFile"), "parses through the shared, tested parser");
   assert.ok(engine.includes('import("../../db.js")'), "db loads lazily — the parser stays importable without env");
   assert.ok(engine.includes("dryRun = false"), "dry run supported — count without writing");
