@@ -22,6 +22,9 @@ export { AREAS };
 export const CORE_TOOL_NAMES = Object.freeze([
   "get_learner_context", "get_agent_capabilities",
   "schema_lookup", "create_tool", "save_computation", "submit_tool_request",
+  // The instructor identity tool — always on for instructor turns (it is
+  // not in the learner catalogue, so listing it here costs learners nothing).
+  "get_my_profile",
 ]);
 
 export const areaSelectionEnabled = () => String(process.env.AKORO_TOOL_AREA_SELECTION ?? "true").toLowerCase() !== "false";
@@ -42,7 +45,7 @@ export const AREA_KEYWORDS = Object.freeze({
   proactive: ["suggestion", "suggestions", "proposed", "you suggested", "while i was away", "auto reply", "autonomy"],
   building: ["tool", "tools", "build me", "make a tool", "save that", "keep that"],
   support: ["bug", "report a bug", "bug report", "broken", "not working", "doesn't work", "glitch", "something's wrong", "something is wrong", "akoro support", "request", "requests"],
-  activities: ["activity", "activities", "assignment", "classwork", "homework"],
+  activities: ["activity", "activities", "assignment", "classwork", "homework", "draft", "drafts", "routine", "routines", "roster", "outcomes", "submissions"],
 });
 
 /** PURE: the areas a message points at. */

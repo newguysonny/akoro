@@ -55,3 +55,15 @@ test("self-tooling stores the derivation: register, domains, saved computations;
   assert.match(pipeline, /export async function learnerToolDefsWithAreas/);
   assert.match(pipeline, /allowed\.tags = /);
 });
+
+test("instructor identity is core too (get_my_profile)", () => {
+  assert.ok(CORE_TOOL_NAMES.includes("get_my_profile"), "get_my_profile must be core for instructor turns");
+});
+
+test("areasForMessage hears instructor phrasings as activities", () => {
+  assert.ok(areasForMessage("Show me my drafts").has("activities"));
+  assert.ok(areasForMessage("Set a weekly routine for JSS2").has("activities"));
+  assert.ok(areasForMessage("Who is on the roster for my class?").has("activities"));
+  assert.ok(areasForMessage("Show the outcomes for the photosynthesis assignment").has("activities"));
+  assert.ok(areasForMessage("How many submissions came in?").has("activities"));
+});

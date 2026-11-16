@@ -123,3 +123,76 @@ test("wiring: chat.js assembles and dispatches merged domains generically", () =
   assert.match(src, /forcedTool = "my_study_sessions";/);
   assert.match(src, /A forced \(required\) tool must survive area selection/);
 });
+
+test("instructor classes config: list is the platform action, rest are view reads", () => {
+  const c = MERGED_DOMAINS.my_classes;
+  assert.equal(c.view, "my_classes");
+  assert.equal(c.area, "activities");
+  assert.deepEqual(c.platformActions, ["list"]);
+  assert.deepEqual(c.baseActions, ["count", "search"]);
+  assert.deepEqual(c.def().function.parameters.properties.action.enum, ["count", "list", "search"]);
+  assert.equal(c.buildIsCovered(["count", "list"]), true);
+  assert.equal(c.buildIsCovered(["by_student_limit"]), false);
+});
+
+test("instructor students + activities configs: view reads only, no platform side", () => {
+  const st = MERGED_DOMAINS.my_class_students;
+  assert.equal(st.view, "my_class_students");
+  assert.equal(st.area, "activities");
+  assert.deepEqual(st.platformActions, []);
+  assert.deepEqual(st.def().function.parameters.properties.action.enum, ["count", "list", "by_status", "search"]);
+  const ac = MERGED_DOMAINS.my_activities;
+  assert.equal(ac.view, "my_activities");
+  assert.deepEqual(ac.platformActions, []);
+  assert.deepEqual(ac.def().function.parameters.properties.action.enum, ["count", "list", "by_subject", "search"]);
+  assert.match(ac.def().function.description, /prepare_activity/);
+});
+
+test("instructor results config: overview is the platform action", () => {
+  const c = MERGED_DOMAINS.my_activity_results;
+  assert.equal(c.view, "my_activity_results");
+  assert.equal(c.area, "activities");
+  assert.deepEqual(c.platformActions, ["overview"]);
+  assert.deepEqual(c.def().function.parameters.properties.action.enum, ["count", "list", "by_subject", "search", "overview"]);
+  assert.equal(c.buildIsCovered(["overview", "count"]), true);
+  assert.equal(c.buildIsCovered(["avg_grade"]), false);
+});
+
+test("instructor drafts config: list + get are the platform actions; delta still extends", () => {
+  const c = MERGED_DOMAINS.my_activity_drafts;
+  assert.equal(c.view, "my_activity_drafts");
+  assert.deepEqual(c.platformActions, ["list", "get"]);
+  assert.deepEqual(c.baseActions, ["count", "by_subject", "search"]);
+  const def = c.def({ delta: ["by_type"] });
+  assert.deepEqual(def.function.parameters.properties.action.enum, ["count", "list", "by_subject", "search", "get", "by_type"]);
+  assert.match(def.function.description, /by_type/);
+  assert.deepEqual(c.deltaActions({ actions: ["list", "by_type", "by_status"], disabledActions: ["by_status"] }), ["by_type"]);
+});
+
+test("wiring: chat.js assembles, dispatches and area-loads the instructor merges", () => {
+  const src = read("../adaptive-learning/chat.js");
+  // turn assembly for instructors (merged defs over the catalogue)
+  assert.match(src, /applyMergedDomain\(allTools, req\.user\.id, MERGED_DOMAINS\.my_classes, \["list_my_classrooms"\], selfToolOn\)/);
+  assert.match(src, /applyMergedDomain\(allTools, req\.user\.id, MERGED_DOMAINS\.my_activity_results, \["check_activity_outcomes"\], selfToolOn\)/);
+  assert.match(src, /applyMergedDomain\(allTools, req\.user\.id, MERGED_DOMAINS\.my_activity_drafts, \["list_activity_drafts", "get_activity_draft"\], selfToolOn\)/);
+  // executor cases, instructor-guarded, dispatching through the engine
+  assert.match(src, /case "my_classes": \{/);
+  assert.match(src, /role === "instructor" && MERGED_DOMAINS\.my_classes\.enabled\(\)/);
+  assert.match(src, /case "my_activity_drafts": \{/);
+  assert.match(src, /executeChatTool\("get_activity_draft", \{ draftId: String\(input\?\.query \|\| ""\) \}/);
+  assert.match(src, /executeChatTool\("check_activity_outcomes"/);
+  // the area loader assembles the instructor merges for the activities area
+  assert.match(src, /openAiInstructorTools\(\)\.filter\(\(t\) => toolArea\(t\.function\.name\) === wantArea\)/);
+  // runtime selection runs for instructor turns too
+  assert.match(src, /else if \(role === "instructor"\) \{/);
+  assert.match(src, /learnerToolDefsWithAreas\(req\.user\.id, "instructor"\)/);
+});
+
+test("wiring: merged names resolve their area BEFORE toolArea's \"other\" fallback", () => {
+  const src = read("../adaptive-learning/chat.js");
+  // toolArea() returns "other" (truthy) for every merged name, so a chain
+  // that consults it before the merged fallbacks drops merged defs from
+  // narrowed turns whenever the user owns no saved row for the domain.
+  assert.match(src, /learnerAreas\.get\(name\) \|\| \(mergedLibraryEnabled\(\)/);
+  assert.match(src, /ownAreas\.get\(name\) \|\| mergedAreaOf\(name\) \|\| toolArea\(name\)/);
+});

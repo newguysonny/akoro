@@ -12,6 +12,7 @@
 //                       search, derived summaries).
 //   - anything else   → the learner's own saved delta actions on their row.
 // Pure module (no imports) so the contract tests exercise the real shapes.
+// Instructor domains (my_classes … my_activity_drafts) enrolled 2026-11-16.
 
 function makeMergedDomain(cfg) {
   const mergedActions = [...cfg.baseActions, ...cfg.platformActions];
@@ -115,6 +116,62 @@ export const MERGED_DOMAINS = {
     description: "Your weak topics — one tool for all of it. Actions: list = the topics you find hardest, weakest first, with confidence levels (pass query as a subject name to filter); count = how many weak-topic records you have; by_subject = records per subject; search = weak-topic records whose topic matches query. Never invent a weak topic.",
   }),
 
+  // Instructor domains (Matt's order 2026-11-16: the learner treatment —
+  // merger, area grouping, runtime selection — for instructor tools too).
+  // The pipeline side (build guard, My-tools delta presentation, view
+  // runner) is generic over this list, so enrolling a view here extends
+  // all of it to instructor builds; chat.js assembles and dispatches the
+  // merged defs for instructor turns. All five live in the activities area.
+  my_classes: makeMergedDomain({
+    name: "my_classes",
+    view: "my_classes",
+    area: "activities",
+    envVar: "AKORO_MERGED_CLASSES",
+    actionOrder: ["count", "list", "search"],
+    baseActions: ["count", "search"],
+    platformActions: ["list"],
+    description: "Your classes — one tool for all of it. Actions: count = how many classes you have; list = your classes with learner counts and each class's roster (up to 40 names per class); search = classes whose name matches query. Never invent a class.",
+  }),
+  my_class_students: makeMergedDomain({
+    name: "my_class_students",
+    view: "my_class_students",
+    area: "activities",
+    envVar: "AKORO_MERGED_CLASS_STUDENTS",
+    actionOrder: ["count", "list", "by_status", "search"],
+    baseActions: ["count", "list", "by_status", "search"],
+    platformActions: [],
+    description: "Students in your classes — one tool for all of it. Actions: count = how many class enrolments there are across your classes; list = the students in your classes, each with their class and enrolment status; by_status = enrolments per status; search = enrolments whose class name matches query. Never invent a student.",
+  }),
+  my_activities: makeMergedDomain({
+    name: "my_activities",
+    view: "my_activities",
+    area: "activities",
+    envVar: "AKORO_MERGED_ACTIVITIES",
+    actionOrder: ["count", "list", "by_subject", "search"],
+    baseActions: ["count", "list", "by_subject", "search"],
+    platformActions: [],
+    description: "Activities you have set — one tool for all of it. Actions: count = how many activities you have set; list = your activities (title, type, subject, topic, difficulty, due date, status); by_subject = activities per subject; search = activities whose title matches query. This tool only reads activities already set — to prepare a new one, use prepare_activity. Never invent an activity.",
+  }),
+  my_activity_results: makeMergedDomain({
+    name: "my_activity_results",
+    view: "my_activity_results",
+    area: "activities",
+    envVar: "AKORO_MERGED_RESULTS",
+    actionOrder: ["count", "list", "by_subject", "search", "overview"],
+    baseActions: ["count", "list", "by_subject", "search"],
+    platformActions: ["overview"],
+    description: "Your students' results on activities you set — one tool for all of it. Actions: count = how many result records there are; list = results (student, activity, subject, status, grade); by_subject = results per subject; search = results whose subject matches query; overview = the outcome summary for ONE activity (pass its assignmentId as query) — with no query it lists your recent activities to pick from. Never invent a result.",
+  }),
+  my_activity_drafts: makeMergedDomain({
+    name: "my_activity_drafts",
+    view: "my_activity_drafts",
+    area: "activities",
+    envVar: "AKORO_MERGED_DRAFTS",
+    actionOrder: ["count", "list", "by_subject", "search", "get"],
+    baseActions: ["count", "by_subject", "search"],
+    platformActions: ["list", "get"],
+    description: "Your unassigned activity drafts — one tool for all of it. Actions: count = how many drafts are waiting; list = your pending drafts (draftId, title, type, when prepared); by_subject = drafts per subject; search = drafts whose title matches query; get = one draft in full, questions included (pass its draftId as query). Never invent a draft.",
+  }),
 
 };
 
