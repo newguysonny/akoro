@@ -28,11 +28,11 @@ test("a brand-new domain tool is drafted too; extending an active one is not re-
   assert.match(src, /samples: \[\], awaitingBuild: true \}/);
 });
 
-test("the card: proposeBuild stores kind 'build'; Keep activates via the pipeline; Not now discards the draft", () => {
+test("the card: proposeBuild stores kind 'build'; an approved Keep activates via the pipeline (executeBuild, called by await_decision); Not now discards the draft", () => {
   const src = read("./confirmations.js");
   assert.match(src, /export async function proposeBuild\(/);
   assert.match(src, /const args = \{ kind: "build", toolId, proposed \};/);
-  assert.match(src, /if \(row\.tool_arguments\?\.kind === "build"\) return confirmBuild\(row, \{ userId, postIntoChat, toolDeps \}\);/);
+  assert.match(src, /kind === "build" \? await executeBuild\(row, \{ userId, toolDeps \}\)/);
   assert.match(src, /const activate = toolDeps\?\.activateTool \|\| pipe\.activateBuiltTool;/);
   assert.match(src, /kind === "permission" \|\| row\.tool_arguments\?\.kind === "build"\) \? row\.tool_arguments\.toolId/);
   const pipe = read("./pipeline.js");

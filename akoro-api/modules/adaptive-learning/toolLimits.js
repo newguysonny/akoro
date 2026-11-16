@@ -29,6 +29,8 @@ export const MODEL_BACKED_CHAT_TOOLS = Object.freeze([
 export const CHAT_TOOL_TIME_LIMITS_MS = Object.freeze({
   // Builds, verifies (up to five builder calls) and may run the new tool once.
   create_tool: 300_000,
+  // Waits for the learner's tap on a card (its own poll window is 100s).
+  await_decision: 150_000,
   schema_lookup: 20_000,
   update_plan: 5_000,
 });

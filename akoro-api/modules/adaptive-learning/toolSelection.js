@@ -21,7 +21,7 @@ export { AREAS };
 /** Always offered, whatever is selected: identity, discovery, and building. */
 export const CORE_TOOL_NAMES = Object.freeze([
   "get_learner_context", "get_agent_capabilities",
-  "schema_lookup", "create_tool", "save_computation", "submit_tool_request",
+  "schema_lookup", "create_tool", "save_computation", "await_decision", "submit_tool_request",
   // The instructor identity tool — always on for instructor turns (it is
   // not in the learner catalogue, so listing it here costs learners nothing).
   "get_my_profile",

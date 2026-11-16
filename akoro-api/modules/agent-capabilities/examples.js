@@ -124,6 +124,7 @@ export const TOOL_EXAMPLES = Object.freeze({
   // Tools the agent builds
   schema_lookup: e("building", "(used while building a tool — checks what data a tool may read)"),
   create_tool: e("building", "Make a tool that times my practice."),
+  await_decision: e("building", "(used right after a Keep / Allow / Confirm card is shown — waits for the learner's tap and finishes what they decided)"),
   save_computation: e("building", "Save that tool so I can reuse it."),
   submit_tool_request: e("building", "Request a tool that reads my school timetable."),
   check_my_requests: e("support", "Did the admins build my request?", "Is my tool request ready?"),

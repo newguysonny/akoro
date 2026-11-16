@@ -17,11 +17,16 @@ test("no 'shall I build it?' round: a change the learner can allow is drafted wi
   assert.match(read("../adaptive-learning/chat.js"), /in this same turn — don't ask 'shall I build it\?' first/);
 });
 
-test("after Approve/Confirm the SERVER posts the outcome and runs the agent's follow-up turn", () => {
+test("after Approve/Confirm the tap records ONLY the decision — the agent's await_decision applies it (2026-11-16: model-driven, no server post)", () => {
   const src = read("./confirmations.js");
-  assert.match(src, /kind: "agent_change_done"/, "posts what changed");
-  assert.match(src, /kind: "agent_tool_built"/, "posts the permission outcome");
-  assert.match(src, /kickDecisionFollowUp\(/, "runs the agent's follow-up turn server-side");
+  assert.doesNotMatch(src, /postIntoChat/, "the server never posts the outcome into the chat");
+  assert.doesNotMatch(src, /kickDecisionFollowUp/, "no server-side follow-up turn is kicked");
+  assert.match(src, /export async function decideConfirmation\(/, "the tap records the decision");
+  assert.match(src, /status: "approved", confirmed_at: now/, "approve moves pending -> approved, unexecuted");
+  assert.match(src, /export async function awaitDecision\(/, "the agent waits for the decision itself");
+  const routes = read("./routes.js");
+  assert.match(routes, /decideConfirmation\(\{ id: req\.params\.id, userId: req\.user\.id, decision: "approved" \}\)/);
+  assert.doesNotMatch(routes, /executeChatTool|postIntoChat/, "the confirm route executes nothing and posts nothing");
 });
 
 test("the trace says 'Drafted', not 'Built', for a tool waiting for Approve", () => {
@@ -33,11 +38,12 @@ test("the trace says 'Drafted', not 'Built', for a tool waiting for Approve", ()
 test("the app: one card, compact once decided, and the chat carries on after a tap", () => {
   const card = read("../../../akoro-learner/src/components/tabs/agentChat/ConfirmChangeCard.jsx");
   assert.doesNotMatch(card, /state\.next\?\.confirmationId && <ConfirmChangeCard/);
-  // Server-driven continuation: the card just calls the confirm endpoint; the
-  // server applies the change and posts the follow-up (no client continueInChat).
+  // Model-driven continuation: the card just calls the confirm endpoint, which
+  // records the decision; the agent's live turn (await_decision) applies it
+  // and narrates the outcome (no client continueInChat).
   assert.match(card, /\/api\/self-tooling\/confirmations\/\$\{state\.confirmationId\}\/\$\{what\}/);
   assert.match(card, /onDone\(.*'approved' : 'confirmed'/);
-  // Continuation is server-driven now (the follow-up test above); the card no
+  // Continuation is model-driven now (the decision test above); the card no
   // longer sends continueInChat or injects a client "Approved…" turn.
   assert.doesNotMatch(card, /continueInChat/);
 });

@@ -483,6 +483,16 @@ export const CHAT_TOOLS = [
     },
   },
   {
+    name: "await_decision",
+    featureGate: "self_tooling",
+    description: "Self-tooling: WAIT for the learner's tap on a confirmation card you just showed (a Keep card from create_tool, an Allow card for a permission, or a Confirm card for a change a tool proposed). Call it with the confirmationId from that tool's result, in the SAME turn, right after telling the learner about the card. It waits while they decide; on their tap it applies exactly what the card proposed and returns the outcome — report it in your own words and continue with what they originally asked. If it returns 'waiting', call it again (up to 3 calls) instead of ending your turn. If it returns 'declined', acknowledge briefly and move on. Never call it without a card waiting, and never decide for the learner.",
+    input_schema: {
+      type: "object",
+      properties: { confirmationId: { type: "string", description: "The confirmationId from the card's tool result." } },
+      required: ["confirmationId"],
+    },
+  },
+  {
     name: "list_chats",
     description: "List the learner's Agent Chat conversations (newest first) with their chatId and title. Use when they refer to another chat by name ('my last chat', 'the Physics chat') — to find a chat by what was DISCUSSED in it use search_chats — or before read_chat / post_to_chat / schedule_chat_follow_up with where='chat'. isThisChat marks the current one.",
     input_schema: {
@@ -2599,6 +2609,21 @@ async function runChatTool(name, input, studentId, { conversationId = null, role
       } catch (error) {
         console.warn("[self-tooling] save_computation failed:", error?.stack || error?.message || error);
         return { status: "rejected", reason: "Saving the tool failed unexpectedly — try again." };
+      }
+    }
+    case "await_decision": {
+      if (!SELF_TOOLING_ROLES.has(role)) return { error: "Card decisions are for learners and instructors." };
+      if (!(await selfToolingAllowedFor(studentId))) return { error: "Self-tooling isn't turned on for this account yet." };
+      if (!input?.confirmationId) return { error: "confirmationId is required — use the one from the card's tool result." };
+      try {
+        const { awaitDecision } = await import("../self-tooling/confirmations.js");
+        return await awaitDecision({ id: String(input.confirmationId), userId: studentId,
+          callTool: (tool, args) => executeChatTool(tool, args, studentId, { role, channel: "self_tooling_confirmed" }),
+          buildTool: (args) => createTool({ ...args, ...selfToolDeps(studentId, role === "instructor" ? "instructor" : "student") }),
+          toolDeps: selfToolDeps(studentId, role === "instructor" ? "instructor" : "student") });
+      } catch (error) {
+        console.warn("[self-tooling] await_decision failed:", error?.stack || error?.message || error);
+        return { status: "error", error: "Waiting for the decision failed — the card is still live; the learner's tap will be picked up in the next turn." };
       }
     }
     case "list_chats": {
@@ -5634,6 +5659,15 @@ router.post("/agent", async (req, res) => {
         return [...byId.values()].filter((r) => !(r.structure && r.folder_id)).slice(0, 5);
       } catch { return []; }
     })() : Promise.resolve([]);
+    // Card decisions the learner made after an earlier turn ended: approved
+    // but not yet applied. This turn finishes them — the model calls
+    // await_decision itself (nothing is applied or posted by the server).
+    const decisionsP = role === "student" && conversationId ? (async () => {
+      try {
+        const { listApprovedDecisions } = await import("../self-tooling/confirmations.js");
+        return await listApprovedDecisions(req.user.id, conversationId);
+      } catch { return []; }
+    })() : Promise.resolve([]);
     const chatFilesP = role === "student" && conversationId ? (async () => {
       try {
         const { data } = await db.schema("edu").from("material_ingests").select("names, state, structure")
@@ -5684,9 +5718,9 @@ router.post("/agent", async (req, res) => {
     const [
       goalsCtx,
       [{ context: syllabusCtx, refs: syllabusRefs }, { context: pastCtx, refs: pastRefs }, { context: curriculumCtx, refs: curriculumRefs }, taught],
-      ingests, pendingUploads, chatFilesCtx, inboxCtx, runningCtx, att, { on: selfToolOn, forced: forceSelfTool }, protege, pendingDrafts,
-    ] = await Promise.all([goalsP, groundingP, ingestsP, pendingUploadsP, chatFilesP, inboxP, runningP, attP, selfToolP, protegeP, draftsP]
-      .map((pr, i) => timed(["goals", "grounding", "ingests", "pendingUploads", "chatFiles", "inbox", "running", "attachments", "selfTool", "protege", "drafts"][i], pr)));
+      ingests, pendingUploads, chatFilesCtx, inboxCtx, runningCtx, att, { on: selfToolOn, forced: forceSelfTool }, protege, pendingDrafts, approvedDecisions,
+    ] = await Promise.all([goalsP, groundingP, ingestsP, pendingUploadsP, chatFilesP, inboxP, runningP, attP, selfToolP, protegeP, draftsP, decisionsP]
+      .map((pr, i) => timed(["goals", "grounding", "ingests", "pendingUploads", "chatFiles", "inbox", "running", "attachments", "selfTool", "protege", "drafts", "decisions"][i], pr)));
     const protegeCtx = taught ? `\n\n${await loadDoctrine("policies/PROTEGE.md")}${renderTaughtContext(taught)}` : "";
     // The reply's trace and meta (previews, materials, the uploads' cards), and the uploads pointed at it.
     let savedReplyId = null;   // the stored reply's id: the episode's label key comes from it
@@ -5705,6 +5739,10 @@ router.post("/agent", async (req, res) => {
     // Agent-driven uploads (Matt, 2026-11-16; supersedes the Stage 4 server
     // post): the agent reads and files waiting uploads with its own tools
     // and narrates the filing itself — the server posts nothing.
+    const decisionsCtx = approvedDecisions.length
+      ? `\n\n## A decision is waiting for you to finish\nBefore this turn, the learner tapped a card in this chat and approved it. Their tap only recorded the decision — nothing has been applied yet, and they have not been told the outcome. FIRST, before answering anything else, call await_decision for each of these and report its outcome in your own words:\n` +
+        approvedDecisions.map((c) => `- confirmationId ${c.confirmationId} · ${c.kind} · "${c.title || "Your tool"}"${(c.items || []).length ? ` · would change: ${c.items.slice(0, 5).join("; ")}` : ""}`).join("\n")
+      : "";
     const ingestCtx = pendingUploads.length
       ? `\n\n## Uploads waiting on you\nThe learner sent file(s) that are saved in their Library but not read or filed yet. YOU drive that in this turn, with your upload tools — no one else files them:\n` +
         pendingUploads.map((r) => `- upload id ${r.id} · ${(Array.isArray(r.names) ? r.names : []).join(", ") || "a file"} · state: ${r.state}`).join("\n") +
@@ -5748,7 +5786,7 @@ router.post("/agent", async (req, res) => {
       renderRelevantMemory(relevantMemories) +
       renderLedger(conversation?.scratchpad ? { ...conversation.scratchpad, progressSummary: "" } : null) +
       (goalsCtx || "") +
-      protegeCtx + inboxCtx + runningCtx + ingestCtx + chatFilesCtx + selfToolCtx + draftsCtx +
+      protegeCtx + inboxCtx + runningCtx + ingestCtx + decisionsCtx + chatFilesCtx + selfToolCtx + draftsCtx +
       (syllabusCtx ? `\n\n${syllabusCtx}` : "") +
       (pastCtx ? `\n\n${pastCtx}` : "") +
       (curriculumCtx ? `\n\n${curriculumCtx}` : "") +
@@ -5798,6 +5836,7 @@ router.post("/agent", async (req, res) => {
     // genuinely missing.
     let forcedTool = role === "student"
       ? (pendingUploads.length ? "read_upload"
+        : approvedDecisions.length ? "await_decision"
         : requiresAgentCapabilitiesTool(userMessage) ? "get_agent_capabilities"
         // Other players' results in the learner's battles: go through
         // create_tool (it builds, or asks an admin for the permission) —

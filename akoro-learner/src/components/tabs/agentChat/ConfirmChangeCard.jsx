@@ -6,7 +6,8 @@
  *
  * kind 'permission': the agent has no ability for what the learner asked
  * (e.g. deleting their tasks) but drafted a tool for it. Approve turns that
- * ability on for this learner only; then the chat carries on (onDone): the
+ * ability on for this learner only; the tap records the decision and the
+ * agent's await_decision call applies it and carries the chat on (onDone): the
  * agent runs the tool in its next turn and its change card comes from there.
  * After a Confirm, the chat carries on too, so the agent checks what changed.
  */
@@ -69,11 +70,12 @@ export default function ConfirmChangeCard({ confirm, onDone = null }) {
         </>
       )}
       {(state.status !== 'pending' || expired) && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 9, fontSize: 12, fontWeight: 800, color: state.status === 'consumed' ? '#10B981' : 'var(--ak-text-muted)' }}>
-          <Icon name={state.status === 'consumed' ? 'ti-circle-check' : 'ti-circle-x'} size={14} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 9, fontSize: 12, fontWeight: 800, color: state.status === 'consumed' ? '#10B981' : state.status === 'approved' ? BRAND : 'var(--ak-text-muted)' }}>
+          <Icon name={state.status === 'consumed' || state.status === 'approved' ? 'ti-circle-check' : 'ti-circle-x'} size={14} />
           {state.status === 'consumed'
             ? `Done — ${result?.done ?? items.length} changed${result?.failed ? `, ${result.failed} couldn't be (${(result.errors || []).join('; ')})` : ''}.`
-            : state.status === 'rejected' ? 'Not changed.' : 'Expired — nothing changed. Ask your agent again.'}
+            : state.status === 'approved' ? 'Approved — your agent is finishing it.'
+              : state.status === 'rejected' ? 'Not changed.' : 'Expired — nothing changed. Ask your agent again.'}
         </div>
       )}
       {err && <div style={{ fontSize: 12, fontWeight: 800, color: '#EF4444', marginTop: 6 }}>{err}</div>}
@@ -111,11 +113,12 @@ function PermissionCard({ state, expired, busy, err, act }) {
         </>
       )}
       {!pending && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 9, fontSize: 12, fontWeight: 800, color: built ? '#10B981' : 'var(--ak-text-muted)' }}>
-          <Icon name={built ? 'ti-circle-check' : 'ti-circle-x'} size={14} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 9, fontSize: 12, fontWeight: 800, color: built ? '#10B981' : state.status === 'approved' ? BRAND : 'var(--ak-text-muted)' }}>
+          <Icon name={built || state.status === 'approved' ? 'ti-circle-check' : 'ti-circle-x'} size={14} />
           {built ? `Approved — “${result.label || state.title}” is ${state.drafted ? 'on' : 'built'} and saved in your tools.`
-            : state.status === 'consumed' ? `Approved, but it couldn't be built: ${result?.reason || 'try asking again'}.`
-              : state.status === 'rejected' ? (state.drafted ? 'Not now — the draft was discarded.' : 'Not allowed — nothing was built.') : 'Expired — ask your agent again.'}
+            : state.status === 'approved' ? `Approved — your agent is ${state.drafted ? 'switching it on' : 'building it'}.`
+              : state.status === 'consumed' ? `Approved, but it couldn't be built: ${result?.reason || 'try asking again'}.`
+                : state.status === 'rejected' ? (state.drafted ? 'Not now — the draft was discarded.' : 'Not allowed — nothing was built.') : 'Expired — ask your agent again.'}
         </div>
       )}
       {err && <div style={{ fontSize: 12, fontWeight: 800, color: '#EF4444', marginTop: 6 }}>{err}</div>}
@@ -152,11 +155,12 @@ function BuildCard({ state, expired, busy, err, act }) {
         <ApprovalButtons busy={busy} onAllow={() => act('confirm')} onReject={() => act('reject')} />
       </>}
       {!pending && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 9, fontSize: 12, fontWeight: 800, color: kept ? '#10B981' : 'var(--ak-text-muted)' }}>
-          <Icon name={kept ? 'ti-circle-check' : 'ti-circle-x'} size={14} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 9, fontSize: 12, fontWeight: 800, color: kept ? '#10B981' : state.status === 'approved' ? BRAND : 'var(--ak-text-muted)' }}>
+          <Icon name={kept || state.status === 'approved' ? 'ti-circle-check' : 'ti-circle-x'} size={14} />
           {kept ? `Kept — “${result.label || state.title}” is saved in your tools.`
-            : state.status === 'consumed' ? `Approved, but it couldn't be switched on: ${result?.reason || 'try asking again'}.`
-              : state.status === 'rejected' ? 'Not kept — the draft was discarded.' : 'Expired — ask your agent again.'}
+            : state.status === 'approved' ? 'Approved — your agent is saving it.'
+              : state.status === 'consumed' ? `Approved, but it couldn't be switched on: ${result?.reason || 'try asking again'}.`
+                : state.status === 'rejected' ? 'Not kept — the draft was discarded.' : 'Expired — ask your agent again.'}
         </div>
       )}
       {err && <div style={{ fontSize: 12, fontWeight: 800, color: '#EF4444', marginTop: 6 }}>{err}</div>}
