@@ -47,7 +47,15 @@ export function materialsFrom(tool, result) {
       // Several documents in the folder: tapping one chooses it (sent as the learner's reply).
       if (!r.made) return (r.records || []).map((x) => (x.name ? { kind: "choice", title: clip(x.name), action: { type: "reply", text: clip(`Make the ${r.tool || "quiz"} from ${x.name}`, 160) } } : null));
       const unit = r.tool === "quiz" ? "questions" : r.tool === "flashcards" ? "cards" : "points";
-      const sub = r.tool === "podcast" ? "Being made — ready in a minute or two" : r.count ? `${r.count} ${unit}` : null;
+      // Provenance rides the card, not the model's prose: a platform-tier
+      // build (Discover free notes, copied into the learner's Library) says
+      // so on the card itself, whoever wrote the reply text.
+      const fromDiscover = r.source === "platform"
+        ? (r.sourceOwner ? `from ${clip(r.sourceOwner, 40)}'s free notes in Discover` : "from free notes in Discover")
+        : null;
+      const sub = r.tool === "podcast"
+        ? ["Being made — ready in a minute or two", fromDiscover].filter(Boolean).join(" · ")
+        : [r.count ? `${r.count} ${unit}` : null, fromDiscover].filter(Boolean).join(" · ") || null;
       const m = withSub(link("study_output", `${TOOL_LABEL[r.tool] || r.tool} · ${r.name}`, r.href), sub);
       return [m ? { ...m, tool: r.tool } : null];
     }
