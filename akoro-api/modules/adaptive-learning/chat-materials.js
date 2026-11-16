@@ -49,7 +49,8 @@ export function materialsFrom(tool, result) {
       const unit = r.tool === "quiz" ? "questions" : r.tool === "flashcards" ? "cards" : "points";
       // Provenance rides the card, not the model's prose: a platform-tier
       // build (Discover free notes, copied into the learner's Library) says
-      // so on the card itself, whoever wrote the reply text.
+      // so on the card itself, whoever wrote the reply text. (The tool
+      // result carries source: "platform" + sourceOwner for these builds.)
       const fromDiscover = r.source === "platform"
         ? (r.sourceOwner ? `from ${clip(r.sourceOwner, 40)}'s free notes in Discover` : "from free notes in Discover")
         : null;
