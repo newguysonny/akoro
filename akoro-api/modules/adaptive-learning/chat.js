@@ -1048,13 +1048,14 @@ export const CHAT_TOOLS = [
   },
   {
     name: "make_study_material",
-    description: "Make a quiz, flashcards, a summary or a podcast FROM the signed-in learner's own Library material, and save it in the reader (cited to the document's pages). Use when they ask e.g. 'create a quiz on the basic science material in my folder', 'make flashcards from my Cell notes', 'turn my chemistry notes into a podcast'. Give `folder` when they name a folder, `query` for the topic or document name. The reply shows the result as a card that opens the reader on it — say what you made in one line (how many questions or cards, from which document); never write the questions, cards or summary in chat. A podcast takes a minute or two to finish: say it's being made. If the folder holds several documents and none clearly matches, it returns them — ask which one. Never invent a document.",
+    description: "Make a quiz, flashcards, a summary or a podcast FROM the signed-in learner's own Library material, and save it in the reader (cited to the document's pages). Use when they ask e.g. 'create a quiz on the basic science material in my folder', 'make flashcards from my Cell notes', 'turn my chemistry notes into a podcast'. Give `folder` when they name a folder, `query` for the topic or document name. The reply shows the result as a card that opens the reader on it — say what you made in one line (how many questions or cards, from which document); never write the questions, cards or summary in chat. A podcast takes a minute or two to finish: say it's being made. If the folder holds several documents and none clearly matches, it returns them — ask which one. If they mean a file they sent in this chat ('this material', 'the photo I uploaded'), set from_chat_file instead of guessing a query for it. Never invent a document.",
     input_schema: {
       type: "object",
       properties: {
         tool: { type: "string", enum: ["quiz", "flashcards", "summary", "podcast"], description: "REQUIRED. What to make." },
         query: { type: "string", description: "OPTIONAL, but required unless folder is given. The topic or document name to build it from (3-200 characters). Use the learner's words." },
         folder: { type: "string", description: "OPTIONAL. The Library folder they named, e.g. 'Basic Science'. Use instead of query when they point at a folder; if it holds several documents the tool returns them so you can ask which." },
+        from_chat_file: { type: "boolean", description: "OPTIONAL. Set true when the learner means a file they sent in this chat ('this material', 'this file', 'the photo I uploaded', 'the PDF I just sent'). The server then builds from that file. Leave unset/false for named documents, topics and folders." },
         focus: { type: "string", description: "OPTIONAL. A narrower focus inside the document, e.g. 'photosynthesis' or 'chapter 2'. Applies to quiz/flashcards/summary/podcast." },
         scope: { type: "string", enum: ["document", "page"], description: "OPTIONAL. 'document' (default) builds from the whole file; 'page' builds from one page and REQUIRES pageNumber. Use 'page' only when the learner says 'this page' or names a page." },
         pageNumber: { type: "integer", minimum: 1, description: "OPTIONAL. The 1-based page for scope='page'. Omit for the whole document." },
@@ -2833,7 +2834,8 @@ async function runChatTool(name, input, studentId, { conversationId = null, role
       const { makeStudyMaterial } = await import("../records/studyMaterial.js");
       return makeStudyMaterial({ userId: studentId, tool: input?.tool, query: input?.query, folder: input?.folder,
         focus: input?.focus || "", count: input?.count || "", difficulty: input?.difficulty || "", length: input?.length || "",
-        scope: input?.scope === "page" ? "page" : "document", pageNumber: input?.pageNumber ?? null });
+        scope: input?.scope === "page" ? "page" : "document", pageNumber: input?.pageNumber ?? null,
+        conversationId, fromChatFile: !!input?.from_chat_file });
     }
     case "analyse_past_papers": {
       // The learner's own parsed past papers only (D53).

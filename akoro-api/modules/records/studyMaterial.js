@@ -7,9 +7,11 @@
  *   startPodcast({ userId, target, scope, pageNumber, pageText, values })
  *       → { artifact } (status "making"; the episode is finished in the background) | { status, message }
  *   toReaderContent(tool, result)   the tab content the reader shows (its citation shape)
- *   makeStudyMaterial({ userId, tool, query, folder, focus, count, difficulty, length })
- *       Agent Chat: find the learner's document (or the best one in a folder),
- *       build the tool from the WHOLE document, save it as a reader tab →
+ *   makeStudyMaterial({ userId, tool, query, folder, focus, count, difficulty, length,
+ *                       conversationId, fromChatFile })
+ *       Agent Chat: find the learner's document (or the best one in a folder,
+ *       or — fromChatFile — a file they sent in this chat), build the tool
+ *       from the WHOLE document, save it as a reader tab →
  *       { made, tool, recordId, artifactId, name, href, count } | { needsChoice } | { error }
  *
  * Whatever chat makes is the same saved item the reader makes (edu.record_artifacts),
@@ -19,6 +21,8 @@ import db from "../../db.js";
 import { openai } from "../../lib/aiModel.js";
 import { TOOL_IDS, TOOL_LIMITS, toolSchema, toolCount, buildToolMessages, shapeToolResult, gatherToolPassages, citeOf } from "./toolsLib.js";
 import { searchRecordChunks } from "./searchLib.js";
+import { getExtraction } from "./extractLib.js";
+import { escapeLike, rankContentHits, pickContentWinner, findDuplicateArtifact, passagesFromExtraction, pickChatRecord } from "./studyMaterialCore.js";
 import { createArtifact, listArtifacts, updateArtifact } from "./artifactsLib.js";
 import { PODCAST_LIMITS, lengthOf, podcastSchema, podcastInFlight, runPodcastJob } from "./podcastLib.js";
 import { coinsAvailable, debitCoins } from "../../lib/coins.js";
@@ -40,9 +44,30 @@ export function toolValues(raw = {}) {
 }
 
 /** One structured model call over numbered passages; every item cites its passage. */
+/**
+ * The extraction fallback: the gather reads the search index and the stored
+ * pages under the target's content key; a target built without its key (or a
+ * record the index has nothing for) reaches here empty-handed. The record's
+ * own extraction — the same pages the ingest read consumed — becomes the
+ * passages, so a document that was read is always buildable. Never throws.
+ */
+async function extractedPassages({ target, scope, pageNumber }) {
+  try {
+    let key = target?.contentKey || null;
+    if (!key && target?.recordId && UUID.test(String(target.recordId))) {
+      const { data } = await db.schema("edu").from("records").select("file_key").eq("id", target.recordId).maybeSingle();
+      key = data?.file_key || null;
+    }
+    if (!key) return [];
+    const ext = await getExtraction(key).catch(() => null);
+    return passagesFromExtraction({ pages: ext?.pages || [], scope, pageNumber });
+  } catch { return []; }
+}
+
 export async function generateToolResult({ userId = null, target, tool, scope = "document", pageNumber = null, pageText = "", values = {}, feature = null }) {
   if (!TOOL_IDS.includes(tool)) return { status: 400, message: `tool must be one of: ${TOOL_IDS.join(", ")}.` };
-  const passages = await gatherToolPassages({ target, scope, pageNumber, pageText, focus: values.focus, search: searchRecordChunks });
+  let passages = await gatherToolPassages({ target, scope, pageNumber, pageText, focus: values.focus, search: searchRecordChunks });
+  if (!passages.length) passages = await extractedPassages({ target, scope, pageNumber });
   if (!passages.length) {
     return { status: 409, message: scope === "page"
       ? "This page has no readable text yet — extract the document's text first."
@@ -188,8 +213,46 @@ async function podcastDeps() {
   return { speakBuffer, putRecordObject };
 }
 
+/**
+ * The read files of one chat, newest upload first — the candidates behind
+ * "this material". The mechanism is the ingest pipeline's own: an ingest row
+ * names its records (record_ids) and, once its read has run, carries what the
+ * read found per file (structure.items, keyed by recordId) — the same rows
+ * chatFilesBrief narrates from. Only files a read actually covered count
+ * (an ingest can hold more files than one read covers), and only records
+ * still live in the learner's Library. → [{ recordId, name, title, subject, topics }]
+ */
+async function chatReadRecords({ userId, conversationId }) {
+  const E = db.schema("edu");
+  const { data: rows } = await E.from("material_ingests")
+    .select("record_ids, structure")
+    .eq("user_id", userId).eq("chat_session_id", conversationId)
+    .neq("state", "undone").not("structure", "is", null)
+    .order("created_at", { ascending: false }).limit(10);
+  const byRecord = new Map();
+  for (const row of rows || []) {
+    const items = Array.isArray(row.structure?.items) ? row.structure.items : [];
+    for (const id of row.record_ids || []) {
+      if (!UUID.test(String(id)) || byRecord.has(id)) continue;
+      const it = items.find((x) => String(x?.recordId) === String(id)) || null;
+      if (!it) continue; // saved in this chat, but no read covered it
+      byRecord.set(id, {
+        recordId: id, itemName: it.name || "", title: it.title || "", subject: it.subject || "",
+        topics: (it.topics || []).map((t) => t?.name).filter(Boolean),
+      });
+    }
+  }
+  if (!byRecord.size) return [];
+  const { data: recs } = await E.from("records").select("id, name")
+    .eq("user_id", userId).is("deleted_at", null).in("id", [...byRecord.keys()]);
+  const liveById = new Map((recs || []).map((r) => [r.id, r]));
+  return [...byRecord.values()].filter((c) => liveById.has(c.recordId))
+    .map((c) => ({ recordId: c.recordId, name: liveById.get(c.recordId).name || c.itemName || "Untitled",
+      title: c.title, subject: c.subject, topics: c.topics }));
+}
+
 /** The learner's document for a request: by id, by name, inside a folder, or by what it says. */
-export async function findStudyRecord({ userId, query = "", folder = "", recordId = null }) {
+export async function findStudyRecord({ userId, query = "", folder = "", recordId = null, conversationId = null, fromChatFile = false }) {
   const E = db.schema("edu");
   const live = (q) => q.eq("user_id", userId).is("deleted_at", null);
   if (recordId && UUID.test(String(recordId))) {
@@ -201,7 +264,7 @@ export async function findStudyRecord({ userId, query = "", folder = "", recordI
   let candidates = null, folderRow = null;
   if (f) {
     const { data: folders } = await E.from("library_folders").select("id, name").eq("user_id", userId)
-      .ilike("name", `%${f.replace(/[%_]/g, "")}%`).limit(3);
+      .ilike("name", `%${escapeLike(f)}%`).limit(3);
     folderRow = (folders || [])[0] || null;
     if (!folderRow) return { error: `No folder called "${f}" in their Library — say so and offer to search all their documents.` };
     // A folder holds its documents as items (item_type 'record'); only the learner's live records count.
@@ -213,21 +276,46 @@ export async function findStudyRecord({ userId, query = "", folder = "", recordI
     if (!candidates.length) return { error: `Their "${folderRow.name}" folder is empty.` };
     if (candidates.length === 1) return { record: candidates[0], folder: folderRow };
   }
+  // "This material": a file they sent in THIS chat. A named folder has
+  // already had its say above; the chat's read files come before any
+  // name/content guessing — and when none has been read, that is the answer:
+  // never fall through and build from a different document.
+  if (fromChatFile && !f && UUID.test(String(conversationId || ""))) {
+    const chat = await chatReadRecords({ userId, conversationId });
+    if (!chat.length) {
+      return { code: "no_chat_file",
+        error: "No file sent in this chat has been read yet — if they just sent it, say it's still being read and ask them to try again in a moment. Don't build from a different document." };
+    }
+    const pick = pickChatRecord(chat, q);
+    if (pick?.needsChoice) return { needsChoice: pick.needsChoice, chat: true };
+    if (pick?.recordId) {
+      const rec = chat.find((c) => c.recordId === pick.recordId);
+      if (rec) return { record: { id: rec.recordId, name: rec.name }, chat: true };
+    }
+  }
   // By name first, then by what is inside (the learner's own records only).
   if (q.length >= 3) {
     const pool = candidates ? new Map(candidates.map((r) => [r.id, r])) : null;
     const byName = (candidates || []).find((r) => r.name?.toLowerCase().includes(q.toLowerCase()));
     if (byName) return { record: byName, folder: folderRow };
     if (!candidates) {
-      const { data: named } = await live(E.from("records").select("id, name")).ilike("name", `%${q.replace(/[%_]/g, "")}%`).limit(1);
+      // Deterministic: the most recently added match wins, never whichever
+      // row the database happens to return first. escapeLike keeps the
+      // query's real characters (the _ in a camera filename) while making
+      // the LIKE wildcards literal.
+      const { data: named } = await live(E.from("records").select("id, name"))
+        .ilike("name", `%${escapeLike(q)}%`).order("created_at", { ascending: false }).limit(1);
       if (named?.[0]) return { record: named[0] };
     }
     const hits = await searchRecordChunks({ userId, q, limit: 20 }).catch(() => []);
-    const score = new Map();
-    for (const h of hits) if (h.recordId && (!pool || pool.has(h.recordId))) score.set(h.recordId, (score.get(h.recordId) || 0) + 1);
-    const best = [...score.entries()].sort((a, b) => b[1] - a[1])[0];
-    if (best) {
-      const rec = pool?.get(best[0]) || (await live(E.from("records").select("id, name").eq("id", best[0])).maybeSingle()).data;
+    const ranked = rankContentHits(hits, {
+      poolIds: pool ? new Set(pool.keys()) : null,
+      names: pool ? new Map([...pool.values()].map((r) => [r.id, r.name])) : null,
+    });
+    const pick = pickContentWinner(ranked);
+    if (pick?.needsChoice) return { needsChoice: pick.needsChoice, folder: folderRow };
+    if (pick?.recordId) {
+      const rec = pool?.get(pick.recordId) || (await live(E.from("records").select("id, name").eq("id", pick.recordId)).maybeSingle()).data;
       if (rec) return { record: rec, folder: folderRow };
     }
   }
@@ -236,22 +324,44 @@ export async function findStudyRecord({ userId, query = "", folder = "", recordI
 }
 
 /** Agent Chat: make the study material and save it as a reader tab. Never throws. */
-export async function makeStudyMaterial({ userId, tool, query = "", folder = "", recordId = null, focus = "", count = "", difficulty = "", length = "", scope = "document", pageNumber = null } = {}) {
+export async function makeStudyMaterial({ userId, tool, query = "", folder = "", recordId = null, focus = "", count = "", difficulty = "", length = "", scope = "document", pageNumber = null, conversationId = null, fromChatFile = false } = {}) {
   try {
     if (!CHAT_STUDY_TOOLS.includes(tool)) return { error: `tool must be one of: ${CHAT_STUDY_TOOLS.join(", ")}.` };
     const docScope = scope === "page" ? "page" : "document";
     const page = Number.isInteger(Number(pageNumber)) && Number(pageNumber) >= 1 ? Number(pageNumber) : null;
     if (docScope === "page" && !page) return { error: "Which page? Say the page number (1-based) for a page-scoped request, or ask for the whole document." };
-    const found = await findStudyRecord({ userId, query, folder, recordId });
-    if (found.error) return { error: found.error };
+    const found = await findStudyRecord({ userId, query, folder, recordId, conversationId, fromChatFile });
+    if (found.error) return { error: found.error, ...(found.code ? { code: found.code } : {}) };
     if (found.needsChoice) {
       return { needsChoice: true, tool, folder: found.folder?.name || null, records: found.needsChoice,
-        note: `Their "${found.folder?.name}" folder has several documents — ask which one (by name) to make the ${tool} from; don't guess.` };
+        note: found.chat
+          ? `More than one file they sent in this chat could be the one — ask which one (by name) to make the ${tool} from; don't guess.`
+          : found.folder
+            ? `Their "${found.folder.name}" folder has several documents — ask which one (by name) to make the ${tool} from; don't guess.`
+            : `More than one of their documents matches almost equally — ask which one (by name) to make the ${tool} from; don't guess.` };
     }
     const { resolveAskTargetFor } = await import("./access.js");
     const target = await resolveAskTargetFor({ userId, recordId: found.record.id });
     if (target.status) return { error: target.message };
     const base = { tool, recordId: found.record.id, name: found.record.name, ...(found.folder ? { folder: found.folder.name } : {}) };
+
+    // An identical rebuild returns the tab that already exists: same
+    // document, same tool, same page, same knobs — no second generation, no
+    // second save. (A podcast still in the making is caught here too; its
+    // in-flight guard inside startPodcast stays as the backstop.)
+    const dup = await listArtifacts({ userId, recordId: found.record.id })
+      .then((arts) => findDuplicateArtifact(arts, {
+        kind: tool, pageNumber: docScope === "page" ? page : null,
+        focus: clean(focus, TOOL_LIMITS.MAX_FOCUS_CHARS), count, difficulty, length,
+      }))
+      .catch(() => null);
+    if (dup) {
+      const items = dup.content?.quizQuestions || dup.content?.cardSet || dup.content?.summaryPoints || [];
+      return { made: true, deduped: true, ...base, artifactId: dup.id, label: LABEL[tool],
+        ...(tool === "podcast" ? { status: dup.content?.podcast?.status || "ready" } : { count: items.length }),
+        scope: docScope === "page" ? `Page ${page}` : "Whole document",
+        href: `/library?record=${found.record.id}&artifact=${dup.id}` };
+    }
 
     if (tool === "podcast") {
       const out = await startPodcast({ userId, target, scope: docScope, pageNumber: page, values: { focus, length }, deps: await podcastDeps() });

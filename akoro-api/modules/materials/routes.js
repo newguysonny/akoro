@@ -35,6 +35,7 @@ import db from "../../db.js";
 import { authenticateToken } from "../auth/routes.js";
 import { openai } from "../../lib/aiModel.js";
 import { getExtraction } from "../records/extractLib.js";
+import { indexRecord } from "../records/searchLib.js";
 import { removeRecordFile } from "../records/lib/storage.js";
 import { cleanStructure, structureChips, structureMessage, structureMessages, structureSchema, STRUCTURE_LIMITS } from "./structureCore.js";
 import { folderItemForCandidate, searchTopics, shapeCandidates, SIMILAR_LIMITS } from "./similarCore.js";
@@ -414,6 +415,27 @@ router.post("/ingest/:id/structure", asyncHandler(async (req, res) => {
     if (msg) {
       message = msg;
       await db.from("chat_sessions").update({ last_message_at: now() }).eq("id", row.chat_session_id).eq("user_id", userId);
+    }
+  }
+  // What was read joins the Library's search index, the way any other upload
+  // does (Stage 1): findable by name and by content, and visible to the study
+  // tools' resolver. Indexing never fails the ingest — indexRecord swallows
+  // its own errors (the sweeper repairs a miss); this guard is the backstop.
+  for (let i = 0; i < records.length; i++) {
+    if (!reads[i]) continue;
+    const record = records[i];
+    try {
+      if (record.kind === "paste") {
+        await indexRecord({ userId, recordId: record.id, name: record.name, pasteText: record.content || "" });
+      } else if (record.file_key) {
+        const pages = await pagesOfRecord(record).catch(() => []);
+        await indexRecord({ userId, recordId: record.id, name: record.name, contentKey: record.file_key,
+          pages: pages.map((p) => ({ pageNumber: p.pageNumber, markdown: p.text })) });
+      } else {
+        await indexRecord({ userId, recordId: record.id, name: record.name });
+      }
+    } catch (e) {
+      console.warn("[materials] indexing failed:", record.id, String(e?.message || e).slice(0, 160));
     }
   }
   res.json({ success: true, data: ingestToApi(row), message });
