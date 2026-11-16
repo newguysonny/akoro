@@ -225,3 +225,61 @@ export function passagesFromExtraction({ pages = [], scope = "document", pageNum
   }
   return samplePassages(new Map(list.map((p) => [p.pageNumber, { markdown: p.markdown || "", blocks: p.blocks || [] }])));
 }
+
+/* ── Source actions (Matt, 2026-11-16) ─────────────────────────────────────
+   make_study_material behaves like a domain tool: ONE tool, and the source
+   is its action — taught (the learner's taught notes) · library (their
+   documents) · discover (free notes in Discover) · upload (a file sent in
+   this chat). For a bare topic ask the model works through the chain in
+   order; every miss names the next source to try, so the cascade the
+   resolver used to run silently now happens as visible tool calls.
+   Upload is explicit intent ("this material") — it is never chained into
+   and never chained out of. */
+export const SOURCE_ACTIONS = Object.freeze(["taught", "library", "discover", "upload"]);
+export const SOURCE_CHAIN = Object.freeze(["taught", "library", "discover"]);
+
+export function nextSource(source) {
+  const i = SOURCE_CHAIN.indexOf(source);
+  return i >= 0 && i < SOURCE_CHAIN.length - 1 ? SOURCE_CHAIN[i + 1] : null;
+}
+
+const MISS_TEXT = Object.freeze({
+  taught: (q) => `Nothing the learner has taught their agent covers "${q}" yet.`,
+  library: (q) => `No document in their Library matches "${q}".`,
+  discover: (q) => `No free notes in Discover match "${q}" either.`,
+  upload: () => "No file sent in this chat has been read yet.",
+});
+
+/** The result of a source action that found nothing: what missed, and the
+ *  next source to try (or, at the end of the chain, the ways forward). */
+export function sourceMiss({ source, query = "" } = {}) {
+  const q = String(query || "").trim().slice(0, 120);
+  const next = nextSource(source);
+  const text = (MISS_TEXT[source] || MISS_TEXT.library)(q);
+  return {
+    error: text, code: "no_match", source,
+    ...(next ? { next } : {}),
+    note: next
+      ? `Don't report failure yet — call make_study_material again with source "${next}" to try the next source.`
+      : "Every source has been tried — tell the learner nothing was found, don't invent material, and offer the ways forward: teach you the topic, or upload the document.",
+  };
+}
+
+/** The Library record a taught build materialises: one per topic. */
+export function taughtRecordName(query = "") {
+  return `Taught notes · ${platformTopicName(query)}`;
+}
+
+/** The taught record's text: the topic as the title, then each taught
+ *  chunk under its own heading (topic — subject), in the order given. */
+export function taughtNotesText({ topic = "", chunks = [] } = {}) {
+  const parts = [`# ${topic}`];
+  for (const c of chunks || []) {
+    const body = String(c?.content || "").trim();
+    if (!body) continue;
+    const head = [c?.topic, c?.subject].map((s) => String(s || "").trim()).filter(Boolean).join(" — ");
+    if (head) parts.push(`## ${head}`);
+    parts.push(body);
+  }
+  return parts.join("\n\n");
+}

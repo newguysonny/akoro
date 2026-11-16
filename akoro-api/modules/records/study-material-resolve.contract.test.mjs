@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { escapeLike, rankContentHits, pickContentWinner, findDuplicateArtifact, passagesFromExtraction, rankChatRecords, pickChatRecord, platformTerms, platformChunkScore, platformHelpfulSet, platformTopicName } from "./studyMaterialCore.js";
+import { escapeLike, rankContentHits, pickContentWinner, findDuplicateArtifact, passagesFromExtraction, rankChatRecords, pickChatRecord, platformTerms, platformChunkScore, platformHelpfulSet, platformTopicName, SOURCE_ACTIONS, SOURCE_CHAIN, nextSource, sourceMiss, taughtRecordName, taughtNotesText } from "./studyMaterialCore.js";
 
 const studyMaterial = await readFile(new URL("./studyMaterial.js", import.meta.url), "utf8");
 const searchLib = await readFile(new URL("./searchLib.js", import.meta.url), "utf8");
@@ -139,7 +139,8 @@ test("chat files: precedence and the no-fall-through rule are wired into the res
   const chatAt = studyMaterial.indexOf("chatReadRecords({ userId, conversationId })");
   const searchAt = studyMaterial.indexOf("searchRecordChunks({ userId, q, limit: 20 })");
   assert.ok(chatAt >= 0 && searchAt > chatAt, "chat resolution runs before the library content search");
-  assert.match(studyMaterial, /if \(fromChatFile && !f && UUID\.test\(String\(conversationId \|\| ""\)\)\)/);
+  assert.match(studyMaterial, /if \(fromChatFile && !f\) return resolveUploadRecord\(\{ userId, query, conversationId \}\)/, "the cascade hands an explicit chat file to the upload resolver, folder first");
+  assert.match(studyMaterial, /UUID\.test\(String\(conversationId \|\| ""\)\)/, "the upload resolver requires the conversation it reads files from");
   // Nothing read in this chat → the coded error; the branch returns there,
   // it cannot drift on into the name/content search below it.
   assert.match(studyMaterial, /code: "no_chat_file"/);
@@ -196,7 +197,8 @@ test("platform tier: wired after the own-Library search, folder-gated, discovery
   const searchAt = studyMaterial.indexOf("searchRecordChunks({ userId, q, limit: 20 })");
   const platAt = studyMaterial.indexOf("await platformFind({ userId, q })");
   assert.ok(searchAt >= 0 && platAt > searchAt, "the platform tier runs only after the own-Library tiers miss");
-  assert.match(studyMaterial, /if \(!candidates && q\.length >= 3\)/, "no folder constraint, a real query");
+  assert.match(studyMaterial, /async function resolveDiscoverRecord/, "discover is its own resolver now");
+  assert.match(studyMaterial, /if \(q\.length < 3\) return null;/, "a real query is required before Discover is searched");
   // The name arm applies the discovery rule itself.
   assert.match(studyMaterial, /\.eq\("private", false\)\.in\("kind", \["upload", "paste"\]\)/);
   assert.match(studyMaterial, /activePremiumUserIds/);
@@ -236,7 +238,8 @@ test("copy-on-use: a platform winner is copied into the learner's Library before
 
 test("platform tier: the agent is told to call the tool for bare topic asks and to name the source", () => {
   assert.match(chat, /bare topic ask like 'create a quiz on properties of matter'/);
-  assert.match(chat, /source 'platform'/);
+  assert.match(chat, /source 'discover'/, "Discover is reached through its source action");
+  assert.match(chat, /free notes in Discover/);
 });
 
 /* ── Gathered content: several helpful free notes → ONE cited text ───────── */
@@ -279,7 +282,7 @@ test("gathered content: several sources become ONE cited text record in the Libr
   assert.match(studyMaterial, /platformNote\?\.sources \? \{ gathered: true, sources:/);
   assert.match(studyMaterial, /brought together \$\{built\.sources\.length\} free notes from Discover/, "the reply is told what the gathered content is");
   // The agent's tool description explains the gathered outcome.
-  assert.match(chat, /writes ONE gathered content from them/);
+  assert.match(chat, /ONE gathered content/, "the agent's tool description explains the gathered outcome");
 });
 
 test("indexing wiring: a chat upload is indexed when its read completes", () => {
@@ -288,4 +291,80 @@ test("indexing wiring: a chat upload is indexed when its read completes", () => 
   const readyAt = materialsRoutes.indexOf('move(row, "ready", { structure', structureAt);
   const indexAt = materialsRoutes.indexOf("indexRecord({", structureAt);
   assert.ok(structureAt >= 0 && readyAt > structureAt && indexAt > readyAt, "indexing runs after the move to ready, inside the structure handler");
+});
+
+/* ── Source actions: one tool, the source is the action ────────────────────
+   taught · library · discover · upload, chained taught → library →
+   discover by guided misses; upload is explicit and final. */
+
+test("source actions: the chain order and the end of the chain", () => {
+  assert.deepEqual([...SOURCE_ACTIONS], ["taught", "library", "discover", "upload"]);
+  assert.deepEqual([...SOURCE_CHAIN], ["taught", "library", "discover"], "upload is never chained into");
+  assert.equal(nextSource("taught"), "library");
+  assert.equal(nextSource("library"), "discover");
+  assert.equal(nextSource("discover"), null, "discover is the last search source");
+  assert.equal(nextSource("upload"), null, "upload never chains onward");
+});
+
+test("source actions: a miss names the next source; the last miss offers the ways forward", () => {
+  const t = sourceMiss({ source: "taught", query: "photosynthesis" });
+  assert.equal(t.code, "no_match");
+  assert.equal(t.next, "library");
+  assert.match(t.error, /taught their agent/);
+  assert.match(t.note, /source "library"/);
+  const l = sourceMiss({ source: "library", query: "photosynthesis" });
+  assert.equal(l.next, "discover");
+  const d = sourceMiss({ source: "discover", query: "photosynthesis" });
+  assert.equal(d.next, undefined, "no next at the end of the chain");
+  assert.match(d.note, /teach you the topic, or upload the document/);
+});
+
+test("taught source: the record name and the notes text assembly", () => {
+  assert.equal(taughtRecordName("properties of matter"), "Taught notes · Properties Of Matter");
+  const text = taughtNotesText({ topic: "Photosynthesis", chunks: [
+    { topic: "Photosynthesis", subject: "Biology", content: "Plants make glucose from sunlight." },
+    { topic: "Chlorophyll", subject: "Biology", content: "  " },
+    { topic: "", subject: "", content: "Loose fact with no heading." },
+  ] });
+  assert.match(text, /^# Photosynthesis/);
+  assert.match(text, /## Photosynthesis — Biology/);
+  assert.match(text, /Plants make glucose from sunlight\./);
+  assert.ok(!text.includes("Chlorophyll"), "a chunk with no content contributes nothing");
+  assert.match(text, /Loose fact with no heading\./, "a headingless chunk still lands as a paragraph");
+});
+
+test("source actions: resolvers, dispatch and the taught materialisation are wired", () => {
+  assert.match(studyMaterial, /async function resolveTaughtRecord/);
+  assert.match(studyMaterial, /async function resolveLibraryRecord/);
+  assert.match(studyMaterial, /async function resolveDiscoverRecord/);
+  assert.match(studyMaterial, /async function resolveUploadRecord/);
+  // The taught source reads the agent's own knowledge chunks, owner-scoped
+  // through the learner's agent row.
+  assert.match(studyMaterial, /from\("student_agents"\)\.select\("id"\)\.eq\("student_id", userId\)/);
+  assert.match(studyMaterial, /from\("agent_knowledge"\)/);
+  assert.match(studyMaterial, /\.eq\("agent_id", agent\.id\)/);
+  // …and materialises them as ONE private Library record per topic.
+  assert.match(studyMaterial, /async function materialiseTaughtRecord/);
+  assert.match(studyMaterial, /taughtRecordName\(query\)/);
+  // Dispatch: an explicit action runs only its resolver; a miss is the
+  // guided chain step; no action keeps the one-call cascade.
+  assert.match(studyMaterial, /SOURCE_ACTIONS\.includes\(source\)/);
+  assert.match(studyMaterial, /if \(act && !found\) return sourceMiss\(\{ source: act, query \}\)/);
+  assert.match(studyMaterial, /findStudyRecord\(\{ userId, query, folder, recordId, conversationId, fromChatFile \}\)/);
+  // A taught build says where it came from, like the platform note does.
+  assert.match(studyMaterial, /source: "taught"/);
+  assert.match(studyMaterial, /built from what the learner taught their agent/);
+  // The cascade itself walks the same chain: taught before library before discover.
+  const cascade = studyMaterial.slice(studyMaterial.indexOf("export async function findStudyRecord"));
+  const tAt = cascade.indexOf("resolveTaughtRecord({ userId, query })");
+  const lAt = cascade.indexOf("resolveLibraryRecord({ userId, query, folder: \"\"", tAt);
+  const dAt = cascade.indexOf("resolveDiscoverRecord({ userId, query })", lAt);
+  assert.ok(tAt >= 0 && lAt > tAt && dAt > lAt, "taught → library → discover inside the cascade");
+});
+
+test("source actions: the tool definition teaches the order and the chaining rule", () => {
+  assert.match(chat, /source: \{ type: "string", enum: \["taught", "library", "discover", "upload"\]/);
+  assert.match(chat, /work through them in this order/);
+  assert.match(chat, /call again with source set to it/, "a `next` field means: call again with that source");
+  assert.match(chat, /source: input\?\.source \|\| null/, "the handler hands the action through");
 });

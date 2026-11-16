@@ -8,16 +8,18 @@
  *       → { artifact } (status "making"; the episode is finished in the background) | { status, message }
  *   toReaderContent(tool, result)   the tab content the reader shows (its citation shape)
  *   makeStudyMaterial({ userId, tool, query, folder, focus, count, difficulty, length,
- *                       conversationId, fromChatFile })
- *       Agent Chat: find the learner's document (or the best one in a folder,
- *       or — fromChatFile — a file they sent in this chat), build the tool
- *       from the WHOLE document, save it as a reader tab. When their Library
- *       has nothing, the platform tier looks in Discover's free notes: one
- *       winner is first copied into their Library (the result then carries
- *       source: "platform" + the source's name and owner); several that
- *       would help are written into ONE gathered content — a single cited
- *       text saved in the Library — and the build reads that (the result
- *       carries the gathered content's name + every source) →
+ *                       conversationId, fromChatFile, source })
+ *       Agent Chat: build the tool from the WHOLE document, save it as a
+ *       reader tab. WHERE it comes from is the source action (like a domain
+ *       tool's actions): "taught" (the learner's taught notes, materialised
+ *       as a Library record), "library" (their documents — or the best one
+ *       in a named folder), "discover" (Discover's free notes: one winner is
+ *       first copied into their Library, several that would help become ONE
+ *       gathered content), "upload" (a file they sent in this chat). An
+ *       explicit action runs only its resolver; a miss returns
+ *       { code: "no_match", next } naming the next source to try. No source
+ *       runs the whole cascade in one call (taught → library → discover).
+ *       The result carries the winning source →
  *       { made, tool, recordId, artifactId, name, href, count } | { needsChoice } | { error }
  *
  * Whatever chat makes is the same saved item the reader makes (edu.record_artifacts),
@@ -28,7 +30,7 @@ import { openai } from "../../lib/aiModel.js";
 import { TOOL_IDS, TOOL_LIMITS, toolSchema, toolCount, buildToolMessages, shapeToolResult, gatherToolPassages, citeOf, pagePassages } from "./toolsLib.js";
 import { searchRecordChunks, searchPlatformChunks, indexRecord } from "./searchLib.js";
 import { getExtraction } from "./extractLib.js";
-import { escapeLike, rankContentHits, pickContentWinner, findDuplicateArtifact, passagesFromExtraction, pickChatRecord, platformTerms, platformChunkScore, platformHelpfulSet, platformTopicName } from "./studyMaterialCore.js";
+import { escapeLike, rankContentHits, pickContentWinner, findDuplicateArtifact, passagesFromExtraction, pickChatRecord, platformTerms, platformChunkScore, platformHelpfulSet, platformTopicName, SOURCE_ACTIONS, sourceMiss, taughtRecordName, taughtNotesText } from "./studyMaterialCore.js";
 import { createArtifact, listArtifacts, updateArtifact } from "./artifactsLib.js";
 import { PODCAST_LIMITS, lengthOf, podcastSchema, podcastInFlight, runPodcastJob } from "./podcastLib.js";
 import { coinsAvailable, debitCoins } from "../../lib/coins.js";
@@ -508,8 +510,110 @@ async function buildGatheredContent({ userId, query, sources }) {
   return { record, sources: citations };
 }
 
-/** The learner's document for a request: by id, by name, inside a folder, or by what it says. */
-export async function findStudyRecord({ userId, query = "", folder = "", recordId = null, conversationId = null, fromChatFile = false }) {
+/* ── The taught source (agent knowledge) ───────────────────────────────────
+   What the learner taught their agent lives in edu.agent_knowledge as
+   chunks (topic, subject, content, confidence) under their agent's row in
+   edu.student_agents. A taught build materialises the matching chunks as
+   ONE Library record — "Taught notes · <Topic>", a private paste — and
+   generates from it like from any document, so the artifact, its card and
+   its dedupe all hang off a record the learner owns and can open. The
+   record is kept current: when the taught chunks change, its text is
+   rewritten in place rather than duplicated. */
+
+async function taughtFind({ userId, q }) {
+  const terms = platformTerms(q);
+  if (!terms.length) return null;
+  const E = db.schema("edu");
+  const { data: agent } = await E.from("student_agents").select("id").eq("student_id", userId).maybeSingle();
+  if (!agent?.id) return null;
+  const ors = terms.flatMap((t) => {
+    const p = `%${escapeLike(t)}%`;
+    return [`topic.ilike.${p}`, `subject.ilike.${p}`, `content.ilike.${p}`];
+  }).join(",");
+  const { data: rows } = await E.from("agent_knowledge")
+    .select("topic, subject, content, confidence")
+    .eq("agent_id", agent.id).not("content", "is", null)
+    .or(ors).order("confidence", { ascending: false }).limit(12);
+  const ql = String(q || "").toLowerCase();
+  const topicHit = (c) => {
+    const t = String(c.topic || "").toLowerCase().trim();
+    return t.length >= 3 && (t.includes(ql) || ql.includes(t));
+  };
+  const kept = (rows || [])
+    .filter((r) => String(r.content || "").trim())
+    .map((c) => ({ ...c, score: platformChunkScore(`${c.topic || ""} ${c.content || ""}`, terms), hit: topicHit(c) }))
+    .filter((c) => c.hit || c.score >= 0.5)
+    .sort((a, b) => b.score - a.score).slice(0, 8);
+  return kept.length ? { chunks: kept } : null;
+}
+
+async function materialiseTaughtRecord({ userId, query, chunks }) {
+  const E = db.schema("edu");
+  const name = taughtRecordName(query);
+  const text = taughtNotesText({ topic: platformTopicName(query), chunks });
+  const { data: existing } = await E.from("records").select("id, name, content")
+    .eq("user_id", userId).eq("kind", "paste").eq("name", name).is("deleted_at", null)
+    .order("created_at", { ascending: true }).limit(1);
+  if (existing?.[0]) {
+    if (existing[0].content === text) return { record: { id: existing[0].id, name } };
+    const { error } = await E.from("records").update({ content: text, size: text.length }).eq("id", existing[0].id);
+    if (error) return { error: "Couldn't refresh their taught notes — try again in a moment." };
+    void indexRecord({ userId, recordId: existing[0].id, name, pasteText: text });
+    return { record: { id: existing[0].id, name } };
+  }
+  const { count } = await E.from("records").select("id", { count: "exact", head: true })
+    .eq("user_id", userId).is("deleted_at", null);
+  if ((count || 0) >= 200) return { error: "Their Library shelf is full (200) — ask them to remove something before saving their taught notes." };
+  const { data: record, error } = await E.from("records").insert({
+    user_id: userId, kind: "paste", name, content: text, size: text.length, private: true,
+  }).select("id, name").single();
+  if (error || !record) return { error: "Couldn't save their taught notes — try again in a moment." };
+  void indexRecord({ userId, recordId: record.id, name, pasteText: text });
+  return { record };
+}
+
+async function resolveTaughtRecord({ userId, query = "" }) {
+  const q = String(query || "").trim().slice(0, 200);
+  if (q.length < 3) return null;
+  const found = await taughtFind({ userId, q }).catch(() => null);
+  if (!found) return null;
+  const built = await materialiseTaughtRecord({ userId, query: q, chunks: found.chunks });
+  if (built.error) return { error: built.error };
+  return { record: built.record, taught: { topics: found.chunks.map((c) => c.topic).filter(Boolean) } };
+}
+
+/* ── The source resolvers ──────────────────────────────────────────────────
+   One per source action. Each returns a resolution ({ record, … }), a
+   needsChoice, an { error } for the cases that are answers in themselves
+   (a named folder that doesn't exist, a chat file not read yet), or null
+   for a plain miss — the caller turns a miss into the guided next step. */
+
+/** upload: a file they sent in THIS chat, already read. Never substitutes
+ *  another document — no read file is the answer, not a miss. */
+async function resolveUploadRecord({ userId, query = "", conversationId = null }) {
+  const q = String(query || "").trim().slice(0, 200);
+  if (!UUID.test(String(conversationId || ""))) {
+    return { code: "no_chat_file",
+      error: "No file was sent in this chat to build from — ask them to attach it here, or to name a document or a topic instead. Don't build from a different document." };
+  }
+  const chat = await chatReadRecords({ userId, conversationId });
+  if (!chat.length) {
+    return { code: "no_chat_file",
+      error: "No file sent in this chat has been read yet — if they just sent it, say it's still being read and ask them to try again in a moment. Don't build from a different document." };
+  }
+  const pick = pickChatRecord(chat, q);
+  if (pick?.needsChoice) return { needsChoice: pick.needsChoice, chat: true };
+  if (pick?.recordId) {
+    const rec = chat.find((c) => c.recordId === pick.recordId);
+    if (rec) return { record: { id: rec.recordId, name: rec.name }, chat: true };
+  }
+  return { code: "no_chat_file",
+    error: "No file sent in this chat has been read yet — if they just sent it, say it's still being read and ask them to try again in a moment. Don't build from a different document." };
+}
+
+/** library: the learner's own documents — by id, inside a named folder,
+ *  by name, or by what they say. */
+async function resolveLibraryRecord({ userId, query = "", folder = "", recordId = null }) {
   const E = db.schema("edu");
   const live = (q) => q.eq("user_id", userId).is("deleted_at", null);
   if (recordId && UUID.test(String(recordId))) {
@@ -532,23 +636,6 @@ export async function findStudyRecord({ userId, query = "", folder = "", recordI
     candidates = data || [];
     if (!candidates.length) return { error: `Their "${folderRow.name}" folder is empty.` };
     if (candidates.length === 1) return { record: candidates[0], folder: folderRow };
-  }
-  // "This material": a file they sent in THIS chat. A named folder has
-  // already had its say above; the chat's read files come before any
-  // name/content guessing — and when none has been read, that is the answer:
-  // never fall through and build from a different document.
-  if (fromChatFile && !f && UUID.test(String(conversationId || ""))) {
-    const chat = await chatReadRecords({ userId, conversationId });
-    if (!chat.length) {
-      return { code: "no_chat_file",
-        error: "No file sent in this chat has been read yet — if they just sent it, say it's still being read and ask them to try again in a moment. Don't build from a different document." };
-    }
-    const pick = pickChatRecord(chat, q);
-    if (pick?.needsChoice) return { needsChoice: pick.needsChoice, chat: true };
-    if (pick?.recordId) {
-      const rec = chat.find((c) => c.recordId === pick.recordId);
-      if (rec) return { record: { id: rec.recordId, name: rec.name }, chat: true };
-    }
   }
   // By name first, then by what is inside (the learner's own records only).
   if (q.length >= 3) {
@@ -576,37 +663,69 @@ export async function findStudyRecord({ userId, query = "", folder = "", recordI
       if (rec) return { record: rec, folder: folderRow };
     }
   }
-  // The platform tier: their own Library has nothing (and no folder was
-  // named — a folder ask stays in the folder), so look in Discover's free
-  // notes before giving up. An explicit chat-file ask never reaches here:
-  // the fromChatFile branch above has already answered for it.
-  if (!candidates && q.length >= 3) {
-    const plat = await platformFind({ userId, q }).catch(() => null);
-    if (plat?.records?.length) return { records: plat.records, platform: true };
-    if (plat?.record) return { record: plat.record, platform: plat.platform };
-  }
   if (candidates) return { needsChoice: candidates.slice(0, 6).map((r) => ({ recordId: r.id, name: r.name })), folder: folderRow };
+  return null;
+}
+
+/** discover: the community's free notes (the platform tier). */
+async function resolveDiscoverRecord({ userId, query = "" }) {
+  const q = String(query || "").trim().slice(0, 200);
+  if (q.length < 3) return null;
+  const plat = await platformFind({ userId, q }).catch(() => null);
+  if (plat?.records?.length) return { records: plat.records, platform: true };
+  if (plat?.record) return { record: plat.record, platform: plat.platform };
+  return null;
+}
+
+/**
+ * The no-source cascade, kept as one call: a named folder or an explicit
+ * chat file answers first (their errors are answers, not misses), then the
+ * chain in order — taught → library → discover. makeStudyMaterial prefers
+ * the per-source actions; this serves callers that pass no source.
+ */
+export async function findStudyRecord({ userId, query = "", folder = "", recordId = null, conversationId = null, fromChatFile = false }) {
+  const f = String(folder || "").trim();
+  if (recordId || f) {
+    const r = await resolveLibraryRecord({ userId, query, folder, recordId });
+    if (r) return r;
+  }
+  if (fromChatFile && !f) return resolveUploadRecord({ userId, query, conversationId });
+  const taught = await resolveTaughtRecord({ userId, query });
+  if (taught) return taught;
+  const library = await resolveLibraryRecord({ userId, query, folder: "", recordId: null });
+  if (library) return library;
+  const discover = await resolveDiscoverRecord({ userId, query });
+  if (discover) return discover;
   return { error: "Nothing in their Library matches, and no free notes in Discover match either — say so; don't invent a document. Offer the ways forward: teach you the topic, or upload the document." };
 }
 
 /** Agent Chat: make the study material and save it as a reader tab. Never throws. */
-export async function makeStudyMaterial({ userId, tool, query = "", folder = "", recordId = null, focus = "", count = "", difficulty = "", length = "", scope = "document", pageNumber = null, conversationId = null, fromChatFile = false } = {}) {
+export async function makeStudyMaterial({ userId, tool, query = "", folder = "", recordId = null, focus = "", count = "", difficulty = "", length = "", scope = "document", pageNumber = null, conversationId = null, fromChatFile = false, source = null } = {}) {
   try {
     if (!CHAT_STUDY_TOOLS.includes(tool)) return { error: `tool must be one of: ${CHAT_STUDY_TOOLS.join(", ")}.` };
     const docScope = scope === "page" ? "page" : "document";
     const page = Number.isInteger(Number(pageNumber)) && Number(pageNumber) >= 1 ? Number(pageNumber) : null;
     if (docScope === "page" && !page) return { error: "Which page? Say the page number (1-based) for a page-scoped request, or ask for the whole document." };
-    const found = await findStudyRecord({ userId, query, folder, recordId, conversationId, fromChatFile });
+    // The source action (Matt, 2026-11-16): one tool, the source is the
+    // action — like a domain tool. An explicit action runs ONLY its
+    // resolver, and a miss answers with the next source to try (guided
+    // chaining); no action keeps the full cascade as one call.
+    const act = SOURCE_ACTIONS.includes(source) ? source : (fromChatFile ? "upload" : null);
+    let found = null;
+    if (act === "taught") found = await resolveTaughtRecord({ userId, query });
+    else if (act === "library") found = await resolveLibraryRecord({ userId, query, folder, recordId });
+    else if (act === "discover") found = await resolveDiscoverRecord({ userId, query });
+    else if (act === "upload") found = await resolveUploadRecord({ userId, query, conversationId });
+    else found = await findStudyRecord({ userId, query, folder, recordId, conversationId, fromChatFile });
+    if (act && !found) return sourceMiss({ source: act, query });
     if (found.error) return { error: found.error, ...(found.code ? { code: found.code } : {}) };
     if (found.needsChoice) {
       return { needsChoice: true, tool, folder: found.folder?.name || null, records: found.needsChoice,
         note: found.chat
           ? `More than one file they sent in this chat could be the one — ask which one (by name) to make the ${tool} from; don't guess.`
-          : found.platform
-            ? `More than one free note in Discover matches almost equally — ask which one to make the ${tool} from; they're listed with their owners' names, so ask by name and owner; don't guess.`
-            : found.folder
-              ? `Their "${found.folder.name}" folder has several documents — ask which one (by name) to make the ${tool} from; don't guess.`
-              : `More than one of their documents matches almost equally — ask which one (by name) to make the ${tool} from; don't guess.` };
+          : found.folder
+            ? `Their "${found.folder.name}" folder has several documents — ask which one (by name) to make the ${tool} from; don't guess.`
+            : `More than one of their documents matches almost equally — ask which one (by name) to make the ${tool} from; don't guess.` };
     }
     // Platform tier: the source is other learners' free notes. A single
     // winner is copied into the learner's Library first; several that would
@@ -635,13 +754,16 @@ export async function makeStudyMaterial({ userId, tool, query = "", folder = "",
     const { resolveAskTargetFor } = await import("./access.js");
     const target = await resolveAskTargetFor({ userId, recordId: found.record.id });
     if (target.status) return { error: target.message };
+    const taughtNote = found.taught ? { source: "taught",
+      note: `This was built from what the learner taught their agent — their taught notes on the topic, saved in their Library as "${found.record.name}". Say so in your reply: it comes from their own teaching.` } : null;
     const base = { tool, recordId: found.record.id,
       // A platform build carries its provenance in the name the result
       // reports: the card title is built from it ("Quiz · Free notes in
       // Discover · <name>") and the model reads it too. The Library record
       // itself keeps its real name.
       name: platformNote ? `Free notes in Discover · ${found.record.name}` : found.record.name,
-      ...(found.folder ? { folder: found.folder.name } : {}), ...(platformNote || {}) };
+      ...(found.folder ? { folder: found.folder.name } : {}),
+      ...(platformNote || taughtNote || { source: found.chat ? "chat" : "library" }) };
 
     // An identical rebuild returns the tab that already exists: same
     // document, same tool, same page, same knobs — no second generation, no
