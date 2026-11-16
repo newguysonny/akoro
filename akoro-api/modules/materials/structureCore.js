@@ -182,13 +182,17 @@ export function recurringTopics(rows) {
 }
 
 /**
- * The line that opens the post-back when reading changed where it's filed
- * (code-written, like the rest): moved to another folder, two folders to
- * choose from, or the subject still unknown. "" when nothing changed.
+ * The line that opens the post-back saying where the read filed it
+ * (code-written, like the rest): filed into its folder (Stage 4: the first
+ * and only filing), moved off a fallback folder, two folders to choose
+ * from, or the subject still unknown. "" when it isn't filed anywhere yet.
  */
 export function filingSentence({ names = [], title = null, subject = null, folder = null, filing = {}, summary = null }) {
   const one = names.length <= 1;
   const what = one ? `**${clip(names[0] || "This file", 120)}**` : `These ${names.length} files`;
+  if (filing.filed && folder && !filing.movedFrom) {
+    return `${what} ${one ? "is" : "are"} filed in **${clip(folder, 100)}**.`;
+  }
   if (filing.movedFrom && folder) {
     const is = title ? `is **${clip(title, 120)}**` : subject ? `turned out to be ${clip(subject, 50)}` : "belongs elsewhere";
     return `${what} ${one ? is : is.replace(/^is /, "are ")}, so I've moved ${one ? "it" : "them"} to **${clip(folder, 100)}**.`;

@@ -5,12 +5,16 @@
  * model call, no clock (`at` is passed in). Every line is written by code
  * from what the step really returned, so it costs nothing and never invents.
  *
- *   sortSteps()     the files sorted (subject + kind each)
- *   folderSteps()   where each group goes: a folder they have, a new one, two to pick from, or none yet
- *   filedSteps()    the files put in their folder (+ Undo, once per message)
+ *   receivedSteps() the upload received — nothing guessed from its names (Stage 4)
+ *   savedSteps()    the files saved to the Library; filing waits for the read
+ *   filedSteps()    the files put in their folder, written at the read when the filing is real (+ Undo, once per message)
  *   readSteps()     each file read into topics (+ a past paper's questions); a move after reading
  *   similarSteps()  Akoro material on its topics
  *   appendSteps()   merged in, by id, the newest STEP_LIMIT kept
+ *
+ *   sortSteps() / folderSteps() narrated the retired name-guess sort (the
+ *   classify call Stage 4 took off the send path); kept under test, no
+ *   longer written by the routes.
  */
 import { kindLabel } from "./ingestCore.js";
 
@@ -64,6 +68,27 @@ export function folderSteps({ batchId, groups = [], ms = null, at = null }) {
     toolStep(`folders:${batchId}`, "material.folders", "Checking your folders", { result: found.join(" · "), ms, at }),
     messageStep(`folders:${batchId}:say`, text ? `${text.charAt(0).toUpperCase()}${text.slice(1)}.` : "", { at }),
   ].filter((s) => s.type !== "message" || s.text);
+}
+
+/**
+ * The upload received (Stage 4): no sorting is claimed — the folder is
+ * decided from the read, after Send. count: the message's files.
+ */
+export function receivedSteps({ batchId, count = 1, at = null }) {
+  return [
+    toolStep(`received:${batchId}`, "material.file", count === 1 ? "Saving your file" : "Saving your files", { at }),
+    messageStep(`received:${batchId}:say`, count === 1
+      ? "Got it — I'll read it first, then file it in your Library where it belongs."
+      : "Got them — I'll read them first, then file them in your Library where they belong.", { at }),
+  ];
+}
+
+/** The files saved to the Library at /records time — in the Library, not yet in a folder. */
+export function savedSteps({ ingestId, first = false, at = null }) {
+  return [
+    toolStep(`saved:${ingestId}`, "material.file", "Saving to your Library", { at }),
+    ...(first ? [messageStep(`saved:${ingestId}:say`, "Saved to your Library. Now I'll read it and file it where it belongs.", { at })] : []),
+  ];
 }
 
 /** The files put in their folder. first: this upload holds the message's first file (Undo is said once). */

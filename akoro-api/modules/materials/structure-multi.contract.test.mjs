@@ -10,7 +10,9 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 const routes = readFileSync(new URL("./routes.js", import.meta.url), "utf8");
-const structure = routes.slice(routes.indexOf('router.post("/ingest/:id/structure"'), routes.indexOf('router.post("/ingest/:id/structure"') + 6000);
+// Scoped to the whole structure handler (it outgrew the old fixed 6000-char
+// window when Stage 4's filing block landed in it); the assertions are unchanged.
+const structure = routes.slice(routes.indexOf('router.post("/ingest/:id/structure"'), routes.indexOf("async function findSimilar"));
 
 test("every file the upload can hold is read", () => {
   assert.match(routes, /const STRUCTURE_FILES = INGEST_LIMITS\.FILES;/);

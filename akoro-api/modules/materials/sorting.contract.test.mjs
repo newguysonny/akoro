@@ -74,7 +74,9 @@ test("each file sorted by its own name; the learner's words only fill in what a 
   assert.equal(shapeClassification("not json", names, "").length, 3, "a broken answer still gives every file a guess");
 });
 
-test("the post-back says where it went: moved, which folder, or which subject", () => {
+test("the post-back says where it went: filed, moved, which folder, or which subject", () => {
+  assert.equal(filingSentence({ names: ["a.pdf"], folder: "Biology — Notes", filing: { filed: true } }),
+    "**a.pdf** is filed in **Biology — Notes**.", "Stage 4: the first filing is said plainly — it was never anywhere else");
   assert.equal(filingSentence({ names: ["scan_001.jpg"], title: "NECO Physics 2020", folder: "Physics — Past papers", filing: { movedFrom: UNSORTED_FOLDER } }),
     "**scan_001.jpg** is **NECO Physics 2020**, so I've moved it to **Physics — Past papers**.");
   assert.match(filingSentence({ names: ["scan_002.jpg"], summary: "About soil and crop rotation.", filing: { needsSubject: true } }), /Which subject is it\?/);
@@ -82,14 +84,17 @@ test("the post-back says where it went: moved, which folder, or which subject", 
   assert.equal(filingSentence({ names: ["a.pdf"], filing: {} }), "");
 });
 
-test("wiring: one upload per folder, a batch id, the choices and subjects answered, moved after reading", () => {
-  assert.match(routes, /const where = await resolveFolder\(userId, \{ subject: g\.subject, kind: g\.kind \}, ctx\)/);
-  assert.match(routes, /batch_id: batchId/);
-  assert.match(routes, /ingests: made\.map\(ingestToApi\), batchId/);
+test("wiring: one upload per message, a batch id, filed once at the read; the choices and subjects answered", () => {
+  // Stage 4: create starts the upload UNFILED (no classify, no folder) — the
+  // folder is resolved once, at /structure, from the READ subject.
+  const create = routes.slice(routes.indexOf('router.post("/ingest"'), routes.indexOf('router.post("/ingest/:id/records"'));
+  assert.doesNotMatch(create, /resolveFolder|classify\(|folderContext/, "nothing is guessed or filed at create");
+  assert.match(create, /batch_id: batchId/);
+  assert.match(create, /ingests: \[ingestToApi\(row\)\], batchId/, "one ingest for the message's files");
+  assert.match(routes, /const where = await resolveFolder\(userId, \{ subject, kind \}, await folderContext\(userId\)\)/, "resolved at the read, from the read");
   assert.match(routes, /router\.post\("\/ingest\/:id\/folder"/);
   assert.match(routes, /from\("material_folder_defaults"\)\.upsert/, "a choice is remembered");
   assert.match(routes, /router\.post\("\/ingest\/:id\/subject"/);
-  assert.match(routes, /filing = \{ movedFrom: row\.folder_name \|\| null, choices: null \}/);
   assert.match(routes, /needsSubject: true, subjectOptions/);
   assert.match(routes, /router\.get\("\/chat\/:chatId"/);
 });

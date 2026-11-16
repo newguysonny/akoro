@@ -5414,14 +5414,14 @@ router.post("/agent", async (req, res) => {
         : Promise.resolve(null),
     ]);
     // Messages from other learners' agents waiting for this one.
-    // Files this turn is saving to the Library (§7.17, D51): the reply says where, in one clause.
+    // Files this turn is saving to the Library (§7.17, D51): the reply says so, in one clause — never where (Stage 4: the read decides that later).
     // (A query builder is a thenable, not a promise: no .catch on it — await it inside try.)
     // One message's files can be sorted into several uploads (one per folder): ingestIds, or the older ingestId.
     const ingestIds = [...new Set([...(Array.isArray(req.body?.ingestIds) ? req.body.ingestIds : []), req.body?.ingestId].map(String))]
       .filter((x) => /^[0-9a-f-]{36}$/i.test(x)).slice(0, 5);
     const ingestsP = role === "student" && ingestIds.length ? (async () => {
       try {
-        const { data } = await db.schema("edu").from("material_ingests").select("id, folder_name, doc_kind, state, filing")
+        const { data } = await db.schema("edu").from("material_ingests").select("id, state")
           .eq("user_id", req.user.id).in("id", ingestIds);
         return ingestIds.map((id) => (data || []).find((r) => r.id === id)).filter(Boolean);
       } catch { return []; }
@@ -5501,9 +5501,11 @@ router.post("/agent", async (req, res) => {
       }
     };
     const live = ingests.filter((r) => r.state !== "undone");
-    const where = live.map((r) => (r.folder_name ? `"${r.folder_name}"` : r.filing?.choices?.length ? "a folder they'll pick on the card" : null)).filter(Boolean);
+    // Stage 4: the folder is decided from the read, after this turn — the reply
+    // must not name one or claim the filing is done. The server's completion
+    // message (posted when the read files it) is the single filing report.
     const ingestCtx = live.length
-      ? `\n\n## The learner's upload\nThe file(s) they attached are being saved to their Library${where.length ? ` — ${[...new Set(where)].join(", ")}` : ""} (private to them) and read in the background; each folder's card shows its files with an Undo. Say so in one short clause — don't repeat the cards' details or any ids. Answer from what you can read now; if the file isn't readable yet, say you'll be able to work on it once it's read.`
+      ? `\n\n## The learner's upload\nThe file(s) they attached are being saved to their Library (private to them) and read in the background; the upload's card shows its files with an Undo. Say so in one short clause — don't name a folder (it isn't decided yet) and don't repeat the card's details or any ids. Answer from what you can read now; if the file isn't readable yet, say you'll be able to work on it once it's read.`
       : "";
     // The files already in this chat and what their reads found: chatFilesCtx (above).
 

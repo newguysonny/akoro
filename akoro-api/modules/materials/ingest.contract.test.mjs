@@ -48,7 +48,8 @@ test("Undo takes out exactly what the upload made, into Recently deleted (restor
   assert.match(undo, /row\.folder_id && row\.folder_created/, "a folder is removed only if this upload made it");
   assert.match(undo, /if \(!count\)/, "…and only when it is empty");
   assert.match(routes, /assertTransition\(ingestWorkflow, row\.state, to\)/, "every move is checked against the definition");
-  assert.match(routes, /__payer: "platform", __feature: "material_ingest"/);
+  // (The platform classify call this test also pinned is gone: Stage 4 took it
+  // off the send path — file-once.contract.test.mjs pins its absence.)
 });
 
 test("wiring: mounted, migrated after its folders, the chat turn carries the upload card", () => {

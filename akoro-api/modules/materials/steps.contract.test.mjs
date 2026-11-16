@@ -5,7 +5,7 @@ import test from "node:test";
  * An upload's steps in the chat (2026-10-19): a tool row and a short message
  * per step, written by code from what each step returned — never invented.
  */
-import { appendSteps, describeFile, filedSteps, folderSteps, readResult, readSteps, similarSteps, sortSteps, STEP_LIMIT } from "./stepsCore.js";
+import { appendSteps, describeFile, filedSteps, folderSteps, readResult, readSteps, receivedSteps, savedSteps, similarSteps, sortSteps, STEP_LIMIT } from "./stepsCore.js";
 
 test("sorting: what each file is, then what happens next", () => {
   const [row, say] = sortSteps({ batchId: "b1", ms: 1400, files: [{ subject: "Biology", kind: "past_paper" }, { subject: "Biology", kind: "notes" }] });
@@ -46,6 +46,18 @@ test("similar: what was found, or that nothing matches", () => {
   assert.equal(row.result, "2 courses · 1 blog post");
   assert.match(say.text, /3 pieces on Akoro/);
   assert.match(similarSteps({ ingestId: "i2", candidates: [] })[1].text, /Nothing on Akoro matches/);
+});
+
+test("received + saved (Stage 4): nothing is sorted or filed until the read", () => {
+  const [row, say] = receivedSteps({ batchId: "b1", count: 2 });
+  assert.equal(row.headline, "Saving your files");
+  assert.match(say.text, /read them first, then file them/, "the folder is not named — it isn't decided yet");
+  assert.equal(receivedSteps({ batchId: "b1", count: 1 })[0].headline, "Saving your file");
+  const saved = savedSteps({ ingestId: "i1", first: true });
+  assert.equal(saved.length, 2);
+  assert.equal(saved[0].headline, "Saving to your Library");
+  assert.match(saved[1].text, /file it where it belongs/);
+  assert.equal(savedSteps({ ingestId: "i1", first: false }).length, 1, "the say is once per message");
 });
 
 test("steps merge by id and stay bounded", () => {

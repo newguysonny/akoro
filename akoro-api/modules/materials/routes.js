@@ -4,13 +4,15 @@
  * their Library, in a folder the protégé picks or creates.
  *
  *   POST /api/agent/materials/ingest                { names, ask, chatSessionId?, replaces? }
- *        → each file classified; one ingest per folder (folderMatch.js: the learner's
- *          own folder for the subject first, a new one only when none fits) → { data, ingests, batchId }
+ *        → one ingest for the message's files, UNFILED: no folder, subject or kind
+ *          until it is read (Stage 4 — nothing is guessed from file names) → { data, ingests, batchId }
  *   POST /api/agent/materials/ingest/:id/records    { recordIds }
- *        → the uploaded records go into the folder → filed
+ *        → the uploaded records are the upload's, marked private; filing waits for the read
  *   POST /api/agent/materials/ingest/:id/progress   { state: extracting|ready|failed, pages?, error? }
  *   POST /api/agent/materials/ingest/:id/structure  → reads it: topics (+ a past paper's questions,
- *        private, D53), posts what it found into the chat → ready
+ *        private, D53), then files it ONCE from the read (folderMatch.js: the learner's
+ *        own folder for the subject first, a new one only when none fits; no subject
+ *        → "From chat — Unsorted" and the card asks), posts what it found into the chat → ready
  *   POST /api/agent/materials/ingest/:id/similar    → Akoro material on its topics (D52) → offering_more
  *   POST /api/agent/materials/ingest/:id/similar/add { keys } → the chosen ones into the folder → ready
  *   POST /api/agent/materials/ingest/:id/similar/dismiss      → "Not now" → ready
@@ -42,11 +44,11 @@ import { folderItemForCandidate, searchTopics, shapeCandidates, SIMILAR_LIMITS }
 import { searchBlogPosts } from "../adaptive-learning/blogResearch.js";
 import { assertTransition, TransitionError } from "../workflows/definition.js";
 import {
-  INGEST_LIMITS, RESTORE_DAYS, ingestWorkflow, classifyMessages, classifySchema, folderItemFor, guessFile, ingestToApi, shapeClassification,
+  INGEST_LIMITS, RESTORE_DAYS, ingestWorkflow, folderItemFor, ingestToApi,
 } from "./ingestCore.js";
 import { pickFolder, subjectKey, subjectLabel, UNSORTED_FOLDER } from "./folderMatch.js";
 import { filingSentence } from "./structureCore.js";
-import { appendSteps, filedSteps, folderSteps, messageStep, readSteps, similarSteps, sortSteps, toolStep } from "./stepsCore.js";
+import { appendSteps, filedSteps, messageStep, readSteps, receivedSteps, savedSteps, similarSteps, toolStep } from "./stepsCore.js";
 
 const router = Router();
 router.use(authenticateToken);
@@ -70,21 +72,6 @@ async function move(row, to, patch = {}) {
   if (error) throw error;
   if (!data) throw new TransitionError("The upload changed meanwhile — refresh and try again.", { from: row.state, to });
   return data;
-}
-
-/** Classify each file from its name + the learner's words: one small capped call, the platform's (D46); guesses if it fails. */
-async function classify(names, ask, userId) {
-  try {
-    const res = await openai.chat.completions.create({
-      __role: "background", messages: classifyMessages({ names, ask }), temperature: 0, max_tokens: 60 + 50 * names.length,
-      response_format: classifySchema(),
-      __payer: "platform", __feature: "material_ingest", __userId: userId, __timeoutMs: 10_000, __maxRetries: 0,
-    });
-    return shapeClassification(res?.choices?.[0]?.message?.content, names, ask);
-  } catch (error) {
-    console.warn("[materials] classify fell back to the guess:", String(error?.message || error).slice(0, 120));
-    return names.map((n) => guessFile(n, ask));
-  }
 }
 
 /** What the learner already has: folders, what earlier uploads filed where, the folders they chose. */
@@ -138,6 +125,19 @@ async function refile(userId, row, target) {
   return { folder_id: target.id, folder_name: target.name, folder_created: row.folder_id === target.id ? row.folder_created : !!target.created };
 }
 
+/**
+ * The Stage 4 fallback: an upload whose read won't happen now is filed once,
+ * into "From chat — Unsorted", so it waits somewhere findable. → the patched
+ * row, or null when there is nowhere to file (folder cap, no Unsorted).
+ */
+async function fileUnsorted(userId, row) {
+  const where = await resolveFolder(userId, { subject: null, kind: row.doc_kind || "other" }, await folderContext(userId));
+  if (!where.folder_id || where.folder_id === row.folder_id) return null;
+  const patch = await refile(userId, row, { id: where.folder_id, name: where.folder_name, created: where.folder_created });
+  const { data } = await edu().from("material_ingests").update({ ...patch, updated_at: now() }).eq("id", row.id).select("*").single();
+  return data || null;
+}
+
 const withFiling = (row, patch) => ({ filing: { ...(row.filing || {}), ...patch } });
 
 /** Add steps to an upload (the chat shows them under its message). Best effort: a step never fails the upload. */
@@ -168,7 +168,6 @@ router.post("/ingest", asyncHandler(async (req, res) => {
   const userId = req.user.id;
   const names = (Array.isArray(req.body?.names) ? req.body.names : []).map((n) => String(n || "").trim().slice(0, INGEST_LIMITS.NAME)).filter(Boolean).slice(0, INGEST_LIMITS.FILES);
   if (!names.length) return res.status(400).json({ success: false, message: "names: at least one file name is required." });
-  const ask = String(req.body?.ask || "").slice(0, INGEST_LIMITS.ASK);
   let chatSessionId = UUID.test(String(req.body?.chatSessionId || "")) ? req.body.chatSessionId : null;
   if (chatSessionId) {
     const { data: chat } = await db.from("chat_sessions").select("id").eq("id", chatSessionId).eq("user_id", userId).maybeSingle();
@@ -176,62 +175,26 @@ router.post("/ingest", asyncHandler(async (req, res) => {
   }
   // "Save it again" after an Undo: the new upload takes over the old one's chat message.
   const replaced = req.body?.replaces ? await loadOwn(req.body.replaces, userId) : null;
-  const sortStarted = Date.now();
-  const kinds = await classify(names, ask, userId);
-  const sortMs = Date.now() - sortStarted;
-  const folderStarted = Date.now();
-  const ctx = await folderContext(userId);
-
-  // One upload per folder: files of one subject and kind together, each group
-  // filed where the learner keeps that subject; unknown ones held as Unsorted
-  // until they're read. ("Save it again" keeps its files together.)
-  const groups = new Map();
-  for (const [i, k] of kinds.entries()) {
-    const subject = subjectLabel(k.subject);
-    const key = replaced ? "all" : subject ? `${subjectKey(subject)}|${k.kind}` : "unsorted";
-    if (!groups.has(key)) groups.set(key, { subject, kind: k.kind, topic: k.topic, indexes: [] });
-    groups.get(key).indexes.push(i);
-  }
-  const placed = new Map();
-  for (const g of groups.values()) {
-    const where = await resolveFolder(userId, { subject: g.subject, kind: g.kind }, ctx);
-    const sig = where.folder_id || (where.choices ? `choose:${where.choices.map((c) => c.id).join(",")}` : `none:${g.subject}|${g.kind}`);
-    if (placed.has(sig)) {
-      const p = placed.get(sig);
-      p.indexes.push(...g.indexes);
-      if (g.kind === "past_paper") p.kind = "past_paper";
-    } else placed.set(sig, { ...g, where });
-  }
-
+  // ONE upload for the message's files, starting UNFILED (Stage 4): no
+  // classify call, no folder resolved or created, no subject or kind — the
+  // read at /structure decides all of it, once. (One row per batch is the
+  // table's own design; the per-folder split only ever served the guess.)
   const batchId = randomUUID();
-  const made = [];
-  for (const g of placed.values()) {
-    const indexes = g.indexes.sort((a, b) => a - b);
-    const { data, error } = await edu().from("material_ingests").insert({
-      user_id: userId, chat_session_id: chatSessionId, names: indexes.map((i) => names[i]), state: "received",
-      folder_id: g.where.folder_id, folder_name: g.where.folder_name, folder_created: g.where.folder_created,
-      doc_kind: g.kind, subject: g.subject, batch_id: batchId,
-      filing: { fileIndexes: indexes, ...(g.where.choices ? { choices: g.where.choices } : {}) },
-      ...(replaced?.state === "undone" && replaced.chat_message_id ? { chat_message_id: replaced.chat_message_id, chat_session_id: replaced.chat_session_id } : {}),
-    }).select("*").single();
-    if (error) throw error;
-    made.push(data);
+  const { data, error } = await edu().from("material_ingests").insert({
+    user_id: userId, chat_session_id: chatSessionId, names, state: "received",
+    folder_id: null, folder_name: null, folder_created: false,
+    doc_kind: null, subject: null, batch_id: batchId,
+    filing: { fileIndexes: names.map((_, i) => i) },
+    ...(replaced?.state === "undone" && replaced.chat_message_id ? { chat_message_id: replaced.chat_message_id, chat_session_id: replaced.chat_session_id } : {}),
+  }).select("*").single();
+  if (error) throw error;
+  const row = await addSteps(data, receivedSteps({ batchId, count: names.length }));
+  if (row?.chat_message_id) {
+    const { data: msg } = await db.from("chat_messages").select("meta").eq("id", row.chat_message_id).eq("user_id", userId).maybeSingle();
+    if (msg) await db.from("chat_messages").update({ meta: { ...(msg.meta || {}), ingest: { id: row.id }, ingests: [{ id: row.id }] } }).eq("id", row.chat_message_id).eq("user_id", userId);
   }
-  // The steps so far, on the message's first upload: the files sorted, and where each group goes.
-  if (made[0]) {
-    made[0] = await addSteps(made[0], [
-      ...sortSteps({ batchId, files: kinds.map((k) => ({ subject: subjectLabel(k.subject), kind: k.kind })), ms: sortMs }),
-      ...folderSteps({ batchId, ms: Date.now() - folderStarted, groups: [...placed.values()].map((g) => ({
-        subject: g.subject, kind: g.kind, folderName: g.where.folder_name, created: g.where.folder_created, choices: g.where.choices,
-        names: g.indexes.map((i) => names[i]) })) }),
-    ]);
-  }
-  if (made[0]?.chat_message_id) {
-    const { data: msg } = await db.from("chat_messages").select("meta").eq("id", made[0].chat_message_id).eq("user_id", userId).maybeSingle();
-    if (msg) await db.from("chat_messages").update({ meta: { ...(msg.meta || {}), ingest: { id: made[0].id }, ingests: made.map((r) => ({ id: r.id })) } }).eq("id", made[0].chat_message_id).eq("user_id", userId);
-  }
-  // `data` is the first upload (older apps); `ingests` is the whole batch, each with the files it holds.
-  res.status(201).json({ success: true, data: ingestToApi(made[0]), ingests: made.map(ingestToApi), batchId });
+  // `data` is the upload (older apps read it); `ingests` is the batch — one entry now.
+  res.status(201).json({ success: true, data: ingestToApi(row), ingests: [ingestToApi(row)], batchId });
 }));
 
 router.post("/ingest/:id/records", asyncHandler(async (req, res) => {
@@ -243,22 +206,17 @@ router.post("/ingest/:id/records", asyncHandler(async (req, res) => {
   if ((records || []).length !== ids.length) return res.status(403).json({ success: false, message: "One of those records isn't yours." });
   // "Only you can see this": a chat upload never shows in Discover (D51, D53).
   await edu().from("records").update({ private: true }).eq("user_id", req.user.id).in("id", ids);
-  if (row.folder_id) {
-    const { error } = await edu().from("library_folder_items")
-      .upsert(records.map((r) => ({ folder_id: row.folder_id, user_id: req.user.id, ...folderItemFor(r, row.doc_kind) })), { onConflict: "folder_id,item_type,item_ref" });
-    if (error) throw error;
-  }
+  // Stage 4: the records are the upload's, but NOT filed into a folder here —
+  // filing happens once, at /structure, from the read (which also fires the
+  // Study Prep attach, with the read subject instead of a name guess).
   const recordIds = [...new Set([...(row.record_ids || []), ...ids])];
   let next = row.state === "received" ? await move(row, "filed", { record_ids: recordIds })
     : (await edu().from("material_ingests").update({ record_ids: recordIds, updated_at: now() }).eq("id", row.id).select("*").single()).data;
   if (row.state === "received") {
     const first = !Array.isArray(row.filing?.fileIndexes) || row.filing.fileIndexes.includes(0);
-    next = await addSteps(next, filedSteps({ ingestId: row.id, folderName: row.folder_name, first }));
+    next = await addSteps(next, savedSteps({ ingestId: row.id, first }));
   }
-  // §8.8: the files join the learner's open Study Prep session in this subject (best effort).
-  const { attachUploadsToStudyPrep } = await import("../adaptive-learning/study-prep/materials-source.js");
-  const studyPrep = await attachUploadsToStudyPrep({ learnerId: req.user.id, subject: row.subject, recordIds: ids });
-  res.json({ success: true, data: { ...ingestToApi(next), ...(studyPrep?.added ? { studyPrep } : {}) } });
+  res.json({ success: true, data: ingestToApi(next) });
 }));
 
 const PROGRESS = new Set(["extracting", "ready", "failed"]);
@@ -351,14 +309,18 @@ router.post("/ingest/:id/structure", asyncHandler(async (req, res) => {
     questions.push(...r.questions);
   }
 
-  // Every read failed (the model was unavailable): keep nothing, say nothing — it can be tried again.
+  // Every read failed (the model was unavailable): keep no read, say nothing — it can be tried again.
   if (calls && failures === calls) {
     const back = await move(row, "ready");
     // One failed-read step, updated in place; the app's last try (final) says so and offers Read it again on the card.
     const final = req.body?.final === true;
-    await addSteps(back, [
+    // The final failure files it once, into Unsorted (the fallback); a later
+    // read files it properly. A non-final failure files nothing — a retry is coming.
+    let settled = back;
+    if (final && !back.folder_id && back.record_ids?.length) settled = await fileUnsorted(userId, back).catch(() => null) || back;
+    await addSteps(settled, [
       toolStep(`read:${row.id}:failed`, "material.read", `Reading ${row.names?.length === 1 ? row.names[0] : "your files"}`, { result: final ? "Couldn't read it" : "Couldn't read it just now — trying again", ok: false }),
-      ...(final ? [messageStep(`read:${row.id}:failed:say`, "I couldn't read it just now — it's saved in your folder, nothing is lost. Tap **Read it again** on the card in a minute and I'll go through it.")] : []),
+      ...(final ? [messageStep(`read:${row.id}:failed:say`, "I couldn't read it just now — it's saved in your Library, nothing is lost. Tap **Read it again** on the card in a minute and I'll go through it.")] : []),
     ]);
     return res.status(503).json({ success: false, code: "structure_unavailable", message: "Couldn't read it just now — try again in a moment." });
   }
@@ -375,26 +337,28 @@ router.post("/ingest/:id/structure", asyncHandler(async (req, res) => {
     })));
     if (error) console.warn("[materials] questions not saved:", error.message);
   }
-  // Filed by its name; now it's read. A different subject (or one found for an
-  // Unsorted file) moves it to where that subject lives; still none → ask.
+  // Filed ONCE, from the read (Stage 4): the first file's subject and kind
+  // lead a mixed batch, as its read always has. No subject → the Unsorted
+  // fallback, and the card still asks; two folders fitting → the card decides.
   const found = subjectLabel(main?.subject);
-  const kind = main?.kind || row.doc_kind;
-  const subject = found || row.subject;
+  const kind = main?.kind || row.doc_kind || "other";
+  const subject = found || null;
+  const guesses = [...new Set((main?.subjectGuesses || []).map(subjectLabel).filter(Boolean))].slice(0, 3);
   let filePatch = {};
   let filing = {};
-  if (found && subjectKey(found) !== subjectKey(row.subject)) {
-    const where = await resolveFolder(userId, { subject: found, kind }, await folderContext(userId));
-    if (where.folder_id && where.folder_id !== row.folder_id) {
-      filePatch = await refile(userId, { ...row, doc_kind: kind }, { id: where.folder_id, name: where.folder_name, created: where.folder_created });
-      filing = { movedFrom: row.folder_name || null, choices: null };
-    } else if (where.choices) filing = { choices: where.choices };
-  } else if (!subject) {
-    filing = { needsSubject: true, subjectOptions: [...new Set((main?.subjectGuesses || []).map(subjectLabel).filter(Boolean))].slice(0, 3) };
-  }
+  const where = await resolveFolder(userId, { subject, kind }, await folderContext(userId));
+  if (where.folder_id) {
+    if (where.folder_id !== row.folder_id) filePatch = await refile(userId, { ...row, doc_kind: kind }, { id: where.folder_id, name: where.folder_name, created: where.folder_created });
+    filing = found ? { filed: true, movedFrom: filePatch.folder_id && row.folder_id ? row.folder_name || null : null, choices: null }
+      : { needsSubject: true, subjectOptions: guesses };
+  } else if (where.choices) filing = { choices: where.choices };
+  else if (!found) filing = { needsSubject: true, subjectOptions: guesses };
   row = await move(row, "ready", { structure, subject, doc_kind: kind, ...filePatch, ...withFiling(row, filing) });
-  // A failed try before this one is gone once it's read.
+  // A failed try before this one is gone once it's read; the filing step is written now that it's real.
+  const first = !Array.isArray(row.filing?.fileIndexes) || row.filing.fileIndexes.includes(0);
   row = await addSteps({ ...row, steps: (row.steps || []).filter((st) => !String(st.id).startsWith(`read:${row.id}:failed`)) },
-    readSteps({ ingestId: row.id, items, moved: filing.movedFrom ? { to: row.folder_name, subject: row.subject } : null }));
+    [...(filing.filed || filePatch.folder_id ? filedSteps({ ingestId: row.id, folderName: row.folder_name, first }) : []),
+     ...readSteps({ ingestId: row.id, items, moved: filing.movedFrom ? { to: row.folder_name, subject: row.subject } : null })]);
 
   // What it found, said in the chat it came from (written by code from what was kept).
   let message = null;
@@ -438,7 +402,12 @@ router.post("/ingest/:id/structure", asyncHandler(async (req, res) => {
       console.warn("[materials] indexing failed:", record.id, String(e?.message || e).slice(0, 160));
     }
   }
-  res.json({ success: true, data: ingestToApi(row), message });
+  // §8.8: the files join the learner's open Study Prep session in the READ
+  // subject (best effort) — it waited for the read, like the filing did,
+  // instead of taking the name-guessed subject at /records time.
+  const { attachUploadsToStudyPrep } = await import("../adaptive-learning/study-prep/materials-source.js");
+  const studyPrep = await attachUploadsToStudyPrep({ learnerId: userId, subject, recordIds: row.record_ids || [] }).catch(() => null);
+  res.json({ success: true, data: { ...ingestToApi(row), ...(studyPrep?.added ? { studyPrep } : {}) }, message });
 }));
 
 /** Akoro's own material on the upload's topics: published courses and blog posts (D52). */
