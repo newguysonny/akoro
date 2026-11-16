@@ -366,5 +366,7 @@ test("source actions: the tool definition teaches the order and the chaining rul
   assert.match(chat, /source: \{ type: "string", enum: \["taught", "library", "discover", "upload"\]/);
   assert.match(chat, /work through them in this order/);
   assert.match(chat, /call again with source set to it/, "a `next` field means: call again with that source");
+  assert.match(chat, /when the learner NAMES a source in their ask/, "a named source overrides the default order");
+  assert.match(chat, /a hit in an earlier source never overrides the source they named/);
   assert.match(chat, /source: input\?\.source \|\| null/, "the handler hands the action through");
 });
