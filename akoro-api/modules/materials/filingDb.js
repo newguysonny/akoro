@@ -103,7 +103,7 @@ export async function fileUnsorted(userId, row) {
   return data || null;
 }
 
-const withFiling = (row, patch) => ({ filing: { ...(row.filing || {}), ...patch } });
+export const withFiling = (row, patch) => ({ filing: { ...(row.filing || {}), ...patch } });
 
 /** Add steps to an upload (the chat shows them under its message). Best effort: a step never fails the upload. */
 export async function addSteps(row, steps) {

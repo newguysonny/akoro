@@ -56,6 +56,23 @@ test("retry_extraction: the server lane inline, scans flagged for the app", () =
   assert.match(tools, /move\(row, "extracting"\)/, "a failed upload re-enters extracting");
 });
 
+test("filingDb exports everything its importers name (the 2026-11-16 deploy crash)", () => {
+  // routes.js imported `withFiling` from filingDb.js, but the extraction
+  // left it unexported (an arrow const, missed by the function pass) — the
+  // API crashed at boot and the deploy never flipped. Pin every named
+  // import from filingDb against its real exports.
+  const filingDb = readFileSync(new URL("../materials/filingDb.js", import.meta.url), "utf8");
+  const exported = new Set([...filingDb.matchAll(/export (?:async function|function|const) (\w+)/g)].map((m) => m[1]));
+  const routes = readFileSync(new URL("../materials/routes.js", import.meta.url), "utf8");
+  const imported = [...routes.matchAll(/import \{([^}]+)\} from "\.\/filingDb\.js"/g)]
+    .flatMap((m) => m[1].split(",").map((n) => n.trim().split(" as ")[0]).filter(Boolean));
+  assert.ok(imported.length >= 10, "routes imports the filing machinery");
+  assert.deepEqual(imported.filter((n) => !exported.has(n)), [], "every named import is exported");
+  for (const name of ["readUploadTool", "retryExtractionTool", "listFoldersTool", "fileUploadTool"]) {
+    assert.ok(new RegExp(`export async function ${name}`).test(tools), `${name} is exported for chat.js`);
+  }
+});
+
 test("the turn: waiting uploads are listed, the first call is forced, nothing is injected", () => {
   assert.match(chat, /const pendingUploadsP = /, "the session's unfiled uploads join the turn's own");
   assert.match(chat, /pendingUploads\.length \? "read_upload"/, "read_upload is forced when uploads wait");
