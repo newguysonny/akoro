@@ -200,19 +200,19 @@ export async function extractStoredRecordText({ recordId, contentKey }) {
 
 /* ── Ask: questions about ONE document, answered with citations ───────────── */
 
-const askTarget = ({ recordId, contentKey }) => (contentKey ? { contentKey } : { recordId });
+const askTarget = ({ recordId, contentKey, folderId }) => (folderId ? { folderId } : contentKey ? { contentKey } : { recordId });
+const targetQuery = ({ recordId, contentKey, folderId }) => (folderId ? `folderId=${encodeURIComponent(folderId)}` : contentKey ? `contentKey=${encodeURIComponent(contentKey)}` : `recordId=${encodeURIComponent(recordId)}`);
 
-/** The learner's Ask thread for this document. */
-export async function getAskHistory({ recordId, contentKey }) {
-  const q = contentKey ? `contentKey=${encodeURIComponent(contentKey)}` : `recordId=${encodeURIComponent(recordId)}`;
-  const d = await apiGet(`/api/records/ask/history?${q}`);
+/** The learner's Ask thread for this document (or folder). */
+export async function getAskHistory({ recordId, contentKey, folderId }) {
+  const d = await apiGet(`/api/records/ask/history?${targetQuery({ recordId, contentKey, folderId })}`);
   return d?.data?.messages ?? [];
 }
 
 /** Ask a question; the answer streams to onDelta. Resolves { answer, citations, messageId }. */
-export async function askRecord({ recordId, contentKey, question, selection = null, onDelta, onStatus, signal }) {
+export async function askRecord({ recordId, contentKey, folderId, question, selection = null, onDelta, onStatus, signal }) {
   let result = null;
-  const full = await streamPost('/api/records/ask?stream=1', { ...askTarget({ recordId, contentKey }), question, ...(selection ? { selection } : {}) }, {
+  const full = await streamPost('/api/records/ask?stream=1', { ...askTarget({ recordId, contentKey, folderId }), question, ...(selection ? { selection } : {}) }, {
     onDelta, onStatus, signal,
     onDone: (d) => { result = d; },
   });
@@ -243,9 +243,9 @@ export async function guideReply({ recordId, contentKey, message, selection = nu
 }
 
 /** Generate a study tool (summary | quiz | flashcards) from the document — grounded, cited. */
-export async function generateRecordTool({ recordId, contentKey, tool, scope = 'page', pageNumber = null, pageText = '', values = {} }) {
+export async function generateRecordTool({ recordId, contentKey, folderId, tool, scope = 'page', pageNumber = null, pageText = '', values = {} }) {
   const d = await apiPost(`/api/records/tools/${encodeURIComponent(tool)}`, {
-    ...(contentKey ? { contentKey } : { recordId }),
+    ...(folderId ? { folderId } : contentKey ? { contentKey } : { recordId }),
     scope, ...(Number.isInteger(pageNumber) ? { pageNumber } : {}),
     ...(pageText ? { pageText: String(pageText).slice(0, 8000) } : {}),
     values,
@@ -255,9 +255,9 @@ export async function generateRecordTool({ recordId, contentKey, tool, scope = '
 
 /** Start a podcast episode → its saved item ({ id, content: { podcast: { status: 'making' } } }).
     The server writes, narrates and stores it; poll getRecordPodcast(id). */
-export async function startRecordPodcast({ recordId, contentKey, scope = 'page', pageNumber = null, pageText = '', values = {} }) {
+export async function startRecordPodcast({ recordId, contentKey, folderId, scope = 'page', pageNumber = null, pageText = '', values = {} }) {
   const d = await apiPost('/api/records/podcast', {
-    ...(contentKey ? { contentKey } : { recordId }),
+    ...(folderId ? { folderId } : contentKey ? { contentKey } : { recordId }),
     scope, ...(Number.isInteger(pageNumber) ? { pageNumber } : {}),
     ...(pageText ? { pageText: String(pageText).slice(0, 8000) } : {}),
     values,
@@ -273,14 +273,12 @@ export async function getRecordPodcast(id) {
 
 /* ── Saved reader items (generated tabs, notes, annotations) ─────────────── */
 
-const targetQuery = ({ recordId, contentKey }) => (contentKey ? `contentKey=${encodeURIComponent(contentKey)}` : `recordId=${encodeURIComponent(recordId)}`);
-
 export async function listRecordArtifacts(target) {
   const d = await apiGet(`/api/records/artifacts?${targetQuery(target)}`);
   return d?.data?.artifacts ?? [];
 }
 export async function saveRecordArtifact(target, body) {
-  const d = await apiPost('/api/records/artifacts', { ...(target.contentKey ? { contentKey: target.contentKey } : { recordId: target.recordId }), ...body });
+  const d = await apiPost('/api/records/artifacts', { ...(target.folderId ? { folderId: target.folderId } : target.contentKey ? { contentKey: target.contentKey } : { recordId: target.recordId }), ...body });
   return d?.data?.artifact ?? null;
 }
 export async function updateRecordArtifact(id, patch) {

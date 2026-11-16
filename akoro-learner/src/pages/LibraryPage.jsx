@@ -8,6 +8,7 @@ import { useLang } from '../contexts/LanguageContext.jsx';
 import AddRecordModal from '../components/dashboard/AddRecordModal.jsx';
 import CreateFolderSheet from '../components/library/CreateFolderSheet.jsx';
 import LibraryFolderPage from '../components/library/LibraryFolderPage.jsx';
+import FolderReaderSession from '../components/library/FolderReaderSession.jsx';
 import RecentlyDeletedPage from '../components/library/RecentlyDeletedPage.jsx';
 import { listDeleted } from '../lib/chatUploads.js';
 import AddToFolderPage from '../components/library/AddToFolderPage.jsx';
@@ -343,6 +344,7 @@ export default function LibraryPage() {
   const [addOpen, setAddOpen] = useState(false);
   const [folderSheetOpen, setFolderSheetOpen] = useState(false);
   const [folderPage, setFolderPage] = useState(null);   // the folder opened full-screen
+  const [folderReader, setFolderReader] = useState(null);   // the folder opened in the content reader
   const [addToFolder, setAddToFolder] = useState(null); // the content being filed away
   const [addToCommunity, setAddToCommunity] = useState(null); // the content being shared to communities
   const [addTarget, setAddTarget] = useState(null);   // the snapshot awaiting a folder/community pick
@@ -591,9 +593,13 @@ export default function LibraryPage() {
           shellMode
           onClose={() => setFolderPage(null)}
           onOpenItem={openFolderItem}
+          onOpenInReader={() => setFolderReader(folderPage)}
           onRenamed={(f) => { setFolders((fs) => fs.map((x) => (x.id === f.id ? f : x))); setFolderPage(f); }}
           onDeleted={(id) => { setFolders((fs) => fs.filter((x) => x.id !== id)); setFolderPage(null); setToast('Folder deleted'); }}
         />
+        {folderReader && (
+          <FolderReaderSession folder={folderReader} records={records} onClose={() => setFolderReader(null)}/>
+        )}
       </AppShell>
     );
   }
@@ -826,6 +832,7 @@ export default function LibraryPage() {
           folder={folderPage}
           onClose={() => setFolderPage(null)}
           onOpenItem={openFolderItem}
+          onOpenInReader={() => setFolderReader(folderPage)}
           nowItem={now.item}
           onNowOpen={openNowFromLibrary}
           onNowDismiss={nowActs.dismiss}
@@ -869,6 +876,12 @@ export default function LibraryPage() {
           item={addToCommunity}
           onClose={() => setAddToCommunity(null)}
         />
+      )}
+
+      {/* A folder opened in the content reader — contents grid, then the
+          picked document with the folder's contents row. */}
+      {folderReader && (
+        <FolderReaderSession folder={folderReader} records={records} onClose={() => setFolderReader(null)}/>
       )}
 
       {/* The record as a TEACHING session — the learner teaches their agent

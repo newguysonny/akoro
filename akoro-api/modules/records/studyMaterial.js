@@ -174,7 +174,8 @@ export async function startPodcast({ userId, target, scope = "document", pageNum
   const billTo = getAiBillTo();
   const { ok } = await coinsAvailable({ userId, billTo, min: 1 });
   if (!ok) return { status: 402, message: "You're out of AI credit — top up to make episodes.", code: "INSUFFICIENT_COINS" };
-  const existing = await listArtifacts({ userId, recordId: target.recordId });
+  const anchor = target.folderId ? { folderId: target.folderId } : { recordId: target.recordId };
+  const existing = await listArtifacts({ userId, ...anchor });
   if (existing.some((a) => a.kind === "podcast" && podcastInFlight(a.content))) {
     return { status: 409, message: "An episode for this document is already being made — it'll be ready in a minute or two." };
   }
@@ -182,7 +183,7 @@ export async function startPodcast({ userId, target, scope = "document", pageNum
   const length = lengthOf(values.length);
   const startedAt = new Date().toISOString();
   const created = await createArtifact({
-    userId, recordId: target.recordId,
+    userId, ...anchor,
     row: {
       kind: "podcast", page_number: pageNumber, open: true,
       params: { focus, length: typeof values.length === "string" ? values.length.slice(0, 40) : length.id, scope: scope === "document" ? "Whole document" : "This page" },

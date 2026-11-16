@@ -91,9 +91,20 @@ export async function resolveAskTargetFor({ userId, recordId: rawRecordId, conte
   if (recordId) {
     if (!/^[0-9a-f-]{36}$/i.test(recordId)) return { status: 400, message: "A valid recordId is required." };
     const { data: rec, error } = await (await edu()).from("records")
-      .select("id, user_id, name, kind, file_key").eq("id", recordId).is("deleted_at", null).maybeSingle();
+      .select("id, user_id, name, kind, file_key, private").eq("id", recordId).is("deleted_at", null).maybeSingle();
     if (error) throw error;
-    if (!rec || rec.user_id !== userId) return { status: 404, message: "Record not found." };
+    if (!rec) return { status: 404, message: "Record not found." };
+    if (rec.user_id !== userId) {
+      // Not theirs — but a record Discover would show them (a free user's
+      // public note, never a Premium subscriber's, never a private one)
+      // is a fair ask target: the thread and any items they make stay
+      // keyed to THEIR user id, and the passages are the owner's chunks,
+      // exactly like the shared-file path below.
+      const discoverable = !rec.private
+        && (rec.kind === "paste" || (rec.kind === "upload" && !!rec.file_key))
+        && !(await activePremiumUserIds()).includes(rec.user_id);
+      if (!discoverable) return { status: 404, message: "Record not found." };
+    }
     return askTargetForRecord(rec);
   }
   if (contentKey) {
@@ -107,4 +118,39 @@ export async function resolveAskTargetFor({ userId, recordId: rawRecordId, conte
     return askTargetForRecord(rec);
   }
   return { status: 400, message: "A recordId or contentKey is required." };
+}
+
+/**
+ * A folder as an AI target: the folder must be the learner's own; its
+ * record items resolve to their ask targets (records that are gone or
+ * detail-only drop out). Returns { folderId, name, ownerId,
+ * folderTargets: [askTargetForRecord…] } | { status, message }.
+ */
+export async function resolveFolderTargetFor({ userId, folderId: rawFolderId }) {
+  const { askTargetForRecord } = await import("./askLib.js");
+  const folderId = String(rawFolderId || "");
+  if (!/^[0-9a-f-]{36}$/i.test(folderId)) return { status: 400, message: "A valid folderId is required." };
+  const db = await edu();
+  const { data: folder, error } = await db.from("library_folders")
+    .select("id, user_id, name").eq("id", folderId).maybeSingle();
+  if (error) throw error;
+  if (!folder || folder.user_id !== userId) return { status: 404, message: "Folder not found." };
+  const { data: items, error: itemsError } = await db.from("library_folder_items")
+    .select("item_ref, created_at").eq("folder_id", folderId).eq("item_type", "record")
+    .order("created_at", { ascending: false }).limit(50);
+  if (itemsError) throw itemsError;
+  const refs = [...new Set((items || []).map((it) => String(it.item_ref || "")).filter((r) => /^[0-9a-f-]{36}$/i.test(r)))];
+  if (!refs.length) return { folderId, name: folder.name || "Folder", ownerId: userId, folderTargets: [] };
+  const { data: recs, error: recsError } = await db.from("records")
+    .select("id, user_id, name, kind, file_key").in("id", refs).is("deleted_at", null);
+  if (recsError) throw recsError;
+  const byId = new Map((recs || []).map((r) => [String(r.id), r]));
+  const folderTargets = [];
+  for (const ref of refs) {
+    const rec = byId.get(ref);
+    if (!rec || rec.user_id !== userId) continue;
+    if (rec.kind !== "paste" && rec.kind !== "upload") continue;
+    folderTargets.push(await askTargetForRecord(rec));
+  }
+  return { folderId, name: folder.name || "Folder", ownerId: userId, folderTargets };
 }

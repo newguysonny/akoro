@@ -7,7 +7,7 @@ process.env.SUPABASE_SERVICE_KEY ||= "test-service-key";
 
 const {
   TOOL_IDS, TOOL_LIMITS, toolCount, pagePassages, textPassages, samplePassages, chunkPassages,
-  toolSchema, buildToolMessages, shapeToolResult, gatherToolPassages,
+  toolSchema, buildToolMessages, shapeToolResult, gatherToolPassages, mergeToolFolderPassages, citeOf,
 } = await import("./toolsLib.js");
 const routes = await readFile(new URL("./routes.js", import.meta.url), "utf8");
 // The generation itself lives in studyMaterial.js (shared with Agent Chat).
@@ -123,4 +123,17 @@ test("near-schema model JSON is salvaged: letter answers, object options, missin
   assert.equal(q.quizQuestions.length, 1);
   assert.equal(q.quizQuestions[0].options[2].correct, true);
   assert.equal(q.quizQuestions[0].cite, null, "no fabricated citation");
+});
+
+test("folder tool passages pool across documents under the single-document caps", () => {
+  const doc = (name, n) => Array.from({ length: n }, (_, i) => ({ kind: "page", pageNumber: i + 1, bbox: null, startMs: null, endMs: null, text: `${name} passage ${i + 1}`, sourceName: name, sourceRecordId: `id-${name}` }));
+  const pooled = mergeToolFolderPassages([doc("Alpha", 12), doc("Beta", 12)]);
+  assert.equal(pooled.length, TOOL_LIMITS.MAX_PASSAGES, "the folder set is capped like one document");
+  assert.deepEqual(pooled.map((p) => p.n), pooled.map((_, i) => i + 1), "renumbered 1..n");
+  assert.ok(pooled.some((p) => p.sourceName === "Alpha") && pooled.some((p) => p.sourceName === "Beta"), "both documents contribute");
+  const cite = citeOf(pooled.find((p) => p.sourceName === "Beta"));
+  assert.equal(cite.sourceName, "Beta", "a folder item's citation names its document");
+  assert.equal(cite.sourceRecordId, "id-Beta");
+  const single = citeOf({ n: 1, pageNumber: 2, text: "plain" });
+  assert.ok(!("sourceName" in single), "single-document citations are unchanged");
 });

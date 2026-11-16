@@ -155,11 +155,13 @@ const fmtTime = (ms) => {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 };
 
-/** Where a passage is, in words the model can repeat ("page 4", "at 12:05"). */
+/** Where a passage is, in words the model can repeat ("page 4", "at 12:05").
+ *  A folder passage also names its document, so the model can say which
+ *  of the folder's documents a fact came from. */
 export function passageWhere(p) {
-  if (Number.isInteger(p.pageNumber)) return `page ${p.pageNumber}`;
-  if (Number.isFinite(p.startMs)) return `at ${fmtTime(p.startMs)}`;
-  return "pasted text";
+  const where = Number.isInteger(p.pageNumber) ? `page ${p.pageNumber}`
+    : Number.isFinite(p.startMs) ? `at ${fmtTime(p.startMs)}` : "pasted text";
+  return p.sourceName ? `${p.sourceName} · ${where}` : where;
 }
 
 /** The chat messages for one Ask turn. */
@@ -210,6 +212,7 @@ export function extractCitations(answer, passages = []) {
       startMs: p.startMs ?? null,
       endMs: p.endMs ?? null,
       quote: clip(p.text, 240),
+      ...(p.sourceName ? { sourceName: p.sourceName, sourceRecordId: p.sourceRecordId ?? null } : {}),
     });
   }
   return { citations, unknown };
@@ -313,19 +316,59 @@ export async function gatherPassages({ target, question, selection = null, searc
   };
 }
 
+/**
+ * Pool several documents' passages into one numbered set (folder Ask /
+ * folder tools): round-robin across documents so no single document
+ * fills the context, capped like a single document's set, renumbered.
+ * Passages arrive pre-tagged with sourceName/sourceRecordId.
+ */
+export function mergeFolderPassages(perDoc = [], limits = ASK_LIMITS) {
+  const queues = perDoc.map((list) => [...list]);
+  const out = [];
+  let chars = 0;
+  for (;;) {
+    let took = false;
+    for (const q of queues) {
+      if (out.length >= limits.MAX_PASSAGES) break;
+      const p = q.shift();
+      if (!p) continue;
+      if (chars + p.text.length > limits.MAX_CONTEXT_CHARS && out.length) continue;
+      out.push(p); chars += p.text.length; took = true;
+    }
+    if (!took || out.length >= limits.MAX_PASSAGES) break;
+  }
+  return out.map((p, i) => ({ ...p, n: i + 1 }));
+}
+
+/** Passages for a question over a whole folder: gather per document, pool. */
+export async function gatherFolderPassages({ targets = [], question, search }) {
+  const perDoc = [];
+  let indexed = false;
+  for (const target of targets.slice(0, 8)) {
+    const { passages, indexed: hit } = await gatherPassages({ target, question, search });
+    indexed = indexed || hit;
+    if (passages.length) {
+      perDoc.push(passages.map((p) => ({ ...p, sourceName: target.name, sourceRecordId: target.recordId })));
+    }
+  }
+  return { passages: mergeFolderPassages(perDoc), indexed };
+}
+
 /* Before migrations/2026-record-chat-guide.sql is seen (or while the API's
    schema cache lags it) there is no channel column: Ask works as it always
    did; only the guide's thread needs it. */
 const noChannel = (error) => error?.code === "42703" || error?.code === "PGRST204" ||
   (/channel/i.test(String(error?.message || "")) && /column|schema cache|could not find/i.test(String(error?.message || "")));
 
-/** One thread per learner per document per channel: "ask" (the Ask tab) or "guide" (Learning with Guide). */
-export async function loadAskHistory({ userId, recordId, limit = ASK_LIMITS.HISTORY_LIMIT, channel = "ask" }) {
+/** One thread per learner per document per channel: "ask" (the Ask tab) or "guide" (Learning with Guide).
+ *  A folder thread anchors on folder_id instead of record_id. */
+export async function loadAskHistory({ userId, recordId, folderId = null, limit = ASK_LIMITS.HISTORY_LIMIT, channel = "ask" }) {
   const db = await dbLazy();
   const query = (withChannel) => {
     let q = db.schema("edu").from("record_chat_messages")
       .select("id, role, text, citations, selection, created_at")
-      .eq("user_id", userId).eq("record_id", recordId);
+      .eq("user_id", userId);
+    q = folderId ? q.eq("folder_id", folderId) : q.eq("record_id", recordId);
     if (withChannel) q = q.eq("channel", channel);
     return q.order("created_at", { ascending: false }).limit(limit);
   };
@@ -341,21 +384,21 @@ export async function loadAskHistory({ userId, recordId, limit = ASK_LIMITS.HIST
 }
 
 /** The two rows of one turn — the same columns in both (see saveAskTurn). */
-export function turnRows({ userId, recordId, question, selection = null, answer, citations = [], channel = null, now = Date.now() }) {
-  const base = { user_id: userId, record_id: recordId, ...(channel ? { channel } : {}) };
+export function turnRows({ userId, recordId, folderId = null, question, selection = null, answer, citations = [], channel = null, now = Date.now() }) {
+  const base = { user_id: userId, ...(folderId ? { folder_id: folderId } : { record_id: recordId }), ...(channel ? { channel } : {}) };
   return [
     { ...base, role: "user", text: question, citations: [], selection: selection || null, created_at: new Date(now).toISOString() },
     { ...base, role: "assistant", text: answer, citations: Array.isArray(citations) ? citations : [], selection: null, created_at: new Date(now + 1).toISOString() },
   ];
 }
 
-export async function saveAskTurn({ userId, recordId, question, selection, answer, citations, channel = "ask" }) {
+export async function saveAskTurn({ userId, recordId, folderId = null, question, selection, answer, citations, channel = "ask" }) {
   const db = await dbLazy();
   const now = Date.now();
   // Both rows carry every column: a batch insert fills a column one row
   // leaves out with NULL (not its default), and citations is NOT NULL — the
   // learner's row without citations made every turn fail to save.
-  const rows = (withChannel) => turnRows({ userId, recordId, question, selection, answer, citations, channel: withChannel ? channel : null, now });
+  const rows = (withChannel) => turnRows({ userId, recordId, folderId, question, selection, answer, citations, channel: withChannel ? channel : null, now });
   let { data, error } = await db.schema("edu").from("record_chat_messages").insert(rows(true)).select("id, role");
   // Without the column an Ask turn saves as before; a guide turn must not land in Ask's thread.
   if (error && noChannel(error) && channel === "ask") ({ data, error } = await db.schema("edu").from("record_chat_messages").insert(rows(false)).select("id, role"));

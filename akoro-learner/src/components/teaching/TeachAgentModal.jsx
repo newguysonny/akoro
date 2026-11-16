@@ -1014,6 +1014,11 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
     ask: content.ask ? { ...content.ask, suggestions: learnSuggestions } : null,
     tools: content.tools || null,
     artifacts: content.artifacts || null,
+    // Gathered content: citation chips + Sources list (the host opens the
+    // original source and returns). Folder mode: contents row / home grid.
+    sourceCitations: content.sourceCitations || null,
+    folderNav: content.folderNav || null,
+    folderHome: content.folderHome || null,
     onClose: closeReader,
     onExplainSelection: explainSelection,
     jumpTo: readerJump,

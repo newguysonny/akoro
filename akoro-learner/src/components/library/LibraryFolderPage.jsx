@@ -40,7 +40,7 @@ const KIND_META = {
 };
 const kindMeta = (k) => KIND_META[k] || ['ti-box', '#6B7280'];
 
-export default function LibraryFolderPage({ folder, onClose, onOpenItem, onRenamed, onDeleted, nowItem, onNowOpen, onNowDismiss, shellMode = false }) {
+export default function LibraryFolderPage({ folder, onClose, onOpenItem, onRenamed, onDeleted, nowItem, onNowOpen, onNowDismiss, onOpenInReader = null, shellMode = false }) {
   const isMobile = useIsMobileView();
   const inShell = shellMode && !isMobile;   // desktop/tablet only — mobile NEVER changes
   const [sheet, setSheet] = useState(null);        // null | 'more' | 'rename' | 'delete'
@@ -195,6 +195,7 @@ export default function LibraryFolderPage({ folder, onClose, onOpenItem, onRenam
           {folder.description && <p className="lf-folder-desc">{folder.description}</p>}
           <div className="lf-action-row">
             <button className="lf-start" onClick={() => setToast({ msg: 'Tap ⋯ on any content — a record, a topic, a video — to add it here', color: BRAND })}>Add items</button>
+            {onOpenInReader && <button className="lf-start" onClick={onOpenInReader}>Open in reader</button>}
             <button className="lf-icon-btn" aria-label="More" onClick={() => setSheet('more')}><Icon name="ti-dots-vertical" size={20}/></button>
           </div>
         </div>

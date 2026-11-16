@@ -433,6 +433,12 @@ const READER_CSS = `
 .folio-redaction.folio-mark-box.revealed{background:transparent;outline:1.5px dashed #a8a29e;}
 .folio-redaction.revealed{background:transparent;color:inherit;outline:1.5px dashed #a8a29e;outline-offset:1px;-webkit-user-select:text;user-select:text;}
 .folio-annotation{background:rgba(108,59,255,.22);border-bottom:2px solid var(--ak-accent);cursor:pointer;border-radius:2px;padding:0 1px;box-decoration-break:clone;-webkit-box-decoration-break:clone;}
+.ak-src-chip{display:inline-flex;align-items:center;justify-content:center;min-width:19px;height:19px;padding:0 5px;margin:0 1px;border:none;border-radius:999px;background:var(--ak-tag-bg);color:var(--ak-accent);font:900 11px 'Nunito',sans-serif;cursor:pointer;vertical-align:2px;}
+.ak-src-chip:hover{background:var(--ak-accent);color:#fff;}
+.ak-folder-chip{display:inline-flex;align-items:center;gap:7px;border:1.5px solid var(--ak-border);background:var(--ak-surface);border-radius:12px;padding:7px 12px 7px 9px;font:800 12px 'Nunito',sans-serif;color:var(--ak-text-sub);cursor:pointer;white-space:nowrap;flex-shrink:0;}
+.ak-folder-chip.on{border-color:var(--ak-accent);color:var(--ak-text);box-shadow:inset 0 0 0 1px var(--ak-accent);}
+.ak-folder-back{width:32px;height:32px;border-radius:50%;border:1.5px solid var(--ak-border);background:var(--ak-surface);color:var(--ak-text-sub);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;}
+.ak-folder-back:hover{border-color:var(--ak-accent);color:var(--ak-accent);}
 `;
 
 /* ── Hooks ─────────────────────────────────────────────────────────────────── */
@@ -517,8 +523,11 @@ function SavedList({ items, onOpen, onDelete }) {
   );
 }
 
-function GenerateGrid({ onPick, discussion, askEnabled = false, saved = null }) {
-  const generated = TOOL_DEFS.filter((t) => !t.community && (!t.needsAsk || askEnabled));
+function GenerateGrid({ onPick, discussion, askEnabled = false, saved = null, serverOnly = false }) {
+  // Over a folder there are no pages to derive from: only the tools the
+  // server builds from the folder's documents (plus Ask) are offered.
+  const generated = TOOL_DEFS.filter((t) => !t.community && (!t.needsAsk || askEnabled)
+    && (!serverOnly || t.id === "ask" || SERVER_TOOLS.has(t.id) || t.id === "podcast"));
   // The Discussion card only features when this content is CONNECTED to
   // one of the learner's communities — that's when the messaging exists.
   // Q&A stays a session-local board either way.
@@ -675,11 +684,11 @@ function resultSub(tab) {
 function Citation({ cite, onCite }) {
   if (!cite) return null;
   const isPage = Number.isInteger(cite.page);
-  if (!isPage && !Number.isFinite(cite.startMs)) return null;
+  if (!isPage && !Number.isFinite(cite.startMs) && !cite.sourceRecordId) return null;
   return (
     <button type="button" onClick={() => onCite(cite)} className="folio-citation" title={cite.quote ? `“${cite.quote}”` : "Jump to source in the reader"}>
       <Icon name={isPage ? "ti-file-text" : "ti-player-play"} size={10}/>
-      {isPage ? `Page ${cite.page + 1}` : citeLabel({ startMs: cite.startMs })}
+      {cite.sourceName ? <span style={{ maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis" }}>{cite.sourceName}</span> : isPage ? `Page ${cite.page + 1}` : citeLabel({ startMs: cite.startMs })}
     </button>
   );
 }
@@ -1142,6 +1151,22 @@ export default function SessionReaderModal({
   /* jumpTo — { cite, key } from the session chat's citation chips: when it
      changes, the reader jumps there (page + box flash, or a seek). */
   jumpTo = null,
+  /* sourceCitations — a gathered content's citation map: { list:
+     [{ marker, name, ownerName }], onOpen(marker) }. The text's [n] markers
+     become chips; a Sources list closes the document; both open the
+     ORIGINAL source (the host swaps readers and returns on close). */
+  sourceCitations = null,
+  /* folderNav — this document was opened from a folder: { items:
+     [{ id, name }], activeId, onSelect(id), onBack() }. A scrollable row of
+     the folder's contents under the tab pills, led by a back arrow. */
+  folderNav = null,
+  /* folderHome — a React node rendered INSTEAD of the pages: a folder
+     opened in the reader shows its contents here (Original Content). */
+  folderHome = null,
+  /* onForeignCite — a citation that points at ANOTHER document (a folder
+     tool/Ask citation naming its source): the host opens that document
+     instead of jumping inside this one. */
+  onForeignCite = null,
 }) {
   const isMobile = useIsMobileView();
   const sideAsk = !isMobile && chatState === "ask" && !!ask;
@@ -1317,6 +1342,13 @@ export default function SessionReaderModal({
      occurrence of the marked text (Fortizo's approach). */
   function buildPageHtml(rawHtml, pageIndex) {
     let html = rawHtml;
+    // A gathered content's [n] markers become citation chips (the marker
+    // must be one of the record's saved sources — anything else stays text).
+    if (sourceCitations?.list?.length) {
+      const valid = new Set(sourceCitations.list.map((s) => Number(s.marker)));
+      html = html.replace(/\[(\d{1,2})\]/g, (m, n) => (valid.has(Number(n))
+        ? `<button type="button" class="ak-src-chip" data-src-marker="${n}" title="Open the source">${n}</button>` : m));
+    }
     annotations.filter((a) => a.page === pageIndex).forEach((a) => {
       if (!a.text || !html.includes(a.text)) return;
       html = html.replace(a.text, `<mark class="folio-annotation" data-ann-id="${a.id}">${a.text}</mark>`);
@@ -1330,6 +1362,11 @@ export default function SessionReaderModal({
   }
 
   function handleViewerClick(e) {
+    const chipEl = e.target.closest("[data-src-marker]");
+    if (chipEl && sourceCitations?.onOpen) {
+      sourceCitations.onOpen(Number(chipEl.dataset.srcMarker));
+      return;
+    }
     const redEl = e.target.closest(".folio-redaction");
     if (redEl) {
       const id = redEl.dataset.redId;
@@ -1656,6 +1693,9 @@ export default function SessionReaderModal({
   /* Citations: jump the reader to the source page and flash the cited line. */
   function citeJump(cite) {
     if (!cite) return;
+    // A folder citation names another document in the folder: the host
+    // opens it (the jump stays inside THIS document otherwise).
+    if (cite.sourceRecordId && onForeignCite) { setGenMenuOpen(false); onForeignCite(cite); return; }
     setGenMenuOpen(false);
     setActiveTabId("reader");
     // A recording citation: seek the player to the moment.
@@ -1840,6 +1880,8 @@ export default function SessionReaderModal({
     }
   }
 
+  // A folder opened in the reader has only its Original Content (the
+  // contents grid) until a document is picked — no tool tabs over a folder.
   const allTabs = [{ id: "reader" }, ...communityTabsOpen.map((id) => ({ id })), ...resultTabs];
 
   function PillsBar({ tabs, showChatButton }) {
@@ -1909,6 +1951,23 @@ export default function SessionReaderModal({
         <div className="flex-shrink-0 border-b" style={{ borderColor: "var(--ak-border)", background: "var(--ak-tag-bg)" }}>
           <PillsBar tabs={allTabs} showChatButton={isMobile && chatState !== "ask"}/>
         </div>
+
+        {/* Folder contents row — this document was opened from a folder:
+            a back arrow returns to the folder's contents, and the folder's
+            documents sit in a scrollable row for switching in place. */}
+        {folderNav && activeTabId === "reader" && (
+          <div className="flex-shrink-0 flex items-center gap-2 px-3 py-2 border-b overflow-x-auto" style={{ borderColor: "var(--ak-border)", background: "var(--ak-surface)", scrollbarWidth: "none" }}>
+            <button type="button" className="ak-folder-back" onClick={folderNav.onBack} title="Back to folder contents" aria-label="Back to folder contents">
+              <Icon name="ti-chevron-left" size={15}/>
+            </button>
+            {(folderNav.items || []).map((it) => (
+              <button key={it.id} type="button" className={`ak-folder-chip${it.id === folderNav.activeId ? " on" : ""}`} onClick={() => folderNav.onSelect(it.id)}>
+                <Icon name="ti-file-text" size={13} color="var(--ak-accent)"/>
+                <span style={{ maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis" }}>{it.name}</span>
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Reader pane — kept mounted (just hidden) when a tool tab is active,
             so scroll position and zoom survive switching back. Media records
@@ -2018,10 +2077,10 @@ export default function SessionReaderModal({
                 <div className="sreader-menu absolute right-0 top-full mt-2 w-72 rounded-lg z-50 overflow-hidden" style={{ maxHeight: "70vh", overflowY: "auto" }}>
                   {formTool ? (
                     <div className="p-3">
-                      <CreationForm key={formTool} toolId={formTool} initialFocus={prefillFocus} onBack={() => setFormTool(null)} onSubmit={handleFormSubmit} withScope={!!tools && (SERVER_TOOLS.has(formTool) || isServerPodcast(tools, formTool))}/>
+                      <CreationForm key={formTool} toolId={formTool} initialFocus={prefillFocus} onBack={() => setFormTool(null)} onSubmit={handleFormSubmit} withScope={!folderHome && !!tools && (SERVER_TOOLS.has(formTool) || isServerPodcast(tools, formTool))}/>
                     </div>
                   ) : (
-                    <GenerateGrid onPick={handleToolPick} discussion={discussion} askEnabled={!!ask}
+                    <GenerateGrid onPick={handleToolPick} discussion={discussion} askEnabled={!!ask} serverOnly={!!folderHome}
                       saved={artifacts ? { items: savedItems, onOpen: openSavedItem, onDelete: deleteSavedItem } : null}/>
                   )}
                 </div>
@@ -2101,6 +2160,9 @@ export default function SessionReaderModal({
             <div ref={viewerRef} onClick={handleViewerClick}
               className={`pdf-scroll h-full overflow-auto flex flex-col items-center ${rawPages ? "px-1.5 md:px-3 pt-2 md:pt-3 pb-8" : "px-3 md:px-6 pt-9 pb-16"}`}
               style={{ background: "var(--ak-bg)", alignItems: zoom > 1 ? "flex-start" : "center" }}>
+              {folderHome ? (
+                <div className="w-full md:max-w-2xl">{folderHome}</div>
+              ) : (<>
               {pages.map((p, i) => (
                 <div
                   key={i}
@@ -2137,6 +2199,26 @@ export default function SessionReaderModal({
                   })()}
                 </div>
               ))}
+              {/* A gathered content closes with its sources — each row opens
+                  the ORIGINAL document; closing it returns here. */}
+              {sourceCitations?.list?.length > 0 && (
+                <div className="w-full md:max-w-2xl" style={{ borderTop: "1px solid var(--ak-border)", paddingTop: 14, marginTop: 4 }}>
+                  <div className="text-xs font-extrabold mb-2" style={{ color: "var(--ak-text-muted)", letterSpacing: ".06em" }}>SOURCES — TAP TO OPEN THE ORIGINAL</div>
+                  {sourceCitations.list.map((s) => (
+                    <button key={s.marker} type="button" onClick={() => sourceCitations.onOpen?.(Number(s.marker))}
+                      className="w-full flex items-center gap-2.5 text-left border rounded-xl px-3 py-2.5 mb-2"
+                      style={{ borderColor: "var(--ak-border)", background: "var(--ak-surface)", cursor: "pointer" }}>
+                      <span className="ak-src-chip" style={{ pointerEvents: "none" }}>{s.marker}</span>
+                      <span className="min-w-0">
+                        <span className="block text-[13px] font-extrabold truncate" style={{ color: "var(--ak-text)" }}>{s.name}</span>
+                        <span className="block text-[11px] font-bold" style={{ color: "var(--ak-text-muted)" }}>{s.ownerName ? `${s.ownerName} · ` : ""}free notes in Discover</span>
+                      </span>
+                      <Icon name="ti-chevron-right" size={14} color="var(--ak-text-muted)"/>
+                    </button>
+                  ))}
+                </div>
+              )}
+              </>)}
             </div>
             )}
           </div>

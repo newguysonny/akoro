@@ -64,11 +64,11 @@ import {
 } from "./avTranscribeLib.js";
 import { indexRecord, indexByContentKey, searchRecordChunks } from "./searchLib.js";
 import {
-  ASK_LIMITS, gatherPassages, buildAskMessages, extractCitations, loadAskHistory, saveAskTurn, cleanModelOutput,
+  ASK_LIMITS, gatherPassages, gatherFolderPassages, buildAskMessages, extractCitations, loadAskHistory, saveAskTurn, cleanModelOutput,
 } from "./askLib.js";
 import { openai, OPENAI_MODEL } from "../../lib/aiModel.js";
 import { buildGuideMessages, cleanGuideHistory, GUIDE_LIMITS } from "./guideLib.js";
-import { activePremiumUserIds, resolveContentAccess, resolveAskTargetFor } from "./access.js";
+import { activePremiumUserIds, resolveContentAccess, resolveAskTargetFor, resolveFolderTargetFor } from "./access.js";
 import { officeKindOf } from "./officeText.js";
 import { storedTextKindOf, extractStoredText } from "./storedText.js";
 import { TOOL_IDS, TOOL_LIMITS, toolSchema, buildToolMessages, shapeToolResult, gatherToolPassages } from "./toolsLib.js";
@@ -804,8 +804,14 @@ router.get("/extract/content/:key", authenticateToken, asyncHandler(async (req, 
  * chunks answer: { recordId, ownerId, contentKey, name } or { status, message }.
  */
 async function resolveAskTarget(req, src) {
+  // A folder target (the folder reader's tools + Ask) resolves to the
+  // folder's documents; everything else is one document as before.
+  if (src?.folderId) return resolveFolderTargetFor({ userId: req.user.id, folderId: src.folderId });
   return resolveAskTargetFor({ userId: req.user.id, recordId: src?.recordId, contentKey: src?.contentKey });
 }
+
+/** The history/artifact anchor for a resolved target: folder or record. */
+const anchorOf = (target) => (target.folderId ? { folderId: target.folderId } : { recordId: target.recordId });
 
 const cleanSelection = (sel) => {
   const text = typeof sel?.text === "string" ? sel.text.trim().slice(0, ASK_LIMITS.MAX_SELECTION_CHARS) : "";
@@ -848,15 +854,17 @@ router.post("/ask", authenticateToken, asyncHandler(async (req, res) => {
 
   try {
     const [history, { passages, indexed }] = await Promise.all([
-      loadAskHistory({ userId: req.user.id, recordId: target.recordId, limit: ASK_LIMITS.HISTORY_TURNS * 2 }).catch(() => []),
-      gatherPassages({ target, question, selection, search: searchRecordChunks }),
+      loadAskHistory({ userId: req.user.id, ...anchorOf(target), limit: ASK_LIMITS.HISTORY_TURNS * 2 }).catch(() => []),
+      target.folderId
+        ? gatherFolderPassages({ targets: target.folderTargets, question, search: searchRecordChunks })
+        : gatherPassages({ target, question, selection, search: searchRecordChunks }),
     ]);
     if (!indexed && !selection) {
       return fail(409, "This document isn't searchable yet — extract its text (or transcribe the recording) first, then ask again.");
     }
     if (wantsStream) send("status", { step: "answer", label: "Writing the answer…", passages: passages.length });
 
-    const messages = buildAskMessages({ docName: target.name, passages, question, history });
+    const messages = buildAskMessages({ docName: target.folderId ? `${target.name} (a folder — passages name their document)` : target.name, passages, question, history });
     let answer = "";
     if (wantsStream) {
       const stream = await openai.chat.completions.create({ model: OPENAI_MODEL, temperature: 0.2, max_tokens: 900, messages, stream: true });
@@ -874,7 +882,7 @@ router.post("/ask", authenticateToken, asyncHandler(async (req, res) => {
 
     let messageId = null;
     try {
-      ({ assistantMessageId: messageId } = await saveAskTurn({ userId: req.user.id, recordId: target.recordId, question, selection, answer, citations }));
+      ({ assistantMessageId: messageId } = await saveAskTurn({ userId: req.user.id, ...anchorOf(target), question, selection, answer, citations }));
     } catch (e) {
       console.warn("[records-ask] saving the turn failed:", String(e?.message || e).slice(0, 160));
     }
@@ -1069,7 +1077,7 @@ router.get("/podcast/:id", authenticateToken, asyncHandler(async (req, res) => {
 router.get("/artifacts", authenticateToken, asyncHandler(async (req, res) => {
   const target = await resolveAskTarget(req, req.query);
   if (target.status) return res.status(target.status).json({ success: false, message: target.message });
-  const list = await listArtifacts({ userId: req.user.id, recordId: target.recordId });
+  const list = await listArtifacts({ userId: req.user.id, ...anchorOf(target) });
   res.json({ success: true, data: { artifacts: await Promise.all(list.map((a) => withPodcastAudio(a, req.user.id))) } });
 }));
 
@@ -1080,7 +1088,7 @@ router.post("/artifacts", authenticateToken, asyncHandler(async (req, res) => {
   const v = validateArtifactInput(req.body);
   if (v.error) return res400(res, v.error);
   if (SERVER_MADE_KINDS.includes(v.row.kind)) return res400(res, "Podcasts are made with the Podcast tool.");
-  const out = await createArtifact({ userId: req.user.id, recordId: target.recordId, row: v.row });
+  const out = await createArtifact({ userId: req.user.id, ...anchorOf(target), row: v.row });
   if (out.error) return res.status(409).json({ success: false, message: out.error });
   res.status(201).json({ success: true, data: { artifact: out.artifact } });
 }));
@@ -1118,7 +1126,7 @@ router.delete("/artifacts/:id", authenticateToken, asyncHandler(async (req, res)
 router.get("/ask/history", authenticateToken, asyncHandler(async (req, res) => {
   const target = await resolveAskTarget(req, req.query);
   if (target.status) return res.status(target.status).json({ success: false, message: target.message });
-  const messages = await loadAskHistory({ userId: req.user.id, recordId: target.recordId });
+  const messages = await loadAskHistory({ userId: req.user.id, ...anchorOf(target) });
   res.json({ success: true, data: { messages } });
 }));
 

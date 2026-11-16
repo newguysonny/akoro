@@ -44,7 +44,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import TeachAgentModal from '../teaching/TeachAgentModal.jsx';
 import { buildSessionReaderPages } from '../teaching/SessionReaderModal.jsx';
 import { officeReaderPages } from '../../lib/officePages.js';
-import { recordDownloadUrl, recordFileSrc, extractStoredRecordText, getRecordExtraction, getSharedExtraction, getRecordTranscript, getSharedTranscript, startRecordTranscription, getRecordTranscriptionStatus, getAskHistory, askRecord, generateRecordTool, startRecordPodcast, getRecordPodcast, listRecordArtifacts, saveRecordArtifact, updateRecordArtifact, deleteRecordArtifact } from '../../services/recordsApi.js';
+import { recordDownloadUrl, recordFileSrc, extractStoredRecordText, getRecordExtraction, getSharedExtraction, getRecordTranscript, getSharedTranscript, startRecordTranscription, getRecordTranscriptionStatus, getAskHistory, askRecord, generateRecordTool, startRecordPodcast, getRecordPodcast, listRecordArtifacts, saveRecordArtifact, updateRecordArtifact, deleteRecordArtifact, discoverRecordOpen } from '../../services/recordsApi.js';
 import { Icon } from '../common/Icons.jsx';
 import { BRAND } from '../../constants.js';
 import ExtractionCard from './ExtractionCard.jsx';
@@ -115,6 +115,8 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
   openArtifact = null,  // a saved tab to open the reader on (made in Agent Chat)
   downloadUrl = null,   // records from the discovery feed ride a presigned
                         // URL — the shelf's /:id/file route is owner-scoped
+  folderNav = null,     // opened from a folder: the reader shows the
+                        // folder's contents row (host owns the selection)
 }) {
   const { t } = useLang();
   const [state, setState] = useState('loading');          // loading | ready | error
@@ -140,6 +142,24 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
   // discussion feature doesn't exist on this content; [..] = the chat
   // rides the reader.
   const [discussionCommunities, setDiscussionCommunities] = useState(null);
+  /* A gathered content's sources: tapping a citation (or a Sources row)
+     opens the ORIGINAL record in its own reader on top of this one;
+     closing it returns here. The source opens exactly like a Discover
+     card — one /discover/:id/open call, then the same session. */
+  const [sourceSession, setSourceSession] = useState(null);   // a record-shaped object
+  const openSource = async (marker) => {
+    const src = (record?.sources || []).find((s) => Number(s.marker) === Number(marker));
+    if (!src?.recordId || sourceSession) return;
+    try {
+      const d = await discoverRecordOpen(src.recordId);
+      if (src.kind === 'paste') {
+        setSourceSession({ id: src.recordId, kind: 'paste', name: src.name, content: d?.content || '', fileUrl: null });
+      } else {
+        if (!d?.url) return;
+        setSourceSession({ id: src.recordId, kind: 'upload', name: src.name, mime: '', fileUrl: d.url, contentKey: d.contentKey || src.contentKey || null });
+      }
+    } catch { /* the source is no longer shared — stay on the gathered content */ }
+  };
   const textsRef  = useRef([]);      // the load flow's per-page text layer (≈'' for scans)
   const applyRef  = useRef(null);    // set by the load flow; applies parsed pages to the session
   // False once the reader closes: extraction polling stops instead of
@@ -633,6 +653,12 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
     tools,
     // Generated tabs, notes and annotations — kept across visits.
     artifacts,
+    // Gathered content: the citation map rides to the reader — [n] markers
+    // become chips and a Sources list closes the document.
+    sourceCitations: Array.isArray(record?.sources) && record.sources.length
+      ? { list: record.sources, onOpen: openSource } : null,
+    // Opened from a folder: the contents row under the tab pills.
+    folderNav,
   };
 
   /* A remembered session id (24h) makes reopening a record CONTINUE its
@@ -680,6 +706,16 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
       onSessionSaved={(sid) => storeSid(record.id, sid)}
     />
       {extractOverlay}
+      {/* The original source, opened from a citation — its own reader,
+          stacked over this one; closing it returns to the gathered content. */}
+      {sourceSession && (
+        <RecordTeachSession
+          record={sourceSession}
+          downloadUrl={sourceSession.kind === 'upload' ? sourceSession.fileUrl : null}
+          onClose={() => setSourceSession(null)}
+          onMinimize={() => setSourceSession(null)}
+        />
+      )}
     </>
   );
 }

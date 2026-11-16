@@ -176,9 +176,12 @@ export function buildToolMessages({ tool, docName = "this document", passages = 
   return [{ role: "system", content: system }, { role: "user", content: `Create the ${tool} now.` }];
 }
 
-/** Where a passage points, as a citation the app's jump understands. */
+/** Where a passage points, as a citation the app's jump understands.
+ *  A folder passage also names its source document (the jump stays
+ *  inside that document; the reader shows the name instead). */
 export function citeOf(p) {
-  return { n: p.n, pageNumber: p.pageNumber ?? null, bbox: p.bbox ?? null, startMs: p.startMs ?? null, endMs: p.endMs ?? null, quote: clip(p.text, 200) };
+  return { n: p.n, pageNumber: p.pageNumber ?? null, bbox: p.bbox ?? null, startMs: p.startMs ?? null, endMs: p.endMs ?? null, quote: clip(p.text, 200),
+    ...(p.sourceName ? { sourceName: p.sourceName, sourceRecordId: p.sourceRecordId ?? null } : {}) };
 }
 
 /**
@@ -255,7 +258,44 @@ async function loadChunks(recordId) {
  * Passages for a tool run. Returns [] when the document has nothing the
  * server can read for that scope (the route says so honestly).
  */
+/**
+ * Pool several documents' tool passages into one numbered set (folder
+ * tools): round-robin across documents under the same caps a single
+ * document gets, renumbered. Passages arrive pre-tagged with their
+ * source document.
+ */
+export function mergeToolFolderPassages(perDoc = []) {
+  const queues = perDoc.map((list) => [...list]);
+  const out = [];
+  let chars = 0;
+  for (;;) {
+    let took = false;
+    for (const q of queues) {
+      if (out.length >= TOOL_LIMITS.MAX_PASSAGES) break;
+      const p = q.shift();
+      if (!p) continue;
+      const text = clip(p.text, TOOL_LIMITS.MAX_PASSAGE_CHARS);
+      if (chars + text.length > TOOL_LIMITS.MAX_CONTEXT_CHARS && out.length) continue;
+      out.push({ ...p, text }); chars += text.length; took = true;
+    }
+    if (!took || out.length >= TOOL_LIMITS.MAX_PASSAGES) break;
+  }
+  return out.map((p, i) => ({ ...p, n: i + 1 }));
+}
+
 export async function gatherToolPassages({ target, scope, pageNumber = null, pageText = "", focus = "", search }) {
+  // A folder target: passages from every document in the folder, pooled.
+  // Page scope has no meaning over a folder — always the whole documents.
+  if (Array.isArray(target?.folderTargets)) {
+    const perDoc = [];
+    for (const docTarget of target.folderTargets.slice(0, 8)) {
+      const passages = await gatherToolPassages({ target: docTarget, scope: "document", focus, search });
+      if (passages.length) {
+        perDoc.push(passages.map((p) => ({ ...p, sourceName: docTarget.name, sourceRecordId: docTarget.recordId })));
+      }
+    }
+    return mergeToolFolderPassages(perDoc);
+  }
   if (scope === "page" && Number.isInteger(pageNumber)) {
     if (target.contentKey) {
       const pages = await loadPages(target.contentKey, [pageNumber]);

@@ -7,6 +7,7 @@ process.env.SUPABASE_SERVICE_KEY ||= "test-service-key";
 
 const {
   ASK_LIMITS, contentWords, selectPassages, buildAskMessages, extractCitations, passageWhere, gatherPassages, cleanModelOutput,
+  mergeFolderPassages, turnRows,
 } = await import("./askLib.js");
 const routesSrc = await readFile(new URL("./routes.js", import.meta.url), "utf8")
   + await readFile(new URL("./access.js", import.meta.url), "utf8");   // the access rule lives in access.js
@@ -138,4 +139,29 @@ test("cleanModelOutput: keeps only the final answer, no sentinel or repeat", () 
   const twice = "Cells are the unit of life. ".repeat(2).trim();
   assert.equal(cleanModelOutput(twice), "Cells are the unit of life.");
   assert.equal(cleanModelOutput("Answer\u200b text<final></final>"), "Answer text");
+});
+
+test("folder passages pool round-robin across documents, keep their source, and renumber", () => {
+  const doc = (name, texts) => texts.map((text, i) => ({ kind: "page", pageNumber: i + 1, bbox: null, startMs: null, endMs: null, text, sourceName: name, sourceRecordId: `id-${name}` }));
+  const pooled = mergeFolderPassages([doc("Alpha", ["a1", "a2", "a3"]), doc("Beta", ["b1", "b2"])]);
+  assert.deepEqual(pooled.map((p) => p.text), ["a1", "b1", "a2", "b2", "a3"], "no document fills the set before the others speak");
+  assert.deepEqual(pooled.map((p) => p.n), [1, 2, 3, 4, 5]);
+  assert.equal(pooled[1].sourceName, "Beta");
+  assert.equal(passageWhere(pooled[0]), "Alpha · page 1", "the model is told which document a passage is from");
+  const { citations } = extractCitations("From both [1] and [2].", pooled);
+  assert.equal(citations[0].sourceName, "Alpha");
+  assert.equal(citations[1].sourceRecordId, "id-Beta");
+});
+
+test("a folder ask turn anchors on folder_id, never record_id", () => {
+  const rows = turnRows({ userId: "u1", folderId: "f1", question: "q", answer: "a", citations: [] });
+  assert.equal(rows.length, 2);
+  assert.ok(rows.every((r) => r.folder_id === "f1" && !("record_id" in r)));
+});
+
+test("folder targets and the Discover ask rule are wired", () => {
+  assert.match(routesSrc, /resolveFolderTargetFor/, "folders resolve to their documents' targets");
+  assert.match(routesSrc, /discoverable/, "a non-owner's record is an ask target only under the Discover rule");
+  assert.match(routesSrc, /activePremiumUserIds/, "Premium owners stay private in that rule");
+  assert.match(routesSrc, /gatherFolderPassages/, "folder Ask gathers across the folder's documents");
 });

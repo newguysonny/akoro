@@ -53,18 +53,22 @@ const fmtTime = (ms) => {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 };
 
-/** A chip's label: "p. 4", "12:05", or the passage number. */
+/** A chip's label: "p. 4", "12:05", or the passage number. A folder
+ *  citation names its document first — the page is inside THAT document. */
 export function citeLabel(cite) {
-  if (Number.isInteger(cite?.pageNumber)) return `p. ${cite.pageNumber}`;
-  if (Number.isFinite(cite?.startMs)) return fmtTime(cite.startMs);
-  return `#${cite?.n ?? ''}`;
+  const base = Number.isInteger(cite?.pageNumber) ? `p. ${cite.pageNumber}`
+    : Number.isFinite(cite?.startMs) ? fmtTime(cite.startMs)
+    : `#${cite?.n ?? ''}`;
+  return cite?.sourceName ? `${cite.sourceName} · ${base}` : base;
 }
 
-/** The reader's citeJump shape (0-based page) — or null when there's nowhere to go. */
+/** The reader's citeJump shape (0-based page) — or null when there's nowhere to go.
+ *  A folder citation keeps its source document: the jump goes there instead. */
 export function toReaderCite(cite) {
+  const source = cite?.sourceRecordId ? { sourceRecordId: cite.sourceRecordId, sourceName: cite.sourceName || null } : {};
   if (Number.isInteger(cite?.pageNumber)) {
-    return { page: cite.pageNumber - 1, ...(Array.isArray(cite.bbox) && cite.bbox.length === 4 ? { bbox: cite.bbox } : {}) };
+    return { page: cite.pageNumber - 1, ...(Array.isArray(cite.bbox) && cite.bbox.length === 4 ? { bbox: cite.bbox } : {}), ...source };
   }
-  if (Number.isFinite(cite?.startMs)) return { startMs: cite.startMs };
-  return null;
+  if (Number.isFinite(cite?.startMs)) return { startMs: cite.startMs, ...source };
+  return Object.keys(source).length ? { ...source } : null;
 }
