@@ -378,7 +378,7 @@ router.post("/users/invite-csv", adminOnly, asyncHandler(async (req, res) => {
       errors.push({ index: i, reason: "missing email", row });
       continue;
     }
-    if (row.role && !["student", "instructor"].includes(row.role)) {
+    if (row.role && !["student", "instructor", "school_admin"].includes(row.role)) {
       errors.push({ index: i, reason: "invalid role", row });
       continue;
     }
