@@ -22,7 +22,7 @@ test("after Approve/Confirm the tap records ONLY the decision — the agent's aw
   assert.doesNotMatch(src, /postIntoChat/, "the server never posts the outcome into the chat");
   assert.doesNotMatch(src, /kickDecisionFollowUp/, "no server-side follow-up turn is kicked");
   assert.match(src, /export async function decideConfirmation\(/, "the tap records the decision");
-  assert.match(src, /status: "approved", confirmed_at: now/, "approve moves pending -> approved, unexecuted");
+  assert.match(src, /status: "confirmed", confirmed_at: now/, "approve moves pending -> confirmed, unexecuted");
   assert.match(src, /export async function awaitDecision\(/, "the agent waits for the decision itself");
   const routes = read("./routes.js");
   assert.match(routes, /decideConfirmation\(\{ id: req\.params\.id, userId: req\.user\.id, decision: "approved" \}\)/);

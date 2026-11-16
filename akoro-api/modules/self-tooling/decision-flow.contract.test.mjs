@@ -19,9 +19,13 @@ test("confirmations: decide records, execute applies, await waits — and nothin
   assert.match(src, /export async function decideConfirmation\(\{ id, userId, decision \}\)/);
   assert.match(src, /export async function executeDecision\(\{ id, userId, callTool, buildTool = null, toolDeps = null \}\)/);
   assert.match(src, /export async function awaitDecision\(/);
-  assert.match(src, /export async function listApprovedDecisions\(userId, sessionId\)/);
+  assert.match(src, /export async function listConfirmedDecisions\(userId, sessionId\)/);
+  // The DB status is the table's own 'confirmed' (its CHECK constraint knows no 'approved');
+  // the public view presents it as 'approved' for the app.
+  assert.match(src, /status: row\.status === "confirmed" \? "approved" : row\.status/);
+  assert.match(src, /update\(\{ status: "confirmed", confirmed_at: now/);
   // Execution claims approved -> consumed atomically, so two turns can't apply one card twice.
-  assert.match(src, /eq\("status", "approved"\)\.select\("\*"\)\.maybeSingle\(\)/);
+  assert.match(src, /eq\("status", "confirmed"\)\.select\("\*"\)\.maybeSingle\(\)/);
   // Every proposal note sends the agent to await_decision in the same turn.
   assert.equal((src.match(/call await_decision with this confirmationId/g) || []).length, 3, "write, permission and build notes all instruct the wait");
 });
@@ -41,7 +45,7 @@ test("the tool: defined for the chat, executable, always in the turn's tool list
 
 test("a late decision is surfaced to the next turn in its chat, and that turn is forced to finish it", () => {
   const chat = read("../adaptive-learning/chat.js");
-  assert.match(chat, /listApprovedDecisions\(req\.user\.id, conversationId\)/);
+  assert.match(chat, /listConfirmedDecisions\(req\.user\.id, conversationId\)/);
   assert.match(chat, /## A decision is waiting for you to finish/);
   assert.match(chat, /approvedDecisions\.length \? "await_decision"/);
 });

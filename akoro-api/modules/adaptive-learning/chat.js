@@ -5664,8 +5664,8 @@ router.post("/agent", async (req, res) => {
     // await_decision itself (nothing is applied or posted by the server).
     const decisionsP = role === "student" && conversationId ? (async () => {
       try {
-        const { listApprovedDecisions } = await import("../self-tooling/confirmations.js");
-        return await listApprovedDecisions(req.user.id, conversationId);
+        const { listConfirmedDecisions } = await import("../self-tooling/confirmations.js");
+        return await listConfirmedDecisions(req.user.id, conversationId);
       } catch { return []; }
     })() : Promise.resolve([]);
     const chatFilesP = role === "student" && conversationId ? (async () => {

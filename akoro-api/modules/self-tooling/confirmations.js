@@ -39,7 +39,8 @@ const publicConfirmation = (row) => ({
   sessionId: row.session_id && row.session_id !== "none" ? row.session_id : null,
   // A permission card for a drafted tool: its goal, and the items are what it would change right now.
   ...((row.tool_arguments?.kind === "permission" || row.tool_arguments?.kind === "build") ? { goal: row.preview?.goal || null, drafted: !!row.tool_arguments?.toolId, ...(row.tool_arguments?.kind === "build" ? { writes: !!row.preview?.writes } : {}) } : {}),
-  status: row.status,
+  // The table's word for a recorded approval is 'confirmed'; the app calls it 'approved'.
+  status: row.status === "confirmed" ? "approved" : row.status,
   title: row.preview?.title || null,
   action: row.preview?.action || null,
   items: row.preview?.items || [],
@@ -195,7 +196,9 @@ export async function proposeBuild({ learnerId, conversationId = null, proposed,
  * chat tool, inside the same turn; when the decision lands, that call applies
  * exactly what the card proposed (the arguments were frozen at proposal
  * time) and returns the outcome for the agent to narrate and continue from.
- * A decision that lands after the turn ended waits as "approved" until the
+ * A decision that lands after the turn ended waits as "confirmed" (the
+ * table's own word for decided-not-yet-applied; the API presents it to the
+ * app as "approved") until the
  * agent's next turn in that chat picks it up the same way.
  */
 
@@ -211,14 +214,14 @@ export async function decideConfirmation({ id, userId, decision }) {
     if (data && draft) await edu().from("agent_tools").update({ status: "archived", updated_at: new Date().toISOString() }).eq("id", draft).eq("owner_id", userId).eq("status", "disabled");
     return publicConfirmation(data || row);
   }
-  if (row.status === "approved") return publicConfirmation(row);
+  if (row.status === "confirmed") return publicConfirmation(row);
   if (row.status !== "pending") throw httpError(409, row.status === "consumed" ? "Already done" : `This change was ${row.status}`);
   if (Date.parse(row.expires_at) <= Date.now()) {
     await edu().from(TABLE).update({ status: "expired", updated_at: new Date().toISOString() }).eq("id", id).eq("status", "pending");
     throw httpError(410, "This confirmation expired — ask your agent again.");
   }
   const now = new Date().toISOString();
-  const { data: decided, error } = await edu().from(TABLE).update({ status: "approved", confirmed_at: now, updated_at: now })
+  const { data: decided, error } = await edu().from(TABLE).update({ status: "confirmed", confirmed_at: now, updated_at: now })
     .eq("id", id).eq("principal_id", userId).eq("status", "pending").select("*").maybeSingle();
   if (error) throw new Error("couldn't record the decision");
   if (!decided) throw httpError(409, "Already handled");
@@ -228,11 +231,11 @@ export async function decideConfirmation({ id, userId, decision }) {
 const kindOf = (row) => (row.tool_arguments?.kind === "permission" ? "permission" : row.tool_arguments?.kind === "build" ? "build" : "change");
 const sessionOf = (row) => (row.session_id && row.session_id !== "none" ? row.session_id : null);
 
-/** Claim an approved row for execution (approved → consumed, atomically, once). Returns null when someone else holds it. */
+/** Claim a confirmed row for execution (confirmed → consumed, atomically, once). Returns null when someone else holds it. */
 async function claimApproved(id, userId) {
   const now = new Date().toISOString();
   const { data, error } = await edu().from(TABLE).update({ status: "consumed", consumed_at: now, updated_at: now })
-    .eq("id", id).eq("principal_id", userId).eq("status", "approved").select("*").maybeSingle();
+    .eq("id", id).eq("principal_id", userId).eq("status", "confirmed").select("*").maybeSingle();
   if (error) throw new Error("couldn't claim the decision");
   return data;
 }
@@ -248,7 +251,7 @@ async function executeChange(row, { userId, callTool }) {
   const runner = WRITE_RUNNERS[cap];
   // Re-check BEFORE claiming: a revoked grant means nothing is changed.
   if (!runner || !CAPABILITIES[cap]?.target || (await capabilityStatus(cap, { learnerId: userId })) !== "enabled") {
-    await edu().from(TABLE).update({ status: "rejected", rejected_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", row.id).eq("status", "approved");
+    await edu().from(TABLE).update({ status: "rejected", rejected_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", row.id).eq("status", "confirmed");
     return { confirmation: publicConfirmation({ ...row, status: "rejected" }), kind: "change", blocked: "This kind of change isn't allowed any more, so nothing was changed." };
   }
   const claimed = await claimApproved(row.id, userId);
@@ -269,7 +272,7 @@ async function executeChange(row, { userId, callTool }) {
 async function executeBuild(row, { userId, toolDeps }) {
   const { proposed = {}, toolId } = row.tool_arguments || {};
   if (!toolId) {
-    await edu().from(TABLE).update({ status: "rejected", rejected_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", row.id).eq("status", "approved");
+    await edu().from(TABLE).update({ status: "rejected", rejected_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", row.id).eq("status", "confirmed");
     return { confirmation: publicConfirmation({ ...row, status: "rejected" }), kind: "build", blocked: "This card has no tool to keep, so nothing was saved." };
   }
   const claimed = await claimApproved(row.id, userId);
@@ -302,7 +305,7 @@ async function executePermission(row, { userId, buildTool, toolDeps }) {
   const { cap, proposed = {} } = row.tool_arguments || {};
   const toolId = row.tool_arguments?.toolId || null;
   if (!learnerGrantable(cap) || (!toolId && !buildTool)) {
-    await edu().from(TABLE).update({ status: "rejected", rejected_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", row.id).eq("status", "approved");
+    await edu().from(TABLE).update({ status: "rejected", rejected_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", row.id).eq("status", "confirmed");
     return { confirmation: publicConfirmation({ ...row, status: "rejected" }), kind: "permission", blocked: "This can't be allowed from here any more, so nothing was built." };
   }
   const claimed = await claimApproved(row.id, userId);
@@ -340,11 +343,11 @@ async function executePermission(row, { userId, buildTool, toolDeps }) {
   return { confirmation: publicConfirmation(stored), kind: "permission", result, next };
 }
 
-/** Apply a decision the learner already approved. Idempotent: a consumed row returns its stored outcome. */
+/** Apply a decision the learner already confirmed. Idempotent: a consumed row returns its stored outcome. */
 export async function executeDecision({ id, userId, callTool, buildTool = null, toolDeps = null }) {
   const row = await owned(id, userId);
   if (row.status === "consumed") return { confirmation: publicConfirmation(row), kind: kindOf(row), result: row.preview?.result || null, alreadyDone: true };
-  if (row.status !== "approved") throw httpError(409, `This card was ${row.status}, not approved`);
+  if (row.status !== "confirmed") throw httpError(409, `This card was ${row.status}, not approved`);
   const kind = kindOf(row);
   const out = kind === "permission" ? await executePermission(row, { userId, buildTool, toolDeps })
     : kind === "build" ? await executeBuild(row, { userId, toolDeps })
@@ -379,7 +382,7 @@ export async function awaitDecision({ id, userId, callTool, buildTool = null, to
       return { status: "expired", kind, title: row.preview?.title || null,
         note: "The card expired before the learner decided, so nothing happened. If what it proposed is still needed, propose it again; otherwise carry on." };
     }
-    if (row.status === "approved" || row.status === "consumed") {
+    if (row.status === "confirmed" || row.status === "consumed") {
       try {
         const out = await executeDecision({ id, userId, callTool, buildTool, toolDeps });
         if (out.blocked) return { status: "blocked", kind, title: row.preview?.title || null, reason: out.blocked,
@@ -406,10 +409,10 @@ export async function awaitDecision({ id, userId, callTool, buildTool = null, to
 }
 
 /** Decisions the learner approved in this chat that no agent turn has applied yet — the next turn finishes them. */
-export async function listApprovedDecisions(userId, sessionId) {
+export async function listConfirmedDecisions(userId, sessionId) {
   if (!sessionId) return [];
   const { data, error } = await edu().from(TABLE).select("*").eq("principal_id", userId).eq("capability_jti", JTI)
-    .eq("status", "approved").eq("session_id", sessionId).order("confirmed_at", { ascending: true }).limit(5);
+    .eq("status", "confirmed").eq("session_id", sessionId).order("confirmed_at", { ascending: true }).limit(5);
   if (error) return [];
   return (data || []).map(publicConfirmation);
 }
