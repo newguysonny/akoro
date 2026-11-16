@@ -224,6 +224,8 @@ test("copy-on-use: a platform winner is copied into the learner's Library before
   assert.match(studyMaterial, /private: true,/);
   assert.match(studyMaterial, /file_key: src\.kind === "upload" \? src\.file_key : null/);
   assert.match(studyMaterial, /source: "platform", sourceName: found\.record\.name, sourceOwner:/);
+  // …and the reported name carries the provenance into the card title.
+  assert.match(studyMaterial, /name: platformNote \? `Free notes in Discover · \$\{found\.record\.name\}` : found\.record\.name/);
   // The result instructs the reply to name the source (the battery found the
   // bare fields were not enough — the agent called it "your own document").
   assert.match(studyMaterial, /free notes in Discover/);

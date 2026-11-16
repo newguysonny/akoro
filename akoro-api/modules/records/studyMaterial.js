@@ -472,7 +472,13 @@ export async function makeStudyMaterial({ userId, tool, query = "", folder = "",
     const { resolveAskTargetFor } = await import("./access.js");
     const target = await resolveAskTargetFor({ userId, recordId: found.record.id });
     if (target.status) return { error: target.message };
-    const base = { tool, recordId: found.record.id, name: found.record.name, ...(found.folder ? { folder: found.folder.name } : {}), ...(platformNote || {}) };
+    const base = { tool, recordId: found.record.id,
+      // A platform build carries its provenance in the name the result
+      // reports: the card title is built from it ("Quiz · Free notes in
+      // Discover · <name>") and the model reads it too. The Library record
+      // itself keeps its real name.
+      name: platformNote ? `Free notes in Discover · ${found.record.name}` : found.record.name,
+      ...(found.folder ? { folder: found.folder.name } : {}), ...(platformNote || {}) };
 
     // An identical rebuild returns the tab that already exists: same
     // document, same tool, same page, same knobs — no second generation, no
