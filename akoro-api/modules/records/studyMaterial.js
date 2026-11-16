@@ -11,7 +11,10 @@
  *                       conversationId, fromChatFile })
  *       Agent Chat: find the learner's document (or the best one in a folder,
  *       or — fromChatFile — a file they sent in this chat), build the tool
- *       from the WHOLE document, save it as a reader tab →
+ *       from the WHOLE document, save it as a reader tab. When their Library
+ *       has nothing, the platform tier looks in Discover's free notes and a
+ *       winner is first copied into their Library (the result then carries
+ *       source: "platform" + the source's name and owner) →
  *       { made, tool, recordId, artifactId, name, href, count } | { needsChoice } | { error }
  *
  * Whatever chat makes is the same saved item the reader makes (edu.record_artifacts),
@@ -20,9 +23,9 @@
 import db from "../../db.js";
 import { openai } from "../../lib/aiModel.js";
 import { TOOL_IDS, TOOL_LIMITS, toolSchema, toolCount, buildToolMessages, shapeToolResult, gatherToolPassages, citeOf } from "./toolsLib.js";
-import { searchRecordChunks } from "./searchLib.js";
+import { searchRecordChunks, searchPlatformChunks, indexRecord } from "./searchLib.js";
 import { getExtraction } from "./extractLib.js";
-import { escapeLike, rankContentHits, pickContentWinner, findDuplicateArtifact, passagesFromExtraction, pickChatRecord } from "./studyMaterialCore.js";
+import { escapeLike, rankContentHits, pickContentWinner, findDuplicateArtifact, passagesFromExtraction, pickChatRecord, platformTerms, platformChunkScore } from "./studyMaterialCore.js";
 import { createArtifact, listArtifacts, updateArtifact } from "./artifactsLib.js";
 import { PODCAST_LIMITS, lengthOf, podcastSchema, podcastInFlight, runPodcastJob } from "./podcastLib.js";
 import { coinsAvailable, debitCoins } from "../../lib/coins.js";
@@ -251,6 +254,110 @@ async function chatReadRecords({ userId, conversationId }) {
       title: c.title, subject: c.subject, topics: c.topics }));
 }
 
+/* ── The platform tier (Discover) ───────────────────────────────────────────
+   Reached only when the learner's own Library has nothing: the community's
+   free notes — the records the Discover feed shows (uploads and pastes, not
+   private, not deleted, never a Premium subscriber's, never the learner's
+   own). Name first (the feed's own signal), then content. A winner is NOT
+   built from directly: makeStudyMaterial first saves the learner their own
+   copy (copyPlatformRecord), because reader access is owner-only — the
+   artifact, its card and its dedupe all hang off a record the learner owns.
+   The shared content key means the copy costs no re-upload and no re-parse:
+   the extraction the owner paid for answers for both. */
+
+async function platformOwners(E, rows) {
+  const ids = [...new Set((rows || []).map((r) => r.user_id).filter(Boolean))];
+  if (!ids.length) return new Map();
+  const { data: users } = await E.from("users").select("id, full_name").in("id", ids);
+  return new Map((users || []).map((u) => [u.id, u.full_name || "Learner"]));
+}
+
+async function platformFind({ userId, q }) {
+  const E = db.schema("edu");
+  const { activePremiumUserIds } = await import("./access.js");
+  const premium = await activePremiumUserIds().catch(() => []);
+  const discoverable = (query) => {
+    let x = query.eq("private", false).in("kind", ["upload", "paste"])
+      .is("deleted_at", null).neq("user_id", userId);
+    if (premium.length) x = x.not("user_id", "in", `(${premium.join(",")})`);
+    return x;
+  };
+  // By name first — a free note actually called what the learner asked for.
+  const { data: named } = await discoverable(E.from("records").select("id, name, user_id"))
+    .ilike("name", `%${escapeLike(q)}%`).order("created_at", { ascending: false }).limit(6);
+  if (named?.length) {
+    const owners = await platformOwners(E, named);
+    const withOwners = named.map((r) => ({ ...r, ownerName: owners.get(r.user_id) || "Learner" }));
+    if (withOwners.length === 1) {
+      const r = withOwners[0];
+      return { record: { id: r.id, name: r.name }, platform: { ownerId: r.user_id, ownerName: r.ownerName } };
+    }
+    return { needsChoice: withOwners.map((r) => ({ recordId: r.id, name: r.name, ownerName: r.ownerName })) };
+  }
+  // Then by what is inside: lexical chunk hits over Discover-eligible
+  // records, scored by term coverage, ranked like the own-Library tier.
+  const hits = await searchPlatformChunks({ userId, q, limit: 60 }).catch(() => []);
+  if (!hits.length) return null;
+  const terms = platformTerms(q);
+  const ownersByRecord = new Map(hits.map((h) => [h.recordId, { ownerId: h.ownerId, ownerName: h.ownerName }]));
+  const ranked = rankContentHits(hits.map((h) => ({ ...h, fused: platformChunkScore(h.text, terms) })));
+  const pick = pickContentWinner(ranked);
+  if (!pick) return null;
+  if (pick.needsChoice) {
+    return { needsChoice: pick.needsChoice.map((c) => ({ ...c, ...(ownersByRecord.get(c.recordId) || {}) })) };
+  }
+  const rec = hits.find((h) => h.recordId === pick.recordId);
+  if (!rec) return null;
+  return { record: { id: rec.recordId, name: rec.name },
+    platform: { ownerId: rec.ownerId, ownerName: rec.ownerName } };
+}
+
+/**
+ * Save the learner their own copy of a Discover record, re-verifying the
+ * discovery rule at copy time (a record made private, deleted or Premium
+ * since the search must not be copied). The copy is private (it never
+ * re-enters the feed as a duplicate) and points at the SAME file, so the
+ * shared extraction answers for it; a paste copies its text. An existing
+ * copy of the same file is reused, never duplicated.
+ * → { record } | { error }
+ */
+async function copyPlatformRecord({ userId, sourceId }) {
+  const E = db.schema("edu");
+  const { data: src } = await E.from("records")
+    .select("id, user_id, kind, name, mime, size, duration, file_key, content, private")
+    .eq("id", sourceId).is("deleted_at", null).maybeSingle();
+  if (!src || src.user_id === userId || src.private || !["upload", "paste"].includes(src.kind)) {
+    return { error: "That free note isn't available anymore — say so and offer another way." };
+  }
+  const { activePremiumUserIds } = await import("./access.js");
+  const premium = await activePremiumUserIds().catch(() => []);
+  if (premium.includes(src.user_id)) return { error: "That free note isn't available anymore — say so and offer another way." };
+  if (src.kind === "upload" && src.file_key) {
+    const { data: existing } = await E.from("records").select("id, name")
+      .eq("user_id", userId).eq("file_key", src.file_key).is("deleted_at", null)
+      .order("created_at", { ascending: true }).limit(1);
+    if (existing?.[0]) return { record: existing[0] };
+  }
+  const { count } = await E.from("records").select("id", { count: "exact", head: true })
+    .eq("user_id", userId).is("deleted_at", null);
+  if ((count || 0) >= 200) return { error: "Their Library shelf is full (200) — ask them to remove something before saving a copy of a free note." };
+  const { data: copy, error } = await E.from("records").insert({
+    user_id: userId, kind: src.kind, name: src.name,
+    mime: src.mime || null, size: src.size || 0,
+    duration: src.duration ?? null,
+    file_key: src.kind === "upload" ? src.file_key : null,
+    content: src.kind === "paste" ? src.content : null,
+    private: true,
+  }).select("id, name").single();
+  if (error || !copy) return { error: "Couldn't save a copy of that free note to their Library — try again in a moment." };
+  // The create route's indexing, mirrored: the name always, a paste's text
+  // too. An upload copy needs no page chunks — generation reads the shared
+  // extraction by content key. Fire-and-forget, like the route.
+  void indexRecord({ userId, recordId: copy.id, name: copy.name, contentKey: src.file_key || null,
+    pasteText: src.kind === "paste" ? src.content : null });
+  return { record: copy };
+}
+
 /** The learner's document for a request: by id, by name, inside a folder, or by what it says. */
 export async function findStudyRecord({ userId, query = "", folder = "", recordId = null, conversationId = null, fromChatFile = false }) {
   const E = db.schema("edu");
@@ -319,8 +426,17 @@ export async function findStudyRecord({ userId, query = "", folder = "", recordI
       if (rec) return { record: rec, folder: folderRow };
     }
   }
+  // The platform tier: their own Library has nothing (and no folder was
+  // named — a folder ask stays in the folder), so look in Discover's free
+  // notes before giving up. An explicit chat-file ask never reaches here:
+  // the fromChatFile branch above has already answered for it.
+  if (!candidates && q.length >= 3) {
+    const plat = await platformFind({ userId, q }).catch(() => null);
+    if (plat?.needsChoice) return { needsChoice: plat.needsChoice, platform: true };
+    if (plat?.record) return { record: plat.record, platform: plat.platform };
+  }
   if (candidates) return { needsChoice: candidates.slice(0, 6).map((r) => ({ recordId: r.id, name: r.name })), folder: folderRow };
-  return { error: "Nothing in their Library matches — say so; don't invent a document." };
+  return { error: "Nothing in their Library matches, and no free notes in Discover match either — say so; don't invent a document. Offer the ways forward: teach you the topic, or upload the document." };
 }
 
 /** Agent Chat: make the study material and save it as a reader tab. Never throws. */
@@ -336,14 +452,26 @@ export async function makeStudyMaterial({ userId, tool, query = "", folder = "",
       return { needsChoice: true, tool, folder: found.folder?.name || null, records: found.needsChoice,
         note: found.chat
           ? `More than one file they sent in this chat could be the one — ask which one (by name) to make the ${tool} from; don't guess.`
-          : found.folder
-            ? `Their "${found.folder.name}" folder has several documents — ask which one (by name) to make the ${tool} from; don't guess.`
-            : `More than one of their documents matches almost equally — ask which one (by name) to make the ${tool} from; don't guess.` };
+          : found.platform
+            ? `More than one free note in Discover matches almost equally — ask which one to make the ${tool} from; they're listed with their owners' names, so ask by name and owner; don't guess.`
+            : found.folder
+              ? `Their "${found.folder.name}" folder has several documents — ask which one (by name) to make the ${tool} from; don't guess.`
+              : `More than one of their documents matches almost equally — ask which one (by name) to make the ${tool} from; don't guess.` };
+    }
+    // Platform tier: the winner is another learner's free note. Save the
+    // learner their own copy first — the artifact, its reader card and its
+    // dedupe all hang off the copy, and the reply can say where it came from.
+    let platformNote = null;
+    if (found.platform) {
+      const copied = await copyPlatformRecord({ userId, sourceId: found.record.id });
+      if (copied.error) return { error: copied.error };
+      platformNote = { source: "platform", sourceName: found.record.name, sourceOwner: found.platform.ownerName || null };
+      found = { ...found, record: copied.record };
     }
     const { resolveAskTargetFor } = await import("./access.js");
     const target = await resolveAskTargetFor({ userId, recordId: found.record.id });
     if (target.status) return { error: target.message };
-    const base = { tool, recordId: found.record.id, name: found.record.name, ...(found.folder ? { folder: found.folder.name } : {}) };
+    const base = { tool, recordId: found.record.id, name: found.record.name, ...(found.folder ? { folder: found.folder.name } : {}), ...(platformNote || {}) };
 
     // An identical rebuild returns the tab that already exists: same
     // document, same tool, same page, same knobs — no second generation, no

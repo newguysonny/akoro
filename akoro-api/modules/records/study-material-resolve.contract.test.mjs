@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { escapeLike, rankContentHits, pickContentWinner, findDuplicateArtifact, passagesFromExtraction, rankChatRecords, pickChatRecord } from "./studyMaterialCore.js";
+import { escapeLike, rankContentHits, pickContentWinner, findDuplicateArtifact, passagesFromExtraction, rankChatRecords, pickChatRecord, platformTerms, platformChunkScore } from "./studyMaterialCore.js";
 
 const studyMaterial = await readFile(new URL("./studyMaterial.js", import.meta.url), "utf8");
+const searchLib = await readFile(new URL("./searchLib.js", import.meta.url), "utf8");
 const materialsRoutes = await readFile(new URL("../materials/routes.js", import.meta.url), "utf8");
 const chat = await readFile(new URL("../adaptive-learning/chat.js", import.meta.url), "utf8");
 
@@ -160,6 +161,76 @@ test("chat files: the tool carries from_chat_file and the handler hands the conv
   assert.ok(callAt >= 0);
   const call = chat.slice(callAt, callAt + 600);
   assert.ok(call.includes("conversationId, fromChatFile: !!input?.from_chat_file"), "the handler passes conversationId and the flag");
+});
+
+/* ── Platform tier: Discover's free notes ───────────────────────────────────
+   Reached only when the learner's own Library has nothing. Candidates in
+   the shape the Discover feed allows: someone else's upload or paste, not
+   private, not deleted, never a Premium subscriber's. */
+
+test("platform terms: task words and stopwords carry no topic", () => {
+  assert.deepEqual(platformTerms("create a quiz on properties of matter"), ["properties", "matter"]);
+  assert.deepEqual(platformTerms("properties of matter"), ["properties", "matter"]);
+  assert.deepEqual(platformTerms("make flashcards from my notes"), []);
+  assert.equal(platformTerms("alpha bravo charlie delta echo foxtrot golf").length, 6, "capped at 6 terms");
+});
+
+test("platform chunk score: coverage of the topic, not repetition of one word", () => {
+  const terms = platformTerms("properties of matter");
+  assert.equal(platformChunkScore("Matter has properties: mass, volume and density.", terms), 1);
+  assert.equal(platformChunkScore("Matter matter matter, everywhere.", terms), 0.5, "one term repeated is half the topic");
+  assert.equal(platformChunkScore("Photosynthesis happens in green plants.", terms), 0);
+  assert.equal(platformChunkScore("anything at all", []), 0);
+  // Ranked like the own tier: a full-coverage short note beats a long
+  // document whose best passage covers only half the topic.
+  const ranked = rankContentHits([
+    { recordId: "long", name: "Science textbook.pdf", fused: platformChunkScore("matter is everywhere in science class today", terms) },
+    { recordId: "long", name: "Science textbook.pdf", fused: platformChunkScore("photosynthesis and respiration in plants", terms) },
+    { recordId: "note", name: "Properties of Matter.txt", fused: platformChunkScore("the properties of matter include mass", terms) },
+  ]);
+  assert.equal(ranked[0].recordId, "note");
+  assert.deepEqual(pickContentWinner(ranked), { recordId: "note" });
+});
+
+test("platform tier: wired after the own-Library search, folder-gated, discovery-guarded", () => {
+  const searchAt = studyMaterial.indexOf("searchRecordChunks({ userId, q, limit: 20 })");
+  const platAt = studyMaterial.indexOf("await platformFind({ userId, q })");
+  assert.ok(searchAt >= 0 && platAt > searchAt, "the platform tier runs only after the own-Library tiers miss");
+  assert.match(studyMaterial, /if \(!candidates && q\.length >= 3\)/, "no folder constraint, a real query");
+  // The name arm applies the discovery rule itself.
+  assert.match(studyMaterial, /\.eq\("private", false\)\.in\("kind", \["upload", "paste"\]\)/);
+  assert.match(studyMaterial, /activePremiumUserIds/);
+  // The content arm is the discovery-scoped chunk search, scored by coverage.
+  assert.match(studyMaterial, /searchPlatformChunks\(\{ userId, q, limit: 60 \}\)/);
+  assert.match(studyMaterial, /platformChunkScore\(h\.text, terms\)/);
+});
+
+test("platform tier: searchPlatformChunks re-verifies every hit against its record", () => {
+  assert.match(searchLib, /export async function searchPlatformChunks/);
+  assert.match(searchLib, /\.neq\("user_id", userId\)/, "never the requester's own chunks");
+  assert.match(searchLib, /\.eq\("private", false\)/, "chat uploads (private) never surface");
+  assert.match(searchLib, /\.in\("kind", \["upload", "paste"\]\)/);
+  assert.match(searchLib, /activePremiumUserIds/, "Premium owners are excluded");
+});
+
+test("copy-on-use: a platform winner is copied into the learner's Library before anything is built", () => {
+  const copyAt = studyMaterial.indexOf("copyPlatformRecord({ userId, sourceId: found.record.id })");
+  const targetAt = studyMaterial.indexOf("resolveAskTargetFor({ userId, recordId: found.record.id })", copyAt);
+  assert.ok(copyAt >= 0 && targetAt > copyAt, "the copy lands before the build target resolves, so the artifact hangs off the learner's own record");
+  // The discovery rule is re-verified at copy time, not trusted from the search.
+  assert.match(studyMaterial, /if \(!src \|\| src\.user_id === userId \|\| src\.private/);
+  // The copy is private (never a duplicate feed entry), shares the file, and
+  // the result carries the provenance for the agent's reply.
+  assert.match(studyMaterial, /private: true,/);
+  assert.match(studyMaterial, /file_key: src\.kind === "upload" \? src\.file_key : null/);
+  assert.match(studyMaterial, /source: "platform", sourceName: found\.record\.name, sourceOwner:/);
+  // A copy of the same file is reused, never duplicated.
+  assert.match(studyMaterial, /\.eq\("file_key", src\.file_key\)/);
+});
+
+test("platform tier: the agent is told to call the tool for bare topic asks and to name the source", () => {
+  assert.match(chat, /bare topic ask like 'create a quiz on properties of matter'/);
+  assert.match(chat, /source 'platform'/);
 });
 
 test("indexing wiring: a chat upload is indexed when its read completes", () => {

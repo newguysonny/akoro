@@ -291,3 +291,55 @@ export async function searchRecordChunks({ userId, q, limit = 12, recordId = nul
     fused: r.fused != null ? Number(r.fused) : 0,
   }));
 }
+
+/* ── The platform (Discover) search ─────────────────────────────────────────
+   The library search widened to the community's free notes — the records
+   the Discover feed shows: uploads and pastes, not private, not deleted,
+   not the requester's own, and never a Premium subscriber's (the access.js
+   rule). The hybrid RPC is owner-scoped, so this arm is lexical: chunks
+   carrying the query's significant terms. Every hit is re-verified against
+   its record before it is returned — a chunk outlives nothing its record
+   wouldn't allow. Callers score the hits (studyMaterialCore's term
+   coverage) and rank records exactly like the own-Library tier. */
+
+const PLATFORM_STOPWORDS = new Set([
+  "the", "and", "for", "from", "with", "this", "that", "what", "about", "into",
+  "quiz", "make", "create", "please", "notes", "note", "material", "materials",
+]);
+
+export async function searchPlatformChunks({ userId, q, limit = 40 }) {
+  const query = String(q || "").trim();
+  if (!query || !userId) return [];
+  const terms = [...new Set(query.toLowerCase().split(/[^a-z0-9]+/)
+    .filter((t) => t.length >= 3 && !PLATFORM_STOPWORDS.has(t)))].slice(0, 6);
+  if (!terms.length) return [];
+  const db = await dbLazy();
+  const { data: chunks, error } = await db.schema("edu").from("record_chunks")
+    .select("record_id, chunk_text, page_number, kind")
+    .neq("user_id", userId)
+    .or(terms.map((t) => `chunk_text.ilike.%${t}%`).join(","))
+    .limit(Math.min(Math.max(Number(limit) || 40, 1), 80));
+  if (error) throw new Error(error.message);
+  if (!chunks?.length) return [];
+  const ids = [...new Set(chunks.map((c) => c.record_id).filter(Boolean))];
+  const { activePremiumUserIds } = await import("./access.js");
+  const premium = new Set(await activePremiumUserIds().catch(() => []));
+  const { data: recs } = await db.schema("edu").from("records")
+    .select("id, user_id, name, kind, private")
+    .in("id", ids).is("deleted_at", null).eq("private", false)
+    .in("kind", ["upload", "paste"]).neq("user_id", userId);
+  const open = new Map((recs || []).filter((r) => !premium.has(r.user_id)).map((r) => [r.id, r]));
+  if (!open.size) return [];
+  const ownerIds = [...new Set([...open.values()].map((r) => r.user_id))];
+  const { data: users } = await db.schema("edu").from("users").select("id, full_name").in("id", ownerIds);
+  const owners = new Map((users || []).map((u) => [u.id, u.full_name || "Learner"]));
+  return chunks.filter((c) => open.has(c.record_id)).map((c) => {
+    const rec = open.get(c.record_id);
+    return {
+      recordId: c.record_id, name: rec.name, kind: rec.kind,
+      ownerId: rec.user_id, ownerName: owners.get(rec.user_id) || "Learner",
+      chunkKind: c.kind, pageNumber: c.page_number ?? null,
+      text: c.chunk_text || "", snippet: snippetOf(c.chunk_text),
+    };
+  });
+}

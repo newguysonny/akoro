@@ -169,6 +169,32 @@ export function findDuplicateArtifact(artifacts, { kind, pageNumber = null, focu
  * real page (and box, when the extraction has blocks). This is the fallback
  * that makes a record whose text exists only as an extraction buildable.
  */
+/* ── Platform (Discover) tier ───────────────────────────────────────────────
+   When the learner's own Library has nothing, the same resolution runs over
+   the community's free notes — the records the Discover feed shows. The
+   chunk search there is lexical only (the hybrid RPC is owner-scoped), so a
+   hit's score is the share of the query's significant terms its text
+   carries: a passage that covers every term the learner used outranks one
+   that merely repeats a single word. rankContentHits then sums a record's
+   best few, and pickContentWinner applies the same 10% close-call margin —
+   the platform tier asks rather than guesses, exactly like the own tier. */
+
+const PLATFORM_EXTRA_STOPWORDS = new Set(["note", "notes", "topic", "topics", "chapter", "unit"]);
+
+/** The query's significant terms: matchTokens' rules, as a list (cap 6). */
+export function platformTerms(query = "") {
+  return [...matchTokens(query)].filter((t) => !PLATFORM_EXTRA_STOPWORDS.has(t)).slice(0, 6);
+}
+
+/** 0..1 — the share of the query terms this text carries (each term once). */
+export function platformChunkScore(text = "", terms = []) {
+  const list = (terms || []).filter(Boolean);
+  if (!list.length) return 0;
+  const hay = String(text || "").toLowerCase();
+  const hit = list.filter((t) => hay.includes(t)).length;
+  return hit / list.length;
+}
+
 export function passagesFromExtraction({ pages = [], scope = "document", pageNumber = null } = {}) {
   const list = (pages || []).filter((p) => p && (String(p.markdown || "").trim() || (Array.isArray(p.blocks) && p.blocks.length)));
   if (!list.length) return [];
