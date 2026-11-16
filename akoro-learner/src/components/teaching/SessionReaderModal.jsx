@@ -2292,7 +2292,7 @@ export default function SessionReaderModal({
            learning session is the right column. On mobile the reader is a
            full-screen modal and the session keeps running underneath. ============ */}
       {split && (
-        <section className="flex flex-col flex-shrink-0 min-h-0 border-l" style={{ width: 400, maxWidth: "44vw", borderColor: "var(--ak-border)" }}>
+        <section className="flex flex-col flex-shrink-0 min-h-0 border-l" style={{ width: 400, maxWidth: "44vw", borderColor: "var(--ak-border3)" }}>
           {sideAsk ? (
             <div className="flex-1 min-h-0 px-4 py-4" style={{ background: "var(--ak-bg)", display: "flex", flexDirection: "column" }}>
               <ReaderAsk ask={ask} onCite={citeJump} pin={askPin} onPinClear={() => setAskPin(null)}/>
