@@ -7,6 +7,10 @@
  *
  *   startIngest({ files, ask, chatSessionId, replaces })   → [ingest…] — one per folder the files sort into
  *   filesOf(ingest, files)                                  the files one of them holds
+ *   uploadChatFile(file, { onProgress, signal })            attach time: one picked file → its Library record
+ *   readChatRecord(record, { onProgress })                  attach time: read that record in the browser
+ *   attachIngestRecords(ingest, records)                    send time: point the ingest at the saved records
+ *   readIngestRecords(ingest, items, onUpdate)              send time: the read, scored onto the ingest
  *   fileIngest(ingest, files, onUpdate)                     uploads, files, reads — onUpdate(ingest) on each step
  *   structureIngest(id)                                     reads it into topics (+ a past paper's questions) → { data, message }
  *   chooseFolder(id, folderId) · chooseSubject(id, subject|null)   the card's questions answered
@@ -46,33 +50,77 @@ async function pagesOf(record) {
   return read?.pages?.length || 0;
 }
 
+/** Attach-time step 1 (composer): save ONE picked file to the Library —
+ *  presign → PUT (progress + AbortSignal) → register the record. Runs the
+ *  moment the file is picked, while the learner composes. */
+export async function uploadChatFile(file, { onProgress, signal } = {}) {
+  const up = await presignRecordUpload({ name: file.name, mime: file.type || '', size: file.size });
+  if (!up?.uploadUrl) throw new Error('The Library is not taking uploads right now.');
+  await putFileTo(up.uploadUrl, file, onProgress, { signal });
+  const created = await createRecord({ kind: 'upload', fileKey: up.fileKey, name: file.name, mime: file.type || '', size: file.size });
+  const record = created?.record || created;
+  if (!record?.id) throw new Error('Nothing could be saved.');
+  return record;
+}
+
+/** Attach-time step 2 (composer): read ONE saved record here in the browser
+ *  (hanji for scans; the server's own text read for the rest). Resolves
+ *  { pages, failed, error } — a partial read still counts its pages, exactly
+ *  as the post-send pipeline always scored it. Never throws. */
+export async function readChatRecord(record, { onProgress } = {}) {
+  const res = await extractUpload(record, { onProgress }).catch((e) => ({ status: 'error', error: e?.message }));
+  if (res.status === 'done') return { pages: res.total || 0, failed: false, error: null };
+  const pages = await pagesOf(record).catch(() => 0);
+  if (res.status === 'error') return { pages, failed: !pages, error: pages ? null : (res.error || "Couldn't read it.") };
+  return { pages, failed: false, error: null };   // skipped — text layer / text file / A/V: the server's lane
+}
+
+/** Post-send step 1: point an ingest at records that already exist (uploaded
+ *  at attach time). Awaited before the chat turn is posted, so the turn and
+ *  the read both find the files on the ingest. */
+export async function attachIngestRecords(ingest, records) {
+  if (!records?.length) return null;
+  const d = await apiPost(`${BASE}/${ingest.id}/records`, { recordIds: records.map((r) => r.id) });
+  return d?.data ?? null;
+}
+
+/** Post-send step 2: the read, scored onto the ingest. items are
+ *  { record, read } — `read` is the attach-time read's promise when the
+ *  composer already started (or finished) it, so a file is never read
+ *  twice; without one the read runs here, as it always did. */
+export async function readIngestRecords(ingest, items, onUpdate = () => {}) {
+  let current = ingest;
+  const set = (next) => { if (next) { current = next; onUpdate(next); } return current; };
+  try {
+    const records = (items || []).map((i) => i?.record).filter(Boolean);
+    if (!records.length) throw new Error('Nothing could be saved.');
+    set(await progress(ingest.id, 'extracting'));
+    let pages = 0;
+    let failed = null;
+    for (const item of items) {
+      if (!item?.record) continue;
+      const res = item.read
+        ? await item.read.catch(() => null) || await readChatRecord(item.record, { onProgress: (done, total) => onUpdate({ ...current, reading: { done: pages + done, total: pages + total } }) })
+        : await readChatRecord(item.record, { onProgress: (done, total) => onUpdate({ ...current, reading: { done: pages + done, total: pages + total } }) });
+      if (res.failed) failed = res.error || "Couldn't read it.";
+      pages += res.pages || 0;
+    }
+    if (failed && !pages) return set(await progress(ingest.id, 'failed', { error: failed }));
+    return set(await progress(ingest.id, 'ready', { pages }));
+  } catch (e) {
+    return set(await progress(ingest.id, 'failed', { error: e?.message || 'Saving failed.' }).catch(() => ({ ...current, state: 'failed', error: e?.message })));
+  }
+}
+
 export async function fileIngest(ingest, files, onUpdate = () => {}) {
   let current = ingest;
   const set = (next) => { if (next) { current = next; onUpdate(next); } return current; };
   try {
     const records = [];
-    for (const file of files.slice(0, 5)) {
-      const up = await presignRecordUpload({ name: file.name, mime: file.type || '', size: file.size });
-      if (!up?.uploadUrl) throw new Error('The Library is not taking uploads right now.');
-      await putFileTo(up.uploadUrl, file);
-      const created = await createRecord({ kind: 'upload', fileKey: up.fileKey, name: file.name, mime: file.type || '', size: file.size });
-      const record = created?.record || created;
-      if (record?.id) records.push(record);
-    }
+    for (const file of files.slice(0, 5)) records.push(await uploadChatFile(file));
     if (!records.length) throw new Error('Nothing could be saved.');
-    set((await apiPost(`${BASE}/${ingest.id}/records`, { recordIds: records.map((r) => r.id) }))?.data);
-    set(await progress(ingest.id, 'extracting'));
-    let pages = 0;
-    let failed = null;
-    for (const record of records) {
-      const res = await extractUpload(record, {
-        onProgress: (done, total) => onUpdate({ ...current, reading: { done: pages + done, total: pages + total } }),
-      }).catch((e) => ({ status: 'error', error: e?.message }));
-      if (res.status === 'error') failed = res.error || "Couldn't read it.";
-      pages += res.status === 'done' ? res.total : await pagesOf(record);
-    }
-    if (failed && !pages) return set(await progress(ingest.id, 'failed', { error: failed }));
-    return set(await progress(ingest.id, 'ready', { pages }));
+    set(await attachIngestRecords(ingest, records));
+    return await readIngestRecords(current, records.map((record) => ({ record })), onUpdate);
   } catch (e) {
     return set(await progress(ingest.id, 'failed', { error: e?.message || 'Saving failed.' }).catch(() => ({ ...current, state: 'failed', error: e?.message })));
   }

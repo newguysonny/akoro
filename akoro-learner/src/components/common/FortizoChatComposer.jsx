@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { BRAND } from '../../constants.js';
 import { Icon } from './Icons.jsx';
 import QuoteChip from './QuoteChip.jsx';
+import Spinner from './Spinner.jsx';
 
 const MAX_INPUT_HEIGHT = 120;   // ≈ 5 lines of the composer's text
 
@@ -36,6 +37,74 @@ function ComposerTool({ icon, label, onClick, disabled = false, active = false, 
     >
       <Icon name={icon} size={16}/>
     </button>
+  );
+}
+
+/*
+ * One attachment inside the box — the activity AnswerTile's language: a
+ * type chip and name on a 104×72 card (a photo is its 54×54 thumbnail),
+ * a spinner (+ the upload's progress bar) while it goes up or is read,
+ * a green tick when it's ready, and ✕ to cancel it mid-flight or remove
+ * it once done. A failed tile offers its retry in the status corner.
+ * The host owns the work; the tile only reports the state it's given:
+ * { id, name, previewUrl?, status: uploading|extracting|ready|failed, progress? }.
+ */
+function ComposerAttachmentTile({ attachment: a, dark = false, onRemove, onRetry }) {
+  const busy = a.status === 'uploading' || a.status === 'extracting';
+  const xBtn = (size, top, right, bg) => (
+    <button type="button" onClick={() => onRemove?.(a.id)} aria-label={busy ? `Cancel ${a.name}` : `Remove ${a.name}`}
+      style={{ position: 'absolute', top, right, width: size, height: size, padding: 0, border: 'none', borderRadius: '50%', background: bg, color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 2 }}>
+      <Icon name="ti-x" size={size - 8}/>
+    </button>
+  );
+  if (a.previewUrl) {
+    return (
+      <div role="group" aria-label={a.name} style={{ position: 'relative', width: 54, height: 54, flexShrink: 0 }}>
+        <img src={a.previewUrl} alt={a.name} style={{ width: 54, height: 54, objectFit: 'cover', borderRadius: 12, border: `1.5px solid ${dark ? 'rgba(255,255,255,.18)' : '#D8D5E6'}`, display: 'block' }}/>
+        {busy && (
+          <span style={{ position: 'absolute', inset: 0, borderRadius: 12, background: 'rgba(255,255,255,.55)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Spinner size={17} color={BRAND}/>
+          </span>
+        )}
+        {a.status === 'failed' && (
+          <span style={{ position: 'absolute', inset: 0, borderRadius: 12, background: 'rgba(255,255,255,.55)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <button type="button" onClick={() => onRetry?.(a.id)} aria-label={`Retry ${a.name}`} title="Retry"
+              style={{ width: 26, height: 26, padding: 0, border: 'none', borderRadius: '50%', background: '#111', color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+              <Icon name="ti-refresh" size={13}/>
+            </button>
+          </span>
+        )}
+        {xBtn(18, 4, 4, 'rgba(17,17,17,.88)')}
+      </div>
+    );
+  }
+  const ext = (String(a.name || '').match(/\.([a-z0-9]+)$/i)?.[1] || 'file').toUpperCase().replace('JPEG', 'JPG').slice(0, 4);
+  return (
+    <div role="group" aria-label={`${a.name}${busy ? ' — uploading' : ''}`}
+      style={{ position: 'relative', width: 104, minHeight: 72, flexShrink: 0, boxSizing: 'border-box', padding: '6px 8px', borderRadius: 14,
+        border: `1px solid ${dark ? 'rgba(255,255,255,.14)' : 'var(--ak-border)'}`,
+        background: dark ? 'rgba(255,255,255,.06)' : 'var(--ak-surface)', fontFamily: "'Nunito',sans-serif" }}>
+      <span style={{ display: 'inline-block', fontSize: 10.5, fontWeight: 900, letterSpacing: '.03em', padding: '1px 8px', borderRadius: 999,
+        border: `1px solid ${dark ? 'rgba(255,255,255,.16)' : 'var(--ak-border)'}`, color: dark ? '#E5EAFB' : 'var(--ak-text)' }}>{ext}</span>
+      {xBtn(20, 5, 5, '#111')}
+      <span style={{ display: 'block', marginTop: 6, fontSize: 11.5, fontWeight: 700, lineHeight: 1.25,
+        color: dark ? '#E5EAFB' : 'var(--ak-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', paddingRight: 24 }}>{a.name}</span>
+      {a.status === 'uploading' && (
+        <span style={{ position: 'absolute', left: 9, right: 34, bottom: 11, height: 3, borderRadius: 3, background: dark ? 'rgba(255,255,255,.15)' : '#E7E4F5', overflow: 'hidden' }}>
+          <i style={{ display: 'block', height: '100%', width: `${Math.max(0, Math.min(100, a.progress || 0))}%`, background: BRAND, borderRadius: 3, transition: 'width .18s linear' }}/>
+        </span>
+      )}
+      <span style={{ position: 'absolute', right: 8, bottom: 7, display: 'flex', alignItems: 'center' }}>
+        {busy ? <Spinner size={17} color={BRAND}/>
+          : a.status === 'failed' ? (
+            <button type="button" onClick={() => onRetry?.(a.id)} aria-label={`Retry ${a.name}`} title="Retry"
+              style={{ width: 20, height: 20, padding: 0, border: `1px solid ${dark ? 'rgba(255,255,255,.2)' : 'var(--ak-border)'}`, borderRadius: '50%', background: 'transparent', color: BRAND, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+              <Icon name="ti-refresh" size={11}/>
+            </button>
+          )
+          : <Icon name="ti-circle-check-filled" size={16} color="#10B981"/>}
+      </span>
+    </div>
   );
 }
 
@@ -177,6 +246,13 @@ export default function FortizoChatComposer({
   // above the input with a remove control (the copilot pattern).
   quote = null,
   onQuoteClear,
+  // Files attached to this message, as tiles INSIDE the box above the
+  // input (the answer-box pattern). The host owns the upload/read work and
+  // passes each file's state; unused (Agent sessions, onboarding) the box
+  // renders exactly as before. [{ id, name, previewUrl?, status, progress? }]
+  attachments = [],
+  onAttachmentRemove,
+  onAttachmentRetry,
   // On a phone or tablet the keyboard's Enter key starts a new line (it shows ↵) and the arrow button sends; on a
   // computer Enter still sends and Shift+Enter starts a new line. Off by default: single-answer prompts keep Enter = send.
   newlineOnTouchEnter = false,
@@ -214,6 +290,13 @@ export default function FortizoChatComposer({
       borderRadius: 25, background: surface, boxShadow: dark ? 'none' : '0 4px 14px rgba(30,41,59,.055)',
       transition: 'border-color .16s, box-shadow .16s',
     }}>
+      {attachments.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, paddingBottom: 11, marginBottom: 11, borderBottom: `1px solid ${dark ? 'rgba(255,255,255,.10)' : '#EFEFF5'}` }}>
+          {attachments.map((a) => (
+            <ComposerAttachmentTile key={a.id} attachment={a} dark={dark} onRemove={onAttachmentRemove} onRetry={onAttachmentRetry}/>
+          ))}
+        </div>
+      )}
       <QuoteChip quote={quote} onClear={onQuoteClear} dark={dark}/>
       <textarea
         ref={inputRef}

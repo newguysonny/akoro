@@ -929,7 +929,7 @@ export const EN = {
   'agent.attach_add':            'Add a photo or file',
   'agent.attach_remove':         'Remove attachment',
   'agent.attach_too_many':       'Up to {max} files at once.',
-  'agent.attach_rejected':       'Only images, PDFs or text files up to {max} MB each.',
+  'agent.attach_rejected':       'Only files the Library can keep, up to {max} MB each.',
   'agent.attach_default_msg':    'Please help me with what I attached.',
   'agent.status_grounding':      'Searching the syllabus and past questions…',
   'agent.status_attachments':    'Reading your files…',

@@ -28,6 +28,7 @@ import { resolveMaterialsFolder } from "../materials/studySource.js";
 import { akoroMaterialFor } from "../materials/akoroMaterial.js";
 import { gatherPassages, extractCitations } from "../records/askLib.js";
 import { searchRecordChunks } from "../records/searchLib.js";
+import { getExtraction } from "../records/extractLib.js";
 import { loadTaughtKnowledge, renderTaughtContext, buildGuideMessages, shapeGuideAnswer, teachRequest } from "./protege.js";
 import { loadDoctrine } from "../agent-context/context-manager.js";
 
@@ -4095,6 +4096,41 @@ async function processAttachments(attachments = []) {
 }
 
 /**
+ * The immediate turn's grounding for files sent as ingest references (the
+ * composer uploads at attach time, so no bytes ride the chat request):
+ * each record's stored extraction text — the read the browser finished in
+ * the composer, or the server's own text read — under the same per-file
+ * cap processAttachments uses. A file whose extraction hasn't landed yet
+ * contributes nothing; ingestCtx already tells the model it's being read.
+ */
+async function ingestRecordsContext(userId, ingestIds) {
+  const { data: ings } = await db.schema("edu").from("material_ingests")
+    .select("id, record_ids").eq("user_id", userId).in("id", ingestIds);
+  const ordered = ingestIds.map((id) => (ings || []).find((r) => r.id === id)).filter(Boolean);
+  const recordIds = [...new Set(ordered.flatMap((r) => (Array.isArray(r.record_ids) ? r.record_ids : [])))].slice(0, 5);
+  if (!recordIds.length) return { docContext: "", notes: [] };
+  const { data: recs } = await db.schema("edu").from("records")
+    .select("id, name, kind, content, file_key").eq("user_id", userId).in("id", recordIds).is("deleted_at", null);
+  const byId = new Map((recs || []).map((r) => [r.id, r]));
+  const chunks = [];
+  const notes = [];
+  for (const id of recordIds) {
+    const rec = byId.get(id);
+    if (!rec) continue;
+    let text = "";
+    if (rec.kind === "paste") text = String(rec.content || "");
+    else if (rec.file_key) {
+      const ext = await getExtraction(rec.file_key).catch(() => null);
+      text = ext?.markdown || "";
+    }
+    if (!text.trim()) continue;
+    chunks.push(`### Attached file: ${rec.name}\n${text.slice(0, DOC_TEXT_CAP)}`);
+    notes.push(`📄 ${rec.name} read.`);
+  }
+  return { docContext: chunks.join("\n\n"), notes };
+}
+
+/**
  * Base system prompt for the live agent — shared by the HTTP /agent route
  * and the voice session bootstrap (modules/voice/routes.js). Role-aware:
  * students get an exam-focused study tutor, instructors a teaching copilot.
@@ -5405,8 +5441,18 @@ router.post("/agent", async (req, res) => {
     // rules for talking about it and changing it (akoro-agent/reasoning/RUNNING_WORK.md), and what it is.
     const runningP = role === "student" && studyPrepEnabled ? runningWorkBrief(req.user.id).catch(() => "") : Promise.resolve("");
     const hasAttachments = Array.isArray(rawAttachments) && rawAttachments.length > 0;
-    if (hasAttachments && wantsStream) status("attachments", "Reading your files…");
-    const attP = hasAttachments ? processAttachments(rawAttachments) : Promise.resolve({ visionParts: [], docContext: "", notes: [] });
+    if ((hasAttachments || ingestIds.length) && wantsStream) status("attachments", "Reading your files…");
+    const attP = (async () => {
+      const base = hasAttachments ? await processAttachments(rawAttachments) : { visionParts: [], docContext: "", notes: [] };
+      if (role !== "student" || !ingestIds.length) return base;
+      const extra = await ingestRecordsContext(req.user.id, ingestIds).catch(() => ({ docContext: "", notes: [] }));
+      if (!extra.docContext) return base;
+      return {
+        visionParts: base.visionParts,
+        docContext: [base.docContext, extra.docContext].filter(Boolean).join("\n\n"),
+        notes: [...base.notes, ...extra.notes],
+      };
+    })();
     // Self-tooling: without this the model tours unrelated tools and says
     // "I don't have that data" instead of building the tool (verify run
     // 1a8cb552, 2 of 3 repeats).

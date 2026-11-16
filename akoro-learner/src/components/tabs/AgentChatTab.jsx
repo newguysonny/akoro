@@ -40,7 +40,8 @@ import IngestCard from './agentChat/IngestCard.jsx';
 import ChatFilesStrip from './agentChat/ChatFilesStrip.jsx';
 import ApprovalButtons from './agentChat/ApprovalButtons.jsx';
 import ProposalPreview from './agentChat/ProposalPreview.jsx';
-import { addSimilar, chatFiles, chooseFolder, chooseSubject, dismissSimilar, fileIngest, filesOf, getIngest, isLibraryFile, restoreIngest, similarFor, startIngest, structureIngest, undoIngest } from '../../lib/chatUploads.js';
+import { addSimilar, attachIngestRecords, chatFiles, chooseFolder, chooseSubject, dismissSimilar, filesOf, getIngest, isLibraryFile, readChatRecord, readIngestRecords, restoreIngest, similarFor, startIngest, structureIngest, undoIngest, uploadChatFile } from '../../lib/chatUploads.js';
+import { deleteRecord } from '../../services/recordsApi.js';
 import SimilarPicker from './agentChat/SimilarPicker.jsx';
 import { useVoiceAnswer } from '../../hooks/useVoiceAnswer.js';
 import { useSpeakReply } from '../../hooks/useSpeakReply.js';
@@ -328,11 +329,57 @@ function AgentChatTab({
   const prependRef     = useRef(null);   // the scroll position to keep while older messages are added
   const skipFollowRef  = useRef(false);
   const fileInputRef   = useRef(null);
-  const MAX_FILES      = 4;
-  const MAX_FILE_MB    = 5;
-  const isSupportedFile = (f) =>
-    /^image\//.test(f.type) || f.type === "application/pdf" ||
-    /\.(txt|md|csv)$/i.test(f.name);
+  // The composer's gate IS the Library's gate (one source): what the
+  // Library can keep (isLibraryFile), as many files as one ingest holds
+  // (the API's INGEST_LIMITS.FILES), up to the Library's per-file cap.
+  const MAX_FILES      = 5;
+  const MAX_FILE_MB    = 500;
+  const attachJobsRef  = useRef(new Map());   // attachment id → { controller, readPromise, settleRead }
+
+  const patchAttachment = useCallback((id, patch) => {
+    setAttachments(prev => prev.map(a => (a.id === id ? { ...a, ...patch } : a)));
+  }, []);
+
+  // One picked file's life in the composer: upload at once (its progress
+  // rides the tile), then read it here in the browser — both while the
+  // learner composes. Send waits for the upload only; the read settles
+  // the job's readPromise, which the post-send pipeline awaits instead of
+  // ever reading the file twice. A removed tile aborts its upload and
+  // takes its record back out of the Library.
+  const runAttachJob = useCallback((entry, { readOnly = false } = {}) => {
+    const { id, file } = entry;
+    const controller = new AbortController();
+    let settleRead;
+    const readPromise = new Promise((res) => { settleRead = res; });
+    attachJobsRef.current.set(id, { controller, readPromise, settleRead });
+    const gone = () => !attachJobsRef.current.has(id);
+    (async () => {
+      let record = readOnly ? entry.record : null;
+      try {
+        if (!record) {
+          patchAttachment(id, { status: "uploading", progress: 0, error: null, stage: null });
+          record = await uploadChatFile(file, {
+            signal: controller.signal,
+            onProgress: (pct) => { if (!gone()) patchAttachment(id, { progress: pct }); },
+          });
+          if (gone()) { deleteRecord(record.id).catch(() => {}); settleRead({ pages: 0, failed: false, error: null }); return; }
+          patchAttachment(id, { status: "extracting", progress: 100, recordId: record.id, record });
+        } else {
+          patchAttachment(id, { status: "extracting", error: null, stage: null });
+        }
+        const read = await readChatRecord(record);
+        settleRead(read);
+        if (gone()) return;
+        patchAttachment(id, read.failed
+          ? { status: "failed", stage: "read", error: read.error }
+          : { status: "ready", stage: null, error: null, readPages: read.pages });
+      } catch (e) {
+        settleRead({ pages: 0, failed: true, error: e?.message || "Upload failed." });
+        if (gone() || controller.signal.aborted) return;
+        patchAttachment(id, { status: "failed", stage: record ? "read" : "upload", error: e?.message || "Upload failed." });
+      }
+    })();
+  }, [patchAttachment]);
 
   const addAttachments = (fileList) => {
     const files = [...fileList];
@@ -342,34 +389,41 @@ function AgentChatTab({
     if (room <= 0) { setAttachError(t('agent.attach_too_many').replace('{max}', MAX_FILES)); return; }
     const accepted = [], rejected = [];
     files.forEach((f) => {
-      if (!isSupportedFile(f) || f.size > MAX_FILE_MB * 1024 * 1024) rejected.push(f);
+      if (!isLibraryFile(f) || f.size > MAX_FILE_MB * 1024 * 1024) rejected.push(f);
       else if (accepted.length < room) accepted.push(f);
     });
     if (rejected.length) setAttachError(t('agent.attach_rejected').replace('{max}', MAX_FILE_MB));
     if (accepted.length) {
-      setAttachments(prev => [...prev, ...accepted.map((f, i) => ({
-        id: Date.now() + "-" + i, file: f, name: f.name, size: f.size,
+      const entries = accepted.map((f, i) => ({
+        id: Date.now() + "-" + i + "-" + Math.random().toString(36).slice(2, 7),
+        file: f, name: f.name, size: f.size,
         previewUrl: /^image\//.test(f.type) ? URL.createObjectURL(f) : null,
-      }))]);
+        status: "uploading", progress: 0, recordId: null, record: null, error: null, stage: null,
+      }));
+      setAttachments(prev => [...prev, ...entries]);
+      entries.forEach((e) => runAttachJob(e));
     }
   };
 
   const removeAttachment = (id) => {
+    const job = attachJobsRef.current.get(id);
+    if (job) { job.controller.abort(); job.settleRead({ pages: 0, failed: false, error: null }); attachJobsRef.current.delete(id); }
     setAttachments(prev => {
       const hit = prev.find(a => a.id === id);
       if (hit?.previewUrl) URL.revokeObjectURL(hit.previewUrl);
+      // Picked but never sent: take its Library record back out, so
+      // removing a tile leaves nothing behind — as it did when the
+      // upload waited for Send.
+      if (hit?.recordId) deleteRecord(hit.recordId).catch(() => {});
       return prev.filter(a => a.id !== id);
     });
   };
 
-  // File → data URL for the API (images go to vision; PDFs get decoded
-  // server-side for text extraction / scan OCR).
-  const fileToDataUrl = (file) => new Promise((resolve, reject) => {
-    const r = new FileReader();
-    r.onload = () => resolve(r.result);
-    r.onerror = () => reject(new Error("read failed"));
-    r.readAsDataURL(file);
-  });
+  const retryAttachment = (id) => {
+    const entry = attachments.find(a => a.id === id);
+    if (!entry || entry.status !== "failed") return;
+    runAttachJob(entry, { readOnly: entry.stage === "read" && !!entry.record });
+  };
 
   // ── Persistent chat sessions ───────────────────────────────────────────────
   const [sessions,      setSessions]      = useState([]);
@@ -905,9 +959,12 @@ function AgentChatTab({
     if (r?.data) putIngest(r.data);
     setSimilar((prev) => ({ ...prev, [msg.id]: { done: true, added: r?.added || [] } }));
   };
-  // Upload → read → what it covers, said back in the chat (the API posts it; shown here at once).
-  const runIngest = async (ingest, files, chatId) => {
-    const done = await fileIngest(ingest, files, putIngest);
+  // Read → what it covers, said back in the chat (the API posts it; shown here at once).
+  // The files were uploaded when they were picked; each item's read is the
+  // attach-time read's promise, awaited here — never a second read.
+  const runIngest = async (ingest, entries, chatId) => {
+    const items = entries.map((e) => ({ record: e.record, read: attachJobsRef.current.get(e.id)?.readPromise || null }));
+    const done = await readIngestRecords(ingest, items, putIngest);
     if (done?.state !== 'ready') return;
     // The read can be briefly unavailable (the API keeps nothing then): two more tries, 20 s apart.
     let r = null;
@@ -965,6 +1022,10 @@ function AgentChatTab({
     const raw=(overrideText??input).trim();
     const text=raw || (attachments.length ? t('agent.attach_default_msg') : "");
     if(!text||loading||running) return;
+    // Send waits for uploads (the composer disables it too): a file still
+    // going up has no Library record to point the turn at yet. A read may
+    // still be running — it finishes beside the turn, never blocking it.
+    if(!overrideText && attachments.some(a=>a.status==="uploading")) return;
     // Talking here is choosing this chat: the resume on mount must not swap it out.
     if(!sessionIdRef.current){ choseChatRef.current=true; openSeqRef.current+=1; }
     if(!overrideText) setInput("");
@@ -972,8 +1033,10 @@ function AgentChatTab({
     tts.stop();
     atBottomRef.current=true; setShowJump(false);   // your own message always brings you to the bottom
     const ts=new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
-    const userMsg={id:Date.now(),from:"me",text,time:ts,attachments:attachments.map(a=>({name:a.name,previewUrl:a.previewUrl}))};
-    const sentAttachments=attachments;
+    // Only files that reached the Library ride this message; a tile whose
+    // upload failed stays in the box, its retry still on it.
+    const sentEntries=attachments.filter(a=>a.recordId&&a.record);
+    const userMsg={id:Date.now(),from:"me",text,time:ts,attachments:sentEntries.map(a=>({name:a.name,previewUrl:a.previewUrl}))};
     setMessages(prev=>[...prev,userMsg]); setLoading(true); setRunning(true);
     setAttachError(""); setStatusLabel("");
 
@@ -987,21 +1050,24 @@ function AgentChatTab({
       setLoading(false); setRunning(false);
       return;
     }
-    // Files go to the Library too (D51): sorted per subject before the turn — one upload per
-    // folder — and each one's upload and reading run beside it.
-    const libFiles = sentAttachments.map((a) => a.file).filter(isLibraryFile);
-    const batch = libFiles.length ? await startIngest({ files: libFiles, ask: text, chatSessionId: sid }).catch(() => []) : [];
+    // Files go to the Library too (D51): they were uploaded when they were
+    // picked, so this only sorts them — one upload per folder — and points
+    // each ingest at the records that already exist. The attach is awaited,
+    // so the turn below and each read find the files on their ingest.
+    const batch = sentEntries.length ? await startIngest({ files: sentEntries.map((a) => a.file), ask: text, chatSessionId: sid }).catch(() => []) : [];
     for (const one of batch) {
       putIngest(one);
-      void runIngest(one, filesOf(one, libFiles), sid);
+      const entries = filesOf(one, sentEntries);
+      const attached = await attachIngestRecords(one, entries.map((e) => e.record)).catch(() => null);
+      if (attached) putIngest(attached);
+      void runIngest(one, entries, sid);
     }
     const ingest = batch[0] || null;
     const ingestIds = batch.map((x) => x.id);
     const mode = thinkMode ? "think" : researchMode ? "research" : "default";
     const statusKey = { grounding:'agent.status_grounding', attachments:'agent.status_attachments', thinking:'agent.status_thinking', synthesis:'agent.status_synthesis' };
-    const attachmentsPayload = await Promise.all(sentAttachments.map(async (a) => ({
-      name: a.name, type: a.file.type || "", dataUrl: await fileToDataUrl(a.file),
-    })));
+    // No file bytes ride the turn any more: the payload points at the
+    // ingests, and the API reads each file from its Library record.
     const history = messages.map(m => ({ role: m.from === "me" ? "user" : "assistant", content: m.text }));
     // A retry keeps the same opaque key for this send, allowing the server's
     // durable turn contract to repair a partial write without duplicate rows.
@@ -1014,8 +1080,7 @@ function AgentChatTab({
     const payload = { message: text, inlineSuggestions: true, history: history.slice(-24), agentName, mode, ...modelPick,
       conversationId: sid, turnId,
       ...(ingest ? { ingestId: ingest.id, ingestIds } : {}),
-      ...(devView ? { developer: true } : {}),
-      ...(attachmentsPayload.length ? { attachments: attachmentsPayload } : {}) };
+      ...(devView ? { developer: true } : {}) };
     const t2=new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
     const replyId=Date.now()+Math.random();
     let started=false;
@@ -1163,9 +1228,11 @@ function AgentChatTab({
         })
         .catch(()=>{});
     }
-    // Attachments are consumed by this message; free the preview URLs.
-    sentAttachments.forEach(a=>a.previewUrl&&URL.revokeObjectURL(a.previewUrl));
-    setAttachments([]);
+    // Sent attachments are consumed by this message; free their preview
+    // URLs. A failed tile stays in the box, its retry still on it.
+    sentEntries.forEach(a=>a.previewUrl&&URL.revokeObjectURL(a.previewUrl));
+    const sentIds=new Set(sentEntries.map(a=>a.id));
+    setAttachments(prev=>prev.filter(a=>!sentIds.has(a.id)));
     setLoading(false);
     setRunning(false);
     abortRef.current=null;
@@ -1584,21 +1651,7 @@ function AgentChatTab({
                 <button onClick={()=>setAttachError("")} style={{ border:"none",background:"transparent",color:RED,cursor:"pointer",fontSize:13,fontWeight:900,padding:0 }}>×</button>
               </div>
             )}
-            {attachments.length>0&&(
-              <div style={{ display:"flex",flexWrap:"wrap",gap:7,margin:"0 0 9px" }}>
-                {attachments.map(a=>(
-                  <div key={a.id} style={{ position:"relative" }}>
-                    {a.previewUrl
-                      ? <img src={a.previewUrl} alt={a.name} style={{ width:54,height:54,objectFit:"cover",borderRadius:12,border:"1.5px solid var(--ak-border2)",display:"block" }}/>
-                      : <div style={{ maxWidth:170,display:"flex",alignItems:"center",gap:5,padding:"10px 30px 10px 11px",borderRadius:12,border:"1.5px solid var(--ak-border2)",background:"var(--ak-surface-hover)" }}>
-                          <Icon name="ti-file-text" size={15}/>
-                          <span style={{ fontSize:11,fontWeight:700,color:"var(--ak-text-sub)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis" }}>{a.name}</span>
-                        </div>}
-                    <button onClick={()=>removeAttachment(a.id)} title={t('agent.attach_remove')} aria-label={t('agent.attach_remove')} style={{ position:"absolute",top:-6,right:-6,width:19,height:19,borderRadius:"50%",border:"none",background:"var(--ak-text)",color:"var(--ak-surface)",fontSize:10,fontWeight:900,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 1px 4px rgba(0,0,0,.25)" }}><Icon name="ti-x" size={10}/></button>
-                  </div>
-                ))}
-              </div>
-            )}
+            {/* Attachments render as tiles INSIDE the composer box (below). */}
             {/* Changes still waiting for the learner's OK: one slim bar, never cards stacked under the latest turn. (A study prep in progress is not shown here: the Needs-you tab and the home workflow card carry it.) */}
             {(()=>{
               const waiting=pendingChanges.filter((c)=>c.sessionId&&c.sessionId===sessionId&&!messages.some((m)=>m.confirm?.confirmationId===c.confirmationId));
@@ -1631,6 +1684,9 @@ function AgentChatTab({
               stopLabel={t('agent.stop')}
               attachmentAction={()=>fileInputRef.current?.click()}
               attachmentLabel={t('agent.attach_add')}
+              attachments={attachments}
+              onAttachmentRemove={removeAttachment}
+              onAttachmentRetry={retryAttachment}
               voiceAction={()=>{ if(mic.recording) mic.stop(); else { tts.stop(); mic.start(); } }}
               voiceActive={mic.recording}
               voiceLabel={mic.recording?t('agent.voice_stop'):mic.transcribing?t('agent.voice_transcribing'):t('agent.voice_start')}
@@ -1640,7 +1696,7 @@ function AgentChatTab({
               audioIcon={readAloud?'ti-volume':'ti-volume-off'}
               audioLabel={readAloud?t('agent.read_aloud_on'):t('agent.read_aloud_off')}
               hideModelMenu
-              sendDisabled={!input.trim()&&!attachments.length}
+              sendDisabled={(!input.trim()&&!attachments.length)||attachments.some(a=>a.status==="uploading")}
             />
             </div>
             {/* The model switch — the LLM behind the next message. */}
@@ -1659,7 +1715,7 @@ function AgentChatTab({
                 <button type="button" aria-label="Dismiss" onClick={()=>setModelNotice("")} style={{ border:0,background:"transparent",color:"inherit",cursor:"pointer",padding:0,display:"flex" }}><Icon name="ti-x" size={13} color="#B45309"/></button>
               </div>
             )}
-            <input ref={fileInputRef} type="file" multiple accept="image/*,application/pdf,.txt,.md,.csv" style={{ display:"none" }} onChange={e=>{addAttachments(e.target.files); e.target.value="";}}/>
+            <input ref={fileInputRef} type="file" multiple accept="image/*,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.presentationml.presentation,audio/*,video/*,.docx,.pptx,.txt,.md,.csv,.mp3,.m4a,.aac,.wav,.ogg,.flac,.mp4,.m4v,.mov,.webm,.mkv" style={{ display:"none" }} onChange={e=>{addAttachments(e.target.files); e.target.value="";}}/>
           </div>
         </>
       )}

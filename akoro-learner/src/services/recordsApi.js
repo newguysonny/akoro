@@ -54,9 +54,11 @@ export async function presignRecordUpload({ name, mime, size }) {
 }
 
 /** Step 2 — PUT the raw bytes to the presigned URL. XHR (not fetch) so the
- *  sheet can show real upload progress; big files take a while on mobile. */
-export function putFileTo(uploadUrl, file, onProgress) {
+ *  sheet can show real upload progress; big files take a while on mobile.
+ *  An AbortSignal (the chat composer's tile ✕) cancels the PUT mid-flight. */
+export function putFileTo(uploadUrl, file, onProgress, { signal } = {}) {
   return new Promise((resolve, reject) => {
+    if (signal?.aborted) { reject(new Error('Upload cancelled.')); return; }
     const xhr = new XMLHttpRequest();
     xhr.open('PUT', uploadUrl, true);
     xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
@@ -69,6 +71,7 @@ export function putFileTo(uploadUrl, file, onProgress) {
       (xhr.status >= 200 && xhr.status < 300) ? resolve() : reject(new Error(`Upload failed (${xhr.status})`)));
     xhr.addEventListener('error', () => reject(new Error('Upload failed — check your connection.')));
     xhr.addEventListener('abort', () => reject(new Error('Upload cancelled.')));
+    if (signal) signal.addEventListener('abort', () => { try { xhr.abort(); } catch { /* already settled */ } }, { once: true });
     xhr.send(file);
   });
 }
