@@ -431,14 +431,15 @@ router.post("/users/invite-csv", adminOnly, asyncHandler(async (req, res) => {
 }));
 
 // POST /users/create
-// Create a real, ready-to-login account (learner / instructor / school).
+// Create a real, ready-to-login account (learner / instructor / school / admin).
 // Sets a password (auto-generated if none given) and emails the person the
 // correct portal sign-in link. Returns the temp password when generated so the
 // admin can share it.
-const CREATE_ROLES = ["student", "instructor", "school_admin"];
+const CREATE_ROLES = ["student", "instructor", "school_admin", "admin"];
 const BCRYPT_ROUNDS = parseInt(process.env.BCRYPT_ROUNDS ?? "12", 10);
 const FRONTEND_URL            = urlFor("FRONTEND_URL");
 const INSTRUCTOR_FRONTEND_URL = urlFor("INSTRUCTOR_FRONTEND_URL");
+const ADMIN_FRONTEND_URL      = urlFor("ADMIN_FRONTEND_URL");
 const SCHOOL_FRONTEND_URL     = urlFor("SCHOOL_FRONTEND_URL");
 
 const genPassword = () =>
@@ -455,7 +456,7 @@ router.post("/users/create", adminOnly, asyncHandler(async (req, res) => {
   if (!email)    return err400(res, "email is required");
   if (!fullName) return err400(res, "full_name is required");
   if (!CREATE_ROLES.includes(role))
-    return err400(res, "role must be student, instructor or school_admin");
+    return err400(res, "role must be student, instructor, school_admin or admin");
   if (provided && provided.length < 8)
     return err400(res, "password must be at least 8 characters");
 
@@ -486,6 +487,7 @@ router.post("/users/create", adminOnly, asyncHandler(async (req, res) => {
 
   const loginUrl = role === "instructor"   ? `${INSTRUCTOR_FRONTEND_URL}/signin`
     : role === "school_admin"              ? `${SCHOOL_FRONTEND_URL}/signin`
+    : role === "admin"                     ? `${ADMIN_FRONTEND_URL}/signin`
     : `${FRONTEND_URL}/signin`;
   sendWelcomeEmail({ to: user.email, name: user.full_name || user.username, loginUrl, role }).catch(() => {});
 

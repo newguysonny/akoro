@@ -358,6 +358,7 @@ export default function UsersPage() {
                   <option value="student">Learner</option>
                   <option value="instructor">Instructor</option>
                   <option value="school_admin">School</option>
+                  <option value="admin">Admin</option>
                 </select>
               </div>
               <Inp
