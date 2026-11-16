@@ -356,6 +356,15 @@ async function copyPlatformRecord({ userId, sourceId }) {
       .order("created_at", { ascending: true }).limit(1);
     if (existing?.[0]) return { record: existing[0] };
   }
+  if (src.kind === "paste" && src.content) {
+    // A paste copies its text verbatim, so an existing copy is recognisable
+    // by name + identical content — reuse it, never duplicate it (an
+    // explicit Discover re-ask used to stack identical copies).
+    const { data: existing } = await E.from("records").select("id, name")
+      .eq("user_id", userId).eq("kind", "paste").eq("name", src.name).eq("content", src.content)
+      .is("deleted_at", null).order("created_at", { ascending: true }).limit(1);
+    if (existing?.[0]) return { record: existing[0] };
+  }
   const { count } = await E.from("records").select("id", { count: "exact", head: true })
     .eq("user_id", userId).is("deleted_at", null);
   if ((count || 0) >= 200) return { error: "Their Library shelf is full (200) — ask them to remove something before saving a copy of a free note." };

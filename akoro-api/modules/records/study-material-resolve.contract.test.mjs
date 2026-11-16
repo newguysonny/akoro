@@ -234,6 +234,10 @@ test("copy-on-use: a platform winner is copied into the learner's Library before
   assert.match(studyMaterial, /don't call it their own document/);
   // A copy of the same file is reused, never duplicated.
   assert.match(studyMaterial, /\.eq\("file_key", src\.file_key\)/);
+  // …and a paste copy is recognised by name + identical content, so an
+  // explicit Discover re-ask reuses it instead of stacking a duplicate.
+  assert.match(studyMaterial, /src\.kind === "paste" && src\.content/);
+  assert.match(studyMaterial, /\.eq\("kind", "paste"\)\.eq\("name", src\.name\)\.eq\("content", src\.content\)/);
 });
 
 test("platform tier: the agent is told to call the tool for bare topic asks and to name the source", () => {
