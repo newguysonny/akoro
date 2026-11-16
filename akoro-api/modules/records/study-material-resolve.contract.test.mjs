@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { escapeLike, rankContentHits, pickContentWinner, findDuplicateArtifact, passagesFromExtraction, rankChatRecords, pickChatRecord, platformTerms, platformChunkScore } from "./studyMaterialCore.js";
+import { escapeLike, rankContentHits, pickContentWinner, findDuplicateArtifact, passagesFromExtraction, rankChatRecords, pickChatRecord, platformTerms, platformChunkScore, platformHelpfulSet, platformTopicName } from "./studyMaterialCore.js";
 
 const studyMaterial = await readFile(new URL("./studyMaterial.js", import.meta.url), "utf8");
 const searchLib = await readFile(new URL("./searchLib.js", import.meta.url), "utf8");
@@ -208,7 +208,7 @@ test("platform tier: wired after the own-Library search, folder-gated, discovery
 test("platform tier: searchPlatformChunks re-verifies every hit against its record", () => {
   assert.match(searchLib, /export async function searchPlatformChunks/);
   assert.match(searchLib, /\.neq\("user_id", userId\)/, "never the requester's own chunks");
-  assert.match(searchLib, /\.eq\("private", false\)/, "chat uploads (private) never surface");
+  assert.match(searchLib, /\.eq\("private", false\)/, "private records never surface");
   assert.match(searchLib, /\.in\("kind", \["upload", "paste"\]\)/);
   assert.match(searchLib, /activePremiumUserIds/, "Premium owners are excluded");
 });
@@ -237,6 +237,49 @@ test("copy-on-use: a platform winner is copied into the learner's Library before
 test("platform tier: the agent is told to call the tool for bare topic asks and to name the source", () => {
   assert.match(chat, /bare topic ask like 'create a quiz on properties of matter'/);
   assert.match(chat, /source 'platform'/);
+});
+
+/* ── Gathered content: several helpful free notes → ONE cited text ───────── */
+
+test("platform helpful set: everything at least half as strong as the winner, capped", () => {
+  const ranked = [
+    { recordId: "a", name: "A", score: 3 },
+    { recordId: "b", name: "B", score: 2.9 },
+    { recordId: "c", name: "C", score: 1.5 },
+    { recordId: "d", name: "D", score: 1.4 },
+    { recordId: "e", name: "E", score: 0 },
+  ];
+  assert.deepEqual(platformHelpfulSet(ranked).map((r) => r.recordId), ["a", "b", "c"], "half the winner's score is the bar; zero scores never help");
+  assert.deepEqual(platformHelpfulSet(ranked, { cap: 2 }).map((r) => r.recordId), ["a", "b"], "the cap holds");
+  assert.deepEqual(platformHelpfulSet([{ recordId: "x", name: "X", score: 1 }]).map((r) => r.recordId), ["x"], "a lone source stays a single build");
+  assert.deepEqual(platformHelpfulSet([]), []);
+  assert.equal(platformTopicName("properties of matter"), "Properties Of Matter");
+  assert.equal(platformTopicName("  cell   structure "), "Cell Structure");
+  assert.equal(platformTopicName(""), "Discover notes");
+});
+
+test("gathered content: several sources become ONE cited text record in the Library", async () => {
+  // Both match arms can return a SET of sources now, never a platform choice.
+  assert.match(studyMaterial, /return \{ records: withOwners\.slice\(0, 5\)/, "the name arm returns every helpful match");
+  assert.match(studyMaterial, /platformHelpfulSet\(ranked\)/, "the content arm selects by the helpful bar");
+  assert.match(studyMaterial, /if \(plat\?\.records\?\.length\) return \{ records: plat\.records, platform: true \}/);
+  assert.doesNotMatch(studyMaterial, /plat\?\.needsChoice/, "the platform tier no longer asks the learner to choose");
+  // No folders, no per-source copies: one gathered text, saved once.
+  assert.doesNotMatch(studyMaterial, /buildPlatformFolder|findOrCreateDiscoverFolder/, "platform builds never create folders (reading the learner's own named folder is a different path)");
+  assert.match(studyMaterial, /async function buildGatheredContent/);
+  assert.match(studyMaterial, /kind: "paste", name: topic, content: text/, "the gathered content is a single text record (text already opens in the reader)");
+  assert.match(studyMaterial, /private: true, sources: citations/, "saved private, with its citation map");
+  assert.match(studyMaterial, /marker: i \+ 1, recordId: s\.id/, "each citation keys a marker to the ORIGINAL record");
+  assert.match(studyMaterial, /async function synthesiseGatheredText/, "the agent writes the content from the sources' passages");
+  assert.match(studyMaterial, /cite the source it came from with its marker/, "…and cites as it writes");
+  // The migration the citation map lives in.
+  const mig = await readFile(new URL("../../migrations/2026-record-sources.sql", import.meta.url), "utf8");
+  assert.match(mig, /ALTER TABLE edu\.records ADD COLUMN IF NOT EXISTS sources jsonb/);
+  // The artifact records that it was made from a gathered content.
+  assert.match(studyMaterial, /platformNote\?\.sources \? \{ gathered: true, sources:/);
+  assert.match(studyMaterial, /brought together \$\{built\.sources\.length\} free notes from Discover/, "the reply is told what the gathered content is");
+  // The agent's tool description explains the gathered outcome.
+  assert.match(chat, /writes ONE gathered content from them/);
 });
 
 test("indexing wiring: a chat upload is indexed when its read completes", () => {

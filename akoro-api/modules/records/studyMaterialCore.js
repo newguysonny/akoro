@@ -187,6 +187,27 @@ export function platformTerms(query = "") {
 }
 
 /** 0..1 — the share of the query terms this text carries (each term once). */
+/**
+ * The platform matches that would actually help (Matt, 2026-11-16): when
+ * Discover holds several good materials for a topic, they are gathered into
+ * a folder and built from together instead of asking the learner to pick.
+ * ranked (best first, score > 0) → every record scoring at least `minShare`
+ * of the winner, capped. → [{ recordId, name, score }] (possibly one).
+ */
+export function platformHelpfulSet(ranked, { cap = 5, minShare = 0.5 } = {}) {
+  const list = (ranked || []).filter((r) => r?.recordId && Number(r.score) > 0);
+  if (!list.length) return [];
+  const top = Number(list[0].score) || 0;
+  return list.filter((r) => Number(r.score) >= top * minShare).slice(0, Math.max(1, cap));
+}
+
+/** The title a multi-source Discover build is saved under: the topic, titled. */
+export function platformTopicName(query = "") {
+  const words = String(query || "").replace(/\s+/g, " ").trim().slice(0, 80);
+  if (!words) return "Discover notes";
+  return words.replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 export function platformChunkScore(text = "", terms = []) {
   const list = (terms || []).filter(Boolean);
   if (!list.length) return 0;

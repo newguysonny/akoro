@@ -100,8 +100,7 @@ export default function IngestCard({ ingest, onOpenFolder, onUndo, onRestore, on
           </p>
         )}
         <p style={{ margin: '3px 0 0', fontSize: 11.5, fontWeight: 600, color: 'var(--ak-text-muted)', display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
-          {status}{dot}
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontWeight: 800, color: 'var(--ak-text-sub)' }}><Icon name="ti-lock" size={11}/> {t('agent.filed_private_short')}</span>
+          {status}
         </p>
       </div>
       <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexShrink: 0, marginLeft: 'auto' }}>

@@ -30,10 +30,10 @@ test("create: no classify, no folder — the upload starts unfiled", () => {
   assert.match(create, /replaced\?\.state === "undone" && replaced\.chat_message_id/, "\"Save it again\" still takes over the undone upload's message");
 });
 
-test("records: attached and private, but NOT filed and NOT sent to Study Prep yet", () => {
+test("records: attached under the Library visibility rule, but NOT filed and NOT sent to Study Prep yet", () => {
   assert.doesNotMatch(records, /library_folder_items/, "no folder items are written before the read");
   assert.doesNotMatch(records, /attachUploadsToStudyPrep/, "Study Prep waits for the read subject");
-  assert.match(records, /update\(\{ private: true \}\)/, "still marked private at once (D51, D53)");
+  assert.doesNotMatch(records, /update\(\{ private: true \}\)/, "no blanket private marking — chat uploads follow the Library rule (public for free, Premium excluded in Discover)");
   assert.match(records, /savedSteps\(\{ ingestId: row\.id, first \}\)/, "the step says saved — not filed");
 });
 

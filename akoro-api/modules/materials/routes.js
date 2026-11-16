@@ -7,7 +7,8 @@
  *        → one ingest for the message's files, UNFILED: no folder, subject or kind
  *          until it is read (Stage 4 — nothing is guessed from file names) → { data, ingests, batchId }
  *   POST /api/agent/materials/ingest/:id/records    { recordIds }
- *        → the uploaded records are the upload's, marked private; filing waits for the read
+ *        → the uploaded records are the upload's (Library visibility rule:
+ *          public for free users, Premium stays private); filing waits for the read
  *   POST /api/agent/materials/ingest/:id/progress   { state: extracting|ready|failed, pages?, error? }
  *   POST /api/agent/materials/ingest/:id/structure  → reads it: topics (+ a past paper's questions,
  *        private, D53), then files it ONCE from the read (folderMatch.js: the learner's
@@ -204,8 +205,12 @@ router.post("/ingest/:id/records", asyncHandler(async (req, res) => {
   if (!ids.length) return res.status(400).json({ success: false, message: "recordIds: at least one record is required." });
   const { data: records } = await edu().from("records").select("id, name, mime").eq("user_id", req.user.id).in("id", ids);
   if ((records || []).length !== ids.length) return res.status(403).json({ success: false, message: "One of those records isn't yours." });
-  // "Only you can see this": a chat upload never shows in Discover (D51, D53).
-  await edu().from("records").update({ private: true }).eq("user_id", req.user.id).in("id", ids);
+  // Visibility follows the Library rule (Matt, 2026-11-16; supersedes the
+  // D53 blanket-private marking): a chat upload is NOT marked private — it is
+  // discoverable like any Library upload, and a Premium subscriber's uploads
+  // stay out of Discover via the dynamic premium exclusion every consumer
+  // enforces (records feed, discover/open, resolveContentAccess, platform
+  // search). The record keeps the schema default, private = false.
   // Stage 4: the records are the upload's, but NOT filed into a folder here —
   // filing happens once, at /structure, from the read (which also fires the
   // Study Prep attach, with the read subject instead of a name guess).

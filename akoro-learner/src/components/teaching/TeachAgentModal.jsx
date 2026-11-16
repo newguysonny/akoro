@@ -1037,7 +1037,10 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
         </>
       ) : readerOpen ? (
         // Desktop/tablet: the Fortizo split — reader left, live session right.
-        <SessionReaderModal {...readerProps} chatState={readerChat} chatNode={readerChat === "agent" ? sessionChat(true) : null}/>
+        // Same close rule as mobile: in the default Ask state the reader's
+        // back exits the viewer to the previous page; only an Agent session's
+        // reader closes back onto the session chat.
+        <SessionReaderModal {...readerProps} chatState={readerChat} onClose={readerChat === "ask" && onClose ? onClose : closeReader} chatNode={readerChat === "agent" ? sessionChat(true) : null}/>
       ) : (
         sessionChat(false)
       )}

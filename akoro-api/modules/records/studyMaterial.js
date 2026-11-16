@@ -12,9 +12,12 @@
  *       Agent Chat: find the learner's document (or the best one in a folder,
  *       or — fromChatFile — a file they sent in this chat), build the tool
  *       from the WHOLE document, save it as a reader tab. When their Library
- *       has nothing, the platform tier looks in Discover's free notes and a
+ *       has nothing, the platform tier looks in Discover's free notes: one
  *       winner is first copied into their Library (the result then carries
- *       source: "platform" + the source's name and owner) →
+ *       source: "platform" + the source's name and owner); several that
+ *       would help are written into ONE gathered content — a single cited
+ *       text saved in the Library — and the build reads that (the result
+ *       carries the gathered content's name + every source) →
  *       { made, tool, recordId, artifactId, name, href, count } | { needsChoice } | { error }
  *
  * Whatever chat makes is the same saved item the reader makes (edu.record_artifacts),
@@ -22,10 +25,10 @@
  */
 import db from "../../db.js";
 import { openai } from "../../lib/aiModel.js";
-import { TOOL_IDS, TOOL_LIMITS, toolSchema, toolCount, buildToolMessages, shapeToolResult, gatherToolPassages, citeOf } from "./toolsLib.js";
+import { TOOL_IDS, TOOL_LIMITS, toolSchema, toolCount, buildToolMessages, shapeToolResult, gatherToolPassages, citeOf, pagePassages } from "./toolsLib.js";
 import { searchRecordChunks, searchPlatformChunks, indexRecord } from "./searchLib.js";
 import { getExtraction } from "./extractLib.js";
-import { escapeLike, rankContentHits, pickContentWinner, findDuplicateArtifact, passagesFromExtraction, pickChatRecord, platformTerms, platformChunkScore } from "./studyMaterialCore.js";
+import { escapeLike, rankContentHits, pickContentWinner, findDuplicateArtifact, passagesFromExtraction, pickChatRecord, platformTerms, platformChunkScore, platformHelpfulSet, platformTopicName } from "./studyMaterialCore.js";
 import { createArtifact, listArtifacts, updateArtifact } from "./artifactsLib.js";
 import { PODCAST_LIMITS, lengthOf, podcastSchema, podcastInFlight, runPodcastJob } from "./podcastLib.js";
 import { coinsAvailable, debitCoins } from "../../lib/coins.js";
@@ -283,7 +286,7 @@ async function platformFind({ userId, q }) {
     return x;
   };
   // By name first — a free note actually called what the learner asked for.
-  const { data: named } = await discoverable(E.from("records").select("id, name, user_id"))
+  const { data: named } = await discoverable(E.from("records").select("id, name, user_id, kind, file_key"))
     .ilike("name", `%${escapeLike(q)}%`).order("created_at", { ascending: false }).limit(6);
   if (named?.length) {
     const owners = await platformOwners(E, named);
@@ -292,7 +295,9 @@ async function platformFind({ userId, q }) {
       const r = withOwners[0];
       return { record: { id: r.id, name: r.name }, platform: { ownerId: r.user_id, ownerName: r.ownerName } };
     }
-    return { needsChoice: withOwners.map((r) => ({ recordId: r.id, name: r.name, ownerName: r.ownerName })) };
+    // Several free notes carry the topic's name: all of them would help —
+    // they become ONE gathered content (Matt, 2026-11-16), not a question.
+    return { records: withOwners.slice(0, 5).map((r) => ({ id: r.id, name: r.name, ownerId: r.user_id, ownerName: r.ownerName, kind: r.kind, file_key: r.file_key || null })) };
   }
   // Then by what is inside: lexical chunk hits over Discover-eligible
   // records, scored by term coverage, ranked like the own-Library tier.
@@ -301,15 +306,25 @@ async function platformFind({ userId, q }) {
   const terms = platformTerms(q);
   const ownersByRecord = new Map(hits.map((h) => [h.recordId, { ownerId: h.ownerId, ownerName: h.ownerName }]));
   const ranked = rankContentHits(hits.map((h) => ({ ...h, fused: platformChunkScore(h.text, terms) })));
-  const pick = pickContentWinner(ranked);
-  if (!pick) return null;
-  if (pick.needsChoice) {
-    return { needsChoice: pick.needsChoice.map((c) => ({ ...c, ...(ownersByRecord.get(c.recordId) || {}) })) };
+  // One clear source builds alone; several that would help build together
+  // from a folder (platformHelpfulSet) — the platform tier no longer asks
+  // the learner to choose between near-equal free notes.
+  const set = platformHelpfulSet(ranked);
+  if (!set.length) return null;
+  if (set.length === 1) {
+    const rec = hits.find((h) => h.recordId === set[0].recordId);
+    if (!rec) return null;
+    return { record: { id: rec.recordId, name: rec.name },
+      platform: { ownerId: rec.ownerId, ownerName: rec.ownerName } };
   }
-  const rec = hits.find((h) => h.recordId === pick.recordId);
-  if (!rec) return null;
-  return { record: { id: rec.recordId, name: rec.name },
-    platform: { ownerId: rec.ownerId, ownerName: rec.ownerName } };
+  const { data: full } = await E.from("records").select("id, kind, file_key").in("id", set.map((e) => e.recordId));
+  const fullById = new Map((full || []).map((r) => [r.id, r]));
+  return { records: set.map((e) => {
+    const h = hits.find((x) => x.recordId === e.recordId);
+    const owner = ownersByRecord.get(e.recordId) || {};
+    const f = fullById.get(e.recordId) || {};
+    return { id: e.recordId, name: e.name || h?.name || "", ownerId: owner.ownerId || h?.ownerId || null, ownerName: owner.ownerName || h?.ownerName || null, kind: f.kind || null, file_key: f.file_key || null };
+  }) };
 }
 
 /**
@@ -356,6 +371,140 @@ async function copyPlatformRecord({ userId, sourceId }) {
   void indexRecord({ userId, recordId: copy.id, name: copy.name, contentKey: src.file_key || null,
     pasteText: src.kind === "paste" ? src.content : null });
   return { record: copy };
+}
+
+/* ── The gathered content (Matt, 2026-11-16) ───────────────────────────────
+   Several Discover materials would help: instead of copying them into a
+   folder, the agent writes ONE content from them — a single text saved in
+   the learner's Library (a paste record; text already opens in the reader),
+   cited to its sources with numbered markers. The record's `sources` jsonb
+   is the citation map: marker → the ORIGINAL record, so the reader can open
+   the source from a citation and come back. Study materials then generate
+   from this one content like from any document. */
+
+/** Readable passages of ONE Discover source, server-side: an upload reads
+ *  its shared extraction, a paste reads its own text. → [passage] */
+async function gatherSourcePassages(source) {
+  try {
+    if (source.kind === "paste") {
+      const E = db.schema("edu");
+      const { data } = await E.from("records").select("content").eq("id", source.id).maybeSingle();
+      const text = String(data?.content || "");
+      return text ? pagePassages(1, { markdown: text }) : [];
+    }
+    if (source.file_key) {
+      const ext = await getExtraction(source.file_key).catch(() => null);
+      return passagesFromExtraction({ pages: ext?.pages || [], scope: "document" });
+    }
+    return [];
+  } catch { return []; }
+}
+
+const GATHER_LIMITS = Object.freeze({ PER_SOURCE_PASSAGES: 6, PER_SOURCE_CHARS: 6000, TOTAL_CHARS: 16000 });
+
+/**
+ * Write the gathered content's text from the sources' passages: one model
+ * call for cited study notes (sections whose facts carry their source's
+ * [n] marker); if the model can't, an extractive assembly — each source's
+ * own section, its passages as paragraphs, the marker at each paragraph's
+ * end. Either way the text ends with the Sources list the markers key to.
+ * sources: [{ name, ownerName, passages }] (already in marker order).
+ */
+async function synthesiseGatheredText({ userId, topic, sources }) {
+  const footer = ["", "Sources", ...sources.map((s, i) => `[${i + 1}] ${s.name} — ${s.ownerName || "another learner"} (free notes in Discover)`)].join("\n");
+  const fallback = () => {
+    const parts = [`# ${topic}`];
+    sources.forEach((s, i) => {
+      parts.push(`## ${s.name}`);
+      for (const p of s.passages) parts.push(`${String(p.text || "").trim()} [${i + 1}]`);
+    });
+    return parts.join("\n\n") + "\n\n" + footer;
+  };
+  try {
+    const blocks = [];
+    let budget = GATHER_LIMITS.TOTAL_CHARS;
+    sources.forEach((s, i) => {
+      const texts = [];
+      let used = 0;
+      for (const p of s.passages.slice(0, GATHER_LIMITS.PER_SOURCE_PASSAGES)) {
+        const t = String(p.text || "").trim();
+        if (!t || used + t.length > GATHER_LIMITS.PER_SOURCE_CHARS || budget - t.length < 0) break;
+        texts.push(t); used += t.length; budget -= t.length;
+      }
+      if (texts.length) blocks.push(`SOURCE [${i + 1}] — "${s.name}" by ${s.ownerName || "another learner"}:\n${texts.join("\n")}`);
+    });
+    if (!blocks.length) return fallback();
+    const messages = [
+      { role: "system", content: "You write clear study notes for a learner from excerpts of other learners' free notes. Write ONE set of notes on the topic, organised into short sections with headings. Use ONLY the excerpts — never invent facts. After each fact, cite the source it came from with its marker, like [1]. Keep the notes tight and readable. Return ONLY one JSON object: {\"sections\": [{\"heading\": \"...\", \"body\": \"...\"}]}." },
+      { role: "user", content: `Topic: ${topic}\n\n${blocks.join("\n\n")}` },
+    ];
+    let json = null;
+    for (const format of [{ type: "json_object" }, null]) {
+      try {
+        const completion = await openai.chat.completions.create({
+          __role: "background", __userId: userId, __feature: "chat_gather_content",
+          temperature: 0.3, max_tokens: 2400, messages,
+          ...(format ? { response_format: format } : {}),
+        });
+        const raw = String(completion.choices?.[0]?.message?.content || "").trim()
+          .replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "").trim();
+        const a = raw.indexOf("{"), b = raw.lastIndexOf("}");
+        if (a >= 0 && b > a) { const parsed = JSON.parse(raw.slice(a, b + 1)); if (Array.isArray(parsed?.sections) && parsed.sections.length) { json = parsed; break; } }
+      } catch { /* try the next format, then the fallback */ }
+    }
+    if (!json) return fallback();
+    const parts = [`# ${topic}`];
+    for (const s of json.sections) {
+      const heading = String(s?.heading || "").trim();
+      const body = String(s?.body || "").trim();
+      if (!body) continue;
+      if (heading) parts.push(`## ${heading}`);
+      parts.push(body);
+    }
+    return parts.length > 1 ? parts.join("\n\n") + "\n\n" + footer : fallback();
+  } catch { return fallback(); }
+}
+
+/**
+ * Build the gathered content for a multi-source platform hit and save it as
+ * ONE text record in the learner's Library. Sources are re-verified against
+ * the discovery rule first (a note made private, deleted or Premium since
+ * the search must not be gathered). The record is private — it is a
+ * derivative of other learners' notes, not the learner's own upload.
+ * → { record, sources: [{ marker, recordId, name, ownerName, contentKey, kind }] } | { error }
+ */
+async function buildGatheredContent({ userId, query, sources }) {
+  const E = db.schema("edu");
+  const { activePremiumUserIds } = await import("./access.js");
+  const premium = await activePremiumUserIds().catch(() => []);
+  const { data: rows } = await E.from("records")
+    .select("id, user_id, kind, name, file_key, private")
+    .in("id", (sources || []).map((s) => s.id)).is("deleted_at", null);
+  const byId = new Map((rows || []).map((r) => [r.id, r]));
+  const usable = [];
+  for (const s of sources || []) {
+    const row = byId.get(s.id);
+    if (!row || row.user_id === userId || row.private || premium.includes(row.user_id)) continue;
+    const passages = await gatherSourcePassages({ ...s, kind: row.kind, file_key: row.file_key });
+    if (passages.length) usable.push({ ...s, kind: row.kind, file_key: row.file_key || null, passages });
+  }
+  if (!usable.length) return { error: "Those free notes aren't available anymore — say so and offer another way." };
+  const { count } = await E.from("records").select("id", { count: "exact", head: true })
+    .eq("user_id", userId).is("deleted_at", null);
+  if ((count || 0) >= 200) return { error: "Their Library shelf is full (200) — ask them to remove something before saving gathered notes." };
+  const topic = platformTopicName(query);
+  const text = await synthesiseGatheredText({ userId, topic, sources: usable });
+  const citations = usable.map((s, i) => ({
+    marker: i + 1, recordId: s.id, name: s.name, ownerName: s.ownerName || null,
+    contentKey: s.file_key || null, kind: s.kind || null,
+  }));
+  const { data: record, error } = await E.from("records").insert({
+    user_id: userId, kind: "paste", name: topic, content: text, size: text.length,
+    private: true, sources: citations,
+  }).select("id, name").single();
+  if (error || !record) return { error: "Couldn't save the gathered notes to their Library — try again in a moment." };
+  void indexRecord({ userId, recordId: record.id, name: record.name, pasteText: text });
+  return { record, sources: citations };
 }
 
 /** The learner's document for a request: by id, by name, inside a folder, or by what it says. */
@@ -432,7 +581,7 @@ export async function findStudyRecord({ userId, query = "", folder = "", recordI
   // the fromChatFile branch above has already answered for it.
   if (!candidates && q.length >= 3) {
     const plat = await platformFind({ userId, q }).catch(() => null);
-    if (plat?.needsChoice) return { needsChoice: plat.needsChoice, platform: true };
+    if (plat?.records?.length) return { records: plat.records, platform: true };
     if (plat?.record) return { record: plat.record, platform: plat.platform };
   }
   if (candidates) return { needsChoice: candidates.slice(0, 6).map((r) => ({ recordId: r.id, name: r.name })), folder: folderRow };
@@ -458,11 +607,24 @@ export async function makeStudyMaterial({ userId, tool, query = "", folder = "",
               ? `Their "${found.folder.name}" folder has several documents — ask which one (by name) to make the ${tool} from; don't guess.`
               : `More than one of their documents matches almost equally — ask which one (by name) to make the ${tool} from; don't guess.` };
     }
-    // Platform tier: the winner is another learner's free note. Save the
-    // learner their own copy first — the artifact, its reader card and its
-    // dedupe all hang off the copy, and the reply can say where it came from.
+    // Platform tier: the source is other learners' free notes. A single
+    // winner is copied into the learner's Library first; several that would
+    // help become ONE gathered content (below). Either way the artifact, its
+    // reader card and its dedupe hang off a record the learner owns, and the
+    // reply can say where it came from.
     let platformNote = null;
-    if (found.platform) {
+    if (found.records?.length) {
+      // Several free notes would help: ONE gathered content written from
+      // all of them, cited to each source, saved as a single text in the
+      // Library — the build then reads that content like any document.
+      const built = await buildGatheredContent({ userId, query, sources: found.records });
+      if (built.error) return { error: built.error };
+      const list = built.sources.map((s) => `"${s.name}" by ${s.ownerName || "another learner"}`).join(", ");
+      platformNote = { source: "platform", sourceName: built.record.name, sourceOwner: null,
+        sources: built.sources.map((s) => ({ name: s.name, ownerName: s.ownerName })),
+        note: `This was built from a gathered content now saved in their Library ("${built.record.name}") — Akoro brought together ${built.sources.length} free notes from Discover (${list}) and wrote them into one cited text, and the ${tool} was made from that text. Say so in your reply: name Discover and the gathered content; don't call the sources their own documents.` };
+      found = { ...found, record: built.record };
+    } else if (found.platform) {
       const copied = await copyPlatformRecord({ userId, sourceId: found.record.id });
       if (copied.error) return { error: copied.error };
       platformNote = { source: "platform", sourceName: found.record.name, sourceOwner: found.platform.ownerName || null,
@@ -511,7 +673,8 @@ export async function makeStudyMaterial({ userId, tool, query = "", folder = "",
     const content = toReaderContent(tool, g.result);
     const created = await createArtifact({ userId, recordId: found.record.id, row: {
       kind: tool, page_number: docScope === "page" ? page : null, open: true,
-      params: { ...values, scope: docScope === "page" ? `Page ${page}` : "Whole document", from: "chat" }, content } });
+      params: { ...values, scope: docScope === "page" ? `Page ${page}` : "Whole document", from: "chat",
+        ...(platformNote?.sources ? { gathered: true, sources: platformNote.sources.map((s) => s.name) } : {}) }, content } });
     if (created.error) return { error: created.error };
     const n = (content.quizQuestions || content.cardSet || content.summaryPoints || []).length;
     return { made: true, ...base, artifactId: created.artifact.id, count: n, label: LABEL[tool],

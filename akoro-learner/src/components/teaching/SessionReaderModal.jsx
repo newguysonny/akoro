@@ -1896,8 +1896,8 @@ export default function SessionReaderModal({
           <button
             type="button"
             onClick={onClose}
-            title={split ? "Close the reader" : chatState === "ask" ? "Back" : "Back to the session chat"}
-            aria-label={split ? "Close the reader" : chatState === "ask" ? "Back" : "Back to the session chat"}
+            title={chatState === "ask" ? "Back" : split ? "Close the reader" : "Back to the session chat"}
+            aria-label={chatState === "ask" ? "Back" : split ? "Close the reader" : "Back to the session chat"}
             className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"
             style={{ background: "var(--ak-tag-bg)" }}
           >

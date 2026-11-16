@@ -151,6 +151,9 @@ const toApi = async (r) => ({
   fileMissing: r.kind === "upload" && !r.file_key,
   url: r.url || null,
   content: r.kind === "paste" ? (r.content || "") : undefined,
+  // A gathered content's citation map (marker → the original Discover
+  // record), so the reader can open a citation's source and come back.
+  sources: Array.isArray(r.sources) && r.sources.length ? r.sources : undefined,
   fileUrl: r.kind === "upload" && r.file_key
     ? await createPresignedDownload(r.file_key).catch((err) => {
         console.error("[records] could not sign fileUrl:", err?.message || err);
@@ -329,7 +332,7 @@ router.get("/discover", authenticateToken, asyncHandler(async (req, res) => {
     .order("created_at", { ascending: false })
     .limit(limit);
   if (premiumIds.length) query = query.not("user_id", "in", `(${premiumIds.join(",")})`);
-  query = query.eq("private", false);   // chat uploads stay their owner's (D53)
+  query = query.eq("private", false);   // private records stay their owner's; Premium owners excluded above — one rule for Library and chat uploads alike
   if (term) query = query.or(`name.ilike.%${term}%,content.ilike.%${term}%`);
   const { data: rows, error } = await query;
   if (error) throw error;

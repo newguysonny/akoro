@@ -68,13 +68,15 @@ test("suggestions: after an upload one chip is always the study step (§7.17.5)"
   assert.match(chat, /\[guideChip\(notTaught\), uploadChip\(uploads\)\]/);
 });
 
-test("a chat upload is private: never in Discover, never opened or asked by anyone else (D51, D53)", async () => {
+test("chat uploads follow the Library visibility rule: public for free users, Premium stays out of Discover (2026-11-16, supersedes D53)", async () => {
   const recRoutes = await readFile(new URL("../records/routes.js", import.meta.url), "utf8");
   const access = await readFile(new URL("../records/access.js", import.meta.url), "utf8");
   const mig = await readFile(new URL("../../migrations/2026-material-structure.sql", import.meta.url), "utf8");
   assert.match(mig, /ALTER TABLE edu\.records ADD COLUMN IF NOT EXISTS private boolean NOT NULL DEFAULT false/);
-  assert.match(routes, /from\("records"\)\.update\(\{ private: true \}\)\.eq\("user_id", req\.user\.id\)\.in\("id", ids\)/);
+  assert.doesNotMatch(routes, /update\(\{ private: true \}\)/, "the ingest attach no longer blanket-marks chat uploads private");
   assert.match(recRoutes, /query = query\.eq\("private", false\);/, "the Discover feed leaves private records out");
-  assert.match(recRoutes, /if \(r\.private && r\.user_id !== req\.user\.id\) return res404/, "…and won't open one");
-  assert.match(access, /if \(rec\.private && rec\.user_id !== userId\) return \{ status: 404/, "shared-file access (ask, guide, extract) refuses it");
+  assert.match(recRoutes, /premiumIds/, "…and Premium subscribers' uploads are excluded by owner, chat uploads included");
+  assert.match(recRoutes, /if \(r\.private && r\.user_id !== req\.user\.id\) return res404/, "a private record still won't open for anyone else");
+  assert.match(access, /if \(rec\.private && rec\.user_id !== userId\) return \{ status: 404/, "shared-file access (ask, guide, extract) refuses a private record");
+  assert.match(access, /premiumIds\.includes\(rec\.user_id\)/, "…and refuses a Premium owner's file even when it is not flagged private");
 });
