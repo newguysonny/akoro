@@ -345,10 +345,22 @@ router.post("/users/invite", adminOnly, asyncHandler(async (req, res) => {
   if (fe) throw fe;
   if (existing) return err409(res, "User already exists");
 
+  // users.username and users.password_hash are NOT NULL: derive a unique
+  // username like /users/create does, and lock the password to a random
+  // secret (invite accounts set their own password later).
+  const cleanEmail = email.toLowerCase().trim();
+  const base = (cleanEmail.split("@")[0] || "user").replace(/[^a-z0-9_]/g, "_").slice(0, 30) || "user";
+  let username = `${base}_${Date.now().toString(36).slice(-4)}`;
+  const { data: clash } = await db.from("users").select("id").eq("username", username).maybeSingle();
+  if (clash) username = `${username}_${Math.random().toString(36).slice(2, 6)}`;
+  const passwordHash = await bcrypt.hash(genPassword() + genPassword(), BCRYPT_ROUNDS);
+
   const { data, error } = await db
     .from("users")
     .insert({
-      email:                 email.toLowerCase().trim(),
+      email:                 cleanEmail,
+      username,
+      password_hash:         passwordHash,
       full_name,
       role,
       is_active:             true,
@@ -409,14 +421,28 @@ router.post("/users/invite-csv", adminOnly, asyncHandler(async (req, res) => {
   let invited = 0;
   if (toInsert.length > 0) {
     const now = new Date().toISOString();
-    const rows = toInsert.map((r) => ({
-      email:                r.email,
-      full_name:            r.full_name,
-      role:                 r.role,
-      is_active:            true,
-      onboarding_completed: false,
-      created_at:           now,
+    // users.username and users.password_hash are NOT NULL: derive a unique
+    // username per row and lock each password to a random secret (invite
+    // accounts set their own password later).
+    const stamp = Date.now().toString(36).slice(-4);
+    const rows = await Promise.all(toInsert.map(async (r, i) => {
+      const base = (r.email.split("@")[0] || "user").replace(/[^a-z0-9_]/g, "_").slice(0, 30) || "user";
+      return {
+        email:                r.email,
+        username:             `${base}_${stamp}${i}`,
+        password_hash:        await bcrypt.hash(genPassword() + genPassword(), BCRYPT_ROUNDS),
+        full_name:            r.full_name,
+        role:                 r.role,
+        is_active:            true,
+        onboarding_completed: false,
+        created_at:           now,
+      };
     }));
+    const { data: clashRows } = await db.from("users").select("username").in("username", rows.map((r) => r.username));
+    if (clashRows?.length) {
+      const taken = new Set(clashRows.map((u) => u.username));
+      for (const r of rows) if (taken.has(r.username)) r.username = `${r.username}_${Math.random().toString(36).slice(2, 6)}`;
+    }
 
     const { data: inserted, error: ie } = await db
       .from("users")
