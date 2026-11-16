@@ -22,7 +22,7 @@ import { buildSuggestionMessages, notTaughtFrom, guideChip, uploadsFrom, uploadC
 import { resolveAskTargetFor } from "../records/access.js";
 import { materialsFrom, collectMaterials } from "./chat-materials.js";
 import { renderRelevantMemory } from "./chat-memory.js";
-import { ensureNotTaughtOpener, promisedTeachTopic, scrubInternalIds, stripDsmlMarkup, hasDsmlMarkup } from "./reply-scrub.js";
+import { ensureNotTaughtOpener, promisedTeachTopic, scrubInternalIds, stripDsmlMarkup, hasDsmlMarkup, stripToolCallMarkup, hasToolCallMarkup } from "./reply-scrub.js";
 import { recurringTopics } from "../materials/structureCore.js";
 import { resolveMaterialsFolder } from "../materials/studySource.js";
 import { akoroMaterialFor } from "../materials/akoroMaterial.js";
@@ -4168,7 +4168,7 @@ async function streamChat({ send, messages, model, max_tokens = 700, temperature
     if (delta) {
       full += delta;
       if (!muted) {
-        if (hasDsmlMarkup(tail + delta)) muted = true;
+        if (hasDsmlMarkup(tail + delta) || hasToolCallMarkup(tail + delta)) muted = true;
         else send("delta", { text: delta });
         tail = (tail + delta).slice(-16);
       }
@@ -4205,7 +4205,7 @@ async function streamDecision({ messages, tools, toolChoice, onText = null, isAb
       content += delta.content;
       // Same DSML guard as streamChat: once tool-call markup starts, stop
       // painting it live; the composed reply is scrubbed before it is saved.
-      if (!dsmlMuted && hasDsmlMarkup(dsmlTail + delta.content)) dsmlMuted = true;
+      if (!dsmlMuted && (hasDsmlMarkup(dsmlTail + delta.content) || hasToolCallMarkup(dsmlTail + delta.content))) dsmlMuted = true;
       if (!dsmlMuted) { onText?.(delta.content); dsmlTail = (dsmlTail + delta.content).slice(-16); }
     }
     for (const part of delta.tool_calls || []) {
@@ -5775,7 +5775,7 @@ router.post("/agent", async (req, res) => {
     // saved transcript matches what the learner saw.
     if (stopped()) reply = reply.trim() ? `${reply.trim()}\n\n${STOPPED_REPLY}` : STOPPED_REPLY;
     // Internal ids the model saw in tool results never reach the learner (reply-scrub.js).
-    reply = scrubInternalIds(stripDsmlMarkup(reply));
+    reply = scrubInternalIds(stripToolCallMarkup(stripDsmlMarkup(reply)));
     if (!stopped()) reply = ensureNotTaughtOpener(reply, prepared.toolExecutions);
     // …and a reply that promises the Teach me button without having called the
     // tool gets the button it promised (the same topic, the same links).

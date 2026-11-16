@@ -72,3 +72,31 @@ export function stripDsmlMarkup(text) {
   if (cut >= 0) s = s.slice(0, cut);
   return s.replace(/\n{3,}/g, "\n\n").trim();
 }
+
+/**
+ * The same leak in its other common dress: a tool call written into the
+ * CONTENT channel as `<tool_call>{…json…}</tool_call>` (DeepSeek/Qwen style),
+ * wrapped in `<tool_calls>`, or as Anthropic-style `<invoke>` XML. Observed
+ * live 2026-11-16: a whole reply that was one `<tool_call>` block for
+ * ask_to_be_taught, served to the learner verbatim. Same stance as DSML:
+ * whole blocks first, then stray tags, then a truncated block's tail.
+ */
+const TOOL_TAG = "tool_calls?|function_calls?|invoke";
+export const hasToolCallMarkup = (text) => new RegExp(`<\\/?(?:${TOOL_TAG})\\b`, "i").test(String(text ?? ""));
+
+export function stripToolCallMarkup(text) {
+  let s = String(text ?? "");
+  if (!hasToolCallMarkup(s)) return s;
+  s = s.replace(/<tool_calls\b[^>]*>[\s\S]*?<\/tool_calls>/gi, "");
+  s = s.replace(/<tool_call\b[^>]*>[\s\S]*?<\/tool_call>/gi, "");
+  s = s.replace(/<function_calls\b[^>]*>[\s\S]*?<\/function_calls>/gi, "");
+  s = s.replace(/<invoke\b[^>]*>[\s\S]*?<\/invoke>/gi, "");
+  // An opening tag still standing starts a block that never closed (a stream
+  // cut mid-call): everything from it on is call payload, never prose.
+  const cut = s.search(new RegExp(`<(?:${TOOL_TAG})\\b`, "i"));
+  if (cut >= 0) s = s.slice(0, cut);
+  // Stray closers and lone tags go; a tag cut mid-name at the very end too.
+  s = s.replace(new RegExp(`<\\/?(?:${TOOL_TAG})\\b[^>]*>`, "gi"), "");
+  s = s.replace(/<(?:t(?:ool)?|f(?:unction)?|i(?:nvoke)?)[a-z_]*$/i, "");
+  return s.replace(/\n{3,}/g, "\n\n").trim();
+}
