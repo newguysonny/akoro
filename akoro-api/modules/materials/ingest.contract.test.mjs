@@ -7,6 +7,7 @@ import { folderItemFor, folderNameFor, guessKind, ingestToApi, ingestWorkflow, s
 import { uploadChip, uploadsFrom } from "../adaptive-learning/chatSuggestions.js";
 
 const routes = await readFile(new URL("./routes.js", import.meta.url), "utf8");
+const filingDb = await readFile(new URL("./filingDb.js", import.meta.url), "utf8");
 const chat = await readFile(new URL("../adaptive-learning/chat.js", import.meta.url), "utf8");
 const app = await readFile(new URL("../../app.js", import.meta.url), "utf8");
 const manifest = JSON.parse(await readFile(new URL("../../migrations/manifest.json", import.meta.url), "utf8"));
@@ -29,8 +30,8 @@ test("the folder: subject and kind, private, an existing one reused (D51, D53)",
   // A past-paper name wins over a model that missed it; an off-list kind falls back.
   assert.equal(shapeClassification({ files: [{ index: 1, subject: "Biology", kind: "notes", topic: null }] }, ["WAEC Biology 2019.pdf"])[0].kind, "past_paper");
   assert.equal(shapeClassification({ files: [{ index: 1, subject: "x", kind: "poem", topic: null }] }, ["my notes.docx"])[0].kind, "notes");
-  assert.match(routes, /visibility: "private"/);
-  assert.match(routes, /f\.name\.toLowerCase\(\) === name\.toLowerCase\(\)/);
+  assert.match(filingDb, /visibility: "private"/);
+  assert.match(filingDb, /f\.name\.toLowerCase\(\) === name\.toLowerCase\(\)/);
   assert.deepEqual(folderItemFor({ id: "r1", name: "a.pdf", mime: "application/pdf" }, "past_paper"),
     { item_type: "record", item_ref: "r1", title: "a.pdf", sub: "From chat · Past papers", kind: "pdf", link: null });
   assert.equal(ingestToApi({ id: "i", state: "filed", folder_id: "f", folder_name: "Biology — Notes", folder_created: true, doc_kind: "notes" }).folder.created, true);
@@ -47,7 +48,7 @@ test("Undo takes out exactly what the upload made, into Recently deleted (restor
   assert.match(restore, /move\(row, "ready"/);
   assert.match(undo, /row\.folder_id && row\.folder_created/, "a folder is removed only if this upload made it");
   assert.match(undo, /if \(!count\)/, "…and only when it is empty");
-  assert.match(routes, /assertTransition\(ingestWorkflow, row\.state, to\)/, "every move is checked against the definition");
+  assert.match(filingDb, /assertTransition\(ingestWorkflow, row\.state, to\)/, "every move is checked against the definition");
   // (The platform classify call this test also pinned is gone: Stage 4 took it
   // off the send path — file-once.contract.test.mjs pins its absence.)
 });

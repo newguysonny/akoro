@@ -4,6 +4,7 @@ import test from "node:test";
 import { cleanStructure, recurringTopics, structureChips, structureMessage, structureMessages } from "./structureCore.js";
 
 const routes = await readFile(new URL("./routes.js", import.meta.url), "utf8");
+const filingDb = await readFile(new URL("./filingDb.js", import.meta.url), "utf8");
 const chat = await readFile(new URL("../adaptive-learning/chat.js", import.meta.url), "utf8");
 
 const PAPER = {
@@ -57,13 +58,15 @@ test("recurring topics across papers: most papers first, then marks", () => {
   assert.equal(r.topics[1].topic, "Osmosis");
 });
 
-test("wiring: once per upload, platform-paid, private questions, posted into the chat; the purge removes them", async () => {
+test("wiring: once per upload, platform-paid, private questions; the purge removes them; nothing is posted into the chat", async () => {
   assert.match(routes, /if \(row\.structure\) return res\.json/, "a second call returns the first result");
   assert.match(routes, /if \(calls && failures === calls\) \{\s*const back = await move\(row, "ready"\);[\s\S]{0,1200}?return res\.status\(503\)/, "a failed read keeps nothing and can be retried");
-  assert.match(routes, /__payer: "platform", __feature: "material_structure"/);
-  assert.match(routes, /from\("material_questions"\)\.insert/);
+  assert.match(filingDb, /__payer: "platform", __feature: "material_structure"/);
+  assert.match(filingDb, /from\("material_questions"\)\.insert/);
   const purge = await readFile(new URL("./purge.js", import.meta.url), "utf8");
   assert.match(purge, /from\("material_questions"\)\.delete\(\)\.eq\("user_id", row\.user_id\)\.eq\("ingest_id", row\.id\)/, "an undone paper's questions go with the purge");
-  assert.match(routes, /role: "agent", text, meta/);
+  // Agent-driven uploads (2026-11-16): the server never writes a chat
+  // message — the agent narrates the filing in its own turn.
+  assert.doesNotMatch(routes + filingDb, /from\("chat_messages"\)\.insert/);
   assert.match(chat, /from\("material_questions"\)\.select\([^)]*\)\s*\.eq\("user_id", studentId\)/, "analyse_past_papers reads only the learner's own papers");
 });

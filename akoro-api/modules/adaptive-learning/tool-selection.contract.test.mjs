@@ -67,3 +67,9 @@ test("areasForMessage hears instructor phrasings as activities", () => {
   assert.ok(areasForMessage("Show the outcomes for the photosynthesis assignment").has("activities"));
   assert.ok(areasForMessage("How many submissions came in?").has("activities"));
 });
+
+test("areasForMessage hears class and student phrasings as activities (instructor battery, 2026-11-16)", () => {
+  assert.ok(areasForMessage("How many classes do I have?").has("activities"));
+  assert.ok(areasForMessage("How many students are in my classes in total?").has("activities"));
+  assert.ok(areasForMessage("Show me the class list").has("activities"));
+});

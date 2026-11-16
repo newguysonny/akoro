@@ -40,7 +40,7 @@ import IngestCard from './agentChat/IngestCard.jsx';
 import ChatFilesStrip from './agentChat/ChatFilesStrip.jsx';
 import ApprovalButtons from './agentChat/ApprovalButtons.jsx';
 import ProposalPreview from './agentChat/ProposalPreview.jsx';
-import { addSimilar, attachIngestRecords, chatFiles, chooseFolder, chooseSubject, dismissSimilar, filesOf, getIngest, isLibraryFile, readChatRecord, readIngestRecords, restoreIngest, similarFor, startIngest, structureIngest, undoIngest, uploadChatFile } from '../../lib/chatUploads.js';
+import { addSimilar, attachIngestRecords, chatFiles, chooseFolder, chooseSubject, dismissSimilar, filesOf, getIngest, isLibraryFile, readChatRecord, readIngestRecords, restoreIngest, similarFor, startIngest, undoIngest, uploadChatFile } from '../../lib/chatUploads.js';
 import { deleteRecord } from '../../services/recordsApi.js';
 import SimilarPicker from './agentChat/SimilarPicker.jsx';
 import { useVoiceAnswer } from '../../hooks/useVoiceAnswer.js';
@@ -299,16 +299,12 @@ function AgentChatTab({
   // the first step); while it is true the send arrow is a ■ stop button.
   const [running,      setRunning]      = useState(false);
   const [inboxCount,   setInboxCount]   = useState(0);   // agent-network inbox: unread messages + unseen answers
-  // What the protégé found in an upload can be ready before its reply is: it waits
-  // and lands after the reply, so the reply never answers below it.
   const runningRef = useRef(false);
-  const heldPostsRef = useRef([]);
-  useEffect(() => {
-    runningRef.current = running;
-    if (running || !heldPostsRef.current.length) return;
-    const held = heldPostsRef.current; heldPostsRef.current = [];
-    setMessages((prev) => [...prev, ...held.filter((h) => !prev.some((m) => m.id === h.id))]);
-  }, [running]);
+  useEffect(() => { runningRef.current = running; }, [running]);
+  // The records behind each ingest this client sent, so a scan/photo whose
+  // read failed can be re-read here (the browser's lane) when the card or
+  // the agent's retry asks for it.
+  const ingestRecordsRef = useRef(new Map());
   // Developer view: raw tool name / arguments / output on each tool row.
   // A per-device preference — storage can be unavailable, so never required.
   const [devView, setDevView] = useState(() => { try { return localStorage.getItem(DEV_VIEW_KEY) === '1'; } catch { return false; } });
@@ -959,36 +955,40 @@ function AgentChatTab({
     if (r?.data) putIngest(r.data);
     setSimilar((prev) => ({ ...prev, [msg.id]: { done: true, added: r?.added || [] } }));
   };
-  // Read → what it covers, said back in the chat (the API posts it; shown here at once).
-  // The files were uploaded when they were picked; each item's read is the
-  // attach-time read's promise, awaited here — never a second read.
-  const runIngest = async (ingest, entries, chatId) => {
+  // Agent-driven uploads (2026-11-16): the files were uploaded when they
+  // were picked; this only scores the attach-time reads onto the ingest
+  // (extraction state). The agent then reads, sorts and files the upload
+  // with its own tools inside the turn — no structure call, no server post.
+  const runIngest = async (ingest, entries) => {
     const items = entries.map((e) => ({ record: e.record, read: attachJobsRef.current.get(e.id)?.readPromise || null }));
-    const done = await readIngestRecords(ingest, items, putIngest);
-    if (done?.state !== 'ready') return;
-    // The read can be briefly unavailable (the API keeps nothing then): two more tries, 20 s apart.
-    let r = null;
-    for (let i = 0; i < 3 && !r; i++) {
-      if (i) await new Promise((ok) => setTimeout(ok, 20000));
-      r = await structureIngest(done.id, { final: i === 2 }).catch(() => null);
-    }
-    // A failed try is a step on the upload: re-read it so the run and the card show it.
-    if (!r) { const now = await getIngest(done.id).catch(() => null); if (now) putIngest(now); }
-    await postStructure(r, chatId);
+    await readIngestRecords(ingest, items, putIngest).catch(() => {});
   };
-  // "Read it again" on the card, after the reads failed.
+  // While a turn runs, the agent's tools move the upload's card server-side
+  // (steps, folder, state): poll the batch so it lands live, not on reopen.
+  const pollTurnIngests = async (ids) => {
+    const wanted = [...new Set(ids)].filter(Boolean);
+    for (let i = 0; i < 90 && wanted.length; i++) {
+      await new Promise((ok) => setTimeout(ok, 4000));
+      const states = await Promise.all(wanted.map((id) => getIngest(id).catch(() => null)));
+      states.forEach((x) => { if (x) putIngest(x); });
+      if (states.every((x) => x && (x.state === 'failed' || x.state === 'undone' || (x.state === 'ready' && x.folder)))) return;
+      if (!runningRef.current && i > 2) return;
+    }
+  };
+  // Re-run the browser's read for an upload's records (scans and photos are
+  // read in the app's lane), scoring it onto the ingest as usual.
+  const rereadIngest = async (id) => {
+    const records = ingestRecordsRef.current.get(id) || [];
+    if (!records.length) return;
+    const one = ingests[id] || { id };
+    await readIngestRecords(one, records.map((record) => ({ record })), putIngest).catch(() => {});
+  };
+  // "Read it again" on the card: re-read here when this client holds the
+  // records, then hand it to the agent — it retries and files in its turn.
   const readAgain = async (id) => {
-    const r = await structureIngest(id, { final: true }).catch(() => null);
-    if (!r) { const now = await getIngest(id).catch(() => null); if (now) putIngest(now); return; }
-    await postStructure(r, sessionIdRef.current);
-  };
-  const postStructure = async (r, chatId) => {
-    if (r?.data) putIngest(r.data);
-    if (r?.message && sessionIdRef.current === chatId) {
-      const post = fromSaved({ ...r.message, role: 'agent' });
-      if (runningRef.current) heldPostsRef.current.push(post);
-      else setMessages((prev) => (prev.some((m) => m.id === post.id) ? prev : [...prev, post]));
-    }
+    await rereadIngest(id);
+    const one = ingests[id];
+    await sendMessage(`Read my upload again — ${(one?.names || []).join(', ') || 'the file on the card'}`);
   };
   // A reopened chat: each saved reply's upload cards read their current state.
   useEffect(() => {
@@ -998,6 +998,20 @@ function AgentChatTab({
   // "Files in this chat" follows the chat and its uploads settling (read, moved, undone, restored).
   const filingKey = Object.values(ingests).filter((x) => x.chatSessionId === sessionIdRef.current)
     .map((x) => `${x.id}:${x.state}:${x.folder?.id || ''}`).join('|');
+  // One upload, one card: several messages can carry the same ingest (the
+  // turn's reply carries its id, and so does the server's "filed" post) —
+  // the FIRST carrier in the conversation renders its steps and card; the
+  // rest show as plain text. Without this the whole Saving → Filing →
+  // Reading run showed twice around the reply (seen live 2026-11-16).
+  const ingestClaims = (() => {
+    const claimed = new Set(); const byMsg = new Map();
+    for (const m of messages) {
+      const ids = (m.ingestIds || (m.ingestId ? [m.ingestId] : [])).filter((id) => id && !claimed.has(id));
+      ids.forEach((id) => claimed.add(id));
+      byMsg.set(m.id, ids);
+    }
+    return byMsg;
+  })();
   useEffect(() => {
     const sid = sessionIdRef.current;
     if (!sid) { setChatFileList([]); return; }
@@ -1058,9 +1072,22 @@ function AgentChatTab({
     for (const one of batch) {
       putIngest(one);
       const entries = filesOf(one, sentEntries);
+      ingestRecordsRef.current.set(one.id, entries.map((e) => e.record));
       const attached = await attachIngestRecords(one, entries.map((e) => e.record)).catch(() => null);
       if (attached) putIngest(attached);
-      void runIngest(one, entries, sid);
+      void runIngest(one, entries);
+    }
+    if (batch.length) void pollTurnIngests(batch.map((b) => b.id));
+    // Sent attachments are consumed by this message: their tiles leave the
+    // box NOW, as the send commits — not when the reply lands. (They used
+    // to be cleared at the end of this routine, so a long turn left them
+    // sitting in the composer looking unsent.) A failed tile was never in
+    // sentEntries, so it stays in the box, its retry still on it. The
+    // preview URLs are revoked at the end of the turn as before — the
+    // message bubble still shows them.
+    if (sentEntries.length) {
+      const sentIds = new Set(sentEntries.map((a) => a.id));
+      setAttachments((prev) => prev.filter((a) => !sentIds.has(a.id)));
     }
     const ingest = batch[0] || null;
     const ingestIds = batch.map((x) => x.id);
@@ -1162,6 +1189,7 @@ function AgentChatTab({
           if (reply != null) writePendingTurn(sid, { turnId, reply });
           setMessages(prev=>prev.map(m=>m.id===replyId?{...m,...(reply!=null?{text:reply}:{}),thinking:thinking||m.thinking,syllabus:syllabus||[],pastQuestions:pastQuestions||[],phase:"done",...(stopped?{stopped:true}:{}),...(messageId?{serverId:messageId}:{}),...(studyPrepSession?{studyPrepSessionId:studyPrepSession.id}:{}),...protegeMoves(toolExecutions)}:m));
           turnTools=toolExecutions||[];
+          if ((toolExecutions || []).some((entry) => entry?.tool === "retry_extraction" && entry?.success)) ingestIds.forEach((id) => void rereadIngest(id));
           if ((toolExecutions || []).some((entry) => entry?.tool === "create_task" && entry?.success)) refetchTasks();
           if ((toolExecutions || []).some((entry) => entry?.tool === "suggest_help" && entry?.success)) refetchInbox();
         },
@@ -1205,6 +1233,7 @@ function AgentChatTab({
           if (studyPrepSessionFallback) {
             setMessages(prev=>prev.map(m=>m.id===replyId?{...m,studyPrepSessionId:studyPrepSessionFallback.id}:m));
           }
+          if ((data?.toolExecutions || []).some((entry) => entry?.tool === "retry_extraction" && entry?.success)) ingestIds.forEach((id) => void rereadIngest(id));
           if ((data?.toolExecutions || []).some((entry) => entry?.tool === "create_task" && entry?.success)) refetchTasks();
           if ((data?.toolExecutions || []).some((entry) => entry?.tool === "suggest_help" && entry?.success)) refetchInbox();
         } catch {
@@ -1228,11 +1257,9 @@ function AgentChatTab({
         })
         .catch(()=>{});
     }
-    // Sent attachments are consumed by this message; free their preview
-    // URLs. A failed tile stays in the box, its retry still on it.
+    // Free the sent files' preview URLs (their tiles left the box when
+    // the send committed, above).
     sentEntries.forEach(a=>a.previewUrl&&URL.revokeObjectURL(a.previewUrl));
-    const sentIds=new Set(sentEntries.map(a=>a.id));
-    setAttachments(prev=>prev.filter(a=>!sentIds.has(a.id)));
     setLoading(false);
     setRunning(false);
     abortRef.current=null;
@@ -1476,10 +1503,10 @@ function AgentChatTab({
                     </div>
                   )}
                   {/* What the protégé did with the upload, step by step: tool row → what it said (server-recorded steps). */}
-                  {!isMe&&(()=>{ const run=ingestRunBlocks((msg.ingestIds||(msg.ingestId?[msg.ingestId]:[])).map((id)=>ingests[id]).filter(Boolean)); return run.length>0&&<div data-ingest-run="" style={{ margin:"0 0 8px" }}><TraceBlocks blocks={run}/></div>; })()}
-                  {!isMe&&(msg.ingestIds||(msg.ingestId?[msg.ingestId]:[])).some((id)=>ingests[id])&&(
+                  {!isMe&&(()=>{ const run=ingestRunBlocks((ingestClaims.get(msg.id)||[]).map((id)=>ingests[id]).filter(Boolean)); return run.length>0&&<div data-ingest-run="" style={{ margin:"0 0 8px" }}><TraceBlocks blocks={run}/></div>; })()}
+                  {!isMe&&(ingestClaims.get(msg.id)||[]).some((id)=>ingests[id])&&(
                     <div data-ingest-cards="" style={{ display:"flex",flexDirection:"column",gap:8,margin:"0 0 10px" }}>
-                      {(msg.ingestIds||[msg.ingestId]).filter((id)=>ingests[id]).map((id)=>(
+                      {(ingestClaims.get(msg.id)||[]).filter((id)=>ingests[id]).map((id)=>(
                         <IngestCard key={id} ingest={ingests[id]}
                           onOpenFolder={(fid)=>navigate(`/library?folder=${encodeURIComponent(fid)}`)}
                           onUndo={async()=>{ const r=await undoIngest(id).catch(()=>null); if(r) putIngest(r); }}

@@ -39,13 +39,14 @@ export const AREA_KEYWORDS = Object.freeze({
   teaching: ["teach", "explain", "study prep", "study plan", "study-plan", "exam in", "waec", "jamb", "guide review", "learn"],
   plans: ["task", "tasks", "todo", "to-do", "goal", "goals", "remind", "reminder", "follow up", "follow-up", "schedule", "check-in", "check in"],
   files: ["library", "notes", "note", "file", "files", "document", "documents", "material", "materials", "past paper", "past papers", "folder", "upload"],
+  uploads: ["uploaded", "attach", "attached", "attachment", "extraction", "extract", "filing", "filed"],
   chats: ["chat", "chats", "conversation", "we said", "remember", "memory", "discussed"],
   network: ["battle", "battles", "challenge", "agent", "agents", "buddy", "league", "inbox", "competitor", "rematch", "revision circle", "daily challenge"],
   blogs: ["blog", "blogs", "publish", "post about", "article"],
   proactive: ["suggestion", "suggestions", "proposed", "you suggested", "while i was away", "auto reply", "autonomy"],
   building: ["tool", "tools", "build me", "make a tool", "save that", "keep that"],
   support: ["bug", "report a bug", "bug report", "broken", "not working", "doesn't work", "glitch", "something's wrong", "something is wrong", "akoro support", "request", "requests"],
-  activities: ["activity", "activities", "assignment", "classwork", "homework", "draft", "drafts", "routine", "routines", "roster", "outcomes", "submissions"],
+  activities: ["activity", "activities", "assignment", "classwork", "homework", "draft", "drafts", "routine", "routines", "roster", "outcomes", "submissions", "class", "classes", "classroom", "student", "students"],
 });
 
 /** PURE: the areas a message points at. */

@@ -289,12 +289,16 @@ test("gathered content: several sources become ONE cited text record in the Libr
   assert.match(chat, /ONE gathered content/, "the agent's tool description explains the gathered outcome");
 });
 
-test("indexing wiring: a chat upload is indexed when its read completes", () => {
-  assert.match(materialsRoutes, /import \{ indexRecord \} from "\.\.\/records\/searchLib\.js";/);
-  const structureAt = materialsRoutes.indexOf('"/ingest/:id/structure"');
-  const readyAt = materialsRoutes.indexOf('move(row, "ready", { structure', structureAt);
-  const indexAt = materialsRoutes.indexOf("indexRecord({", structureAt);
-  assert.ok(structureAt >= 0 && readyAt > structureAt && indexAt > readyAt, "indexing runs after the move to ready, inside the structure handler");
+test("indexing wiring: a chat upload is indexed when its read completes", async () => {
+  // The filing (and its indexing) lives in filingDb.fileIngestFromDecision
+  // since the agent-driven build — shared by /structure and file_upload.
+  const { readFile } = await import("node:fs/promises");
+  const filingDb = await readFile(new URL("../materials/filingDb.js", import.meta.url), "utf8");
+  assert.match(filingDb, /import \{ indexRecord \} from "\.\.\/records\/searchLib\.js";/);
+  const filingAt = filingDb.indexOf("export async function fileIngestFromDecision");
+  const readyAt = filingDb.indexOf('move(row, "ready", { structure', filingAt);
+  const indexAt = filingDb.indexOf("indexRecord({", filingAt);
+  assert.ok(filingAt >= 0 && readyAt > filingAt && indexAt > readyAt, "indexing runs after the move to ready, inside the shared filing");
 });
 
 /* ── Source actions: one tool, the source is the action ────────────────────

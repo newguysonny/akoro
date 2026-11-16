@@ -1,0 +1,63 @@
+/*
+ * agent-uploads.contract.test.mjs — the agent-driven upload pipeline
+ * (Matt, 2026-11-16): the chat-upload process as tools the agent calls
+ * itself, grouped in their own "uploads" area. Upload + extraction stay
+ * in the composer; the agent reads the extraction state, reads the
+ * content from the database, retries a failed extraction, looks at the
+ * folders, and files from its own decision. The server posts nothing.
+ */
+import "../../test-env.mjs";
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+
+const chat = readFileSync(new URL("./chat.js", import.meta.url), "utf8");
+const tools = readFileSync(new URL("../materials/uploadTools.js", import.meta.url), "utf8");
+const examples = readFileSync(new URL("../agent-capabilities/examples.js", import.meta.url), "utf8");
+const selection = readFileSync(new URL("./toolSelection.js", import.meta.url), "utf8");
+
+test("the four upload tools are defined and executed", () => {
+  for (const name of ["read_upload", "retry_extraction", "list_folders", "file_upload"]) {
+    assert.match(chat, new RegExp(`name: "${name}"`), `${name} is defined`);
+    assert.match(chat, new RegExp(`case "${name}"`), `${name} is executed`);
+  }
+  assert.match(tools, /export async function readUploadTool/);
+  assert.match(tools, /export async function retryExtractionTool/);
+  assert.match(tools, /export async function listFoldersTool/);
+  assert.match(tools, /export async function fileUploadTool/);
+});
+
+test("the tools form their own area, with keywords", () => {
+  assert.match(examples, /uploads: "Uploads from chat"/);
+  for (const name of ["read_upload", "retry_extraction", "list_folders", "file_upload"]) {
+    assert.match(examples, new RegExp(`${name}: e\\("uploads"`), `${name} is in the uploads area`);
+  }
+  assert.match(selection, /uploads: \["uploaded", "attach", "attached", "attachment", "extraction", "extract", "filing", "filed"\]/);
+});
+
+test("read_upload: state first, a bounded wait, the content from the database", () => {
+  assert.match(tools, /const WAIT_MS = 45_000/, "it waits for a running extraction, briefly");
+  assert.match(tools, /state: "extracting"/, "still running is a state the agent can report");
+  assert.match(tools, /state: "failed"/, "failed is a state the agent can retry from");
+  assert.match(tools, /const TEXT_CAP = 12_000/, "the content carries the old injection's cap");
+  assert.match(tools, /Call retry_extraction for this upload/, "a failed read names the next tool");
+});
+
+test("file_upload files only what was read, once, through the shared filing", () => {
+  assert.match(tools, /state: "not_read"/, "no filing before the read");
+  assert.match(tools, /state: "already_filed"/, "a filed upload is not filed twice");
+  assert.match(tools, /fileIngestFromDecision\(\{ userId, row: row0/, "the mechanics are filingDb's, shared with /structure");
+  assert.match(tools, /docKind === "past_paper"/, "past papers keep their question harvest");
+});
+
+test("retry_extraction: the server lane inline, scans flagged for the app", () => {
+  assert.match(tools, /extractStoredText\(\{ userId, contentKey: record\.file_key/, "text kinds re-extract on the server");
+  assert.match(tools, /clientReread: true/, "scans and photos are re-read by the app's lane");
+  assert.match(tools, /move\(row, "extracting"\)/, "a failed upload re-enters extracting");
+});
+
+test("the turn: waiting uploads are listed, the first call is forced, nothing is injected", () => {
+  assert.match(chat, /const pendingUploadsP = /, "the session's unfiled uploads join the turn's own");
+  assert.match(chat, /pendingUploads\.length \? "read_upload"/, "read_upload is forced when uploads wait");
+  assert.doesNotMatch(chat, /ingestRecordsContext/, "no extracted-text injection remains");
+});

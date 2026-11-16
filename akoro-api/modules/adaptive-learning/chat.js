@@ -1069,6 +1069,49 @@ export const CHAT_TOOLS = [
     },
   },
   {
+    name: "read_upload",
+    description: "Read one of the learner's chat uploads (a file they sent in this chat that is saved in their Library but not filed yet). Returns the extraction state first: 'extracting' (still being read in the background — tell them briefly and don't guess at the content), 'failed' (call retry_extraction, then read_upload again), or 'ready' with the extracted content from the database. When the uploads section of your context lists waiting uploads, call this for each one before answering about them. After a ready read, decide the filing and call file_upload.",
+    input_schema: {
+      type: "object",
+      properties: {
+        ingest_id: { type: "string", description: "REQUIRED. The upload id from the uploads section of your context." },
+      },
+      required: ["ingest_id"],
+    },
+  },
+  {
+    name: "retry_extraction",
+    description: "Re-run the extraction for an upload whose read failed (read_upload said 'failed'). Then call read_upload again — it waits for the new read to land. If it fails a second time, tell the learner plainly and carry on with the rest of their message.",
+    input_schema: {
+      type: "object",
+      properties: {
+        ingest_id: { type: "string", description: "REQUIRED. The upload id whose extraction failed." },
+      },
+      required: ["ingest_id"],
+    },
+  },
+  {
+    name: "list_folders",
+    description: "The learner's Library folders (name and how many items each holds). Call it when sorting an upload: if one of their folders clearly fits the file, pass its folder_id to file_upload instead of letting a new folder be created.",
+    input_schema: { type: "object", properties: {} },
+  },
+  {
+    name: "file_upload",
+    description: "File an upload you have read (read_upload returned its content) into the learner's Library, from YOUR decision: a short descriptive title, the subject, the kind, and up to 6 topic names — decided from the content and the conversation (what they said the file is for beats a guess from the text). Pass folder_id only when list_folders showed a folder that clearly fits; otherwise the folder is picked or created from the subject and kind. Returns where it was filed — name that folder in your reply, never before this returns. If it returns needsSubject, ask the learner which subject it is, in one line.",
+    input_schema: {
+      type: "object",
+      properties: {
+        ingest_id: { type: "string", description: "REQUIRED. The upload id to file." },
+        title: { type: "string", description: "A short descriptive title for the file, from its content (e.g. 'Fossil Fuels: Coal Formation and Types'). Becomes the file's name in the Library." },
+        subject: { type: "string", description: "The school subject it belongs to, e.g. 'Geography'. Omit only when the content gives no subject at all." },
+        kind: { type: "string", enum: ["past_paper", "notes", "textbook", "syllabus", "slides", "other"], description: "What kind of document it is." },
+        folder_id: { type: "string", description: "OPTIONAL. A folder id from list_folders, when one clearly fits. Omit to file by subject and kind." },
+        topics: { type: "array", items: { type: "string" }, description: "Up to 6 topic names the file covers, from its content." },
+      },
+      required: ["ingest_id"],
+    },
+  },
+  {
     name: "analyse_past_papers",
     description: "Across the past papers the signed-in learner uploaded (read into questions by topic): which topics keep coming back — in how many papers and which years, how many questions and marks. Use for 'which topics keep coming up?', 'what should I focus on for WAEC Biology?', or after they upload a past paper. Answer only from this result; with one paper, say more years would show the pattern. Their papers are private to them.",
     input_schema: {
@@ -2853,6 +2896,23 @@ async function runChatTool(name, input, studentId, { conversationId = null, role
         scope: input?.scope === "page" ? "page" : "document", pageNumber: input?.pageNumber ?? null,
         conversationId, fromChatFile: !!input?.from_chat_file, source: input?.source || null });
     }
+    case "read_upload": {
+      const { readUploadTool } = await import("../materials/uploadTools.js");
+      return readUploadTool({ userId: studentId, ingestId: String(input?.ingest_id || "") });
+    }
+    case "retry_extraction": {
+      const { retryExtractionTool } = await import("../materials/uploadTools.js");
+      return retryExtractionTool({ userId: studentId, ingestId: String(input?.ingest_id || "") });
+    }
+    case "list_folders": {
+      const { listFoldersTool } = await import("../materials/uploadTools.js");
+      return listFoldersTool({ userId: studentId });
+    }
+    case "file_upload": {
+      const { fileUploadTool } = await import("../materials/uploadTools.js");
+      return fileUploadTool({ userId: studentId, ingestId: String(input?.ingest_id || ""), title: input?.title || null,
+        subject: input?.subject || null, kind: input?.kind || null, folderId: input?.folder_id || null, topics: input?.topics || [] });
+    }
     case "analyse_past_papers": {
       // The learner's own parsed past papers only (D53).
       try {
@@ -4257,41 +4317,6 @@ async function processAttachments(attachments = []) {
 }
 
 /**
- * The immediate turn's grounding for files sent as ingest references (the
- * composer uploads at attach time, so no bytes ride the chat request):
- * each record's stored extraction text — the read the browser finished in
- * the composer, or the server's own text read — under the same per-file
- * cap processAttachments uses. A file whose extraction hasn't landed yet
- * contributes nothing; ingestCtx already tells the model it's being read.
- */
-async function ingestRecordsContext(userId, ingestIds) {
-  const { data: ings } = await db.schema("edu").from("material_ingests")
-    .select("id, record_ids").eq("user_id", userId).in("id", ingestIds);
-  const ordered = ingestIds.map((id) => (ings || []).find((r) => r.id === id)).filter(Boolean);
-  const recordIds = [...new Set(ordered.flatMap((r) => (Array.isArray(r.record_ids) ? r.record_ids : [])))].slice(0, 5);
-  if (!recordIds.length) return { docContext: "", notes: [] };
-  const { data: recs } = await db.schema("edu").from("records")
-    .select("id, name, kind, content, file_key").eq("user_id", userId).in("id", recordIds).is("deleted_at", null);
-  const byId = new Map((recs || []).map((r) => [r.id, r]));
-  const chunks = [];
-  const notes = [];
-  for (const id of recordIds) {
-    const rec = byId.get(id);
-    if (!rec) continue;
-    let text = "";
-    if (rec.kind === "paste") text = String(rec.content || "");
-    else if (rec.file_key) {
-      const ext = await getExtraction(rec.file_key).catch(() => null);
-      text = ext?.markdown || "";
-    }
-    if (!text.trim()) continue;
-    chunks.push(`### Attached file: ${rec.name}\n${text.slice(0, DOC_TEXT_CAP)}`);
-    notes.push(`📄 ${rec.name} read.`);
-  }
-  return { docContext: chunks.join("\n\n"), notes };
-}
-
-/**
  * Base system prompt for the live agent — shared by the HTTP /agent route
  * and the voice session bootstrap (modules/voice/routes.js). Role-aware:
  * students get an exam-focused study tutor, instructors a teaching copilot.
@@ -5587,6 +5612,28 @@ router.post("/agent", async (req, res) => {
         return ingestIds.map((id) => (data || []).find((r) => r.id === id)).filter(Boolean);
       } catch { return []; }
     })() : Promise.resolve([]);
+    // Uploads waiting on the agent (Matt, 2026-11-16): this turn's payload
+    // ingests plus the session's unfiled ones — the agent reads and files
+    // them with its upload tools; the server posts nothing.
+    const pendingUploadsP = role === "student" ? (async () => {
+      try {
+        const byId = new Map();
+        if (conversationId) {
+          const { data } = await db.schema("edu").from("material_ingests")
+            .select("id, names, state, folder_id, structure")
+            .eq("user_id", req.user.id).eq("chat_session_id", conversationId)
+            .neq("state", "undone").order("created_at", { ascending: true }).limit(10);
+          for (const r of data || []) byId.set(r.id, r);
+        }
+        if (ingestIds.length) {
+          const { data } = await db.schema("edu").from("material_ingests")
+            .select("id, names, state, folder_id, structure")
+            .eq("user_id", req.user.id).in("id", ingestIds);
+          for (const r of data || []) byId.set(r.id, r);
+        }
+        return [...byId.values()].filter((r) => !(r.structure && r.folder_id)).slice(0, 5);
+      } catch { return []; }
+    })() : Promise.resolve([]);
     const chatFilesP = role === "student" && conversationId ? (async () => {
       try {
         const { data } = await db.schema("edu").from("material_ingests").select("names, state, structure")
@@ -5604,15 +5651,9 @@ router.post("/agent", async (req, res) => {
     const hasAttachments = Array.isArray(rawAttachments) && rawAttachments.length > 0;
     if ((hasAttachments || ingestIds.length) && wantsStream) status("attachments", "Reading your files…");
     const attP = (async () => {
-      const base = hasAttachments ? await processAttachments(rawAttachments) : { visionParts: [], docContext: "", notes: [] };
-      if (role !== "student" || !ingestIds.length) return base;
-      const extra = await ingestRecordsContext(req.user.id, ingestIds).catch(() => ({ docContext: "", notes: [] }));
-      if (!extra.docContext) return base;
-      return {
-        visionParts: base.visionParts,
-        docContext: [base.docContext, extra.docContext].filter(Boolean).join("\n\n"),
-        notes: [...base.notes, ...extra.notes],
-      };
+      // Uploads sent as ingest references no longer inject their text here:
+      // the agent reads them itself with read_upload (Matt, 2026-11-16).
+      return hasAttachments ? await processAttachments(rawAttachments) : { visionParts: [], docContext: "", notes: [] };
     })();
     // Self-tooling: without this the model tours unrelated tools and says
     // "I don't have that data" instead of building the tool (verify run
@@ -5643,9 +5684,9 @@ router.post("/agent", async (req, res) => {
     const [
       goalsCtx,
       [{ context: syllabusCtx, refs: syllabusRefs }, { context: pastCtx, refs: pastRefs }, { context: curriculumCtx, refs: curriculumRefs }, taught],
-      ingests, chatFilesCtx, inboxCtx, runningCtx, att, { on: selfToolOn, forced: forceSelfTool }, protege, pendingDrafts,
-    ] = await Promise.all([goalsP, groundingP, ingestsP, chatFilesP, inboxP, runningP, attP, selfToolP, protegeP, draftsP]
-      .map((pr, i) => timed(["goals", "grounding", "ingests", "chatFiles", "inbox", "running", "attachments", "selfTool", "protege", "drafts"][i], pr)));
+      ingests, pendingUploads, chatFilesCtx, inboxCtx, runningCtx, att, { on: selfToolOn, forced: forceSelfTool }, protege, pendingDrafts,
+    ] = await Promise.all([goalsP, groundingP, ingestsP, pendingUploadsP, chatFilesP, inboxP, runningP, attP, selfToolP, protegeP, draftsP]
+      .map((pr, i) => timed(["goals", "grounding", "ingests", "pendingUploads", "chatFiles", "inbox", "running", "attachments", "selfTool", "protege", "drafts"][i], pr)));
     const protegeCtx = taught ? `\n\n${await loadDoctrine("policies/PROTEGE.md")}${renderTaughtContext(taught)}` : "";
     // The reply's trace and meta (previews, materials, the uploads' cards), and the uploads pointed at it.
     let savedReplyId = null;   // the stored reply's id: the episode's label key comes from it
@@ -5661,12 +5702,13 @@ router.post("/agent", async (req, res) => {
         } catch { /* the cards still show; they won't reopen with the chat */ }
       }
     };
-    const live = ingests.filter((r) => r.state !== "undone");
-    // Stage 4: the folder is decided from the read, after this turn — the reply
-    // must not name one or claim the filing is done. The server's completion
-    // message (posted when the read files it) is the single filing report.
-    const ingestCtx = live.length
-      ? `\n\n## The learner's upload\nThe file(s) they attached are being saved to their Library (private to them) and read in the background; the upload's card shows its files with an Undo. Say so in one short clause — don't name a folder (it isn't decided yet) and don't repeat the card's details or any ids. Answer from what you can read now; if the file isn't readable yet, say you'll be able to work on it once it's read.`
+    // Agent-driven uploads (Matt, 2026-11-16; supersedes the Stage 4 server
+    // post): the agent reads and files waiting uploads with its own tools
+    // and narrates the filing itself — the server posts nothing.
+    const ingestCtx = pendingUploads.length
+      ? `\n\n## Uploads waiting on you\nThe learner sent file(s) that are saved in their Library but not read or filed yet. YOU drive that in this turn, with your upload tools — no one else files them:\n` +
+        pendingUploads.map((r) => `- upload id ${r.id} · ${(Array.isArray(r.names) ? r.names : []).join(", ") || "a file"} · state: ${r.state}`).join("\n") +
+        `\nFor each one: call read_upload (your first call is forced to it). If it says extracting, tell them briefly it's still being read and don't guess at its content. If it says failed, call retry_extraction, then read_upload again. When you have the content, decide a short title, the subject, the kind and up to 6 topics from the content and this conversation, then call file_upload with your decision. Say briefly what each file is and where you filed it — never name a folder before file_upload returns it, and don't repeat the card's details or any ids. If they asked to make something from the file (a quiz, flashcards, a summary), file it first, then make it with make_study_material (source 'upload').`
       : "";
     // The files already in this chat and what their reads found: chatFilesCtx (above).
 
@@ -5755,7 +5797,8 @@ router.post("/agent", async (req, res) => {
     // covers iteration 0 only; the tool's own clarify() handles anything
     // genuinely missing.
     let forcedTool = role === "student"
-      ? (requiresAgentCapabilitiesTool(userMessage) ? "get_agent_capabilities"
+      ? (pendingUploads.length ? "read_upload"
+        : requiresAgentCapabilitiesTool(userMessage) ? "get_agent_capabilities"
         // Other players' results in the learner's battles: go through
         // create_tool (it builds, or asks an admin for the permission) —
         // left on auto the model sometimes said "I can't see that" instead.

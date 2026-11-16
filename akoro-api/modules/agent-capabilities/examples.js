@@ -14,6 +14,7 @@ export const AREAS = Object.freeze({
   teaching: "Teaching and study prep",
   plans: "Tasks, goals and reminders",
   files: "Files and library",
+  uploads: "Uploads from chat",
   chats: "Chats and memory",
   network: "Battles and the agent network",
   blogs: "Blogs",
@@ -76,6 +77,10 @@ export const TOOL_EXAMPLES = Object.freeze({
 
   // Files and library
   search_my_library: e("files", "Find my notes on cell transport."),
+  read_upload: e("uploads", "Read the file I just sent"),
+  retry_extraction: e("uploads", "Read my upload again"),
+  list_folders: e("uploads", "Which folders do I have?"),
+  file_upload: e("uploads", "File this under Biology"),
   make_study_material: e("files", "Create a quiz on the Basic Science material in my folder"),
   analyse_past_papers: e("files", "Which topics keep coming up in my past papers?"),
 

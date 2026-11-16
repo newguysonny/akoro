@@ -8,6 +8,7 @@ import { guessFile, shapeClassification } from "./ingestCore.js";
 import { filingSentence } from "./structureCore.js";
 
 const routes = await readFile(new URL("./routes.js", import.meta.url), "utf8");
+const filingDb = await readFile(new URL("./filingDb.js", import.meta.url), "utf8");
 
 test("subjects by any name: short forms, class labels and exam names don't hide them", () => {
   assert.equal(canonicalSubject("Bio"), "Biology");
@@ -91,10 +92,10 @@ test("wiring: one upload per message, a batch id, filed once at the read; the ch
   assert.doesNotMatch(create, /resolveFolder|classify\(|folderContext/, "nothing is guessed or filed at create");
   assert.match(create, /batch_id: batchId/);
   assert.match(create, /ingests: \[ingestToApi\(row\)\], batchId/, "one ingest for the message's files");
-  assert.match(routes, /const where = await resolveFolder\(userId, \{ subject, kind \}, await folderContext\(userId\)\)/, "resolved at the read, from the read");
+  assert.match(filingDb, /await resolveFolder\(userId, \{ subject, kind \}, await folderContext\(userId\)\)/, "resolved at the read, from the read (filingDb, shared by /structure and file_upload)");
   assert.match(routes, /router\.post\("\/ingest\/:id\/folder"/);
   assert.match(routes, /from\("material_folder_defaults"\)\.upsert/, "a choice is remembered");
   assert.match(routes, /router\.post\("\/ingest\/:id\/subject"/);
-  assert.match(routes, /needsSubject: true, subjectOptions/);
+  assert.match(filingDb, /needsSubject: true, subjectOptions/);
   assert.match(routes, /router\.get\("\/chat\/:chatId"/);
 });

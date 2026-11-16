@@ -13,7 +13,8 @@
  *   POST /api/agent/materials/ingest/:id/structure  → reads it: topics (+ a past paper's questions,
  *        private, D53), then files it ONCE from the read (folderMatch.js: the learner's
  *        own folder for the subject first, a new one only when none fits; no subject
- *        → "From chat — Unsorted" and the card asks), posts what it found into the chat → ready
+ *        → "From chat — Unsorted" and the card asks) → ready. (The agent's upload
+ *        tools are the live path now; this route files the same way, silently.)
  *   POST /api/agent/materials/ingest/:id/similar    → Akoro material on its topics (D52) → offering_more
  *   POST /api/agent/materials/ingest/:id/similar/add { keys } → the chosen ones into the folder → ready
  *   POST /api/agent/materials/ingest/:id/similar/dismiss      → "Not now" → ready
@@ -50,6 +51,7 @@ import {
 import { pickFolder, subjectKey, subjectLabel, UNSORTED_FOLDER } from "./folderMatch.js";
 import { filingSentence } from "./structureCore.js";
 import { appendSteps, filedSteps, messageStep, readSteps, receivedSteps, savedSteps, similarSteps, toolStep } from "./stepsCore.js";
+import { now, loadOwn, move, folderContext, resolveFolder, refile, fileUnsorted, withFiling, addSteps, pagesOfRecord, readStructure, fileIngestFromDecision } from "./filingDb.js";
 
 const router = Router();
 router.use(authenticateToken);
@@ -57,114 +59,6 @@ const edu = () => db.schema("edu");
 const asyncHandler = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 const UUID = /^[0-9a-f-]{36}$/i;
 const MAX_FOLDERS = 50;
-const now = () => new Date().toISOString();
-
-async function loadOwn(id, userId) {
-  if (!UUID.test(String(id))) return null;
-  const { data } = await edu().from("material_ingests").select("*").eq("id", id).eq("user_id", userId).maybeSingle();
-  return data || null;
-}
-
-/** Move the ingest, checked against the definition and pinned to its current state. */
-async function move(row, to, patch = {}) {
-  assertTransition(ingestWorkflow, row.state, to);
-  const { data, error } = await edu().from("material_ingests").update({ ...patch, state: to, updated_at: now() })
-    .eq("id", row.id).eq("state", row.state).select("*").maybeSingle();
-  if (error) throw error;
-  if (!data) throw new TransitionError("The upload changed meanwhile — refresh and try again.", { from: row.state, to });
-  return data;
-}
-
-/** What the learner already has: folders, what earlier uploads filed where, the folders they chose. */
-async function folderContext(userId) {
-  const [{ data: folders }, { data: filed }, { data: defaults }] = await Promise.all([
-    edu().from("library_folders").select("id, name").eq("user_id", userId).limit(MAX_FOLDERS + 10),
-    edu().from("material_ingests").select("folder_id, subject, doc_kind, record_ids").eq("user_id", userId)
-      .neq("state", "undone").not("folder_id", "is", null).not("subject", "is", null).limit(500),
-    edu().from("material_folder_defaults").select("subject_key, kind, folder_id").eq("user_id", userId).limit(200),
-  ]);
-  const stats = (filed || []).map((r) => ({ folder_id: r.folder_id, subject: r.subject, kind: r.doc_kind, count: (r.record_ids || []).length || 1 }));
-  return { folders: folders || [], stats, defaults: defaults || [] };
-}
-
-/** pickFolder's answer made real: an existing folder, a new one, two to choose from, or none. */
-async function resolveFolder(userId, { subject, kind }, ctx) {
-  const pick = pickFolder({ subject, kind, ...ctx, atCap: ctx.folders.length >= MAX_FOLDERS });
-  if (pick.folder) return { folder_id: pick.folder.id, folder_name: pick.folder.name, folder_created: false, choices: null };
-  if (pick.choices) return { folder_id: null, folder_name: null, folder_created: false, choices: pick.choices };
-  if (pick.create) {
-    const made = await folderFor(userId, pick.create);
-    if (made) {
-      if (made.created) ctx.folders.push({ id: made.id, name: made.name });
-      return { folder_id: made.id, folder_name: made.name, folder_created: made.created, choices: null };
-    }
-  }
-  return { folder_id: null, folder_name: null, folder_created: false, choices: null };
-}
-
-/**
- * Move an upload's files to another folder: out of the old one (removed if
- * this upload made it and it is now empty), into the new. → the row's patch.
- */
-async function refile(userId, row, target) {
-  const ids = (row.record_ids || []).map(String);
-  if (row.folder_id && row.folder_id !== target.id && ids.length) {
-    await edu().from("library_folder_items").delete().eq("folder_id", row.folder_id).eq("user_id", userId).eq("item_type", "record").in("item_ref", ids);
-  }
-  if (ids.length) {
-    const { data: records } = await edu().from("records").select("id, name, mime").eq("user_id", userId).in("id", ids);
-    if (records?.length) {
-      const { error } = await edu().from("library_folder_items")
-        .upsert(records.map((r) => ({ folder_id: target.id, user_id: userId, ...folderItemFor(r, row.doc_kind) })), { onConflict: "folder_id,item_type,item_ref" });
-      if (error) throw error;
-    }
-  }
-  if (row.folder_id && row.folder_id !== target.id && row.folder_created) {
-    const { count } = await edu().from("library_folder_items").select("id", { count: "exact", head: true }).eq("folder_id", row.folder_id);
-    if (!count) await edu().from("library_folders").delete().eq("id", row.folder_id).eq("user_id", userId);
-  }
-  return { folder_id: target.id, folder_name: target.name, folder_created: row.folder_id === target.id ? row.folder_created : !!target.created };
-}
-
-/**
- * The Stage 4 fallback: an upload whose read won't happen now is filed once,
- * into "From chat — Unsorted", so it waits somewhere findable. → the patched
- * row, or null when there is nowhere to file (folder cap, no Unsorted).
- */
-async function fileUnsorted(userId, row) {
-  const where = await resolveFolder(userId, { subject: null, kind: row.doc_kind || "other" }, await folderContext(userId));
-  if (!where.folder_id || where.folder_id === row.folder_id) return null;
-  const patch = await refile(userId, row, { id: where.folder_id, name: where.folder_name, created: where.folder_created });
-  const { data } = await edu().from("material_ingests").update({ ...patch, updated_at: now() }).eq("id", row.id).select("*").single();
-  return data || null;
-}
-
-const withFiling = (row, patch) => ({ filing: { ...(row.filing || {}), ...patch } });
-
-/** Add steps to an upload (the chat shows them under its message). Best effort: a step never fails the upload. */
-async function addSteps(row, steps) {
-  if (!row || !steps.length) return row;
-  const { data } = await edu().from("material_ingests").update({ steps: appendSteps(row.steps, steps.map((s) => ({ ...s, at: s.at || now() }))) })
-    .eq("id", row.id).select("*").maybeSingle().then((r) => r, () => ({ data: null }));
-  return data || row;
-}
-
-/** An existing folder with this name (any case), else a new private one. → { id, name, created } | null */
-async function folderFor(userId, name) {
-  const { data: mine } = await edu().from("library_folders").select("id, name").eq("user_id", userId).limit(MAX_FOLDERS);
-  const same = (mine || []).find((f) => f.name.toLowerCase() === name.toLowerCase());
-  if (same) return { id: same.id, name: same.name, created: false };
-  if ((mine || []).length >= MAX_FOLDERS) return null;   // at the cap: the files are still saved, just unfiled
-  const { data, error } = await edu().from("library_folders")
-    .insert({ user_id: userId, name, description: "Saved from Agent Chat", visibility: "private" }).select("id, name").single();
-  if (error) {
-    // A race on the unique name: the other request made it — use that one.
-    const { data: again } = await edu().from("library_folders").select("id, name").eq("user_id", userId).ilike("name", name).maybeSingle();
-    return again ? { id: again.id, name: again.name, created: false } : null;
-  }
-  return { id: data.id, name: data.name, created: true };
-}
-
 router.post("/ingest", asyncHandler(async (req, res) => {
   const userId = req.user.id;
   const names = (Array.isArray(req.body?.names) ? req.body.names : []).map((n) => String(n || "").trim().slice(0, INGEST_LIMITS.NAME)).filter(Boolean).slice(0, INGEST_LIMITS.FILES);
@@ -243,52 +137,6 @@ router.post("/ingest/:id/progress", asyncHandler(async (req, res) => {
   res.json({ success: true, data: ingestToApi(await move(row, to, patch)) });
 }));
 
-/** A record's pages as text: parsed/extracted pages, or a paste split into parts. */
-async function pagesOfRecord(record) {
-  if (record.kind === "paste") {
-    const parts = String(record.content || "").split(/\n{2,}/).reduce((acc, para) => {
-      const last = acc[acc.length - 1];
-      if (last && last.length + para.length < STRUCTURE_LIMITS.PAGE_CHARS) acc[acc.length - 1] = `${last}\n\n${para}`; else acc.push(para);
-      return acc;
-    }, []);
-    return parts.map((text, i) => ({ pageNumber: i + 1, text }));
-  }
-  if (!record.file_key) return [];
-  const ext = await getExtraction(record.file_key).catch(() => ({ pages: [] }));
-  return (ext.pages || []).map((p) => ({ pageNumber: p.pageNumber, text: p.markdown || "" })).filter((p) => p.text.trim());
-}
-
-/** One file's read into topics and questions → { item, questions }, or null when it has no text. Never throws. */
-async function readStructure(record, row, userId) {
-  const pages = await pagesOfRecord(record).catch(() => []);
-  if (!pages.length) return null;
-  let raw = "{}";
-  const readStarted = Date.now();
-  let readOk = true;
-  try {
-    const out = await openai.chat.completions.create({
-      __role: "background", messages: structureMessages({ names: [record.name], kindHint: row.doc_kind, pages }),
-      temperature: 0, max_tokens: STRUCTURE_LIMITS.MAX_TOKENS, response_format: structureSchema(),
-      __payer: "platform", __feature: "material_structure", __userId: userId,
-      // Under the breaker's 60 s backstop: a slow read must not count as the provider failing for every chat.
-      __timeoutMs: 50_000, __maxRetries: 0,
-    });
-    raw = out?.choices?.[0]?.message?.content || "{}";
-  } catch (error) {
-    readOk = false;
-    console.warn("[materials] structure call failed:", String(error?.message || error).slice(0, 160));
-  }
-  const s = cleanStructure(raw, { pageNumbers: pages.map((p) => p.pageNumber), fallbackKind: row.doc_kind || "other" });
-  return {
-    item: { recordId: record.id, name: record.name, pages: pages.length, ...s, questions: undefined, questionCount: s.questions.length, ms: Date.now() - readStarted, ok: readOk },
-    questions: s.questions.map((q) => ({ ...q, record_id: record.id, exam: s.exam, subject: s.subject || row.subject, year: s.year })),
-  };
-}
-
-// Every file an upload can hold is read (2026-10-25: a 4-file upload read only 3), and all
-// at once — one after another, 3–5 reads of up to 50 s outran the app's 120 s wait, so the
-// "here's what I found" message never reached the open chat.
-const STRUCTURE_FILES = INGEST_LIMITS.FILES;
 router.post("/ingest/:id/structure", asyncHandler(async (req, res) => {
   const userId = req.user.id;
   let row = await loadOwn(req.params.id, userId);
@@ -349,70 +197,12 @@ router.post("/ingest/:id/structure", asyncHandler(async (req, res) => {
   const kind = main?.kind || row.doc_kind || "other";
   const subject = found || null;
   const guesses = [...new Set((main?.subjectGuesses || []).map(subjectLabel).filter(Boolean))].slice(0, 3);
-  let filePatch = {};
-  let filing = {};
-  const where = await resolveFolder(userId, { subject, kind }, await folderContext(userId));
-  if (where.folder_id) {
-    if (where.folder_id !== row.folder_id) filePatch = await refile(userId, { ...row, doc_kind: kind }, { id: where.folder_id, name: where.folder_name, created: where.folder_created });
-    filing = found ? { filed: true, movedFrom: filePatch.folder_id && row.folder_id ? row.folder_name || null : null, choices: null }
-      : { needsSubject: true, subjectOptions: guesses };
-  } else if (where.choices) filing = { choices: where.choices };
-  else if (!found) filing = { needsSubject: true, subjectOptions: guesses };
-  row = await move(row, "ready", { structure, subject, doc_kind: kind, ...filePatch, ...withFiling(row, filing) });
-  // A failed try before this one is gone once it's read; the filing step is written now that it's real.
-  const first = !Array.isArray(row.filing?.fileIndexes) || row.filing.fileIndexes.includes(0);
-  row = await addSteps({ ...row, steps: (row.steps || []).filter((st) => !String(st.id).startsWith(`read:${row.id}:failed`)) },
-    [...(filing.filed || filePatch.folder_id ? filedSteps({ ingestId: row.id, folderName: row.folder_name, first }) : []),
-     ...readSteps({ ingestId: row.id, items, moved: filing.movedFrom ? { to: row.folder_name, subject: row.subject } : null })]);
-
-  // What it found, said in the chat it came from (written by code from what was kept).
-  let message = null;
-  if (row.chat_session_id && items.length) {
-    const found = items.length === 1
-      ? structureMessage({ ...main, questions: questions.filter((q) => q.record_id === main.recordId) }, { pages: main.pages })
-      : items.map((it) => `**${it.title || it.name}** — ${structureMessage({ ...it, questions: questions.filter((q) => q.record_id === it.recordId) }, { pages: it.pages }).replace(/^I've read it\.?\s*/, "")}`).join("\n\n");
-    const filed = filingSentence({ names: row.names, title: main?.title, subject: row.subject, folder: row.folder_name, filing: row.filing, summary: main?.summary });
-    const text = filed ? `${filed}\n\n${found}` : found;
-    const materials = [
-      ...(row.folder_id ? [{ kind: "folder", title: row.folder_name, href: `/library?folder=${row.folder_id}` }] : []),
-      ...items.map((it) => ({ kind: "record", title: it.title || it.name, href: `/library?record=${it.recordId}` })),
-    ].slice(0, 6);
-    // The chips from every file read: the most tested topic across them all, a paper's study step if any is a paper.
-    const allFiles = { ...main, kind: items.some((it) => it.kind === "past_paper") ? "past_paper" : main?.kind, topics: items.flatMap((it) => it.topics || []), questions };
-    const meta = { ingest: { id: row.id }, materials, ideas: main ? structureChips(allFiles) : [] };
-    const { data: msg } = await db.from("chat_messages").insert({ session_id: row.chat_session_id, user_id: userId, role: "agent", text, meta }).select("id, text, meta, created_at").single();
-    if (msg) {
-      message = msg;
-      await db.from("chat_sessions").update({ last_message_at: now() }).eq("id", row.chat_session_id).eq("user_id", userId);
-    }
-  }
-  // What was read joins the Library's search index, the way any other upload
-  // does (Stage 1): findable by name and by content, and visible to the study
-  // tools' resolver. Indexing never fails the ingest — indexRecord swallows
-  // its own errors (the sweeper repairs a miss); this guard is the backstop.
-  for (let i = 0; i < records.length; i++) {
-    if (!reads[i]) continue;
-    const record = records[i];
-    try {
-      if (record.kind === "paste") {
-        await indexRecord({ userId, recordId: record.id, name: record.name, pasteText: record.content || "" });
-      } else if (record.file_key) {
-        const pages = await pagesOfRecord(record).catch(() => []);
-        await indexRecord({ userId, recordId: record.id, name: record.name, contentKey: record.file_key,
-          pages: pages.map((p) => ({ pageNumber: p.pageNumber, markdown: p.text })) });
-      } else {
-        await indexRecord({ userId, recordId: record.id, name: record.name });
-      }
-    } catch (e) {
-      console.warn("[materials] indexing failed:", record.id, String(e?.message || e).slice(0, 160));
-    }
-  }
-  // §8.8: the files join the learner's open Study Prep session in the READ
-  // subject (best effort) — it waited for the read, like the filing did,
-  // instead of taking the name-guessed subject at /records time.
-  const { attachUploadsToStudyPrep } = await import("../adaptive-learning/study-prep/materials-source.js");
-  const studyPrep = await attachUploadsToStudyPrep({ learnerId: userId, subject, recordIds: row.record_ids || [] }).catch(() => null);
-  res.json({ success: true, data: { ...ingestToApi(row), ...(studyPrep?.added ? { studyPrep } : {}) }, message });
+  // Filed ONCE, from the read (Stage 4 mechanics, shared with the agent's
+  // file_upload tool): the first file's subject and kind lead a mixed batch.
+  // No chat post any more — the agent narrates the filing in its own turn.
+  const { row: filedRow, studyPrep } = await fileIngestFromDecision({ userId, row, subject, kind, guesses, structure, items, questions, records });
+  row = filedRow;
+  res.json({ success: true, data: { ...ingestToApi(row), ...(studyPrep?.added ? { studyPrep } : {}) }, message: null });
 }));
 
 /** Akoro's own material on the upload's topics: published courses and blog posts (D52). */
