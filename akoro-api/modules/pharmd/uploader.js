@@ -186,7 +186,7 @@ export async function runPharmdUpload({ dryRun = false, only = null, dir = DEFAU
           type: "pdf", status: "published",
           meta: `${(buffer.length / 1048576).toFixed(1)} MB`,
           url: db.storage.from(PHARMD_BUCKET).getPublicUrl(path).data.publicUrl,
-          file_path: path, file_hash: fileHash,
+          file_path: path, file_hash: fileHash, file_size: buffer.length,
           source_topic_id: legacyTopicId,
         };
         const { data: existing } = await edu().from("programme_materials")

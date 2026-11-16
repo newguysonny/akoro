@@ -115,7 +115,7 @@ async function serveUnifiedCourse(res, code) {
     .select("id, code, title").eq("programme_id", gp.id).eq("code", code).eq("status", "published").maybeSingle();
   if (!course) { missing(res, "Course not found"); return true; }
   const { data: materials } = await edu().from("programme_materials")
-    .select("id, position, title, type, meta, url, file_path, file_hash")
+    .select("id, position, title, type, meta, url, file_path, file_hash, file_size, read_minutes")
     .eq("course_id", course.id).eq("status", "published").order("position").order("created_at");
   ok(res, {
     course: { id: course.id, code: course.code, title: course.title || course.code },
@@ -123,9 +123,9 @@ async function serveUnifiedCourse(res, code) {
       id: m.id,
       position: m.position,
       title: m.title,
-      read_minutes: parseMinutes(m.meta),
+      read_minutes: m.read_minutes ?? parseMinutes(m.meta),
       mime: MIME_BY_TYPE[m.type] || "application/pdf",
-      size: parseSizeBytes(m.meta),
+      size: m.file_size ?? parseSizeBytes(m.meta),
       file_url: m.url || (m.file_path ? publicFileUrl("pharmd-courses", m.file_path) : null),
       file_hash: m.file_hash || null,
       contentKey: m.file_path ? pharmdContentKey({ file_path: m.file_path, file_hash: m.file_hash }) : null,
