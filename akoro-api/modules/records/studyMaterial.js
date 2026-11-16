@@ -465,7 +465,8 @@ export async function makeStudyMaterial({ userId, tool, query = "", folder = "",
     if (found.platform) {
       const copied = await copyPlatformRecord({ userId, sourceId: found.record.id });
       if (copied.error) return { error: copied.error };
-      platformNote = { source: "platform", sourceName: found.record.name, sourceOwner: found.platform.ownerName || null };
+      platformNote = { source: "platform", sourceName: found.record.name, sourceOwner: found.platform.ownerName || null,
+        note: `This was built from ${found.platform.ownerName || "another learner"}'s free notes in Discover ("${found.record.name}") — a copy is now saved in their Library. Say so in your reply: name Discover and the owner, don't call it their own document.` };
       found = { ...found, record: copied.record };
     }
     const { resolveAskTargetFor } = await import("./access.js");
