@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { PageSkeleton } from '../components/Primitives.jsx';
 import { PageLayout } from '../components/Layout.jsx';
 import { apiGet, apiPost, apiPatch } from '../services/api.js';
 
@@ -316,7 +317,7 @@ export default function TiersPage() {
     <PageLayout title="Tiers & Credits" subtitle="Default credit caps and feature gating per platform">
       <div className="ak-page">
 
-        {loading && <p className="ak-sub">Loading…</p>}
+        {loading && <PageSkeleton header={false} variant="grid" rows={3} />}
         {loadError && <p className="ak-sub text-akoro-coral">{loadError}</p>}
 
         {!loading && (

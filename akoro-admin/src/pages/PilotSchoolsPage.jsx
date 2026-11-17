@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { PageSkeleton } from '../components/Primitives.jsx';
 import { PageLayout } from '../components/Layout.jsx';
 import { apiGet, apiPost, apiPatch } from '../services/api.js';
 import MessageModal from './billing/MessageModal.jsx';
@@ -413,7 +414,7 @@ export default function PilotSchoolsPage() {
         ) : (
           /* ══════════ SCHOOLS LIST + APPLICATIONS ══════════ */
           <>
-            {loading && <p className="ak-sub">Loading…</p>}
+            {loading && <PageSkeleton header={false} rows={6} />}
             {loadError && <p className="ak-sub text-akoro-coral">{loadError}</p>}
 
             {!loading && (

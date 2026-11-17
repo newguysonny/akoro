@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { PageSkeleton } from '../components/Primitives.jsx';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { PageLayout } from '../components/Layout.jsx';
 import { apiGet, apiPatch } from '../services/api.js';
@@ -221,7 +222,7 @@ export default function CustomersPage() {
         ) : (
           /* ══════════ LIST ══════════ */
           <>
-            {loading && <p className="ak-sub">Loading…</p>}
+            {loading && <PageSkeleton header={false} rows={6} />}
             {loadError && <p className="ak-sub text-akoro-coral">{loadError}</p>}
 
             {!loading && (

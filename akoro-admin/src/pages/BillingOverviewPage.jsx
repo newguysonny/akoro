@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { PageSkeleton } from '../components/Primitives.jsx';
 import { useNavigate } from 'react-router-dom';
 import { PageLayout } from '../components/Layout.jsx';
 import { apiGet } from '../services/api.js';
@@ -57,7 +58,7 @@ export default function BillingOverviewPage() {
     <PageLayout title="Billing Overview" subtitle="Subscription health at a glance">
       <div className="ak-page">
 
-        {loading && <p className="ak-sub">Loading…</p>}
+        {loading && <PageSkeleton header={false} variant="grid" rows={4} />}
         {loadError && <p className="ak-sub text-akoro-coral">{loadError}</p>}
 
         {!loading && data && (

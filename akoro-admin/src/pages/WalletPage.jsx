@@ -3,6 +3,7 @@
  * Every AI feature (agent tasks, AI chat, generators) draws from this balance.
  */
 import { useState, useEffect, useCallback } from 'react';
+import { PageSkeleton } from '../components/Primitives.jsx';
 import { Coins, Plus, Loader2, ArrowUpRight, ArrowDownRight, Wallet as WalletIcon } from 'lucide-react';
 import { apiGet, apiPost } from '../services/api.js';
 import { PageLayout } from '../components/Layout.jsx';
@@ -124,7 +125,7 @@ function AdminOverview({ showToast }) {
   return (
     <div style={card}>
       <div style={cardTitle}>Platform coins</div>
-      {!o ? <div style={{ color: MUTED2, fontSize: 13 }}>Loading…</div> : (
+      {!o ? <PageSkeleton header={false} rows={2} /> : (
         <>
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
             <Stat label="Total balance" value={o.total_balance} />

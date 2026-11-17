@@ -17,6 +17,7 @@ import { useDragReorder } from './reorder.jsx';
 import { Routes, Route, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { apiGet, apiPost, apiPatch, apiDelete } from '../../services/api.js';
 import { confirmDialog } from '../../components/ConfirmHost.jsx';
+import { PageSkeleton } from '../../components/Primitives.jsx';
 import './pc.css';
 
 /* The API answers { success, data } — unwrap once, tolerate both shapes. */
@@ -129,7 +130,7 @@ function Home() {
     return () => clearInterval(t);
   }, []);
 
-  if (!ov) return null;
+  if (!ov) return <PageSkeleton variant="detail" />;
   const pubI = ov.publishedMaterials ?? 0;
   const pctM = ov.materials ? Math.round((pubI / ov.materials) * 100) : 0;
   const pctC = ov.courses ? Math.round(((ov.publishedCourses ?? 0) / ov.courses) * 100) : 0;
@@ -247,7 +248,7 @@ function ProgramsList() {
       } catch (e) { toast('Could not save order'); }
     },
   });
-  if (!programs) return null;
+  if (!programs) return <PageSkeleton variant="grid" rows={6} />;
   const l = programs.filter((p) => `${p.name}${p.code || ''}`.toLowerCase().includes(q.toLowerCase()));
 
   return (
@@ -333,7 +334,7 @@ function ProgramDetail() {
   // Section add/rename runs through the styled modal, never a browser prompt.
   const [modal, setModal] = useState(null); // null | { mode: 'add' } | { mode: 'rename', section }
 
-  if (!p) return null;
+  if (!p) return <PageSkeleton variant="detail" />;
   const sections = p.sections ?? [];
 
   const toggle = async () => {
@@ -448,7 +449,7 @@ function SectionDetail() {
     () => (courses ?? []).filter((c) => c.section_id === sid),
     [courses, sid],
   );
-  if (!p || !courses) return null;
+  if (!p || !courses) return <PageSkeleton variant="grid" rows={6} />;
   if (!section) return <div className="empty">That section no longer exists.</div>;
 
   return (
@@ -499,7 +500,7 @@ function CoursesList() {
   const [programs] = useData(() => get('/api/programmes/programs'), []);
   const [q, setQ] = useState('');
   const [f, setF] = useState('');
-  if (!courses || !programs) return null;
+  if (!courses || !programs) return <PageSkeleton variant="grid" rows={6} />;
   const l = courses.filter((c) => (!f || c.programme_id === f) && `${c.code}${c.title ?? ''}`.toLowerCase().includes(q.toLowerCase()));
 
   return (
@@ -551,7 +552,7 @@ function CourseDetail() {
     },
   });
 
-  if (!c) return null;
+  if (!c) return <PageSkeleton variant="detail" />;
   const its = c.materials ?? [];
 
   const toggle = async () => {
@@ -635,7 +636,7 @@ function ContentsList() {
   const [f, setF] = useState(sp.get('status') || '');
   const [menu, setMenu] = useState(null);
   const { toast } = usePc();
-  if (!materials) return null;
+  if (!materials) return <PageSkeleton variant="list" rows={6} />;
   const l = materials
     .filter((m) => (!ty || m.type === ty) && (!f || m.status === f) && m.title.toLowerCase().includes(q.toLowerCase()));
 
@@ -728,6 +729,7 @@ function ProgramForm({ edit = false }) {
   const formRef = useRef(null);
 
   useEffect(() => { if (edit && p) setCover(p.cover_url || null); }, [edit, p]);
+  if (edit && !p) return <PageSkeleton variant="form" rows={4} />;
 
   const pickCover = (files) => { if (files?.[0]) shrink(files[0], 900, (d) => { if (d) setCover(d); else toast('Choose an image file'); }); };
   const val = (k) => formRef.current?.querySelector(`[data-k=${k}]`)?.value.trim() ?? '';
@@ -810,7 +812,7 @@ function CourseForm({ edit = false }) {
 
   const pickCover = (files) => { if (files?.[0]) shrink(files[0], 900, (d) => { if (d) setCover(d); else toast('Choose an image file'); }); };
 
-  if (!programs || (edit && !c)) return null;
+  if (!programs || (edit && !c)) return <PageSkeleton variant="form" rows={4} />;
   const sections = (pid2) => programs.find((p) => p.id === pid2)?.programme_sections ?? [];
   const pid = formRef.current?.querySelector('[data-k=pid]')?.value || c?.programme_id || sp.get('program') || programs[0]?.id;
   const years = sections(pid);
@@ -905,7 +907,7 @@ function ItemForm({ edit = false }) {
   }, [edit, mid]);
   useEffect(() => { if (edit && m) setThumb(m.thumb_url || null); }, [edit, m]);
 
-  if (!courses || (edit && !m)) return null;
+  if (!courses || (edit && !m)) return <PageSkeleton variant="form" rows={4} />;
   const cid = formRef.current?.querySelector('[data-k=cid]')?.value || m?.course_id || sp.get('course') || courses[0]?.id;
 
   const save = async () => {

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Settings, Lock, User, Shield, Megaphone, CreditCard } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { PageLayout } from '../components/Layout.jsx';
-import { Btn, Inp, Toast } from '../components/Primitives.jsx';
+import { Btn, Inp, Toast, PageSkeleton } from '../components/Primitives.jsx';
 import { apiGet, apiPost, apiPatch } from '../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, FONT } from '../constants.js';
 
@@ -207,7 +207,7 @@ export default function SettingsPage() {
               </div>
             </div>
           ) : (
-            <div style={{ fontSize: 13, color: MUTED, fontFamily: FONT }}>Loading billing settings…</div>
+            <PageSkeleton header={false} variant="form" rows={3} />
           )}
         </div>
 
