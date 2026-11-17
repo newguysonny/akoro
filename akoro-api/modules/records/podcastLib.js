@@ -23,8 +23,8 @@ import { passageWhere } from "./askLib.js";
 
 export const PODCAST_LENGTHS = Object.freeze({
   short:  { id: "short",  minutes: "2–3", chars: 2400, maxTokens: 1500 },
-  medium: { id: "medium", minutes: "5–6", chars: 5000, maxTokens: 2800 },
-  long:   { id: "long",   minutes: "8–10", chars: 8400, maxTokens: 4200 },
+  medium: { id: "medium", minutes: "5–6", chars: 5000, maxTokens: 3600 },
+  long:   { id: "long",   minutes: "8–10", chars: 8400, maxTokens: 5600 },
 });
 export const PODCAST_LIMITS = Object.freeze({
   MAX_TURNS: 60,
@@ -99,6 +99,27 @@ export function buildPodcastMessages({ docName = "this document", passages = [],
     passages.map((p) => `[${p.n}] (${passageWhere(p)})\n${p.text}`).join("\n\n"),
   ].filter(Boolean).join("\n");
   return [{ role: "system", content: system }, { role: "user", content: "Write the episode now." }];
+}
+
+/**
+ * The model's answer → the script object, salvaged the way the reader
+ * tools salvage theirs: a fenced block, or the object inside prose.
+ * Providers that ignore json_schema answer like this; a raw JSON.parse
+ * failed whole episodes on it. Returns {} when nothing parses (a
+ * truncated answer salvages nothing — the caller's retry covers that).
+ */
+export function parsePodcastScriptText(text) {
+  const raw = String(text || "").trim();
+  if (!raw) return {};
+  const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  for (const candidate of [raw.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "").trim(), fenced?.[1]]) {
+    if (!candidate) continue;
+    try { return JSON.parse(candidate); } catch { /* try the object inside */ }
+    const a = candidate.indexOf("{");
+    const b = candidate.lastIndexOf("}");
+    if (a >= 0 && b > a) { try { return JSON.parse(candidate.slice(a, b + 1)); } catch { /* give up */ } }
+  }
+  return {};
 }
 
 /**
@@ -198,7 +219,7 @@ export async function runPodcastJob({ artifactId, target, scope, pageNumber, pag
         : "This document isn't readable yet — extract its text (or transcribe the recording) first.");
     }
     let json = {};
-    try { json = JSON.parse(await deps.chat(buildPodcastMessages({ docName: target.name, passages, length, focus }), length) || "{}"); }
+    try { json = parsePodcastScriptText(await deps.chat(buildPodcastMessages({ docName: target.name, passages, length, focus }), length)); }
     catch (e) {
       if (e?.name === "InsufficientCoins") return fail("You're out of AI credit — top up to make episodes.");
       throw e;

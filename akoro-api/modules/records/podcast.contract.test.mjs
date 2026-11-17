@@ -7,7 +7,7 @@ process.env.SUPABASE_SERVICE_KEY ||= "test-service-key";
 
 const {
   PODCAST_LENGTHS, PODCAST_LIMITS, PODCAST_VOICES, lengthOf, podcastSchema, buildPodcastMessages, shapePodcastScript,
-  narrateTurns, podcastInFlight, podcastForClient, runPodcastJob,
+  narrateTurns, podcastInFlight, podcastForClient, runPodcastJob, parsePodcastScriptText,
 } = await import("./podcastLib.js");
 const routes = await readFile(new URL("./routes.js", import.meta.url), "utf8");
 // The episode itself is made in studyMaterial.js (shared with Agent Chat).
@@ -174,4 +174,13 @@ test("alternation: a Guest paragraph split in two merges; order is preserved", (
   ] }, passages);
   assert.deepEqual(out.turns.map((t) => t.speaker), ["Host", "Guest", "Host"]);
   assert.equal(out.turns[1].text, "Part one of the answer. Part two of the answer.");
+});
+
+test("script answers are salvaged like the reader tools': fenced, prose-wrapped, truncated", () => {
+  const script = JSON.stringify({ title: "Ep", turns: [{ speaker: "Host", text: "Hi.", source: 1 }] });
+  assert.equal(parsePodcastScriptText(script).title, "Ep");
+  assert.equal(parsePodcastScriptText("```json\n" + script + "\n```").title, "Ep");
+  assert.equal(parsePodcastScriptText("Here is your episode: " + script + " Enjoy!").title, "Ep");
+  assert.deepEqual(parsePodcastScriptText(script.slice(0, 30)), {}, "a truncated answer salvages nothing — the retry's job");
+  assert.deepEqual(parsePodcastScriptText(""), {});
 });

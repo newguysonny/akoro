@@ -32,7 +32,7 @@ import { searchRecordChunks, searchPlatformChunks, indexRecord } from "./searchL
 import { getExtraction } from "./extractLib.js";
 import { escapeLike, rankContentHits, pickContentWinner, findDuplicateArtifact, passagesFromExtraction, pickChatRecord, platformTerms, platformChunkScore, platformHelpfulSet, platformTopicName, SOURCE_ACTIONS, sourceMiss, taughtRecordName, taughtNotesText } from "./studyMaterialCore.js";
 import { createArtifact, listArtifacts, updateArtifact } from "./artifactsLib.js";
-import { PODCAST_LIMITS, lengthOf, podcastSchema, podcastInFlight, runPodcastJob } from "./podcastLib.js";
+import { PODCAST_LIMITS, lengthOf, podcastSchema, podcastInFlight, runPodcastJob, parsePodcastScriptText } from "./podcastLib.js";
 import { coinsAvailable, debitCoins } from "../../lib/coins.js";
 import { coinsForTtsChars } from "../../lib/aiPricing.js";
 import { getAiBillTo } from "../../lib/aiContext.js";
@@ -231,12 +231,19 @@ export async function startPodcast({ userId, target, scope = "document", pageNum
   void runPodcastJob({ artifactId, target, scope, pageNumber, pageText, focus, length, startedAt }, {
     gather: (args) => gatherToolPassages({ ...args, search: searchRecordChunks }),
     chat: async (messages, len) => {
-      const completion = await openai.chat.completions.create({
-        __role: "background", temperature: 0.7, max_tokens: len.maxTokens, messages,
+      const base = { __role: "background", temperature: 0.7, max_tokens: len.maxTokens, __userId: userId, __billTo: billTo, __feature: "reader_podcast" };
+      const first = await openai.chat.completions.create({
+        ...base, messages,
         response_format: { type: "json_schema", json_schema: { name: "reader_podcast", strict: true, schema: podcastSchema() } },
-        __userId: userId, __billTo: billTo, __feature: "reader_podcast",
       });
-      return completion.choices?.[0]?.message?.content || "{}";
+      const firstText = first.choices?.[0]?.message?.content || "{}";
+      if (parsePodcastScriptText(firstText)?.turns?.length) return firstText;
+      const second = await openai.chat.completions.create({
+        ...base,
+        messages: [...messages, { role: "system", content: `Return ONLY one JSON object matching this JSON Schema:\n${JSON.stringify(podcastSchema())}` }],
+        response_format: { type: "json_object" },
+      }).catch(() => null);
+      return second?.choices?.[0]?.message?.content || firstText;
     },
     speak: async (input, voice) => {
       const { model, buffer } = await deps.speakBuffer({ text: input, voice, openai });
