@@ -33,6 +33,7 @@ export default function ReaderPodcast({ podcast, onCite, onRetry }) {
   const [time, setTime] = useState(0);
   const [duration, setDuration] = useState(NaN);
   const [playing, setPlaying] = useState(false);
+  const [showTranscript, setShowTranscript] = useState(true);
   const status = podcast?.status || 'making';
 
   useEffect(() => { setTime(0); setDuration(NaN); setPlaying(false); }, [podcast?.audioUrl]);
@@ -112,7 +113,15 @@ export default function ReaderPodcast({ podcast, onCite, onRetry }) {
         )}
       </div>
 
-      <div className="text-xs font-semibold mb-2" style={{ color: 'var(--ak-text-sub)' }}>Transcript</div>
+      <div className="flex items-center justify-between mb-2">
+        <div className="text-xs font-semibold" style={{ color: 'var(--ak-text-sub)' }}>Transcript</div>
+        <button type="button" onClick={() => setShowTranscript((v) => !v)} aria-expanded={showTranscript}
+          className="flex items-center gap-1 text-xs font-semibold" style={{ color: BRAND }}>
+          <Icon name={showTranscript ? 'ti-chevron-up' : 'ti-chevron-down'} size={13}/>
+          {showTranscript ? 'Hide transcript' : 'View transcript'}
+        </button>
+      </div>
+      {showTranscript && (
       <ol className="flex flex-col gap-1.5" style={{ listStyle: 'none', padding: 0, margin: 0 }}>
         {turns.map((t, i) => (
           <li key={i}>
@@ -131,6 +140,7 @@ export default function ReaderPodcast({ podcast, onCite, onRetry }) {
           </li>
         ))}
       </ol>
+      )}
     </div>
   );
 }
