@@ -265,7 +265,7 @@ export async function searchRecordChunks({ userId, q, limit = 12, recordId = nul
   const { data, error } = await db.rpc("match_record_chunks", {
     p_user_id: userId,
     p_query_embedding: embedding,
-    p_match_count: Math.min(Math.max(Number(limit) || 12, 1), 25),
+    p_match_count: Math.min(Math.max(Number(limit) || 12, 1), 96),   // raised 25 -> 96 (2026-11-17): Library search pages by growing the limit in 12s
     p_query_text: query,
     p_record_id: recordId,
   });

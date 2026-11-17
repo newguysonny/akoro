@@ -103,6 +103,27 @@ const MAX_FILE_BYTES   = 500 * 1024 * 1024;  // 500 MB — matches the sheet's g
 const MAX_TEXT_CHARS   = 20_000;             // matches the sheet's counter
 const MAX_RECORDS      = 200;                // a shelf, not an archive
 
+/* ── Cursor paging (scroll-to-fetch-more, Matt 2026-11-17) ───────────────
+   Paged mode is opt-in per request (?limit= / ?cursor=; Discover also
+   accepts ?paged=1): the response data becomes { <key>: [...], total,
+   nextCursor } while legacy callers keep the bare array they expect. The
+   cursor is the last row's (created_at, id); ordering is created_at DESC,
+   id DESC, so pages never overlap or skip when new rows land at the top. */
+const pageParams = (req, defLimit, maxLimit) => {
+  const paged = req.query.limit !== undefined || req.query.cursor !== undefined || req.query.paged !== undefined;
+  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || defLimit, 1), maxLimit);
+  let cursor = null;
+  if (req.query.cursor) {
+    try { cursor = JSON.parse(Buffer.from(String(req.query.cursor), "base64url").toString("utf8")); } catch { cursor = null; }
+  }
+  return { paged, limit, cursor };
+};
+const encodeCursor = (row, col = "created_at") => (row
+  ? Buffer.from(JSON.stringify({ t: row[col], id: row.id }), "utf8").toString("base64url") : null);
+const applyCursor = (q, cursor, col = "created_at") => (cursor && cursor.t
+  ? q.or(`${col}.lt.${cursor.t},and(${col}.eq.${cursor.t},id.lt.${cursor.id})`)
+  : q);
+
 /* Folders — the shelf's organization layer (created from the
    "Add to library" sheet). A cover rides the SAME presigned storage
    pipeline as record files, just image-only and small. */
@@ -283,11 +304,23 @@ router.post("/", authenticateToken, asyncHandler(async (req, res) => {
 
 // ─── GET /api/records — my shelf ────────────────────────────────────────────
 router.get("/", authenticateToken, asyncHandler(async (req, res) => {
-  const { data, error } = await edu().from("records")
+  const { paged, limit, cursor } = pageParams(req, 12, 100);
+  let query = edu().from("records")
     .select("*").eq("user_id", req.user.id).is("deleted_at", null)   // Recently deleted (§7.17) stays out of the shelf
-    .order("created_at", { ascending: false }).limit(MAX_RECORDS);
+    .order("created_at", { ascending: false }).order("id", { ascending: false });
+  query = applyCursor(query, cursor).limit(paged ? limit : MAX_RECORDS);
+  const { data, error } = await query;
   if (error) throw error;
-  res200(res, await Promise.all((data || []).map(toApi)));
+  const rows = data || [];
+  if (!paged) return res200(res, await Promise.all(rows.map(toApi)));
+  const { count } = await edu().from("records")
+    .select("*", { count: "exact", head: true })
+    .eq("user_id", req.user.id).is("deleted_at", null);
+  return res200(res, {
+    records: await Promise.all(rows.map(toApi)),
+    total: count ?? rows.length,
+    nextCursor: rows.length === limit ? encodeCursor(rows[rows.length - 1]) : null,
+  });
 }));
 
 // ─── GET /api/records/search?q= — semantic library search ──────────────────
@@ -320,7 +353,11 @@ router.get("/search", authenticateToken, asyncHandler(async (req, res) => {
 // presigned URLs are minted until a learner opens one record. Paste rows
 // carry a short preview; the full text rides on /discover/:id/open.
 router.get("/discover", authenticateToken, asyncHandler(async (req, res) => {
-  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 80, 1), 100);
+  // Paged mode (the Discover tab's scroll-to-fetch-more) is gated on
+  // ?paged=1 / ?cursor= — NOT on ?limit, which legacy search passes use.
+  const discoverPaged = req.query.paged !== undefined || req.query.cursor !== undefined;
+  const { limit: pageLimit, cursor } = pageParams(req, 12, 100);
+  const limit = discoverPaged ? pageLimit : Math.min(Math.max(parseInt(req.query.limit, 10) || 80, 1), 100);
   const premiumIds = await activePremiumUserIds();
   // ?q= — database search across the record's name and (for pastes) its
   // text (PostgREST or-ilike; term sanitised for the grammar).
@@ -329,11 +366,16 @@ router.get("/discover", authenticateToken, asyncHandler(async (req, res) => {
   let query = edu().from("records")
     .select("id, user_id, kind, name, mime, size, duration, file_key, content, created_at")
     .in("kind", ["upload", "paste"]).is("deleted_at", null)
-    .order("created_at", { ascending: false })
+    .order("created_at", { ascending: false }).order("id", { ascending: false })
     .limit(limit);
   if (premiumIds.length) query = query.not("user_id", "in", `(${premiumIds.join(",")})`);
   query = query.eq("private", false);   // private records stay their owner's; Premium owners excluded above — one rule for Library and chat uploads alike
   if (term) query = query.or(`name.ilike.%${term}%,content.ilike.%${term}%`);
+  if (discoverPaged) {
+    // The openable rule moves into SQL so a page is a full page.
+    query = query.or("kind.eq.paste,file_key.not.is.null");
+    query = applyCursor(query, cursor);
+  }
   const { data: rows, error } = await query;
   if (error) throw error;
 
@@ -347,7 +389,7 @@ router.get("/discover", authenticateToken, asyncHandler(async (req, res) => {
     for (const u of users || []) owners.set(u.id, u.full_name || "Learner");
   }
 
-  res200(res, openable.map((r) => ({
+  const mapped = openable.map((r) => ({
     id: r.id,
     ownerId: r.user_id,
     ownerName: owners.get(r.user_id) || "Learner",
@@ -359,7 +401,21 @@ router.get("/discover", authenticateToken, asyncHandler(async (req, res) => {
     fileType: r.kind === "upload" ? detectType(r.mime || "", r.name || "") : "note",
     contentPreview: r.kind === "paste" ? String(r.content || "").slice(0, 280) : "",
     createdAt: r.created_at,
-  })));
+  }));
+  if (!discoverPaged) return res200(res, mapped);
+  let countQuery = edu().from("records")
+    .select("*", { count: "exact", head: true })
+    .in("kind", ["upload", "paste"]).is("deleted_at", null)
+    .eq("private", false)
+    .or("kind.eq.paste,file_key.not.is.null");
+  if (premiumIds.length) countQuery = countQuery.not("user_id", "in", `(${premiumIds.join(",")})`);
+  if (term) countQuery = countQuery.or(`name.ilike.%${term}%,content.ilike.%${term}%`);
+  const { count } = await countQuery;
+  return res200(res, {
+    items: mapped,
+    total: count ?? mapped.length,
+    nextCursor: (rows || []).length === limit ? encodeCursor(rows[rows.length - 1]) : null,
+  });
 }));
 
 // ─── GET /api/records/discover/:id/open — open one discovered record ───────
@@ -431,12 +487,24 @@ function normalizeItemPayload(body = {}) {
 
 // ─── GET /api/records/folders — my folders, newest first ───────────────────
 router.get("/folders", authenticateToken, asyncHandler(async (req, res) => {
-  const { data, error } = await edu().from("library_folders")
+  const { paged, limit, cursor } = pageParams(req, 20, 100);
+  let query = edu().from("library_folders")
     .select("*").eq("user_id", req.user.id)
-    .order("created_at", { ascending: false }).limit(MAX_FOLDERS);
+    .order("created_at", { ascending: false }).order("id", { ascending: false });
+  query = applyCursor(query, cursor).limit(paged ? limit : MAX_FOLDERS);
+  const { data, error } = await query;
   if (error) throw error;
+  const rows = data || [];
   const counts = await folderItemCounts(req.user.id).catch(() => new Map());
-  res200(res, await Promise.all((data || []).map((f) => folderToApi(f, counts.get(f.id) || 0))));
+  const mapped = await Promise.all(rows.map((f) => folderToApi(f, counts.get(f.id) || 0)));
+  if (!paged) return res200(res, mapped);
+  const { count } = await edu().from("library_folders")
+    .select("*", { count: "exact", head: true }).eq("user_id", req.user.id);
+  return res200(res, {
+    folders: mapped,
+    total: count ?? rows.length,
+    nextCursor: rows.length === limit ? encodeCursor(rows[rows.length - 1]) : null,
+  });
 }));
 
 // ─── POST /api/records/folders — create one ────────────────────────────────
@@ -537,16 +605,27 @@ router.get("/folders/:id/items", authenticateToken, asyncHandler(async (req, res
   if (!existing) return res404(res, "Folder not found.");
   if (existing.user_id !== req.user.id) return res403(res, "Not your folder.");
 
-  const { data, error } = await edu().from("library_folder_items")
+  const { paged, limit, cursor } = pageParams(req, 20, 100);
+  let query = edu().from("library_folder_items")
     .select("id, item_type, item_ref, title, sub, kind, link, created_at")
     .eq("folder_id", req.params.id)
-    .order("created_at", { ascending: false }).limit(MAX_FOLDER_ITEMS);
+    .order("created_at", { ascending: false }).order("id", { ascending: false });
+  query = applyCursor(query, cursor).limit(paged ? limit : MAX_FOLDER_ITEMS);
+  const { data, error } = await query;
   if (error) throw error;
-  res200(res, (data || []).map((it) => ({
+  const rows = (data || []).map((it) => ({
     id: it.id, itemType: it.item_type, itemRef: it.item_ref,
     title: it.title, sub: it.sub || "", kind: it.kind || "topic",
     link: it.link || null, createdAt: it.created_at,
-  })));
+  }));
+  if (!paged) return res200(res, rows);
+  const { count } = await edu().from("library_folder_items")
+    .select("*", { count: "exact", head: true }).eq("folder_id", req.params.id);
+  return res200(res, {
+    items: rows,
+    total: count ?? rows.length,
+    nextCursor: rows.length === limit ? encodeCursor(data[data.length - 1]) : null,
+  });
 }));
 
 // ─── POST /api/records/folders/items — add one thing to N folders ──────────

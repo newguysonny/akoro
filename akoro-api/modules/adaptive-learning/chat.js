@@ -4125,14 +4125,43 @@ const sessionTitleFrom = (text) => {
 // GET /sessions — the user's sessions, newest activity first.
 router.get("/sessions", async (req, res) => {
   try {
-    const { data, error } = await db
+    // Paged mode (the drawer's scroll-to-fetch-more, 2026-11-17): ?limit /
+    // ?cursor switch the response to { sessions, total, nextCursor };
+    // legacy callers keep the bare list capped at 100. Cursor = the last
+    // row's (last_message_at, id); nulls sort last in paged mode, and a
+    // null-timestamp tail row ends paging (empty sessions sit last).
+    const paged = req.query.limit !== undefined || req.query.cursor !== undefined;
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 100);
+    let cursor = null;
+    if (req.query.cursor) {
+      try { cursor = JSON.parse(Buffer.from(String(req.query.cursor), "base64url").toString("utf8")); } catch { cursor = null; }
+    }
+    let query = db
       .from("chat_sessions")
       .select("id, title, created_at, updated_at, last_message_at")
       .eq("user_id", req.user.id)
-      .order("last_message_at", { ascending: false })
-      .limit(100);
+      .order("last_message_at", { ascending: false, nullsFirst: false })
+      .order("id", { ascending: false });
+    if (cursor?.t) {
+      query = query.or(`last_message_at.lt.${cursor.t},and(last_message_at.eq.${cursor.t},id.lt.${cursor.id})`);
+    }
+    const { data, error } = await query.limit(paged ? limit : 100);
     if (error) throw new Error(error.message);
-    res.json({ success: true, sessions: data ?? [] });
+    const sessions = data ?? [];
+    if (!paged) return res.json({ success: true, sessions });
+    const { count } = await db
+      .from("chat_sessions")
+      .select("*", { count: "exact", head: true })
+      .eq("user_id", req.user.id);
+    const last = sessions[sessions.length - 1];
+    return res.json({
+      success: true,
+      sessions,
+      total: count ?? sessions.length,
+      nextCursor: sessions.length === limit && last?.last_message_at
+        ? Buffer.from(JSON.stringify({ t: last.last_message_at, id: last.id }), "utf8").toString("base64url")
+        : null,
+    });
   } catch (err) {
     console.error("[/chat/sessions GET]", err);
     res.status(500).json({ error: err.message });

@@ -129,13 +129,25 @@ router.get("/sessions", authenticateToken, async (req, res) => {
     const studentId = req.user?.id;   // token-derived only — no query override
     if (!studentId) return res.status(400).json({ error: "studentId required" });
 
-    const { data: rows, error } = await db.schema("edu")
+    // Paged mode (dashboard scroll-to-fetch-more, 2026-11-17): ?limit /
+    // ?cursor page past the legacy 30 and add a real total + nextCursor.
+    const paged = req.query.limit !== undefined || req.query.cursor !== undefined;
+    const pageLimit = Math.min(Math.max(parseInt(req.query.limit, 10) || 10, 1), 100);
+    let pageCursor = null;
+    if (req.query.cursor) {
+      try { pageCursor = JSON.parse(Buffer.from(String(req.query.cursor), "base64url").toString("utf8")); } catch { pageCursor = null; }
+    }
+    let sessQuery = db.schema("edu")
       .from("adaptive_sessions")
       .select("id, topic, subject, status, subtopics, objectives, updated_at, completed_at, block_history")
       .eq("student_id", studentId)
       .in("status", ["active", "complete"])
       .order("updated_at", { ascending: false })
-      .limit(30);
+      .order("id", { ascending: false });
+    if (pageCursor?.t) {
+      sessQuery = sessQuery.or(`updated_at.lt.${pageCursor.t},and(updated_at.eq.${pageCursor.t},id.lt.${pageCursor.id})`);
+    }
+    const { data: rows, error } = await sessQuery.limit(paged ? pageLimit : 30);
 
     if (error) throw new Error(error.message);
 
@@ -208,7 +220,21 @@ router.get("/sessions", authenticateToken, async (req, res) => {
       };
     });
 
-    res.json({ success: true, sessions, total: sessions.length });
+    if (!paged) return res.json({ success: true, sessions, total: sessions.length });
+    const { count } = await db.schema("edu")
+      .from("adaptive_sessions")
+      .select("*", { count: "exact", head: true })
+      .eq("student_id", studentId)
+      .in("status", ["active", "complete"]);
+    const lastRow = (rows || [])[rows.length - 1];
+    return res.json({
+      success: true,
+      sessions,
+      total: count ?? sessions.length,
+      nextCursor: (rows || []).length === pageLimit && lastRow
+        ? Buffer.from(JSON.stringify({ t: lastRow.updated_at, id: lastRow.id }), "utf8").toString("base64url")
+        : null,
+    });
 
   } catch (err) {
     console.error("[adaptive/sessions]", err.message);
