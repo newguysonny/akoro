@@ -7,9 +7,9 @@
  * kind 'permission': the agent has no ability for what the learner asked
  * (e.g. deleting their tasks) but drafted a tool for it. Approve turns that
  * ability on for this learner only; the tap records the decision and the
- * agent's await_decision call applies it and carries the chat on (onDone): the
- * agent runs the tool in its next turn and its change card comes from there.
- * After a Confirm, the chat carries on too, so the agent checks what changed.
+ * agent's await_decision call applies it and carries the chat on (onDone).
+ * The change the card lists is part of that same approval — no second card
+ * follows a permission. The agent narrates the outcome; the card is not kept.
  */
 import { useEffect, useState } from 'react';
 import ApprovalButtons from './ApprovalButtons.jsx';
@@ -35,8 +35,9 @@ export default function ConfirmChangeCard({ confirm, onDone = null }) {
   const act = async (what) => {
     setBusy(true); setErr('');
     try {
-      // The server performs the write AND posts the follow-up into the chat; the
-      // card is not kept. No client-driven continuation is needed.
+      // The tap records the decision only; the agent applies it (in its live
+      // turn, or the continuation turn the tap starts) and narrates the
+      // outcome. The card is not kept after a decision.
       const r = unwrap(await apiPost(`/api/self-tooling/confirmations/${state.confirmationId}/${what}`, {}));
       setState((s) => ({ ...s, ...r }));
       if (onDone) onDone(what === 'confirm' ? ((state.kind === 'permission' || state.kind === 'build') ? 'approved' : 'confirmed') : 'rejected', { ...state, ...r });
@@ -108,7 +109,7 @@ function PermissionCard({ state, expired, busy, err, act }) {
       </> : pending && (state.items || [])[0] && <div style={{ marginTop: 9, fontSize: 12.5, fontWeight: 700, color: 'var(--ak-text)', lineHeight: 1.5 }}>{state.items[0]}</div>}
       {pending && (
         <>
-          <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--ak-text-muted)', marginTop: 8 }}>{state.drafted ? 'Only for you. Allow turns it on, and nothing changes until you confirm each change it proposes.' : 'Only for you. Nothing changes until you confirm each change it proposes.'}</div>
+          <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--ak-text-muted)', marginTop: 8 }}>{state.drafted ? 'Only for you. Allow turns it on and makes the change listed above.' : 'Only for you. Allow builds it, turns it on, and makes the change it describes.'}</div>
           <ApprovalButtons busy={busy} onAllow={() => act('confirm')} onReject={() => act('reject')} />
         </>
       )}

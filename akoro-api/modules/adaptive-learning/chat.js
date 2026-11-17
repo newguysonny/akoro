@@ -121,7 +121,7 @@ import { createEpisodeRecorder } from "../agent-contract/episode.js";
 import { recordsRealTraffic, saveEpisode } from "../agent-contract/store.js";
 import { labelKeyFor } from "../agent-ratings/ratings.js";
 import { requiresAgentCapabilitiesTool, requiresActivityPreparation, isDraftFollowUp, isToolDraftFollowUp, requiredLearnerDataTool, requiredStudyPrepTool, classForExam } from "./agent-chat-intent.js";
-import { agentToolActivity } from "../../lib/agentActivity.js";
+import { agentToolActivity, reportAgentActivity } from "../../lib/agentActivity.js";
 import { noteChatTurn } from "../agent-memory/quietLearning.js";
 import { createChatTrace, decisionNarration, TALK_AFTER_TOOLS, talkAfterTool } from "./chat-trace.js";
 import { toResponsesInput, toResponsesTools } from "./responses-input.js";
@@ -1598,6 +1598,10 @@ export const PARALLEL_CALL_BARRIERS = new Set([
 ]);
 /** Widest batch the loop runs at once — the reads share the database pool with every other turn. */
 export const PARALLEL_READ_BATCH = 4;
+// Confirmation statuses that mean the learner has decided: such a card is
+// never (re)written into the chat as a message artifact — its outcome is
+// the agent's narration only (Matt, 2026-11-17).
+export const DECIDED_CONFIRM_STATUSES = ["approved", "consumed", "rejected", "expired"];
 const BUILTIN_TOOL_NAMES = new Set([...CHAT_TOOLS, ...INSTRUCTOR_TOOLS].map((t) => t.name));
 /** The batching steer: appended to the system prompt per turn (never part of
  *  the golden-pinned static doctrine) and dropped when the kill switch is
@@ -5284,8 +5288,11 @@ async function runAgentToolLoop({ systemContent, messages, studentId, conversati
         // a Teach me button, and the teaching guide's mark on the answer.
         ...(tool === "ask_to_be_taught" && toolResult?.asked ? { teach: { topic: toolResult.topic, subject: toolResult.subject } } : {}),
         // A tool that would change data (S6): the confirmation card — only the learner's tap runs it.
-        ...(toolResult?.confirmation?.confirmationId ? { confirm: toolResult.confirmation }
-          : toolResult?.result?.confirmation?.confirmationId ? { confirm: toolResult.result.confirmation } : {}),
+        // Only a card still WAITING for its tap rides the reply: a decided
+        // card (an await_decision outcome) is never written into the chat —
+        // the agent's narration is the outcome (Matt, 2026-11-17).
+        ...(toolResult?.confirmation?.confirmationId && !DECIDED_CONFIRM_STATUSES.includes(toolResult.confirmation.status) ? { confirm: toolResult.confirmation }
+          : toolResult?.result?.confirmation?.confirmationId && !DECIDED_CONFIRM_STATUSES.includes(toolResult.result.confirmation.status) ? { confirm: toolResult.result.confirmation } : {}),
         // await_decision APPLIED a card this turn — its result also carries
         // the decided card as `confirmation`, which on its own would read to
         // the end-of-turn check as "only a card was made" and append a false
@@ -5321,12 +5328,12 @@ async function runAgentToolLoop({ systemContent, messages, studentId, conversati
       // A card the learner must act on goes out NOW, not with "done": it used to
       // appear only after the whole reply had been written (2026-11-06).
       if (executions.at(-1)?.confirm) trace?.card?.({ tool, confirm: executions.at(-1).confirm });
-      // A result can carry a FOLLOW-UP card: await_decision applying a build
-      // or permission runs the tool, and the run's own change proposal rides
-      // back as `next`. It must reach the learner too — without it the agent
-      // waits on a card nobody can see or tap, and the turn (and the client's
-      // post-reply card refetch) never settles (live, 2026-11-17).
-      if (toolResult?.next?.confirmationId) trace?.card?.({ tool, confirm: toolResult.next });
+      // A result can carry a FOLLOW-UP proposal as `next`: since the
+      // build/permission approval now applies the change it listed, `next`
+      // normally arrives already decided and is NOT shown — the agent
+      // narrates it. A still-pending one (a path that could not apply it)
+      // is shown, or the agent would wait on a card nobody can tap.
+      if (toolResult?.next?.confirmationId && !DECIDED_CONFIRM_STATUSES.includes(toolResult.next.status)) trace?.card?.({ tool, confirm: toolResult.next });
       // Phase 22: persist this step (redacted, capped) so the full path — tool,
       // real error class/message, duration, retry — survives the turn.
       await recordStep(runId, stepRow({ runId, iteration, tool, input, success: observation.success,
@@ -5570,7 +5577,7 @@ router.post("/learn-suggestions", async (req, res) => {
   }
 });
 
-router.post("/agent", async (req, res) => {
+async function agentChatHandler(req, res) {
   const t0 = Date.now();
   const wantsStream = req.query.stream === "1" || req.query.stream === "true"
     || (req.headers.accept || "").includes("text/event-stream");
@@ -5584,6 +5591,7 @@ router.post("/agent", async (req, res) => {
   // this API's own client, which skips blocks without a data line.
   let heartbeat = null;
   let turnCtx = null;          // conversation/turn/message, for the error path
+  let sessionTrackId = null;   // this turn's chat, for the tap-continuation recheck
   let streamedAnswer = "";     // deltas of the final answer, for a partial save
   const stopHeartbeat = () => { if (heartbeat) { clearInterval(heartbeat); heartbeat = null; } };
   res.on("close", stopHeartbeat);
@@ -5686,6 +5694,10 @@ router.post("/agent", async (req, res) => {
     const isThink = mode === "think";
     const role = ["instructor", "teacher", "school", "school_admin", "admin"].includes(req.user?.role)
       ? "instructor" : "student";
+    if (role === "student" && conversationId) {
+      sessionTrackId = conversationId;
+      activeSessionTurns.set(conversationId, (activeSessionTurns.get(conversationId) || 0) + 1);
+    }
     // The instructor app asked, but the session is a learner's: a request that
     // reached the server without the instructor portal header reads the
     // learner cookie. Refuse it loudly rather than run learner tools for a
@@ -6488,8 +6500,72 @@ router.post("/agent", async (req, res) => {
       return res.end();
     }
     return res.status(error?.status || 500).json({ error: error?.message || "Agent Chat is unavailable" });
+  } finally {
+    if (sessionTrackId) {
+      const left = (activeSessionTurns.get(sessionTrackId) || 1) - 1;
+      if (left > 0) activeSessionTurns.set(sessionTrackId, left); else activeSessionTurns.delete(sessionTrackId);
+      // A card tap that landed while this turn was running could not start
+      // its own continuation then (a turn was live); if an approved decision
+      // is still unapplied now this turn has ended, start it here.
+      if (!req.internalContinuation) scheduleDecisionContinuation({ userId: req.user?.id, user: req.user, sessionId: sessionTrackId });
+    }
   }
-});
+}
+
+router.post("/agent", agentChatHandler);
+
+// ── Tap-triggered continuation (Option A — Matt, 2026-11-17) ───────────────
+// A card tap records the decision only. When no turn is live in that chat,
+// the tap itself starts the agent's continuation turn (headless, below):
+// the turn opens with the decision already injected, the agent applies it
+// with await_decision and narrates the outcome — the learner sends nothing,
+// and the server posts nothing of its own into the chat. A tap that lands
+// mid-turn is caught by the live turn's await_decision poll, or by the
+// end-of-turn recheck in the handler's finally above.
+// Kill switch: AKORO_TAP_CONTINUATION=false restores the old behaviour
+// (a late tap waits for the learner's next message in that chat).
+const activeSessionTurns = new Map();       // sessionId -> live /agent turns
+const decisionContinuations = new Map();    // sessionId -> in-flight continuation
+
+/** A sink response for a headless turn: the handler runs in full (prompt,
+ * tools, persist) and its stream events go nowhere; the saved reply — the
+ * agent's own narration — is the outcome the learner reads. */
+function headlessRes() {
+  const res = { statusCode: 200, destroyed: false, writableEnded: false, body: null,
+    on: () => res, once: () => res, writeHead: () => res, write: () => true,
+    end: () => { res.writableEnded = true; return res; },
+    status: (code) => { res.statusCode = code; return res; },
+    json: (payload) => { res.body = payload; res.writableEnded = true; return res; } };
+  return res;
+}
+
+export function scheduleDecisionContinuation({ userId, user = null, sessionId } = {}) {
+  if (process.env.AKORO_TAP_CONTINUATION === "false") return;
+  if (!userId || !sessionId || !CHAT_SESSION_ID.test(sessionId)) return;
+  if (decisionContinuations.has(sessionId) || activeSessionTurns.get(sessionId)) return;
+  const run = (async () => {
+    try {
+      const { listConfirmedDecisions } = await import("../self-tooling/confirmations.js");
+      const waiting = await listConfirmedDecisions(userId, sessionId).catch(() => []);
+      if (!waiting.length) return;
+      reportAgentActivity(userId, "Finishing what you approved…");
+      const req = {
+        user: user || { id: userId, role: "student" },
+        body: { message: "I tapped Allow", conversationId: sessionId, turnId: `tap${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}` },
+        query: {}, headers: {}, internalContinuation: true,
+      };
+      await agentChatHandler(req, headlessRes());
+      // Nudge the app: the outcome message is saved — show it now.
+      try { global.io?.to(`user:${userId}`).emit("agent_chat_updated", { sessionId }); } catch { /* saved either way */ }
+    } catch (e) {
+      console.warn("[decision-continuation] failed:", e?.message || e);
+    } finally {
+      reportAgentActivity(userId, null);
+      decisionContinuations.delete(sessionId);
+    }
+  })();
+  decisionContinuations.set(sessionId, run);
+}
 
 // =============================================================
 // HISTORY

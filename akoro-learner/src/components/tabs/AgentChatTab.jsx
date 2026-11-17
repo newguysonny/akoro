@@ -633,7 +633,10 @@ function AgentChatTab({
         } catch { /* it is saved — opening the chat again shows it */ }
       };
       socket.on("chat_follow_up_ready", (data) => { onReady(data); if (data?.proposalId) refetchInbox(); refetchInboxCount(); });
-      return () => { socket.off("chat_follow_up_ready", onReady); socket.off("connect", subscribe); };
+      // A card tap started the agent's continuation turn and its outcome
+      // message just landed in a chat: show it the same way.
+      socket.on("agent_chat_updated", onReady);
+      return () => { socket.off("chat_follow_up_ready", onReady); socket.off("agent_chat_updated", onReady); socket.off("connect", subscribe); };
     } catch { /* WS unavailable — the notification still links to the chat */ }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

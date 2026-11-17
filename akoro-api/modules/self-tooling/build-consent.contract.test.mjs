@@ -32,7 +32,7 @@ test("the card: proposeBuild stores kind 'build'; an approved Keep activates via
   const src = read("./confirmations.js");
   assert.match(src, /export async function proposeBuild\(/);
   assert.match(src, /const args = \{ kind: "build", toolId, proposed \};/);
-  assert.match(src, /kind === "build" \? await executeBuild\(row, \{ userId, toolDeps \}\)/);
+  assert.match(src, /kind === "build" \? await executeBuild\(row, \{ userId, toolDeps, callTool \}\)/);
   assert.match(src, /const activate = toolDeps\?\.activateTool \|\| pipe\.activateBuiltTool;/);
   assert.match(src, /kind === "permission" \|\| row\.tool_arguments\?\.kind === "build"\) \? row\.tool_arguments\.toolId/);
   const pipe = read("./pipeline.js");

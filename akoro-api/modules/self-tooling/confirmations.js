@@ -121,8 +121,8 @@ export async function proposePermission({ learnerId, conversationId = null, capa
   return {
     status: "needs_permission", confirmation: publicConfirmation(data),
     note: (toolId
-      ? `The tool "${proposed.label}" is drafted but OFF, and nothing has changed. The learner sees a card asking them to allow it (${cap.description}), listing what it would change right now (${preview.items.length}${preview.more ? `+${preview.more}` : ""} item(s)). Only their Allow turns it on — for them alone — and even then each change waits for their Confirm. In your own words: you've drafted it, here's what it would do, tap Allow on the card if they want it. Never say it's on or that anything changed, and never approve for them.`
-      : `NOTHING IS BUILT YET. You don't have this ability yet, but you can build a tool for it: the learner sees a card asking them to allow it (${cap.description}) and only their tap on Allow turns it on — for them alone — and builds "${proposed.label}". Even then, every change it makes waits for their Confirm. Tell them that in plain words and to tap Allow on the card. Never say it's built or done, and never approve for them.`)
+      ? `The tool "${proposed.label}" is drafted but OFF, and nothing has changed. The learner sees a card asking them to allow it (${cap.description}), listing what it would change right now (${preview.items.length}${preview.more ? `+${preview.more}` : ""} item(s)). Only their Allow turns it on — for them alone — and makes the change the card lists; changes it proposes after that still get their own card. In your own words: you've drafted it, here's what it would do, tap Allow on the card if they want it. Never say it's on or that anything changed, and never approve for them.`
+      : `NOTHING IS BUILT YET. You don't have this ability yet, but you can build a tool for it: the learner sees a card asking them to allow it (${cap.description}) and only their tap on Allow turns it on — for them alone — builds "${proposed.label}" and makes the change the card lists; changes it proposes after that still get their own card. Tell them that in plain words and to tap Allow on the card. Never say it's built or done, and never approve for them.`)
       + ` Then call await_decision with this confirmationId and WAIT for their tap inside this same turn — if it returns "waiting", call it again (up to 3 calls) instead of ending your turn. When it returns the outcome, report exactly what it says and continue.`,
   };
 }
@@ -268,8 +268,36 @@ async function executeChange(row, { userId, callTool }) {
   return { confirmation: publicConfirmation(stored), kind: "change", result };
 }
 
+/**
+ * The change a build/permission card's own run just proposed. The card the
+ * learner approved already listed exactly this change ("Right now it would
+ * change: …"), so their approval covers it — no second card (Matt,
+ * 2026-11-17: "there should be no cards after the permission"). Mark it
+ * approved and apply it like any decided change. Returns
+ * { confirmationId, result } / { confirmationId, blocked } / null when the
+ * proposal could not be applied here (it then stays for the usual path).
+ */
+async function applyRunChange(next, { userId, callTool }) {
+  if (!next?.confirmationId) return null;
+  const row = await owned(next.confirmationId, userId).catch(() => null);
+  if (!row) return null;
+  if (row.status === "consumed") return { confirmationId: row.id, result: row.preview?.result || null, alreadyDone: true };
+  if (row.status !== "pending") return null;
+  const now = new Date().toISOString();
+  const { data: marked } = await edu().from(TABLE).update({ status: "confirmed", confirmed_at: now, updated_at: now })
+    .eq("id", row.id).eq("principal_id", userId).eq("status", "pending").select("*").maybeSingle();
+  if (!marked) {
+    const fresh = await owned(row.id, userId).catch(() => null);
+    return fresh?.status === "consumed" ? { confirmationId: row.id, result: fresh.preview?.result || null, alreadyDone: true } : null;
+  }
+  const out = await executeChange(marked, { userId, callTool });
+  if (!out) return { confirmationId: row.id, result: null, alreadyDone: true };
+  if (out.blocked) return { confirmationId: row.id, blocked: out.blocked };
+  return { confirmationId: row.id, result: out.result || null };
+}
+
 /** Apply an approved build card: turn the drafted tool on, then run it once as this learner. */
-async function executeBuild(row, { userId, toolDeps }) {
+async function executeBuild(row, { userId, toolDeps, callTool }) {
   const { proposed = {}, toolId } = row.tool_arguments || {};
   if (!toolId) {
     await edu().from(TABLE).update({ status: "rejected", rejected_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", row.id).eq("status", "confirmed");
@@ -293,15 +321,19 @@ async function executeBuild(row, { userId, toolDeps }) {
     }
   } catch (e) { out = { status: "failed", reason: e.message }; }
   const next = out?.result?.confirmation || null;
+  // The card listed exactly what this run would change; the learner's
+  // approval covers that change — apply it now, no second card.
+  const appliedChange = await applyRunChange(next, { userId, callTool }).catch(() => null);
   const result = { status: out?.status || "failed", tool: out?.tool || null, label: out?.label || proposed.label || null,
     reason: out?.status === "created" ? null : String(out?.reason || "something went wrong").slice(0, 240),
-    found: next ? (next.items || []).length : null, at: new Date().toISOString() };
+    found: next ? (next.items || []).length : null,
+    changed: appliedChange?.result?.done ?? null, changeFailed: appliedChange?.result?.failed ?? null, at: new Date().toISOString() };
   const stored = await storeResult(row.id, claimed, result);
-  return { confirmation: publicConfirmation(stored), kind: "build", result, next };
+  return { confirmation: publicConfirmation(stored), kind: "build", result, next: appliedChange ? null : next, appliedChange };
 }
 
 /** Apply an approved permission card: grant the capability to this learner alone, then build (or switch on the drafted tool) and run it. */
-async function executePermission(row, { userId, buildTool, toolDeps }) {
+async function executePermission(row, { userId, buildTool, toolDeps, callTool }) {
   const { cap, proposed = {} } = row.tool_arguments || {};
   const toolId = row.tool_arguments?.toolId || null;
   if (!learnerGrantable(cap) || (!toolId && !buildTool)) {
@@ -318,7 +350,7 @@ async function executePermission(row, { userId, buildTool, toolDeps }) {
   const conversationId = sessionOf(row);
   let out;
   if (toolId) {
-    // The drafted tool: turn it on, then run it — its proposed change is the usual card (nothing changes without Confirm).
+    // The drafted tool: turn it on, then run it — the change it proposes is the one this card listed, so the approval applies it (no second card).
     const { data: t } = await edu().from("agent_tools").select("id, name, label, verification").eq("id", toolId).eq("owner_id", userId).eq("status", "disabled").maybeSingle();
     if (!t) out = { status: "failed", reason: "the draft is gone — ask me to build it again." };
     else {
@@ -336,11 +368,15 @@ async function executePermission(row, { userId, buildTool, toolDeps }) {
         hint: { ...(proposed.hint || {}), capabilities: [...new Set([...[].concat(proposed.hint?.capabilities || []), cap])] } } });
   } catch (e) { out = { status: "failed", reason: e.message }; }
   const next = out?.result?.confirmation || null;
+  // The card listed exactly what this run would change; the learner's
+  // approval covers that change — apply it now, no second card.
+  const appliedChange = await applyRunChange(next, { userId, callTool }).catch(() => null);
   const result = { granted: true, status: out?.status || "failed", tool: out?.tool || null, label: out?.label || proposed.label || null,
     reason: out?.status === "created" ? null : String(out?.reason || "something went wrong").slice(0, 240),
-    found: next ? (next.items || []).length : null, at: new Date().toISOString() };
+    found: next ? (next.items || []).length : null,
+    changed: appliedChange?.result?.done ?? null, changeFailed: appliedChange?.result?.failed ?? null, at: new Date().toISOString() };
   const stored = await storeResult(row.id, claimed, result);
-  return { confirmation: publicConfirmation(stored), kind: "permission", result, next };
+  return { confirmation: publicConfirmation(stored), kind: "permission", result, next: appliedChange ? null : next, appliedChange };
 }
 
 /** Apply a decision the learner already confirmed. Idempotent: a consumed row returns its stored outcome. */
@@ -349,8 +385,8 @@ export async function executeDecision({ id, userId, callTool, buildTool = null, 
   if (row.status === "consumed") return { confirmation: publicConfirmation(row), kind: kindOf(row), result: row.preview?.result || null, alreadyDone: true };
   if (row.status !== "confirmed") throw httpError(409, `This card was ${row.status}, not approved`);
   const kind = kindOf(row);
-  const out = kind === "permission" ? await executePermission(row, { userId, buildTool, toolDeps })
-    : kind === "build" ? await executeBuild(row, { userId, toolDeps })
+  const out = kind === "permission" ? await executePermission(row, { userId, buildTool, toolDeps, callTool })
+    : kind === "build" ? await executeBuild(row, { userId, toolDeps, callTool })
     : await executeChange(row, { userId, callTool });
   if (!out) {
     // Another turn claimed it first: return the freshest state.
@@ -394,6 +430,12 @@ export async function awaitDecision({ id, userId, callTool, buildTool = null, to
         }
         const r = out.result || {};
         if (r.status !== "created") return { ...base, note: `The learner approved, but it couldn't be completed: ${r.reason || "something went wrong"}. Tell them plainly and offer to try again another way.` };
+        if (out.appliedChange) {
+          const ac = out.appliedChange;
+          if (ac.blocked) return { ...base, note: `"${r.label}" is now on and saved in their tools, but the change its card listed could not be made: ${ac.blocked} Tell the learner both parts plainly, in your own words.` };
+          const cr = ac.result || {};
+          return { ...base, note: `"${r.label}" is now on and saved in their tools, AND the change its card listed has been made: ${cr.done ?? 0} changed${cr.failed ? `, ${cr.failed} couldn't be (${(cr.errors || []).join("; ")})` : ""}. The learner approved that change on the card itself — there is no second card and none is needed. Report BOTH parts in your own words and continue with what they originally asked.` };
+        }
         if (out.next?.confirmationId) return { ...base, next: out.next, note: `"${r.label}" is now on and saved in their tools. Running it proposes a change — a NEW card is showing for it (confirmationId ${out.next.confirmationId}). Present what it would change, then call await_decision with that confirmationId and wait again.` };
         return { ...base, note: `"${r.label}" is now on and saved in their tools${kind === "permission" ? ", and the ability is theirs alone" : ""}. Report this in your own words and continue with what they originally asked — if they wanted the answer this tool gives, call it by name now.` };
       } catch (e) {

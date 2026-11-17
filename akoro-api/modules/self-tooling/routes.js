@@ -61,14 +61,21 @@ router.get("/confirmations", authenticateToken, asyncHandler(async (req, res) =>
 }));
 router.get("/confirmations/:id", authenticateToken, confirmationRoute((req) => getConfirmation(req.params.id, req.user.id)));
 // The tap records ONLY the decision (2026-11-16): nothing executes here and
-// nothing is posted into the chat. The agent's await_decision tool call —
-// in the live turn, or the next turn in that chat — applies what was
-// approved and narrates the outcome itself.
+// nothing is posted into the chat by the server. The agent's await_decision
+// tool call applies what was approved and narrates the outcome itself — in
+// the live turn when one is waiting, and otherwise in a continuation turn
+// the tap itself starts (Option A, 2026-11-17: no waiting for the learner's
+// next message).
 router.post("/confirmations/:id/reject", authenticateToken, confirmationRoute(async (req) => {
   return decideConfirmation({ id: req.params.id, userId: req.user.id, decision: "rejected" });
 }));
 router.post("/confirmations/:id/confirm", authenticateToken, confirmationRoute(async (req) => {
-  return decideConfirmation({ id: req.params.id, userId: req.user.id, decision: "approved" });
+  const decided = await decideConfirmation({ id: req.params.id, userId: req.user.id, decision: "approved" });
+  if (decided?.sessionId) {
+    const { scheduleDecisionContinuation } = await import("../adaptive-learning/chat.js");
+    scheduleDecisionContinuation({ userId: req.user.id, user: req.user, sessionId: decided.sessionId });
+  }
+  return decided;
 }));
 
 export default router;
