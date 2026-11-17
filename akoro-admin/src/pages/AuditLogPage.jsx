@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { PageSkeleton } from '../components/Primitives.jsx';
 import { PageLayout } from '../components/Layout.jsx';
 import { apiGet } from '../services/api.js';
 
@@ -109,7 +110,7 @@ export default function AuditLogPage() {
     <PageLayout title="Audit Log" subtitle="Every pricing, tier, credit, and billing change made from this dashboard">
       <div className="ak-page">
 
-        {loading && <p className="ak-sub">Loading…</p>}
+        {loading && <PageSkeleton header={false} rows={6} />}
         {loadError && <p className="ak-sub text-akoro-coral">{loadError}</p>}
 
         {!loading && (

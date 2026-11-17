@@ -8,6 +8,7 @@
  * reaches this page.
  */
 import { useEffect, useState } from 'react';
+import { PageSkeleton } from '../../components/Primitives.jsx';
 import { ThumbsUp, ThumbsDown, RefreshCw } from 'lucide-react';
 import { apiGet } from '../../services/api.js';
 import { INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, AMBER, FONT } from '../../constants.js';
@@ -65,7 +66,7 @@ export default function LearnerRatings() {
             </div>
           </div>
         ))}
-        {loading && !summary && <div style={{ fontFamily: FONT, fontSize: 13, color: MUTED }}>Loading…</div>}
+        {loading && !summary && <PageSkeleton header={false} rows={3} />}
       </div>
 
       <div style={{ fontFamily: FONT, fontSize: 13, fontWeight: 700, color: INK, margin: '18px 0 8px' }}>Worst-rated turns</div>

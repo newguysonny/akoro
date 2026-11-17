@@ -352,9 +352,72 @@ export function Toast({ message, type = 'success', onClose }) {
   );
 }
 
+/* ── Skeleton styles ──────────────────────────────────────────────────
+   The app's GlobalStyles sheet (which once carried the .skeleton rule)
+   is not mounted anywhere, so skeleton placeholders rendered as
+   invisible empty boxes. Inject the shimmer rule once, from here, so
+   every Skeleton/PageSkeleton is actually visible. */
+if (typeof document !== 'undefined' && !document.querySelector('style[data-akoro-skeleton]')) {
+  const el = document.createElement('style');
+  el.setAttribute('data-akoro-skeleton', '');
+  el.textContent = '@keyframes akoro-shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }'
+    + ' .skeleton { background: linear-gradient(90deg, #EBEDF0 25%, #F4F5F7 50%, #EBEDF0 75%); background-size: 200% 100%; animation: akoro-shimmer 1.5s infinite; border-radius: 8px; }';
+  document.head.appendChild(el);
+}
+
 /* ── Skeleton ─────────────────────────────────────────────────────── */
 export function Skeleton({ width = '100%', height = 20, style }) {
   return (
     <div className="skeleton" style={{ width, height, borderRadius: 8, ...style }} />
   );
+}
+
+/* ── PageSkeleton: full-page loading placeholder ──────────────────────
+   Renders a page-shaped shimmer (title + subtitle + content blocks) so a
+   page never sits blank while its data is in flight. Use header={false}
+   when the page shell/header already renders and only the content area
+   is waiting. Variants: list (rows), grid (cards), detail (hero + rows),
+   form (label + input pairs). */
+export function PageSkeleton({ variant = 'list', rows = 5, header = true, style }) {
+  const head = header ? (
+    <div style={{ marginBottom: 22 }}>
+      <Skeleton width={230} height={26} style={{ marginBottom: 10 }} />
+      <Skeleton width={340} height={14} />
+    </div>
+  ) : null;
+  let body;
+  if (variant === 'grid') {
+    body = (
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 14 }}>
+        {Array.from({ length: rows }).map((_, i) => <Skeleton key={i} height={118} />)}
+      </div>
+    );
+  } else if (variant === 'form') {
+    body = (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 18, maxWidth: 520 }}>
+        {Array.from({ length: rows }).map((_, i) => (
+          <div key={i}>
+            <Skeleton width={110} height={12} style={{ marginBottom: 8 }} />
+            <Skeleton height={42} />
+          </div>
+        ))}
+      </div>
+    );
+  } else if (variant === 'detail') {
+    body = (
+      <div>
+        <Skeleton height={120} style={{ marginBottom: 16 }} />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {Array.from({ length: rows }).map((_, i) => <Skeleton key={i} height={56} />)}
+        </div>
+      </div>
+    );
+  } else {
+    body = (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {Array.from({ length: rows }).map((_, i) => <Skeleton key={i} height={56} />)}
+      </div>
+    );
+  }
+  return <div style={{ fontFamily: FONT, ...style }}>{head}{body}</div>;
 }

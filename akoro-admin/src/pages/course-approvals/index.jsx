@@ -21,6 +21,7 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState } from 
 import { Routes, Route, NavLink, Navigate, useNavigate, useParams } from 'react-router-dom';
 import { apiGet, apiPost } from '../../services/api.js';
 import { confirmDialog } from '../../components/ConfirmHost.jsx';
+import { PageSkeleton } from '../../components/Primitives.jsx';
 import './ca.css';
 
 /* The API answers { success, data } — unwrap once, tolerate both shapes. */
@@ -180,7 +181,7 @@ function Queue() {
   const { courses } = useCa();
   const setStatus = useStatusActions();
   const [asking, setAsking] = useState(null); // course being sent back
-  if (!courses) return null;
+  if (!courses) return <PageSkeleton variant="list" rows={6} />;
   const queue = courses.filter((c) => c.status === 'review');
   const by = (s) => courses.filter((c) => c.status === s).length;
   const approve = async (c) => {
@@ -227,7 +228,7 @@ function AllCourses() {
   const { courses } = useCa();
   const [q, setQ] = useState('');
   const [f, setF] = useState('');
-  if (!courses) return null;
+  if (!courses) return <PageSkeleton variant="list" rows={6} />;
   const needle = q.toLowerCase();
   const cs = courses.filter((c) => (!f || c.status === f) && (c.title + (c.owner || '') + (c.tags || '') + (c.lang || '')).toLowerCase().includes(needle));
   return (
@@ -274,7 +275,7 @@ function CourseView() {
   const setStatus = useStatusActions();
   const [asking, setAsking] = useState(false);
   const [preview, setPreview] = useState(false);
-  if (!courses) return null;
+  if (!courses) return <PageSkeleton variant="detail" />;
   const c = courses.find((x) => x.id === cid);
   if (!c) return <Navigate to={BASE} replace />;
   const ck = checksOf(c);

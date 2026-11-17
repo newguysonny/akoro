@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { FileText, RotateCcw, Save, History, AlertTriangle, Layers } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
-import { Toast } from '../components/Primitives.jsx';
+import { Toast, PageSkeleton } from '../components/Primitives.jsx';
 import { apiGet, apiPost, apiPut } from '../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, PURPLE, FONT } from '../constants.js';
 
@@ -69,13 +69,16 @@ export default function AgentPromptsPage() {
   const [setName, setSetName] = useState('');
   const [toast, setToast] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   const loadList = useCallback(async () => {
+    setLoading(true);
     try {
       const [p, s] = await Promise.all([apiGet('/api/admin/agent-prompts'), apiGet('/api/admin/agent-prompts/sets')]);
       setParts(p.parts ?? []); setSets(s.sets ?? []); setError(null);
     } catch (e) { setError(e.message || 'Could not load the prompt parts'); }
+    finally { setLoading(false); }
   }, []);
   useEffect(() => { loadList(); }, [loadList]);
 
@@ -135,6 +138,7 @@ export default function AgentPromptsPage() {
           <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Filter by file or set"
                  style={{ width: '100%', boxSizing: 'border-box', fontFamily: FONT, fontSize: 13, padding: '8px 10px', borderRadius: 8, border: `1px solid ${BORDER}`, marginBottom: 8 }} />
           <div style={{ maxHeight: 560, overflow: 'auto' }}>
+            {loading && parts.length === 0 && <PageSkeleton header={false} rows={5} />}
             {shown.map((p) => (
               <button key={p.file} onClick={() => open(p.file)}
                       style={{ display: 'flex', width: '100%', textAlign: 'left', gap: 8, alignItems: 'center', padding: '7px 8px', borderRadius: 8, border: 'none', cursor: 'pointer', background: p.file === file ? LIGHT : 'transparent' }}>
