@@ -462,8 +462,18 @@ function tabLabel(tab) {
   if (tab.id === "qa") return "Q&A";
   if (tab.id === "ask") return "Ask";
   if (tab.id === "discussion") return "Discussion";
+  if (tab.toolId && String(tab.id).startsWith("tool:")) return toolById(tab.toolId)?.label || tab.toolId;
   return tab.title;
 }
+
+/* One tab per tool (Matt, 2026-11-17): creations group under their tool's
+ * pill, the badge carries the count, and the tool's tab is the list of its
+ * creations. Plural names head the list and the back row inside a creation. */
+const KIND_PLURALS = Object.freeze({ summary: "Summaries", quiz: "Quizzes", flashcards: "Flashcards", podcast: "Podcasts", notes: "Notes", video: "Videos" });
+const kindPlural = (kind) => KIND_PLURALS[kind] || `${toolById(kind)?.label || kind}s`;
+const focusLabelOf = (tab) => (tab.values?.focus && String(tab.values.focus).trim())
+  || (tab.values?.scope === "Whole document" ? "Whole document" : `Page ${(tab.createdPage ?? 0) + 1}`);
+const rowTitleOf = (tab) => (tab.toolId === "podcast" && tab.podcast?.title) || focusLabelOf(tab);
 
 function TabIcon({ tab }) {
   if (tab.id === "reader") return <Icon name="ti-book-2" size={14}/>;
@@ -479,7 +489,10 @@ function TabPill({ tab, active, onSelect, onClose }) {
     >
       <TabIcon tab={tab}/>
       <span className="truncate">{tabLabel(tab)}</span>
-      {tab.id !== "reader" && (
+      {Number.isInteger(tab.count) && tab.count > 0 && (
+        <span className="flex-shrink-0 font-ui-mono" style={{ background: "var(--ak-accent)", color: "#fff", fontSize: 10, fontWeight: 800, borderRadius: 999, padding: "1px 6px", lineHeight: 1.5 }}>{tab.count}</span>
+      )}
+      {tab.id !== "reader" && !tab.noClose && (
         <button
           type="button"
           onClick={(e) => { e.stopPropagation(); onClose(); }}
@@ -520,6 +533,82 @@ function SavedList({ items, onOpen, onDelete }) {
         })}
       </div>
     </>
+  );
+}
+
+/**
+ * One tool's creations as a list — the tool tab's home (Matt, 2026-11-17).
+ * Open creations (tabs) and closed saved items of the kind merge here,
+ * newest first; a row opens the creation, the trash deletes it for real
+ * (the same delete the Generate menu's Saved list always offered).
+ */
+const KIND_LIST_PAGE = 10;
+
+function ToolKindList({ kind, tabs, saved, onOpenTab, onOpenSaved, onDeleteTab, onDeleteSaved, onNew }) {
+  const def = toolById(kind);
+  const [shown, setShown] = useState(KIND_LIST_PAGE);
+  const sentinelRef = useRef(null);
+  const rows = [
+    ...(tabs || []).map((tab) => ({ key: `t-${tab.id}`, tab, ts: tab.createdAt || "", title: rowTitleOf(tab), sub: resultSub(tab), status: kind === "podcast" ? tab.podcast?.status || null : null })),
+    ...(saved || []).map((a) => { const tab = artifactToTab(a, a.id); return { key: `s-${a.id}`, savedItem: a, ts: a.createdAt || "", title: rowTitleOf(tab), sub: resultSub(tab), status: kind === "podcast" ? a.content?.podcast?.status || null : null }; }),
+  ].sort((x, y) => (x.ts < y.ts ? 1 : x.ts > y.ts ? -1 : 0));
+  const visible = rows.slice(0, shown);
+  // Paged, not infinite: the end sentinel reveals the NEXT 10 only, and
+  // stops at the total — the footer always says how many of how many.
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el || shown >= rows.length || typeof IntersectionObserver === "undefined") return undefined;
+    const io = new IntersectionObserver((entries) => {
+      if (entries.some((e) => e.isIntersecting)) setShown((s) => s + KIND_LIST_PAGE);
+    }, { rootMargin: "240px" });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [shown, rows.length]);
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-1">
+        <div>
+          <div className="font-display text-base font-semibold" style={{ color: "var(--ak-text)" }}>{kindPlural(kind)}</div>
+          <div className="text-xs" style={{ color: "var(--ak-text-sub)" }}>Newest first · saved on this document</div>
+        </div>
+        <button type="button" onClick={onNew} className="folio-primary-btn flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-bold flex-shrink-0">
+          <Icon name="ti-plus" size={13}/> New
+        </button>
+      </div>
+      <div className="flex flex-col">
+        {visible.map((r) => (
+          <div key={r.key} className="flex items-center gap-3 py-3 border-b" style={{ borderColor: "var(--ak-border)" }}>
+            <button type="button" onClick={() => (r.tab ? onOpenTab(r.tab) : onOpenSaved(r.savedItem))}
+              className="flex-1 flex items-center gap-3 min-w-0 text-left" style={{ background: "none", border: "none", padding: 0, cursor: "pointer" }}>
+              <span className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: def?.bg }}>
+                <Icon name={def?.icon || "ti-file-text"} size={17} color={def?.fg}/>
+              </span>
+              <span className="flex-1 min-w-0">
+                <span className="block truncate text-sm font-bold" style={{ color: "var(--ak-text)" }}>{r.title}</span>
+                <span className="block truncate text-xs" style={{ color: "var(--ak-text-sub)" }}>{r.sub}</span>
+              </span>
+            </button>
+            {r.status === "ready" && <span className="text-[10px] font-extrabold px-2 py-1 rounded-full flex-shrink-0" style={{ background: "rgba(16,185,129,.12)", color: "var(--ak-success-text)" }}>Ready</span>}
+            {r.status === "making" && <span className="text-[10px] font-extrabold px-2 py-1 rounded-full flex-shrink-0" style={{ background: "rgba(245,158,11,.14)", color: "var(--ak-warn-text)" }}>Making…</span>}
+            {r.status === "failed" && <span className="text-[10px] font-extrabold px-2 py-1 rounded-full flex-shrink-0" style={{ background: "rgba(239,68,68,.12)", color: "var(--ak-danger-text)" }}>Failed</span>}
+            <button type="button" aria-label={`Delete ${r.title}`} title="Delete"
+              onClick={() => (r.tab ? onDeleteTab(r.tab) : onDeleteSaved(r.savedItem))}
+              className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--ak-text-sub)" }}>
+              <Icon name="ti-trash" size={14}/>
+            </button>
+            <Icon name="ti-chevron-right" size={15} color="var(--ak-text-sub)"/>
+          </div>
+        ))}
+        {!rows.length && (
+          <div className="text-sm py-6 text-center" style={{ color: "var(--ak-text-sub)" }}>Nothing here yet — make the first one.</div>
+        )}
+      </div>
+      {rows.length > KIND_LIST_PAGE && (
+        <div ref={sentinelRef} className="text-center text-xs py-4" style={{ color: "var(--ak-text-sub)" }}>
+          {shown < rows.length ? `Showing ${Math.min(shown, rows.length)} of ${rows.length} — scroll for more` : `All ${rows.length} shown`}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -1503,7 +1592,7 @@ export default function SessionReaderModal({
       || (values.scope === "Whole document" ? "Whole document" : `Page ${createdPage + 1}`);
     const id = "r" + nextResultId.current++;
     const tab = {
-      id, toolId, values, createdPage,
+      id, toolId, values, createdPage, createdAt: new Date().toISOString(),
       title: `${tdef.label} · ${focusLabel.length > 22 ? focusLabel.slice(0, 22) + "…" : focusLabel}`,
       cardIndex: 0, flipped: false, quizIndex: 0, quizHint: null, topic: docTitle,
       ...content,
@@ -1563,7 +1652,7 @@ export default function SessionReaderModal({
       const focusLabel = (values.focus && values.focus.trim()) || `Page ${currentPage + 1}`;
       const id = "r" + nextResultId.current++;
       const tab = {
-        id, toolId, values, createdPage: currentPage,
+        id, toolId, values, createdPage: currentPage, createdAt: new Date().toISOString(),
         title: `${tdef.label} · ${focusLabel.length > 22 ? focusLabel.slice(0, 22) + "…" : focusLabel}`,
         cardIndex: 0, flipped: false,
         quizIndex: 0, quizHint: null,
@@ -1685,6 +1774,17 @@ export default function SessionReaderModal({
     artifacts?.update(a.id, { open: true }).catch(() => {});
   }
 
+  /* Deleting a creation from its tool's list: the tab goes and the saved
+   * item is deleted for real (podcast audio goes with it, server-side). */
+  function deleteResultTab(tab) {
+    setResultTabs((rt) => rt.filter((t) => t.id !== tab.id));
+    if (tab.artifactId) {
+      lastSavedRef.current.delete(tab.artifactId);
+      artifacts?.remove(tab.artifactId).catch(() => {});
+    }
+    if (activeTabId === tab.id) switchTabTo(`tool:${tab.toolId}`);
+  }
+
   function deleteSavedItem(a) {
     setSavedItems((s) => s.filter((x) => x.id !== a.id));
     lastSavedRef.current.delete(a.id);
@@ -1696,6 +1796,7 @@ export default function SessionReaderModal({
   }
 
   const activeResultTab = resultTabs.find((t) => t.id === activeTabId);
+  const activeListKind = activeTabId.startsWith("tool:") ? activeTabId.slice(5) : null;
 
   /* Citations: jump the reader to the source page and flash the cited line. */
   function citeJump(cite) {
@@ -1889,14 +1990,23 @@ export default function SessionReaderModal({
 
   // A folder opened in the reader has only its Original Content (the
   // contents grid) until a document is picked — no tool tabs over a folder.
-  const allTabs = [{ id: "reader" }, ...communityTabsOpen.map((id) => ({ id })), ...resultTabs];
+  /* One pill per tool kind (Matt, 2026-11-17): the strip holds the reader,
+   * any community tabs, and one pill per tool that has creations — the
+   * badge carries the count (open tabs + closed saved items of the kind). */
+  const kindPills = ["summary", "quiz", "flashcards", "podcast", "video", "notes"]
+    .map((k) => ({
+      id: `tool:${k}`, toolId: k, noClose: true,
+      count: resultTabs.filter((t) => t.toolId === k).length + savedItems.filter((a) => a.kind === k).length,
+    }))
+    .filter((pill) => pill.count > 0);
+  const allTabs = [{ id: "reader" }, ...communityTabsOpen.map((id) => ({ id })), ...kindPills];
 
   function PillsBar({ tabs, showChatButton }) {
     return (
       <div className="flex items-center gap-1.5 px-3 pt-1.5 pb-3 flex-shrink-0">
         <div className="flex-1 min-w-0 flex gap-1.5 overflow-x-auto" style={{ scrollbarWidth: "none" }}>
           {tabs.map((t) => (
-            <TabPill key={t.id} tab={t} active={t.id === activeTabId} onSelect={() => switchTabTo(t.id)} onClose={() => closeTab(t.id)}/>
+            <TabPill key={t.id} tab={t} active={t.id === activeTabId || (!!t.toolId && activeResultTab?.toolId === t.toolId)} onSelect={() => switchTabTo(t.id)} onClose={() => closeTab(t.id)}/>
           ))}
         </div>
         {showChatButton && (
@@ -2286,9 +2396,29 @@ export default function SessionReaderModal({
           </div>
         )}
 
+        {/* Tool list pane — a tool tab's home: every creation of the kind. */}
+        {activeListKind && (
+          <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4" style={{ background: "var(--ak-bg)" }}>
+            <ToolKindList key={activeListKind} kind={activeListKind}
+              tabs={resultTabs.filter((t) => t.toolId === activeListKind)}
+              saved={savedItems.filter((a) => a.kind === activeListKind)}
+              onOpenTab={(tab) => switchTabTo(tab.id)}
+              onOpenSaved={openSavedItem}
+              onDeleteTab={deleteResultTab}
+              onDeleteSaved={deleteSavedItem}
+              onNew={() => openForm(activeListKind)}/>
+          </div>
+        )}
+
         {/* Result pane — shown when a generated tab (not "Original Content") is active. */}
         {activeTabId !== "reader" && activeTabId !== "qa" && activeTabId !== "discussion" && activeTabId !== "ask" && activeResultTab && (
           <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4" style={{ background: "var(--ak-bg)" }}>
+            <div className="flex items-center gap-2 mb-3.5">
+              <button type="button" onClick={() => switchTabTo(`tool:${activeResultTab.toolId}`)}
+                className="flex items-center gap-1 text-sm font-bold flex-shrink-0" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--ak-accent)", padding: 0 }}>
+                <Icon name="ti-chevron-left" size={15}/> {kindPlural(activeResultTab.toolId)}
+              </button>
+            </div>
             <ResultView tab={activeResultTab} onUpdate={(patch) => updateResultTab(activeResultTab.id, patch)} onCite={citeJump}
               onRetryPodcast={tools?.podcast ? retryPodcast : null}/>
           </div>

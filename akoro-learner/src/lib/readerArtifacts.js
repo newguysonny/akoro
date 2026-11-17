@@ -42,7 +42,7 @@ export function artifactToTab(a, id) {
   const focus = (values.focus && String(values.focus).trim())
     || (values.scope === 'Whole document' ? 'Whole document' : `Page ${createdPage + 1}`);
   return {
-    id, artifactId: a.id, toolId: a.kind, values, createdPage,
+    id, artifactId: a.id, toolId: a.kind, values, createdPage, createdAt: a.createdAt || null,
     title: `${TOOL_LABELS[a.kind] || a.kind} · ${focus.length > 22 ? `${focus.slice(0, 22)}…` : focus}`,
     cardIndex: 0, flipped: false, quizIndex: 0, quizHint: null,
     ...content,
