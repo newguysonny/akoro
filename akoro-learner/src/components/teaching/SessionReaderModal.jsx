@@ -796,7 +796,6 @@ function ResultView({ tab, onUpdate, onCite, onRetryPodcast = null }) {
           {header}
           <div className="flex items-center justify-between mb-3">
             <span className="font-ui-mono text-xs" style={{ color: "var(--ak-text-sub)" }}>Question {idx + 1} of {total}</span>
-            <Citation cite={q.cite} onCite={onCite}/>
           </div>
           <div className="font-display text-sm font-medium mb-3.5" style={{ color: "var(--ak-text)" }}>{q.prompt}</div>
           <div className="mb-1.5">
@@ -808,7 +807,7 @@ function ResultView({ tab, onUpdate, onCite, onRetryPodcast = null }) {
               return (
                 <div
                   key={opt.key}
-                  onClick={() => !revealed && patchAnswer({ selected: opt.key })}
+                  onClick={() => !revealed && patchAnswer({ selected: opt.key, checked: true })}
                   className="flex items-center gap-2.5 px-3 py-2.5 border rounded-lg mb-2 text-sm cursor-pointer"
                   style={{ borderColor: cls.border, background: cls.background, color: "var(--ak-text)" }}
                 >
@@ -834,21 +833,12 @@ function ResultView({ tab, onUpdate, onCite, onRetryPodcast = null }) {
             </div>
           )}
 
-          {!revealed ? (
+          {!revealed && (
             <div className="flex gap-2">
-              <button type="button" onClick={() => patchAnswer({ checked: true })} className="folio-primary-btn flex-1 py-2.5 rounded-lg text-sm font-bold">
-                Check answer
-              </button>
               <button type="button" onClick={() => patchAnswer({ dontKnow: true })} className="folio-btn-outline flex items-center gap-1.5 px-3.5 py-2.5 rounded-lg border text-sm font-bold flex-shrink-0">
                 <Icon name="ti-help" size={14}/> Don't know
               </button>
             </div>
-          ) : idx < total - 1 ? (
-            <button type="button" onClick={() => onUpdate({ quizIndex: idx + 1, quizHint: null })} className="folio-primary-btn w-full py-2.5 rounded-lg text-sm font-bold">
-              Next question
-            </button>
-          ) : (
-            <div className="text-center text-sm font-bold py-2" style={{ color: GREEN }}>Quiz complete 🎉</div>
           )}
 
           {revealed && (
@@ -859,8 +849,22 @@ function ResultView({ tab, onUpdate, onCite, onRetryPodcast = null }) {
                 ? "Correct!"
                 : `Not quite — the correct answer is: ${correctOpt?.text}`}
               {q.explanation && <div className="mt-1.5 leading-relaxed" style={{ color: "var(--ak-text-sec)" }}>{q.explanation}</div>}
+              {/* The citation lives in the answer (Matt, 2026-11-17): shown
+                  only once the answer is revealed, so learners don't go
+                  looking it up before trying. */}
+              <div className="mt-2 flex">
+                <Citation cite={q.cite} onCite={onCite}/>
+              </div>
             </div>
           )}
+
+          {revealed && (idx < total - 1 ? (
+            <button type="button" onClick={() => onUpdate({ quizIndex: idx + 1, quizHint: null })} className="folio-primary-btn w-full py-2.5 rounded-lg text-sm font-bold mt-3">
+              Next question
+            </button>
+          ) : (
+            <div className="text-center text-sm font-bold py-2 mt-1" style={{ color: GREEN }}>Quiz complete 🎉</div>
+          ))}
         </div>
       );
     }
@@ -876,7 +880,6 @@ function ResultView({ tab, onUpdate, onCite, onRetryPodcast = null }) {
           {header}
           <div className="flex items-center justify-center gap-2 text-center text-xs mb-3" style={{ color: "var(--ak-text-sub)" }}>
             <span>Tap the card to flip</span>
-            <Citation cite={cardCite} onCite={onCite}/>
           </div>
           <div className="w-full mb-3.5" style={{ perspective: "1000px", aspectRatio: "4 / 3" }}>
             <div
@@ -888,10 +891,14 @@ function ResultView({ tab, onUpdate, onCite, onRetryPodcast = null }) {
                 <span className="font-display text-lg font-semibold" style={{ color: "var(--ak-accent)" }}>{card.front}</span>
               </div>
               <div
-                className="absolute inset-0 rounded-lg flex items-center justify-center text-center p-4 text-sm leading-relaxed"
+                className="absolute inset-0 rounded-lg flex items-center justify-center text-center p-4 pb-9 text-sm leading-relaxed"
                 style={{ backfaceVisibility: "hidden", transform: "rotateY(180deg)", background: "var(--ak-surface)", border: "1px solid var(--ak-border2)", color: "var(--ak-text)" }}
               >
                 {card.back}
+                {/* Citation on the answer side only (Matt, 2026-11-17). */}
+                <span className="absolute bottom-2.5 left-1/2 -translate-x-1/2 flex" onClick={(e) => e.stopPropagation()}>
+                  <Citation cite={cardCite} onCite={onCite}/>
+                </span>
               </div>
             </div>
           </div>
