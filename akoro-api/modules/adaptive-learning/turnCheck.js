@@ -41,7 +41,7 @@ export function actionClaimCorrection(reply, executions = []) {
   if (!claims.length) return null;
   const xs = (executions || []).filter((x) => x && x.tool !== "update_plan");
   // A Teach me button the protégé put in this chat backs "I've set up a Teach me button".
-  const changed = xs.some((x) => x.success && (x.sideEffecting || x.teach) && !x.confirm);
+  const changed = xs.some((x) => x.success && (((x.sideEffecting || x.teach) && !x.confirm) || x.appliedDecision));
   if (changed) return null;
   if (xs.some((x) => x.confirm)) return "Note: nothing has changed yet — it happens when you tap **Confirm** on the card above.";
   // Admin requests are requestClaims.js's to judge; a failed change is the honest-failure path's.

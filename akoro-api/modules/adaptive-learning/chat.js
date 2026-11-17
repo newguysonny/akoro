@@ -5286,6 +5286,11 @@ async function runAgentToolLoop({ systemContent, messages, studentId, conversati
         // A tool that would change data (S6): the confirmation card — only the learner's tap runs it.
         ...(toolResult?.confirmation?.confirmationId ? { confirm: toolResult.confirmation }
           : toolResult?.result?.confirmation?.confirmationId ? { confirm: toolResult.result.confirmation } : {}),
+        // await_decision APPLIED a card this turn — its result also carries
+        // the decided card as `confirmation`, which on its own would read to
+        // the end-of-turn check as "only a card was made" and append a false
+        // "nothing has changed yet" note under a truthful outcome report.
+        ...(tool === "await_decision" && toolResult?.executed ? { appliedDecision: true } : {}),
         // Materials the tool returned (courses, blog posts, Library documents, weak topics)
         // ride as clickable links — built from ids/slugs, never from the model's prose.
         ...(() => { const mats = collectMaterials([materialsFrom(tool, toolResult)]); return mats.length ? { materials: mats } : {}; })(),
