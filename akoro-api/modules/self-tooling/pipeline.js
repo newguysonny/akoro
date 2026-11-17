@@ -121,6 +121,60 @@ export function inventedDates(source, goal, params = {}) {
   return found.length ? [`code: don't hard-code ${found.join(", ")} — start from akoro.today (dates the learner gave are fine)`] : [];
 }
 
+/** Fields that identify ONE specific row (its display identity), as opposed
+ * to a condition many rows share (status, priority, a subject). */
+const IDENTITY_FIELDS = new Set(["title", "name"]);
+
+/**
+ * A WRITE definition must not hard-code the specific row it acts on
+ * (Matt, 2026-11-17): a saved "Delete a chat" tool built for one chat baked
+ * that chat's title into its filter, so it could never delete any other —
+ * and reusing it matched nothing, silently. The row's identity belongs in
+ * a param the learner's agent supplies each run. PURE: returns one entry
+ * per hard-coded target { param, field, value, message } — `message` is
+ * builder feedback; the caller auto-declares `param` (default = the value
+ * this request named) so the repair attempt can bind it. Only literals the
+ * GOAL itself names count (the learner pointed at that row), only on
+ * identity fields, only in definitions that write.
+ */
+export function hardCodedTargets(def, goal, params = {}) {
+  if (!def || typeof def !== "object") return [];
+  const goalText = String(goal || "").toLowerCase();
+  const inGoal = (lit) => goalText.includes(String(lit).toLowerCase());
+  const props = paramProps(params);
+  const paramFor = (field, value) => Object.keys(props).find((k) => props[k]?.default === value) || field;
+  const out = [];
+  const seen = new Set();
+  const consider = (field, value) => {
+    if (!IDENTITY_FIELDS.has(field)) return;
+    for (const v of [].concat(value ?? [])) {
+      if (typeof v !== "string" || v.startsWith("$") || v.trim().length < 6) continue;
+      if (!inGoal(v)) continue;
+      const param = paramFor(field, v);
+      const key = `${param}:${v}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({ param, field, value: v,
+        message: `the definition hard-codes the specific row it acts on (${field} = "${v}") — a saved tool must take that row from the $${param} param instead, so it works for any row the learner names: filter ${field} by "$${param}", never the literal` });
+    }
+  };
+  const scanWhere = (where) => { for (const w of [].concat(where || [])) if (w && typeof w === "object") consider(String(w.field || ""), w.value); };
+  if (def.kind === "recipe") {
+    const writes = [].concat(def.then || []).filter((op) => op?.op === "write");
+    if (writes.length) {
+      for (const s of [].concat(def.steps || [])) scanWhere(s?.where);
+      for (const op of [].concat(def.then || [])) if (op?.op === "filter") scanWhere(op.where);
+    }
+  } else if (def.kind === "code") {
+    const hasWriteStep = [].concat(def.steps || []).some((s) => CAPABILITIES[s?.cap]?.kind === "write");
+    if (hasWriteStep) {
+      for (const s of [].concat(def.steps || [])) scanWhere(s?.where);
+      for (const m of String(def.source || "").matchAll(/["']([^"']{6,})["']/g)) consider("title", m[1]);
+    }
+  }
+  return out;
+}
+
 const ABOUT_OTHERS = /\b(other (players?|learners?|students?|people)|others|classmates?|opponents?|everyone else|the rest of (my|the) class)\b/i;
 const BATTLE_WORDS = /\b(battles?|duels?|challenges?|matches)\b/i;
 const OTHERS_WORDS = /\b(other (players?|learners?|students?|people)|others|opponents?|classmates?|everyone else|the rest|compared? (to|with)|versus|vs\.?|who (beat|won)|beat me|than me)\b/i;
@@ -570,7 +624,7 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
     await edu().from("agent_tools").update({ status: "archived", updated_at: new Date().toISOString() })
       .eq("owner_id", learnerId).eq("name", name).eq("status", "disabled").not("verification->awaitingBuild", "is", null);
     const { data: mine } = await edu().from("agent_tools").select("id, name").eq("owner_id", learnerId).in("status", ["active", "disabled"]).limit(LIMITS.maxTools + 1);
-    if ((mine || []).some((t) => t.name === name && t.id !== replaced?.id)) return reject(`You already have a tool called ${name} — call it, or pick another name.`);
+    if ((mine || []).some((t) => t.name === name && t.id !== replaced?.id)) return reject(`You already have a tool called ${name} — call it, or pick another name, or rebuild it in place: call create_tool again with the same name and replace set to "${name}" (or its exact label), and the old tool is swapped for the corrected build once the new one checks out.`);
     if ((mine || []).filter((t) => t.id !== replaced?.id).length >= LIMITS.maxTools) return finish("rejected", reject(`You have ${LIMITS.maxTools} tools — delete one in Settings → Agent → My tools first.`));
   }
 
@@ -658,6 +712,7 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
   // A spec reads one view — it can't use an approved capability, so a resume skips it.
   const order = mustUse.length ? stages.filter((st) => st !== "spec") : stages;
   const ctx = { learnerId, callCapability };
+  const autoTargetValues = {};   // row-identity params declared by the hard-coded-target check (C2), filled at register
   let lastProblem = null;
   let inexpressible = false;   // the builder said what's available can't express it
   const tried = [];            // every attempt's problem, kept on a failed resume for the admin
@@ -685,6 +740,19 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
       if (built.definition.kind !== stage) built.definition.kind = stage === "spec" && built.definition.from ? "spec" : built.definition.kind;
       const v = await validateDefinition(built.definition, params, { audience, learnerId, assume: draftCap ? [draftCap] : [] });
       if (v.ok && built.definition.kind === "code") v.errors.push(...inventedDates(built.definition.source, goal, params));
+      // No hard-coded targets in a write tool: declare the row-identity
+      // param the builder reached past (default = the row THIS request
+      // named, so the card's dry run still lists exactly its rows), then
+      // send the build back with feedback naming the param to bind.
+      if (v.ok) {
+        for (const h of hardCodedTargets(built.definition, goal, params)) {
+          if (!params[h.param]) {
+            params[h.param] = { type: "string", description: `The ${h.field} of the specific row this tool acts on — named by the learner each run`, default: h.value };
+            autoTargetValues[h.param] = h.value;
+          }
+          v.errors.push(h.message);
+        }
+      }
       for (const c of mustUse) if (!v.uses.capabilities.includes(c)) v.errors.push(howToUse(c));
       if (v.errors.length) v.ok = false;
       if (!v.ok) { feedback = v.errors.slice(0, 6).join("; "); lastProblem = feedback; tried.push(`${stage}#${attempt}: ${feedback}`); continue; }
@@ -755,7 +823,10 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
     ev.capabilities = v.uses.capabilities;
     const verification = { verdict: check.verdict, at: new Date().toISOString(),
       assertions: check.assertions.map((a) => ({ name: a.name, passed: a.passed })), samples: built.samples || [] };
-    const runInput = input?.run && typeof input.run === "object" ? input.run : (built.samples || [])[0] || {};
+    // The first run answers THIS request: the agent's run values (or the
+    // builder's first sample), with any auto-declared row-identity param
+    // pinned to the row this request actually named — never a sample's row.
+    const runInput = { ...(input?.run && typeof input.run === "object" ? input.run : (built.samples || [])[0] || {}), ...autoTargetValues };
     const runNow = await tryRun(built.definition, params, runInput, ctx);
     const def = { name, label, goal, mode: stage, definition: built.definition, params_schema: params,
       capabilities: v.uses.capabilities, views: [...new Set(v.uses.views)], verification };
