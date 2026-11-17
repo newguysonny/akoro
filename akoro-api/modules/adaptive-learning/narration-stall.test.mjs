@@ -95,3 +95,15 @@ test("completion reports are not non-completion admissions", () => {
   assert.equal(admitsNonCompletion(""), false);
   assert.equal(admitsNonCompletion(null), false);
 });
+
+test("the fallback answer call carries the anti-deferral closing on every attempt", () => {
+  // The loop guard cannot reach the post-loop answer call (no tools are
+  // allowed there by design), and a deferral is not an empty reply, so
+  // the retry-only closing never fired for these shapes — live,
+  // 2026-11-18, the answer call ended a turn on "I'm checking what I
+  // can actually do before answering…". The closing therefore rides on
+  // the first attempts too (non-stream + stream + both retries = 4).
+  const chat = readFileSync(new URL("./chat.js", import.meta.url), "utf8");
+  assert.match(chat, /nothing runs after you, so do not defer/);
+  assert.equal(chat.split("[...finalMessages, answerClosing]").length - 1, 4);
+});

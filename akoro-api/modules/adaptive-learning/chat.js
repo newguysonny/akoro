@@ -6268,7 +6268,7 @@ async function agentChatHandler(req, res) {
     // DSML text (which the scrubber then removes, leaving an empty reply),
     // and on reasoning models the whole token budget can go to hidden
     // reasoning — both ended live turns on the empty-reply line (2026-11-17).
-    const answerClosing = { role: "user", content: "Write your reply to the learner now, in plain words, from the results above. Do not call any tool and do not describe tools — just answer." };
+    const answerClosing = { role: "user", content: "Write your reply to the learner now, in plain words, from the results above. Do not call any tool and do not describe tools — just answer. This is the last call of the turn and nothing runs after you, so do not defer: no promising to check, look up or run something next, and no reporting that work was not done while asking to be asked again. Give the complete answer the conversation and the results support; if something the learner asked for could not be done, say so plainly, with the reason — do not offer a later turn as the remedy." };
     const tools = turnTools;   // declared (with tool_choice "none") so the answer call's history — assistant tool calls and their results — references tools the request actually defines; sending that history with NO tools declared made the default model return empty/markup answers (live, 2026-11-17). The preflight loop above remains the only executor: "none" forbids new calls.
     let reply = "";
     let thinking = "";
@@ -6293,7 +6293,7 @@ async function agentChatHandler(req, res) {
           model: usedModel,
           temperature: 0.6,
           max_tokens: isResearch ? 2200 : 900,
-          messages: finalMessages,
+          messages: [...finalMessages, answerClosing],
           ...(tools ? { tools, tool_choice: "none" } : {}),
         });
         reply = completion.choices?.[0]?.message?.content?.trim() || "";
@@ -6328,7 +6328,7 @@ async function agentChatHandler(req, res) {
         try {
           reply = await streamChat({
             send,
-            messages: finalMessages,
+            messages: [...finalMessages, answerClosing],
             model: usedModel,
             max_tokens: isResearch ? 2200 : 900,
             tools,
