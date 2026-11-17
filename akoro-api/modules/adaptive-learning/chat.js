@@ -6182,9 +6182,15 @@ router.post("/agent", async (req, res) => {
     });
     mark("agentLoop");
     const stopped = () => Boolean(prepared.aborted) || isAborted();
-    const finalMessages = promptTailOn
-      ? [{ role: "system", content: systemStatic }, ...prepared.messages, ...(systemDynamic ? [{ role: "system", content: systemDynamic }] : [])]
-      : [{ role: "system", content: systemContent }, ...prepared.messages];
+    // Post-loop calls (the fallback answer call, the think passes) keep the
+    // SINGLE-system shape, deliberately: with the volatile context trailing
+    // the transcript, the model tried to continue the tool pattern as DSML
+    // text in the no-tools answer call and the reply scrubbed to empty —
+    // live-verified 2026-11-17, 3 of 3 fallback turns ended on the
+    // empty-reply line while the same layout answers fine inside the loop
+    // (where tools are offered). The loop's decisions — the token volume —
+    // keep the tail layout; these once-per-turn calls use the proven shape.
+    const finalMessages = [{ role: "system", content: systemContent }, ...prepared.messages];
     const tools = null;   // the preflight loop above is the only executor
     let reply = "";
     let thinking = "";
