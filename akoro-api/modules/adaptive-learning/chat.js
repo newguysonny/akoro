@@ -5771,7 +5771,10 @@ async function agentChatHandler(req, res) {
         }
         // Phase 22: keep the learner's message even if the turn crashes below.
         // Idempotent per turnId — the end-of-turn persist reuses this row.
-        await persistLearnerAgentUserTurnMessage({ conversationId, userId: req.user.id, sessionId: agentSessionId(conversationId), turnId, userMessage }).catch(() => {});
+        // A tap continuation has no learner message to keep (its cue is an
+        // internal event) — saving it would write a prompt the learner
+        // never sent into their chat (Matt, 2026-11-17).
+        if (!isContinuation) await persistLearnerAgentUserTurnMessage({ conversationId, userId: req.user.id, sessionId: agentSessionId(conversationId), turnId, userMessage }).catch(() => {});
       } catch (durableError) {
         console.error("[/chat/agent] durable context unavailable — continuing with basic transcript:", durableError.message);
         durable = false;

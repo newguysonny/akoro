@@ -95,7 +95,8 @@ export async function proposeWrite({ learnerId, conversationId = null, tool, wri
 export async function proposePermission({ learnerId, conversationId = null, capability, proposed, toolId = null, changes = null }) {
   const cap = CAPABILITIES[capability];
   if (!learnerGrantable(capability)) throw new Error("only an admin can allow this");
-  const args = { kind: "permission", cap: capability, proposed, ...(toolId ? { toolId } : {}) };
+  const args = { kind: "permission", cap: capability, proposed, ...(toolId ? { toolId } : {}),
+    ...(Array.isArray(changes?.refs) && changes.refs.length ? { approvedRefs: [...new Set(changes.refs.map(String))].sort() } : {}) };
   const digest = agentToolArgumentsDigest({ kind: "permission", cap: capability, goal: proposed.goal, name: proposed.name, toolId });
   const bucket = Math.floor(Date.now() / PERMISSION_TTL_MS);
   // Said to the learner: "delete your tasks (…)".
@@ -160,9 +161,10 @@ export async function getConfirmation(id, userId) {
  * the draft on. Nothing about the learner's data changes by keeping a reader;
  * a tool that can write still proposes every change on its own card.
  */
-export async function proposeBuild({ learnerId, conversationId = null, proposed, toolId, does = null, writes = false, items = [], more = 0 }) {
+export async function proposeBuild({ learnerId, conversationId = null, proposed, toolId, does = null, writes = false, items = [], more = 0, refs = [] }) {
   if (!toolId) throw new Error("a build card needs its drafted tool");
-  const args = { kind: "build", toolId, proposed };
+  const args = { kind: "build", toolId, proposed,
+    ...(Array.isArray(refs) && refs.length ? { approvedRefs: [...new Set(refs.map(String))].sort() } : {}) };
   const digest = agentToolArgumentsDigest({ kind: "build", name: proposed.name, goal: proposed.goal, toolId });
   const bucket = Math.floor(Date.now() / PERMISSION_TTL_MS);
   const preview = { title: proposed.label, action: does || "It only reads your own data.", goal: proposed.goal, writes: !!writes,
@@ -277,13 +279,33 @@ async function executeChange(row, { userId, callTool }) {
  * { confirmationId, result } / { confirmationId, blocked } / null when the
  * proposal could not be applied here (it then stays for the usual path).
  */
-async function applyRunChange(next, { userId, callTool }) {
+async function applyRunChange(next, { userId, callTool, approvedRefs = null }) {
   if (!next?.confirmationId) return null;
-  const row = await owned(next.confirmationId, userId).catch(() => null);
+  let row = await owned(next.confirmationId, userId).catch(() => null);
   if (!row) return null;
   if (row.status === "consumed") return { confirmationId: row.id, result: row.preview?.result || null, alreadyDone: true };
   if (row.status !== "pending") return null;
   const now = new Date().toISOString();
+  // Bound to the card (2026-11-17): the learner approved the items the card
+  // listed — the activation run's fresh change may NEVER exceed that set.
+  // (Live failure: a card listing one chat applied a fresh change that
+  // deleted two.) Trim the fresh refs to the approved set; if nothing the
+  // card listed remains, apply nothing and retire the proposal so it can
+  // never surface as a card of its own.
+  if (Array.isArray(approvedRefs) && approvedRefs.length) {
+    const freshRefs = Array.isArray(row.tool_arguments?.refs) ? row.tool_arguments.refs.map(String) : [];
+    const allowed = freshRefs.filter((r) => approvedRefs.includes(r));
+    if (!allowed.length) {
+      await edu().from(TABLE).update({ status: "expired", updated_at: now }).eq("id", row.id).eq("status", "pending");
+      return { confirmationId: row.id, blocked: "What the tool would change now no longer matches the change the card listed, so nothing was changed." };
+    }
+    if (allowed.length < freshRefs.length) {
+      console.warn(`[self-tooling] auto-apply trimmed to the card's listed items (${allowed.length}/${freshRefs.length}) for change ${row.id}`);
+      const { data: trimmed } = await edu().from(TABLE).update({ tool_arguments: { ...row.tool_arguments, refs: allowed }, updated_at: now })
+        .eq("id", row.id).eq("status", "pending").select("*").maybeSingle();
+      if (trimmed) row = trimmed;
+    }
+  }
   const { data: marked } = await edu().from(TABLE).update({ status: "confirmed", confirmed_at: now, updated_at: now })
     .eq("id", row.id).eq("principal_id", userId).eq("status", "pending").select("*").maybeSingle();
   if (!marked) {
@@ -323,7 +345,7 @@ async function executeBuild(row, { userId, toolDeps, callTool }) {
   const next = out?.result?.confirmation || null;
   // The card listed exactly what this run would change; the learner's
   // approval covers that change — apply it now, no second card.
-  const appliedChange = await applyRunChange(next, { userId, callTool }).catch(() => null);
+  const appliedChange = await applyRunChange(next, { userId, callTool, approvedRefs: Array.isArray(row.tool_arguments?.approvedRefs) ? row.tool_arguments.approvedRefs : null }).catch(() => null);
   const result = { status: out?.status || "failed", tool: out?.tool || null, label: out?.label || proposed.label || null,
     reason: out?.status === "created" ? null : String(out?.reason || "something went wrong").slice(0, 240),
     found: next ? (next.items || []).length : null,
@@ -370,7 +392,7 @@ async function executePermission(row, { userId, buildTool, toolDeps, callTool })
   const next = out?.result?.confirmation || null;
   // The card listed exactly what this run would change; the learner's
   // approval covers that change — apply it now, no second card.
-  const appliedChange = await applyRunChange(next, { userId, callTool }).catch(() => null);
+  const appliedChange = await applyRunChange(next, { userId, callTool, approvedRefs: Array.isArray(row.tool_arguments?.approvedRefs) ? row.tool_arguments.approvedRefs : null }).catch(() => null);
   const result = { granted: true, status: out?.status || "failed", tool: out?.tool || null, label: out?.label || proposed.label || null,
     reason: out?.status === "created" ? null : String(out?.reason || "something went wrong").slice(0, 240),
     found: next ? (next.items || []).length : null,

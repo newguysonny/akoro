@@ -712,7 +712,8 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
   /** Save the built tool switched OFF and ask the learner on a card, showing what it would change right now. */
   async function draftAndAsk({ def, runNow }) {
     if (!runNow.ok) return finish("rejected", reject(`Built, but it couldn't run: ${runNow.error}`));
-    const changes = { items: (runNow.write?.targets || []).map((t) => t.label), more: runNow.write?.more || 0 };
+    const changes = { items: (runNow.write?.targets || []).map((t) => t.label), more: runNow.write?.more || 0,
+      refs: (runNow.write?.targets || []).map((t) => String(t.ref)) };
     if (dry) {
       await finish("dry", {});
       return { status: "needs_permission", dryRun: true, tool: name, label, wouldChange: changes.items,
@@ -738,6 +739,7 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
     const items = runNow.ok ? (runNow.write ? (runNow.write.targets || []).map((t) => t.label)
       : rowsText(runNow.rows || []).split("\n").map((s) => s.replace(/^• /, ""))) : [];
     const card = await proposeBuild({ learnerId, conversationId, toolId: row.id,
+      refs: runNow.write ? (runNow.write.targets || []).map((t) => String(t.ref)) : [],
       proposed: { name, label, goal, run: input?.run && typeof input.run === "object" ? input.run : {} },
       does: runNow.write ? "It can change your data — only ever after you confirm each change on a card." : "It only reads your own data.",
       writes: !!runNow.write, items, more: runNow.write?.more || 0 });
