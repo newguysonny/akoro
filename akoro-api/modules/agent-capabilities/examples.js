@@ -72,6 +72,7 @@ export const TOOL_EXAMPLES = Object.freeze({
   schedule_chat_follow_up: e("plans", "Message me in 30 minutes to check I started.", "Remind me here at 5pm."),
   list_scheduled_chat_follow_ups: e("plans", "What check-ins are scheduled?"),
   cancel_scheduled_chat_follow_up: e("plans", "Cancel tomorrow's reminder."),
+  send_email_to_me: e("plans", "Email me this summary.", "Send that plan to my email."),
   suggest_help: e("proactive", "(the agent opens a new chat with an idea it noticed in passing)"),
   list_my_proposals: e("proactive", "What have you suggested?"),
 

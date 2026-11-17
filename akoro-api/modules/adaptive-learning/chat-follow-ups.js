@@ -306,29 +306,10 @@ export async function deliverChatFollowUp(followUpId) {
   catch (e) { console.warn("[chat-follow-ups] next in series not scheduled:", e?.message || e); }
 
   const link = appLink(`tab=agent&sessionId=${encodeURIComponent(followUp.chat_session_id)}`);
-  // Optional email channel (learner-approved request): also deliver the check-in
-  // by email when the learner allows email and hasn't turned reminder emails off.
-  // Best-effort — a lookup or SMTP failure never blocks the in-app delivery or
-  // the chat message that was already written above.
-  let email = null;
-  try {
-    const [{ data: user }, { data: prefs }] = await Promise.all([
-      db.from("users").select("email, full_name, username").eq("id", followUp.user_id).maybeSingle(),
-      db.from("user_notification_preferences").select("email_enabled, notify_agent_reminders").eq("user_id", followUp.user_id).maybeSingle(),
-    ]);
-    if (user?.email && prefs?.email_enabled !== false && prefs?.notify_agent_reminders !== false) {
-      email = {
-        to: user.email,
-        name: user.full_name || user.username || undefined,
-        subject: followUp.title || "Your Akoro check-in",
-        heading: followUp.title || "Your check-in",
-        body: followUp.message,
-        ctaUrl: link,
-        ctaLabel: "Open in Akoro",
-      };
-    }
-  } catch { /* email is optional; the in-app delivery is the durable path */ }
-
+  // No automatic email for reminders (Matt, 2026-11-17): an email per
+  // delivered follow-up costs too much at volume. Delivery is the chat
+  // message above + this in-app notification; email happens only when the
+  // agent deliberately calls the send_email_to_me tool.
   await notifyUser({
     userId: followUp.user_id,
     type: "agent_follow_up",
@@ -336,7 +317,6 @@ export async function deliverChatFollowUp(followUpId) {
     content: followUp.message,
     relatedId: followUp.chat_session_id,
     link,
-    email,
   });
   try {
     global.io?.to(`user:${followUp.user_id}`).emit("chat_follow_up_ready", {

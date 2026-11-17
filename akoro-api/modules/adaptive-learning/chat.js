@@ -99,6 +99,7 @@ import {
   listChatFollowUps,
   scheduleChatFollowUp,
 } from "./chat-follow-ups.js";
+import { sendNotificationEmail } from "../auth/emails.js";
 import {
   getLearnerAutonomy,
   scheduleAutonomyReviewForTask,
@@ -428,6 +429,18 @@ export const CHAT_TOOLS = [
         followUpId: { type: "string", description: "The followUpId returned by list_scheduled_chat_follow_ups or schedule_chat_follow_up." },
       },
       required: ["followUpId"],
+    },
+  },
+  {
+    name: "send_email_to_me",
+    description: "Send an email to the learner's OWN account email address (the one on their Akoro account - you cannot choose or change the recipient). Use ONLY when the learner explicitly asks to be emailed something: 'email me this summary', 'send that to my email', 'mail me my plan'. Write the full content yourself in body - the email must stand on its own outside the chat. Never send email on your own initiative, and never use this as a reminder channel: scheduled follow-ups and agent task notifications do NOT email automatically. If the account has no email address or email is turned off in their notification settings, the tool returns an error - relay it plainly.",
+    input_schema: {
+      type: "object",
+      properties: {
+        subject: { type: "string", description: "The email subject line (maximum 120 characters)." },
+        body: { type: "string", description: "The full email body in plain text - everything the learner asked to receive, written to stand alone (maximum 4000 characters)." },
+      },
+      required: ["subject", "body"],
     },
   },
   {
@@ -1552,7 +1565,7 @@ async function resolveLearnerSchoolContext(studentId) {
  * flag the scratchpad, and by the agent console's DRY mode, which answers
  * these with what they WOULD do instead of doing it (lib/dryRunContext.js).
  */
-export const SIDE_EFFECT_TOOLS = ["set_agent_auto_reply", "create_task", "suggest_help", "schedule_chat_follow_up", "post_to_chat", "create_tool", "save_computation", "cancel_scheduled_chat_follow_up", "submit_tool_request", "submit_bug_report", "prepare_activity", "revise_activity_draft",
+export const SIDE_EFFECT_TOOLS = ["set_agent_auto_reply", "create_task", "suggest_help", "schedule_chat_follow_up", "post_to_chat", "send_email_to_me", "create_tool", "save_computation", "cancel_scheduled_chat_follow_up", "submit_tool_request", "submit_bug_report", "prepare_activity", "revise_activity_draft",
           "create_goal", "update_goal_progress", "save_blog_draft", "publish_blog", "update_agent_network_settings", "block_agent", "log_past_question_practice",
           "challenge_agent", "class_battle", "post_challenge_request", "accept_challenge_request", "cancel_challenge_request", "rematch_battle", "request_guide_review", "message_agent", "reply_to_agent", "start_study_prep_session", "cancel_study_prep_session",
           "consult_peer_agents", "discard_activity_draft", "schedule_activity_routine", "cancel_activity_routine", "run_teaching_tool"];
@@ -2661,6 +2674,32 @@ async function runChatTool(name, input, studentId, { conversationId = null, role
         return await cancelChatFollowUp({ userId: studentId, followUpId: input.followUpId });
       } catch (error) {
         return { error: error.message || "Could not cancel the chat follow-up" };
+      }
+    }
+    case "send_email_to_me": {
+      const subject = String(input?.subject || "").trim();
+      const body = String(input?.body || "").trim();
+      if (!subject) return clarify("subject", "What should the email's subject be?", { action: "send_email_to_me" });
+      if (!body) return clarify("body", "What should the email say?", { action: "send_email_to_me" });
+      try {
+        const [{ data: user }, { data: prefs }] = await Promise.all([
+          db.from("users").select("email, full_name, username").eq("id", studentId).maybeSingle(),
+          db.from("user_notification_preferences").select("email_enabled").eq("user_id", studentId).maybeSingle(),
+        ]);
+        if (!user?.email) return { error: "There's no email address on this account, so an email can't be sent." };
+        if (prefs?.email_enabled === false) return { error: "Email is turned off in this account's notification settings, so the email wasn't sent." };
+        await sendNotificationEmail({
+          to: user.email,
+          name: user.full_name || user.username || undefined,
+          subject: subject.slice(0, 120),
+          heading: subject.slice(0, 120),
+          body: body.slice(0, 4000),
+          ctaUrl: appLink("tab=agent"),
+          ctaLabel: "Open in Akoro",
+        });
+        return { sent: true, to: user.email };
+      } catch (error) {
+        return { error: error.message || "Could not send the email" };
       }
     }
     case "list_tasks":

@@ -37,7 +37,7 @@ export const AREA_KEYWORDS = Object.freeze({
   profile: ["school", "class", "teacher", "teachers", "my level", "year group", "subjects does", "subjects offered"],
   progress: ["progress", "weak", "rank", "ranking", "xp", "score", "scores", "overview", "knowledge map", "past question", "past-question", "concept tracker", "insights", "how am i doing", "how did i do", "study time", "due for review"],
   teaching: ["teach", "explain", "study prep", "study plan", "study-plan", "exam in", "waec", "jamb", "guide review", "learn"],
-  plans: ["task", "tasks", "todo", "to-do", "goal", "goals", "remind", "reminder", "follow up", "follow-up", "schedule", "check-in", "check in"],
+  plans: ["task", "tasks", "todo", "to-do", "goal", "goals", "remind", "reminder", "follow up", "follow-up", "schedule", "check-in", "check in", "email", "mail"],
   files: ["library", "notes", "note", "file", "files", "document", "documents", "material", "materials", "past paper", "past papers", "folder", "upload"],
   uploads: ["uploaded", "attach", "attached", "attachment", "extraction", "extract", "filing", "filed"],
   chats: ["chat", "chats", "conversation", "we said", "remember", "memory", "discussed"],
