@@ -4,7 +4,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
-import { looksLikeStepNarration, planHasOpenSteps } from "./narration-stall.js";
+import { looksLikeStepNarration, containsDeferral, admitsNonCompletion, planHasOpenSteps } from "./narration-stall.js";
 
 test("tonight's stall lines are recognised as step narration, not answers", () => {
   assert.equal(looksLikeStepNarration("Checking which Akoro capability can delete a chat, so the tool is drafted against the real action rather than a lookalike."), true);
@@ -45,10 +45,10 @@ test("an unfinished plan in the turn's own ledger means work is owed", () => {
 
 test("the loop wires the guard: one-shot, streamed turns only, kill switch, narration kept as activity", () => {
   const src = readFileSync(new URL("./chat.js", import.meta.url), "utf8");
-  assert.match(src, /import \{ looksLikeStepNarration, planHasOpenSteps \} from "\.\/narration-stall\.js";/);
+  assert.match(src, /import \{ looksLikeStepNarration, containsDeferral, admitsNonCompletion, planHasOpenSteps \} from "\.\/narration-stall\.js";/);
   assert.match(src, /narrationContinuationUsed = false/);
   assert.match(src, /process\.env\.AKORO_NARRATION_CONTINUATION !== "false"/);
-  assert.match(src, /const owesWork = planHasOpenSteps\(ledgerNow\) \|\| \(executions\.length === 0 && looksLikeStepNarration\(content\)\);/);
+  assert.match(src, /const owesWork = planHasOpenSteps\(ledgerNow\) \|\| \(executions\.length === 0 && \(looksLikeStepNarration\(content\) \|\| containsDeferral\(content\) \|\| admitsNonCompletion\(content\)\)\);/);
   assert.match(src, /The sentence must ride in the SAME reply as the tool call it describes/);
 });
 
@@ -59,4 +59,39 @@ test("re- prefixed gerunds also read as step narration (live miss, 2026-11-17)",
   assert.equal(looksLikeStepNarration("Re-running the check now."), true);
   assert.equal(looksLikeStepNarration("Rechecking your chat list."), true);
   assert.equal(looksLikeStepNarration("I'm rebuilding it as a contains-match version."), true);
+});
+
+test("a deferral clause anywhere in the reply is a stall shape (live miss, 2026-11-18)", () => {
+  // The exact sentence that ended the t15f turn with zero tool calls:
+  // a claim first, the promise trailing — the start-anchored lead missed it.
+  assert.equal(containsDeferral("I don't have a delete-chat tool in my set, and nothing in this conversation shows an earlier empty-phrase run — let me check what Akoro actually supports before I answer."), true);
+  assert.equal(containsDeferral("I'll check the capability first, then rebuild it."), true);
+  assert.equal(containsDeferral("One moment — pulling up your tools."), true);
+});
+
+test("deferral detection leaves genuine answers and questions alone", () => {
+  assert.equal(containsDeferral("Your earliest chat is Computer Studies — Software, from 7 October."), false);
+  assert.equal(containsDeferral("Done — the chat is deleted and 3 remain."), false);
+  assert.equal(containsDeferral("Should I check your progress first?"), false);
+  assert.equal(containsDeferral("Let me know which chat you mean and I'll delete it."), false);
+  assert.equal(containsDeferral("The results are in — let me know if you need anything else."), false);
+  assert.equal(containsDeferral(""), false);
+  assert.equal(containsDeferral(null), false);
+});
+
+test("a reply that admits the work wasn't done is a stall shape at any length (live miss, 2026-11-18)", () => {
+  assert.equal(admitsNonCompletion("Nothing was rebuilt and nothing ran in this turn, so I have no result to report — and I won't make one up."), true);
+  assert.equal(admitsNonCompletion("Say the word and I'll actually do it — rebuild, then the omitted-title run — and report each result exactly as it comes back."), true);
+  assert.equal(admitsNonCompletion("I haven't run it yet."), true);
+  // The same words AFTER real executions are an honest outcome report —
+  // the pure helper still recognises the shape; the loop is what gates
+  // it on executions.length === 0.
+  assert.equal(admitsNonCompletion("Nothing was deleted: the phrase matched no chats."), true);
+});
+
+test("completion reports are not non-completion admissions", () => {
+  assert.equal(admitsNonCompletion("Done — rebuilt the tool and ran it: nothing matched, so nothing changed."), false);
+  assert.equal(admitsNonCompletion("Your earliest chat is Civic Education — Rule of law."), false);
+  assert.equal(admitsNonCompletion(""), false);
+  assert.equal(admitsNonCompletion(null), false);
 });
