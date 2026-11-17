@@ -26,7 +26,7 @@ curl -s $B/suites | jq
 ### Sandbox
 
 When production has `VERIFY_SANDBOX_ENABLED=true`, runs are forwarded to the
-sandbox gate (`https://akoro-sandbox.onrender.com`, same code, its own
+sandbox gate (`https://sandbox.akoro.ng`, same code, its own
 database); responses carry `"via":"sandbox"` and `target: "sandbox"`. Check
 where runs go and the sandbox's build with
 `curl -s $B/scenarios | jq '.data | {runsGoTo, sandbox}'` — wait for
