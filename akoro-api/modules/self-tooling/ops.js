@@ -33,6 +33,12 @@ export function withinMs(v) {
 }
 
 const num = (v) => (v == null || v === "" ? null : Number(v));
+// A text-search needle: blank (empty, whitespace-only, or missing) is
+// never a real search — "".includes matches every row, so a tool run
+// with no phrase would act on the learner's whole list (live,
+// 2026-11-17: a rebuilt contains-tool's first run proposed the current
+// chat on a card). Blank needle → no match, in matches() below.
+const needleOf = (value) => (value == null ? "" : String(value).trim().toLowerCase());
 const cmp = (a, b) => {
   if (a == null && b == null) return 0;
   if (a == null) return 1;
@@ -54,8 +60,8 @@ export function matches(row, { field, op, value }) {
     case "gt": return v != null && cmp(v, value) > 0;
     case "gte": return v != null && cmp(v, value) >= 0;
     case "in": return Array.isArray(value) && value.some((x) => (typeof x === "string" && typeof v === "string" ? x.toLowerCase() === v.toLowerCase() : x == v)); // eslint-disable-line eqeqeq
-    case "contains": return v != null && String(v).toLowerCase().includes(String(value).toLowerCase());
-    case "startsWith": return v != null && String(v).toLowerCase().startsWith(String(value).toLowerCase());
+    case "contains": { const n = needleOf(value); return n !== "" && v != null && String(v).toLowerCase().includes(n); }
+    case "startsWith": { const n = needleOf(value); return n !== "" && v != null && String(v).toLowerCase().startsWith(n); }
     case "isNull": return v == null;
     case "notNull": return v != null;
     case "within": { const ms = withinMs(value); return ms != null && v != null && Date.parse(v) >= Date.now() - ms; }
