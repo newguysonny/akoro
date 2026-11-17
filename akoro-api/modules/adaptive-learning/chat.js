@@ -24,6 +24,7 @@ import { materialsFrom, collectMaterials } from "./chat-materials.js";
 import { renderRelevantMemory } from "./chat-memory.js";
 import { ensureNotTaughtOpener, promisedTeachTopic, scrubInternalIds, stripDsmlMarkup, hasDsmlMarkup, stripToolCallMarkup, hasToolCallMarkup } from "./reply-scrub.js";
 import { recurringTopics } from "../materials/structureCore.js";
+import { looksLikeStepNarration, planHasOpenSteps } from "./narration-stall.js";
 import { resolveMaterialsFolder } from "../materials/studySource.js";
 import { akoroMaterialFor } from "../materials/akoroMaterial.js";
 import { gatherPassages, extractCitations } from "../records/askLib.js";
@@ -1607,7 +1608,7 @@ const BUILTIN_TOOL_NAMES = new Set([...CHAT_TOOLS, ...INSTRUCTOR_TOOLS].map((t) 
  *  the golden-pinned static doctrine) and dropped when the kill switch is
  *  off, so the prompt never promises what the loop won't do. */
 export const PARALLEL_READS_NOTE = "\n\n## Gathering what you need\nWhen your answer needs several independent lookups (progress, goals, tasks, sessions, weak topics, the Library), ask for them all in ONE reply — put every independent read in the same response instead of one per turn. They run together, and you answer sooner with fewer steps. Call one at a time only when a later call needs an earlier call's result, or when a call changes something: changes always go one by one, in order.";
-export const STEP_NARRATION_NOTE = "\n\n## Narrating your work\nKeep the learner informed while you work, in your own words. With every reply that calls tools, include one short sentence saying what you are doing and why — as you start the step, not after the whole job is done. When a step's results come back and you go on to another step, first say in one short sentence what that step found or changed. If a step fails, say that in one short sentence too, with what you are doing about it — never let a step pass in silence. These lines appear between your steps in the chat, so keep each to a single plain sentence, specific to what is actually happening (name the thing you are checking, drafting or changing). Do not narrate a step you are not taking, do not repeat a line you already said, and keep your final answer as the summary of the outcome — it does not need to repeat the step lines.";
+export const STEP_NARRATION_NOTE = "\n\n## Narrating your work\nKeep the learner informed while you work, in your own words. With every reply that calls tools, include one short sentence saying what you are doing and why — as you start the step, not after the whole job is done. When a step's results come back and you go on to another step, first say in one short sentence what that step found or changed. If a step fails, say that in one short sentence too, with what you are doing about it — never let a step pass in silence. These lines appear between your steps in the chat, so keep each to a single plain sentence, specific to what is actually happening (name the thing you are checking, drafting or changing). Do not narrate a step you are not taking, do not repeat a line you already said, and keep your final answer as the summary of the outcome — it does not need to repeat the step lines. The sentence must ride in the SAME reply as the tool call it describes: a reply with no tool call ends your turn, so never send the sentence on its own.";
 
 /** A read helper that throws reaches the model as {error} naming what failed,
  *  not the loop's generic "could not be completed". */
@@ -5067,6 +5068,8 @@ async function runAgentToolLoop({ systemContent, messages, studentId, conversati
   // After a Library search, a reader tool or the past papers, the agent says what it found
   // before its next step (2026-10-19); if it goes straight on to a tool, this line is said.
   let owedLine = null;
+  // One continuation per turn for a step narration that lost its tool call.
+  let narrationContinuationUsed = false;
   for (let iteration = 0; iteration < CHAT_TOOL_LOOP_MAX_ITERATIONS; iteration += 1) {
     // Stop pressed between steps: end here, before spending another call.
     if (isAborted()) return { messages: transcript, toolExecutions: executions, ledger: ledgerNow, aborted: true };
@@ -5141,6 +5144,26 @@ async function runAgentToolLoop({ systemContent, messages, studentId, conversati
     }
     const content = typeof assistant.content === "string" ? assistant.content.trim() : "";
     if (!calls.length) {
+      // A step narration that lost its tool call is not an answer
+      // (2026-11-17): the model sometimes sends the one-sentence step line
+      // alone, and accepting it would end the turn on a promise, recorded
+      // as a success. When the turn still owes work — its own plan has
+      // open steps, or nothing has run yet and the text only announces a
+      // step — keep the line as the activity block it is, steer once, and
+      // let the model actually take the step. A second text-only reply is
+      // accepted unconditionally, so a genuine answer costs at most one
+      // extra decision. Kill switch: AKORO_NARRATION_CONTINUATION=false.
+      const owesWork = planHasOpenSteps(ledgerNow) || (executions.length === 0 && looksLikeStepNarration(content));
+      if (!narrationContinuationUsed && streamText && !think && !lastChance
+        && iteration <= CHAT_TOOL_LOOP_MAX_ITERATIONS - 3
+        && process.env.AKORO_NARRATION_CONTINUATION !== "false" && owesWork) {
+        narrationContinuationUsed = true;
+        if (liveId) trace.activityEnd(liveId, content);
+        else if (content) trace?.activity(content);
+        transcript.push(assistant);
+        transcript.push({ role: "system", content: "Loop note (not from the learner): your last reply described a step but called no tool, and a reply with no tool call ends the turn — the step has NOT happened. If the step is still needed, call the tool now, with its one-sentence narration in the same reply. If you have genuinely finished, give the complete final answer instead; do not repeat the step line." });
+        continue;
+      }
       // A decision that calls no tool IS the answer: what already streamed
       // becomes the reply (promoted out of the trace), so no second model
       // call is paid for. Research mode still regenerates on its own model.
