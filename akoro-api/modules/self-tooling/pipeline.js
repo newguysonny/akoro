@@ -158,7 +158,8 @@ export function hardCodedTargets(def, goal, params = {}) {
         message: `the definition hard-codes the specific row it acts on (${field} = "${v}") — a saved tool must take that row from the $${param} param instead, so it works for any row the learner names: filter ${field} by "$${param}", never the literal` });
     }
   };
-  const scanWhere = (where) => { for (const w of [].concat(where || [])) if (w && typeof w === "object") consider(String(w.field || ""), w.value); };
+  const boundIdentity = new Set();
+  const scanWhere = (where) => { for (const w of [].concat(where || [])) if (w && typeof w === "object") { consider(String(w.field || ""), w.value); if (IDENTITY_FIELDS.has(String(w.field || "")) && typeof w.value === "string" && w.value.startsWith("$")) boundIdentity.add(w.value.slice(1)); } };
   // A param DEFAULT that names the row from this request bakes the target
   // into the saved tool just as surely as a hard-coded filter literal:
   // every later run that omits the param (or, before the coerceInput fix,
@@ -171,7 +172,18 @@ export function hardCodedTargets(def, goal, params = {}) {
   const scanDefaults = () => {
     for (const [k, p] of Object.entries(props)) {
       const d = p?.default;
-      if (typeof d !== "string" || d.trim().length < 6 || !inGoal(d)) continue;
+      if (typeof d !== "string" || !d.trim()) continue;
+      // Flagged when the default names the goal's row, OR whenever the
+      // param feeds an identity-field filter on the write path — there
+      // the default IS a target selector, and it may have leaked from
+      // sample data rather than the goal text (the builder's samples are
+      // the learner's real rows), so the goal check alone misses it.
+      // Identity params only: a default on a condition param (status,
+      // kind) names a class of rows, not a specific row — the same
+      // distinction the literal scan makes.
+      const identityish = boundIdentity.has(k) || IDENTITY_FIELDS.has(k);
+      if (!identityish) continue;
+      if (!((d.trim().length >= 6 && inGoal(d)) || boundIdentity.has(k))) continue;
       const key = `${k}:${d}`;
       if (seen.has(key)) continue;
       seen.add(key);
@@ -869,21 +881,24 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
     // builder's first sample), with any auto-declared row-identity param
     // pinned to the row this request actually named — never a sample's row.
     const runInput = { ...(input?.run && typeof input.run === "object" ? input.run : (built.samples || [])[0] || {}), ...autoTargetValues };
-    const runNow = await tryRun(built.definition, params, runInput, ctx);
-    const def = { name, label, goal, mode: stage, definition: built.definition, params_schema: params,
-      capabilities: v.uses.capabilities, views: [...new Set(v.uses.views)], verification };
-    // Strip baked targets from the SAVED schema: a param default that names
-    // this request's row (flagged by hardCodedTargets) must not persist —
-    // later runs would inherit it as their target. This build's own runs
-    // already happened above (runNow) or ride the explicit run pin on the
-    // card, so nothing about this request changes.
+    // Strip baked targets BEFORE the first run, not only from the saved
+    // schema: a param default that names a specific row (flagged by
+    // hardCodedTargets) must not steer this build's own first run either.
+    // The request's row, when it named one, arrives via runInput /
+    // autoTargetValues — never via a default. (Live, 2026-11-18: a
+    // rebuild whose request named no row still staged a delete card for
+    // the chat its title default pointed at, because runNow ran with the
+    // original params.)
     const bakedDefaults = hardCodedTargets(built.definition, goal, params).filter((h) => h.paramDefault);
+    let runParams = params;
     if (bakedDefaults.length) {
-      const clean = JSON.parse(JSON.stringify(params || {}));
-      const cleanProps = clean?.properties && typeof clean.properties === "object" ? clean.properties : clean;
-      for (const h of bakedDefaults) if (cleanProps[h.param]) delete cleanProps[h.param].default;
-      def.params_schema = clean;
+      runParams = JSON.parse(JSON.stringify(params || {}));
+      const rp = runParams?.properties && typeof runParams.properties === "object" ? runParams.properties : runParams;
+      for (const h of bakedDefaults) if (rp[h.param]) delete rp[h.param].default;
     }
+    const runNow = await tryRun(built.definition, runParams, runInput, ctx);
+    const def = { name, label, goal, mode: stage, definition: built.definition, params_schema: runParams,
+      capabilities: v.uses.capabilities, views: [...new Set(v.uses.views)], verification };
     // One taxonomy: the area is derived from the main read, never chosen.
     Object.assign(def, deriveToolArea(def));
     if (draftCap) return draftAndAsk({ def, runNow });

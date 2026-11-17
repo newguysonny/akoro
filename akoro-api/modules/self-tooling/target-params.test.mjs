@@ -93,19 +93,43 @@ test("flags a write recipe whose param default names the goal's row", () => {
   assert.equal(out[0].value, "Civic Education — Rule of law");
 });
 
-test("no default flag when the default is not in the goal (an ordinary fallback)", () => {
+test("no default flag for a default on an unrelated param (not identity, not in the goal)", () => {
   const def = recipeWrite([{ field: "title", op: "contains", value: "$title" }]);
-  const out = hardCodedTargets(def, GOAL, { title: { type: "string", default: "Untitled" } });
+  const out = hardCodedTargets(def, GOAL, { title: { type: "string" }, reason: { type: "string", default: "spring cleaning" } });
   assert.deepEqual(out, []);
 });
 
-test("no default flag for short or non-string defaults", () => {
+test("an identity-bound param's default flags even when short — on a write path it is a target selector", () => {
   const def = recipeWrite([{ field: "title", op: "contains", value: "$title" }]);
-  assert.deepEqual(hardCodedTargets(def, "delete my Law chat", { title: { type: "string", default: "Law" } }), []);
+  const out = hardCodedTargets(def, "delete my Law chat", { title: { type: "string", default: "Law" } });
+  assert.equal(out.length, 1);
+  assert.equal(out[0].paramDefault, true);
+});
+
+test("no default flag for non-string defaults", () => {
+  const def = recipeWrite([{ field: "title", op: "contains", value: "$title" }]);
   assert.deepEqual(hardCodedTargets(def, GOAL, { n: { type: "number", default: 30 } }), []);
 });
 
 test("no default flag on a READ definition", () => {
   const read = { kind: "recipe", steps: [{ id: "a", view: "my_chats", where: [{ field: "title", op: "contains", value: "$title" }] }], then: [{ op: "from", ref: "a" }] };
   assert.deepEqual(hardCodedTargets(read, GOAL, { title: { type: "string", default: "Civic Education — Rule of law" } }), []);
+});
+
+test("flags an identity-bound param default even when the goal never names it (sample-data leak)", () => {
+  // The builder's samples are the learner's real rows, so a default can
+  // name a row the request never mentioned. Live, 2026-11-18: a rebuild
+  // whose request named no row still staged a delete card for the chat
+  // its title default pointed at.
+  const def = recipeWrite([{ field: "title", op: "contains", value: "$title" }]);
+  const out = hardCodedTargets(def, "rebuild my chat delete tool with the same behaviour", { title: { type: "string", default: "Stage 3 API proof" } });
+  assert.equal(out.length, 1);
+  assert.equal(out[0].paramDefault, true);
+  assert.equal(out[0].param, "title");
+});
+
+test("no flag for a default on a param not bound to an identity filter and not in the goal", () => {
+  const def = recipeWrite([{ field: "status", op: "eq", value: "$status" }]);
+  const out = hardCodedTargets(def, "delete my archived chats", { status: { type: "string", default: "archived" } });
+  assert.deepEqual(out, []);
 });
