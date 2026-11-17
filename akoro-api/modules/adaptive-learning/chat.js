@@ -6197,7 +6197,7 @@ router.post("/agent", async (req, res) => {
     // and on reasoning models the whole token budget can go to hidden
     // reasoning — both ended live turns on the empty-reply line (2026-11-17).
     const answerClosing = { role: "user", content: "Write your reply to the learner now, in plain words, from the results above. Do not call any tool and do not describe tools — just answer." };
-    const tools = null;   // the preflight loop above is the only executor
+    const tools = turnTools;   // declared (with tool_choice "none") so the answer call's history — assistant tool calls and their results — references tools the request actually defines; sending that history with NO tools declared made the default model return empty/markup answers (live, 2026-11-17). The preflight loop above remains the only executor: "none" forbids new calls.
     let reply = "";
     let thinking = "";
     let usedModel = OPENAI_MODEL;
