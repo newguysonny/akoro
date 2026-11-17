@@ -4,6 +4,7 @@ import { BRAND, RED, GREEN, GOLD, SUBJECTS, SUBJECT_COLORS, PRIORITY_CONFIG, STU
 import { useWallet } from '../hooks/useWallet.js';
 import { API, apiGet, apiPost, apiPatch } from '../services/api.js';
 import { listRecords, setRecordProgress as setRecordProgressApi } from '../services/recordsApi.js';
+import { useLocalList, useSentinel, pagedStatusText } from '../lib/usePagedList.js';
 import RecordTeachSession from '../components/library/RecordTeachSession.jsx';
 import { useLang } from '../contexts/LanguageContext.jsx';
 import { useCart } from '../contexts/CartContext.jsx';
@@ -243,6 +244,10 @@ export default function LearnerDashboard() {
   });
   const [decayAlerts,  setDecayAlerts]  = useState([]);
   const [agentSessions, setAgentSessions] = useState([]);
+  /* Agent sessions page in from the server 10 at a time (scroll-to-
+     fetch-more); the ref holds the cursor between fetches. */
+  const [agentSessionsTotal, setAgentSessionsTotal] = useState(0);
+  const agentSessionsPageRef = useRef({ cursor: null, done: true, loading: false });
   const [userProfile,  setUserProfile]  = useState(null);
   // Phones: the profile photo opens the account drawer; tablet/desktop keep going straight to Settings.
   const [drawer, setDrawer] = useState(false);
@@ -625,11 +630,34 @@ export default function LearnerDashboard() {
   // Reload the persisted agent sessions — called on mount and whenever a
   // teaching/decay session closes so a new session shows up immediately.
   const loadAgentSessions = useCallback(() => {
-    apiGet("/api/adaptive/teaching/sessions")
-      .then(d=>{ setAgentSessions(d.sessions || []); })
+    apiGet("/api/adaptive/teaching/sessions?limit=10")
+      .then(d=>{
+        setAgentSessions(d.sessions || []);
+        setAgentSessionsTotal(typeof d.total === "number" ? d.total : (d.sessions || []).length);
+        agentSessionsPageRef.current = { cursor: d.nextCursor || null, done: !d.nextCursor, loading: false };
+      })
       // An empty Sessions tab and a failing Sessions fetch looked identical
       // before this — say which one it is.
       .catch(e=>{ console.warn("[sessions] load failed:", e?.message || e); });
+  },[]);
+
+  /* The agent sessions next page (10). Value-based cursor: sessions
+     updated above it never shift the pages. */
+  const loadMoreAgentSessions = useCallback(async () => {
+    const st = agentSessionsPageRef.current;
+    if (st.loading || st.done || !st.cursor) return;
+    st.loading = true;
+    try {
+      const d = await apiGet(`/api/adaptive/teaching/sessions?limit=10&cursor=${encodeURIComponent(st.cursor)}`);
+      st.cursor = d.nextCursor || null;
+      st.done = !d.nextCursor;
+      if (typeof d.total === "number") setAgentSessionsTotal(d.total);
+      setAgentSessions((prev) => {
+        const seen = new Set(prev.map((s) => s.id));
+        return [...prev, ...(d.sessions || []).filter((s) => !seen.has(s.id))];
+      });
+    } catch { /* keep what's shown — the sentinel can retry */ }
+    st.loading = false;
   },[]);
 
   // WebSocket — live class alerts + challenge notifications + decay alerts
@@ -786,6 +814,9 @@ export default function LearnerDashboard() {
   const filtered  = sessionTab==="all"   ? bySubject
                   : sessionTab==="live"  ? liveBase.filter(s=>liveMatch(s, liveSubTab))
                   : bySubject.filter(s=>s.type==="agent");
+  /* The composed sessions list is fetched whole (live + agent merged and
+     bucket-sorted server-side) — it reveals 10 at a time locally. */
+  const sessionsLocal = useLocalList(filtered, 10, `${sessionTab}|${liveSubTab}|${subjectFilter}|${liveSubjectFilter}`);
 
   // Agent sub-tab data
   // Prefer the richer /teaching/sessions data; fall back to the agent-type
@@ -795,6 +826,18 @@ export default function LearnerDashboard() {
   const agentSessionsFiltered = agentSubjectFilter==="all"
     ? agentSessionsBase
     : agentSessionsBase.filter(s=>s.subject===agentSubjectFilter);
+  /* Agent sessions reveal 10 at a time; when the reveal runs out and the
+     server still has pages, the same sentinel fetches the next 10. */
+  const [agentShown, setAgentShown] = useState(10);
+  useEffect(() => { setAgentShown(10); }, [agentSubjectFilter, agentSubTab, sessionTab]);
+  const agentVisible = agentSessionsFiltered.slice(0, agentShown);
+  const agentHasMoreServer = agentSessions.length > 0 && agentSessionsTotal > agentSessions.length;
+  const agentHasMore = agentShown < agentSessionsFiltered.length || agentHasMoreServer;
+  const onAgentSentinel = useCallback(() => {
+    if (agentShown < agentSessionsFiltered.length) setAgentShown((s) => s + 10);
+    else loadMoreAgentSessions();
+  }, [agentShown, agentSessionsFiltered.length, loadMoreAgentSessions]);
+  const agentSentinelRef = useSentinel(onAgentSentinel, sessionTab==="agent" && agentSubTab==="sessions" && agentHasMore);
   const agentRevisions = agentSubjectFilter==="all"
     ? decayAlerts
     : decayAlerts.filter(a=>a.subject===agentSubjectFilter);
@@ -1115,12 +1158,19 @@ export default function LearnerDashboard() {
                         :t('sessions.not_found')}
                     </p>
                   </div>
-                  :filtered.map(s=>(
-                    <SessionCard key={s.id} session={s}
-                      onTap={openSessionTracked}
-                      decayAlert={decayBySession[s.id]||null}
-                      agentProfile={agentProfile}/>
-                  ))
+                  :(<>
+                    {sessionsLocal.visible.map(s=>(
+                      <SessionCard key={s.id} session={s}
+                        onTap={openSessionTracked}
+                        decayAlert={decayBySession[s.id]||null}
+                        agentProfile={agentProfile}/>
+                    ))}
+                    {sessionsLocal.total > 10 && (
+                      <div ref={sessionsLocal.sentinelRef} style={{ textAlign:"center",fontSize:12,fontWeight:700,color:"var(--ak-text-muted)",padding:"14px 0 6px" }}>
+                        {pagedStatusText({ shown: sessionsLocal.shown, total: sessionsLocal.total, hasMore: sessionsLocal.hasMore })}
+                      </div>
+                    )}
+                  </>)
               )}
 
               {/* ── Agent sub-tabs: Sessions | Revisions ── */}
@@ -1129,7 +1179,7 @@ export default function LearnerDashboard() {
                   {/* Sub-tab bar */}
                   <div style={{ display:"flex",borderBottom:"1px solid var(--ak-border)",background:"var(--ak-surface)",flexShrink:0 }}>
                     {[
-                      {key:"sessions", label:t('sessions.sessions'), icon:"ti-book", count:agentSessionsFiltered.length},
+                      {key:"sessions", label:t('sessions.sessions'), icon:"ti-book", count:(agentSubjectFilter==="all" && agentSessions.length) ? Math.max(agentSessionsTotal, agentSessionsFiltered.length) : agentSessionsFiltered.length},
                       {key:"selfstudy", label:"Self study", icon:"ti-book-2", count:selfStudyCount},
                       {key:"revisions", label:t('sessions.revisions'), icon:"ti-refresh", count:agentRevisions.length},
                     ].map(({key,label,icon,count})=>{
@@ -1181,12 +1231,21 @@ export default function LearnerDashboard() {
                         <p style={{ fontSize:15,fontWeight:800,color:"var(--ak-text-muted)" }}>{t('sessions.empty')}</p>
                         <p style={{ fontSize:12,color:"#D1D5DB",textAlign:"center" }}>{t('sessions.empty_hint')}</p>
                       </div>
-                      :agentSessionsFiltered.map(s=>(
-                        <SessionCard key={s.id} session={s}
-                          onTap={openSessionTracked}
-                          decayAlert={decayBySession[s.id]||null}
-                          agentProfile={agentProfile}/>
-                      ))
+                      :(<>
+                        {agentVisible.map(s=>(
+                          <SessionCard key={s.id} session={s}
+                            onTap={openSessionTracked}
+                            decayAlert={decayBySession[s.id]||null}
+                            agentProfile={agentProfile}/>
+                        ))}
+                        {(agentSessionsFiltered.length > 10 || agentHasMoreServer) && (
+                          <div ref={agentSentinelRef} style={{ textAlign:"center",fontSize:12,fontWeight:700,color:"var(--ak-text-muted)",padding:"14px 0 6px" }}>
+                            {(agentSubjectFilter==="all" && agentSessions.length)
+                              ? pagedStatusText({ shown: Math.min(agentShown, agentSessionsFiltered.length), total: Math.max(agentSessionsTotal, agentSessionsFiltered.length), hasMore: agentHasMore })
+                              : (agentHasMore ? "Scroll for more" : `All ${agentSessionsFiltered.length} shown`)}
+                          </div>
+                        )}
+                      </>)
                   )}
                   {/* Self study sub-tab — teacher-assigned topics */}
                   {agentSubTab==="selfstudy"&&(

@@ -25,6 +25,14 @@ export async function listRecords() {
   return d?.data ?? [];
 }
 
+/** One page of my shelf (scroll-to-fetch-more): { records, total, nextCursor }. */
+export async function listRecordsPage({ limit = 12, cursor } = {}) {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (cursor) params.set('cursor', cursor);
+  const d = await apiGet(`/api/records?${params}`);
+  return d?.data ?? { records: [], total: 0, nextCursor: null };
+}
+
 /** The Contents/Materials discovery feed — everyone's uploads and pasted
  *  notes (Premium subscribers' stay private). Metadata only: no fileUrl
  *  rides the list; call discoverRecordOpen() when a card is tapped. */
@@ -38,6 +46,15 @@ export async function discoverRecords({ q, limit } = {}) {
   const qs = params.toString();
   const d = await apiGet(`/api/records/discover${qs ? `?${qs}` : ''}`);
   return d?.data ?? [];
+}
+
+/** One page of the Discover feed: { items, total, nextCursor }. */
+export async function discoverRecordsPage({ q, limit = 12, cursor } = {}) {
+  const params = new URLSearchParams({ paged: '1', limit: String(limit) });
+  if (q && String(q).trim()) params.set('q', String(q).trim());
+  if (cursor) params.set('cursor', cursor);
+  const d = await apiGet(`/api/records/discover?${params}`);
+  return d?.data ?? { items: [], total: 0, nextCursor: null };
 }
 
 /** Open one discovered record — presigns its file (with download name),
@@ -99,6 +116,14 @@ export async function listFolders() {
   return d?.data ?? [];
 }
 
+/** One page of my folders: { folders, total, nextCursor }. */
+export async function listFoldersPage({ limit = 20, cursor } = {}) {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (cursor) params.set('cursor', cursor);
+  const d = await apiGet(`/api/records/folders?${params}`);
+  return d?.data ?? { folders: [], total: 0, nextCursor: null };
+}
+
 /** Step 1 of a cover upload — same endpoint, folder-cover purpose. */
 export async function presignFolderCoverUpload({ name, mime, size }) {
   const d = await apiPost('/api/records/upload-url', { name, mime, size, purpose: 'folder-cover' });
@@ -127,6 +152,14 @@ export async function deleteFolder(id) {
 export async function listFolderItems(folderId) {
   const d = await apiGet(`/api/records/folders/${folderId}/items`);
   return d?.data ?? [];
+}
+
+/** One page of a folder's items: { items, total, nextCursor }. */
+export async function listFolderItemsPage(folderId, { limit = 20, cursor } = {}) {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (cursor) params.set('cursor', cursor);
+  const d = await apiGet(`/api/records/folders/${folderId}/items?${params}`);
+  return d?.data ?? { items: [], total: 0, nextCursor: null };
 }
 
 /** Add one thing to N folders (the Add-to-folder page multi-selects).

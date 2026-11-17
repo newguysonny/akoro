@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { fetchMyLibrary } from '../services/libraryApi.js';
-import { listRecords, listFolders, setRecordProgress, touchRecordOpened, searchRecords, renameRecord, deleteRecord } from '../services/recordsApi.js';
+import { listRecords, listRecordsPage, listFolders, listFoldersPage, setRecordProgress, touchRecordOpened, searchRecords, renameRecord, deleteRecord } from '../services/recordsApi.js';
+import { useLocalList, useSentinel, pagedStatusText } from '../lib/usePagedList.js';
 import { Icon, XIcon } from '../components/common/Icons.jsx';
 import { BRAND, RED, GREEN, GOLD, STUDENT_ID } from '../constants.js';
 import { useLang } from '../contexts/LanguageContext.jsx';
@@ -325,17 +326,24 @@ export default function LibraryPage() {
   const [q, setQ]                   = useState('');
   const [qResults, setQResults]     = useState(null);   // null = not searching
   const [qBusy, setQBusy]           = useState(false);
+  /* Search pages by growing the limit in 12s (the endpoint re-runs the
+     ranked search; a short page means the results are exhausted). */
+  const [qLimit, setQLimit]         = useState(12);
+  const qResultsRef                 = useRef(null);
+  qResultsRef.current = qResults;
   useEffect(() => {
     const query = q.trim();
     if (!query) { setQResults(null); setQBusy(false); return; }
-    setQBusy(true);
+    if (qResultsRef.current === null) setQBusy(true);
     const id = setTimeout(async () => {
-      const results = await searchRecords(query, 20);
+      const results = await searchRecords(query, qLimit);
       setQResults(results);
       setQBusy(false);
     }, 350);
     return () => clearTimeout(id);
-  }, [q]);
+  }, [q, qLimit]);
+  const qHasMore = qResults !== null && qResults.length >= qLimit && qLimit < 96;
+  const qSentinelRef = useSentinel(() => { if (qHasMore) setQLimit((l) => Math.min(l + 12, 96)); }, qHasMore);
 
   // ── Add a record — the + in the header ────────────────────────────────────
   // Every learner (school and higher-ed alike) adds material from the shelf
@@ -366,32 +374,94 @@ export default function LibraryPage() {
     return () => clearTimeout(id);
   }, [toast]);
 
+  /* Records and folders page in from the server (12 / 20 at a time);
+     `records`/`folders` hold the accumulated pages, the refs hold the
+     cursor state, and the totals drive the "Showing N of M" footers. */
+  const [recordsTotal, setRecordsTotal] = useState(0);
+  const [foldersTotal, setFoldersTotal] = useState(0);
+  const recordsPageRef = useRef({ cursor: null, done: true, loading: false });
+  const foldersPageRef = useRef({ cursor: null, done: true, loading: false });
+
+  const loadMoreRecords = useCallback(async () => {
+    const st = recordsPageRef.current;
+    if (st.loading || st.done) return;
+    st.loading = true;
+    try {
+      const page = await listRecordsPage({ limit: 12, cursor: st.cursor });
+      st.cursor = page.nextCursor || null;
+      st.done = !page.nextCursor;
+      if (typeof page.total === 'number') setRecordsTotal(page.total);
+      setRecords((rs) => {
+        const seen = new Set(rs.map((r) => r.id));
+        return [...rs, ...(page.records || []).filter((r) => !seen.has(r.id))];
+      });
+    } catch { /* keep what's shown — the sentinel can retry */ }
+    st.loading = false;
+  }, []);
+
+  const loadMoreFolders = useCallback(async () => {
+    const st = foldersPageRef.current;
+    if (st.loading || st.done) return;
+    st.loading = true;
+    try {
+      const page = await listFoldersPage({ limit: 20, cursor: st.cursor });
+      st.cursor = page.nextCursor || null;
+      st.done = !page.nextCursor;
+      if (typeof page.total === 'number') setFoldersTotal(page.total);
+      setFolders((fs) => {
+        const seen = new Set(fs.map((f) => f.id));
+        return [...fs, ...(page.folders || []).filter((f) => !seen.has(f.id))];
+      });
+    } catch { /* keep what's shown */ }
+    st.loading = false;
+  }, []);
+
+  /* A wholesale folder replacement (add-to-folder refresh) — the full
+     list becomes the state and paging stops. */
+  const replaceFolders = useCallback((flds) => {
+    setFolders(flds || []);
+    setFoldersTotal((flds || []).length);
+    foldersPageRef.current = { cursor: null, done: true, loading: false };
+  }, []);
+
   const load = useCallback(async () => {
     try {
       // The shelf is three feeds now: the school/higher-ed library, the
-      // learner's own records, and their folders. One failing shouldn't
-      // blank the others.
-      const [lib, recs, flds, gone] = await Promise.all([
+      // learner's own records (first page), and their folders (first
+      // page). One failing shouldn't blank the others.
+      const [lib, recPage, fldPage, gone] = await Promise.all([
         fetchMyLibrary().catch(() => []),
-        listRecords().catch(() => []),
-        listFolders().catch(() => []),
+        listRecordsPage({ limit: 12 }).catch(() => ({ records: [], total: 0, nextCursor: null })),
+        listFoldersPage({ limit: 20 }).catch(() => ({ folders: [], total: 0, nextCursor: null })),
         listDeleted().catch(() => []),
       ]);
       setItems(lib);
-      setRecords(recs);
-      setFolders(flds);
+      setRecords(recPage.records || []);
+      setRecordsTotal(recPage.total || 0);
+      recordsPageRef.current = { cursor: recPage.nextCursor || null, done: !recPage.nextCursor, loading: false };
+      setFolders(fldPage.folders || []);
+      setFoldersTotal(fldPage.total || 0);
+      foldersPageRef.current = { cursor: fldPage.nextCursor || null, done: !fldPage.nextCursor, loading: false };
       setDeletedCount(gone.length);
       // Deep link (Discover search results): /library?folder=<id> opens
       // that folder full-screen once the shelf lands.
       const folderParam = searchParams.get('folder');
       if (folderParam) {
-        const target = (flds || []).find((f) => `${f.id}` === `${folderParam}`);
+        let target = (fldPage.folders || []).find((f) => `${f.id}` === `${folderParam}`);
+        if (!target) {
+          const all = await listFolders().catch(() => []);
+          target = (all || []).find((f) => `${f.id}` === `${folderParam}`);
+        }
         if (target) setFolderPage(target);
       }
       // Deep link (Agent Chat materials): /library?record=<id> opens that record.
       const recordParam = searchParams.get('record');
       if (recordParam) {
-        const target = (recs || []).find((r) => `${r.id}` === `${recordParam}`);
+        let target = (recPage.records || []).find((r) => `${r.id}` === `${recordParam}`);
+        if (!target) {
+          const all = await listRecords().catch(() => []);
+          target = (all || []).find((r) => `${r.id}` === `${recordParam}`);
+        }
         const tool = searchParams.get('tool');
         if (target && READER_TOOLS.has(tool)) setViewerTool(tool);
         const artifactParam = searchParams.get('artifact');
@@ -450,10 +520,13 @@ export default function LibraryPage() {
 
   /* Items stored inside a folder open back onto the surface they came
      from: records re-enter their teach session, links navigate. */
-  const openFolderItem = (it) => {
+  const openFolderItem = async (it) => {
     if (!it) return;
     if (it.itemType === 'record') {
-      const r = records.find((x) => String(x.id) === String(it.itemRef));
+      let r = records.find((x) => String(x.id) === String(it.itemRef));
+      if (!r) {
+        try { r = ((await listRecords()) || []).find((x) => String(x.id) === String(it.itemRef)) || null; } catch { /* offline */ }
+      }
       if (r) { setFolderPage(null); openRecord(r); }
       else setToast('That record is no longer on your shelf');
       return;
@@ -558,6 +631,18 @@ export default function LibraryPage() {
       : items.filter(a => a.kind === filter);
   const activeLabel = KINDS.find(k => k.key === filter)?.label || 'Library';
 
+  /* Paging (scroll-to-fetch-more): the records-bearing tabs ride the
+     server cursor; the kind tabs (courses / guides / blogs — bounded
+     personal lists fetched whole) reveal 12 at a time locally. */
+  const recordsTab = filter === 'all' || filter === 'records';
+  const kindLocal = useLocalList(recordsTab ? [] : displayed, 12, filter);
+  const visibleDisplayed = recordsTab ? displayed : kindLocal.visible;
+  const recordsSentinelRef = useSentinel(loadMoreRecords, recordsTab && recordsTotal > records.length);
+  const foldersSentinelRef = useSentinel(loadMoreFolders, foldersTotal > folders.length);
+  const listShown = recordsTab ? displayed.length : kindLocal.shown;
+  const listTotal = recordsTab ? (filter === 'records' ? recordsTotal : items.length + recordsTotal) : kindLocal.total;
+  const listHasMore = recordsTab ? recordsTotal > records.length : kindLocal.hasMore;
+
   const isMobile = useIsMobileView();
 
   const TAB = (active) => ({
@@ -618,7 +703,7 @@ export default function LibraryPage() {
             <div>
               <p style={{ fontSize: 16, fontWeight: 900, color: 'var(--ak-text)', margin: 0 }}>Library</p>
               <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--ak-text-muted)', margin: 0 }}>
-                {items.length + records.length > 0 ? `${items.length + records.length} saved` : 'Your shelf is empty'}
+                {items.length + recordsTotal > 0 ? `${items.length + recordsTotal} saved` : 'Your shelf is empty'}
               </p>
             </div>
           </div>
@@ -641,7 +726,7 @@ export default function LibraryPage() {
           </span>
           <input
             value={q}
-            onChange={(e) => setQ(e.target.value)}
+            onChange={(e) => { setQ(e.target.value); setQLimit(12); }}
             placeholder="Search inside your records…"
             aria-label="Search your library"
             style={{ width: '100%', boxSizing: 'border-box', padding: '9px 34px 9px 33px', borderRadius: 100,
@@ -663,7 +748,12 @@ export default function LibraryPage() {
             Add-to-library sheet; opening one (adding items) comes next. */}
         {!loading && (folders.length > 0 || deletedCount > 0) && (
           <div style={{ marginBottom: 16 }}>
-            <p style={{ fontSize: 11.5, fontWeight: 800, color: 'var(--ak-text-muted)', margin: '0 0 8px', letterSpacing: .3 }}>FOLDERS</p>
+            <p style={{ fontSize: 11.5, fontWeight: 800, color: 'var(--ak-text-muted)', margin: '0 0 8px', letterSpacing: .3 }}>
+              FOLDERS
+              {foldersTotal > 20 && (
+                <span style={{ letterSpacing: 0, fontWeight: 700 }}> · {pagedStatusText({ shown: folders.length, total: foldersTotal, hasMore: foldersTotal > folders.length })}</span>
+              )}
+            </p>
             <div style={{ display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 4, scrollbarWidth: 'none' }}>
               {folders.map(f => (
                 <button key={f.id} onClick={() => setFolderPage(f)}
@@ -683,6 +773,7 @@ export default function LibraryPage() {
                   </div>
                 </button>
               ))}
+              {foldersTotal > folders.length && <div ref={foldersSentinelRef} style={{ flex: '0 0 2px' }} />}
               {deletedCount > 0 && (
                 <button type="button" data-recently-deleted-tile="" onClick={() => setDeletedOpen(true)} title="Recently deleted"
                   style={{ flex: '0 0 128px', borderRadius: 14, overflow: 'hidden', border: '1px solid var(--ak-border)', background: 'var(--ak-surface)', cursor: 'pointer', textAlign: 'left', padding: 0, fontFamily: "'Nunito',sans-serif" }}>
@@ -702,7 +793,7 @@ export default function LibraryPage() {
         )}
         {qResults !== null ? (
           /* SEARCH RESULTS — chunk hits, best match first. */
-          qBusy ? (
+          (qBusy && qResults.length === 0) ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {[1,2,3].map(i => <div key={i} style={{ height: 70, borderRadius: 14, background: 'var(--ak-border)', opacity: .4 }} />)}
             </div>
@@ -744,13 +835,18 @@ export default function LibraryPage() {
                   );
                 })}
               </div>
+              {qResults.length >= 12 && (
+                <div ref={qSentinelRef} style={{ textAlign: 'center', fontSize: 12, fontWeight: 700, color: 'var(--ak-text-muted)', padding: '12px 0 4px' }}>
+                  {qBusy ? 'Fetching more…' : qHasMore ? `Showing ${qResults.length} — scroll for more` : `All ${qResults.length} shown`}
+                </div>
+              )}
             </>
           )
         ) : loading ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {[1,2,3,4].map(i => <div key={i} style={{ height: 70, borderRadius: 14, background: 'var(--ak-border)', opacity: .4 }} />)}
           </div>
-        ) : displayed.length === 0 ? (
+        ) : visibleDisplayed.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '60px 20px' }}>
             <div style={{ fontSize: 40, marginBottom: 10, color: filter === 'records' ? BRAND : getMeta(filter).color }}>
               <Icon name={filter === 'records' ? 'ti-file-text' : getMeta(filter).icon} size={40}/>
@@ -760,9 +856,17 @@ export default function LibraryPage() {
             </p>
           </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
-            {displayed.map(a => <LibraryItem key={a.id} item={a} onMore={openAddTarget} onOpen={openLibraryItem} />)}
-          </div>
+          <>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+              {visibleDisplayed.map(a => <LibraryItem key={a.id} item={a} onMore={openAddTarget} onOpen={openLibraryItem} />)}
+            </div>
+            {listTotal > 12 && (
+              <div ref={recordsTab ? recordsSentinelRef : kindLocal.sentinelRef}
+                style={{ textAlign: 'center', fontSize: 12, fontWeight: 700, color: 'var(--ak-text-muted)', padding: '14px 0 4px' }}>
+                {pagedStatusText({ shown: listShown, total: listTotal, hasMore: listHasMore })}
+              </div>
+            )}
+          </>
         )}
       </div>
 
@@ -820,7 +924,7 @@ export default function LibraryPage() {
       <CreateFolderSheet
         open={folderSheetOpen}
         onClose={() => setFolderSheetOpen(false)}
-        onCreated={(f) => { setFolders((fs) => [f, ...fs]); setToast(`Folder “${f.name}” created`); }}
+        onCreated={(f) => { setFolders((fs) => [f, ...fs]); setFoldersTotal((n) => n + 1); setToast(`Folder “${f.name}” created`); }}
       />
 
       {deletedOpen && <RecentlyDeletedPage onClose={closeDeleted} onChanged={setDeletedCount} onToast={setToast}/>}
@@ -868,7 +972,7 @@ export default function LibraryPage() {
         <AddToFolderPage
           item={addToFolder}
           onClose={() => setAddToFolder(null)}
-          onAdded={() => { listFolders().then(setFolders).catch(() => {}); }}
+          onAdded={() => { listFolders().then(replaceFolders).catch(() => {}); }}
         />
       )}
       {addToCommunity && (

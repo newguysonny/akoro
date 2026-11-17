@@ -25,7 +25,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Icon } from '../common/Icons.jsx';
 import { BRAND, RED, GREEN, GOLD, STUDENT_ID } from '../../constants.js';
-import { discoverRecords, discoverRecordOpen, listRecords } from '../../services/recordsApi.js';
+import { discoverRecordsPage, discoverRecordOpen, listRecords } from '../../services/recordsApi.js';
+import { useCursorList, pagedStatusText } from '../../lib/usePagedList.js';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 import Toast from '../common/Toast.jsx';
 import RecordTeachSession from '../library/RecordTeachSession.jsx';
@@ -160,9 +161,6 @@ function typeOf(it) {
 /* ── The feed ─────────────────────────────────────────────────── */
 export default function ContentsDiscoveryTab({ initialQuery = '' }) {
   const { t } = useLang();
-  const [items, setItems] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [loadErr, setLoadErr] = useState(false);
   const [query, setQuery] = useState(initialQuery);
   const [chip, setChip] = useState('all');        // all | video | audio | pdf | note | image
   const [expanded, setExpanded] = useState({});   // { video, audio, pdf, note, image }
@@ -171,29 +169,34 @@ export default function ContentsDiscoveryTab({ initialQuery = '' }) {
   const [toast, setToast] = useState(null);
   const [myTypes, setMyTypes] = useState(() => new Set());  // my shelf's types — the taste signal
 
-  useEffect(() => {
-    let alive = true;
-    const load = (opts) => discoverRecords(opts)
-      .then(d => { if (alive) { setItems(Array.isArray(d) ? d : []); setLoadErr(false); } })
-      .catch(() => { if (alive) setLoadErr(true); })
-      .finally(() => { if (alive) setLoading(false); });
-    load();
-    return () => { alive = false; };
-  }, []);
-
-  /* Search hits the DATABASE, not the 80-row browse feed: the debounced
-     query re-fetches /api/records/discover with ?q= (server-side ILIKE
-     across the record's name and paste text, raised cap). The client-side
-     matches() still refines on top between keystrokes. */
+  /* The feed pages in from the server, 12 at a time (scroll-to-fetch-
+     more): browse and search are separate cursor lists over the same
+     endpoint; the rails below bucket whatever has accumulated. */
+  const browse = useCursorList({
+    pageSize: 12,
+    fetchPage: async (cursor) => {
+      const page = await discoverRecordsPage({ limit: 12, cursor });
+      return { items: page.items || [], total: page.total || 0, nextCursor: page.nextCursor || null };
+    },
+  });
+  /* Search hits the DATABASE, not the browse feed: the debounced query
+     pages /api/records/discover with ?q= (server-side ILIKE across the
+     record's name and paste text). The client-side matches() still
+     refines on top between keystrokes. */
   const debouncedQ = useDebouncedValue(query.trim(), 300);
-  const searchReqRef = useRef(0);
-  useEffect(() => {
-    if (!debouncedQ) return;
-    const id = ++searchReqRef.current;
-    discoverRecords({ q: debouncedQ, limit: 100 })
-      .then(rows => { if (searchReqRef.current === id) setItems(Array.isArray(rows) ? rows : []); })
-      .catch(() => { /* keep the last good feed */ });
-  }, [debouncedQ]);
+  const searching = debouncedQ.length > 0;
+  const search = useCursorList({
+    pageSize: 12,
+    resetKey: debouncedQ,
+    fetchPage: async (cursor) => {
+      if (!debouncedQ) return { items: [], total: 0, nextCursor: null };
+      const page = await discoverRecordsPage({ q: debouncedQ, limit: 12, cursor });
+      return { items: page.items || [], total: page.total || 0, nextCursor: page.nextCursor || null };
+    },
+  });
+  const active = searching ? search : browse;
+  const items = active.items;
+  const loading = !searching && browse.loading && browse.items.length === 0;
 
   /* My own shelf's content types — the honest "for you" signal we have:
      what the learner actually studies leads the recommendations. */
@@ -342,12 +345,6 @@ export default function ContentsDiscoveryTab({ initialQuery = '' }) {
         <Rail title={t('discovery.contents_all')} accent={BRAND} count={0} loading expanded={false} onToggle={() => {}}>
           <span/>
         </Rail>
-      ) : loadErr ? (
-        <div style={{ margin: '26px 14px 0', padding: '26px 18px', borderRadius: 16, border: '1px dashed var(--ak-border2)', textAlign: 'center', background: 'var(--ak-surface)' }}>
-          <p style={{ fontSize: 12.5, fontWeight: 800, color: 'var(--ak-text-sec, #6B7280)', margin: 0 }}>
-            {t('discovery.contents_open_fail')}
-          </p>
-        </div>
       ) : items.length === 0 ? (
         <div style={{ margin: '26px 14px 0', padding: '26px 18px', borderRadius: 16, border: '1px dashed var(--ak-border2)', textAlign: 'center', background: 'var(--ak-surface)' }}>
           <p style={{ fontSize: 12.5, fontWeight: 800, color: 'var(--ak-text-sec, #6B7280)', margin: 0 }}>
@@ -403,6 +400,11 @@ export default function ContentsDiscoveryTab({ initialQuery = '' }) {
               ))}
             </Rail>
           ))}
+        {active.total > 12 && (
+          <div ref={active.sentinelRef} style={{ textAlign: 'center', fontSize: 12, fontWeight: 700, color: 'var(--ak-text-muted)', padding: '16px 0 4px' }}>
+            {pagedStatusText({ shown: items.length, total: active.total, hasMore: active.hasMore })}
+          </div>
+        )}
         </React.Fragment>
       )}
 

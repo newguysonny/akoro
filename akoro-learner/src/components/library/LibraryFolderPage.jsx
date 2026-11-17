@@ -20,7 +20,8 @@ import { Icon } from '../common/Icons.jsx';
 import Toast from '../common/Toast.jsx';
 import NowStudyingBar from '../dashboard/NowStudyingBar.jsx';
 import { useIsMobileView } from '../teaching/SessionReaderModal.jsx';
-import { renameFolder, deleteFolder, listFolderItems } from '../../services/recordsApi.js';
+import { renameFolder, deleteFolder, listFolderItemsPage } from '../../services/recordsApi.js';
+import { useCursorList, pagedStatusText } from '../../lib/usePagedList.js';
 
 /* The reference's folder gradient — same family as Pharm.D's accent art. */
 const ART_BG = `linear-gradient(160deg, ${BRAND} 0%, #2E1A6E 75%)`;
@@ -47,21 +48,22 @@ export default function LibraryFolderPage({ folder, onClose, onOpenItem, onRenam
   const [name, setName]       = useState(folder?.name || '');
   const [busy, setBusy]       = useState(false);
   const [toast, setToast]     = useState(null);
-  const [items, setItems]     = useState([]);
-  const [itemsLoaded, setItemsLoaded] = useState(false);
-
   const soon = (label) => setToast({ msg: `${label} — coming soon`, color: BRAND });
 
-  /* Items come from their own endpoint — newest first, snapshots only. */
-  useEffect(() => {
-    if (!folder?.id) return;
-    let alive = true;
-    setItemsLoaded(false);
-    listFolderItems(folder.id)
-      .then((rows) => { if (alive) { setItems(rows); setItemsLoaded(true); } })
-      .catch(() => { if (alive) { setItems([]); setItemsLoaded(true); } });
-    return () => { alive = false; };
-  }, [folder?.id]);
+  /* Items come from their own endpoint — newest first, snapshots only,
+     paged 20 at a time (scroll-to-fetch-more). */
+  const {
+    items, total: itemsTotal, done: itemsDone, hasMore: itemsHasMore, sentinelRef: itemsSentinelRef,
+  } = useCursorList({
+    pageSize: 20,
+    resetKey: folder?.id || "",
+    fetchPage: async (cursor) => {
+      if (!folder?.id) return { items: [], total: 0, nextCursor: null };
+      const page = await listFolderItemsPage(folder.id, { limit: 20, cursor });
+      return { items: page.items || [], total: page.total || 0, nextCursor: page.nextCursor || null };
+    },
+  });
+  const itemsLoaded = items.length > 0 || itemsDone;
 
   /* Escape closes the sheet (the Pharm.D pattern). */
   useEffect(() => {
@@ -76,7 +78,7 @@ export default function LibraryFolderPage({ folder, onClose, onOpenItem, onRenam
   const visibilityLabel = folder.visibility === 'public' ? 'Public' : 'Private';
   /* The API count holds the seat until the real list lands, so the
      header never flashes 0 on open. */
-  const itemCount = itemsLoaded ? items.length : (folder.itemCount || items.length);
+  const itemCount = itemsLoaded ? itemsTotal : (folder.itemCount || items.length);
 
   /* Rename — optimistic close, rolled back on failure. */
   const submitRename = async () => {
@@ -220,6 +222,11 @@ export default function LibraryFolderPage({ folder, onClose, onOpenItem, onRenam
               </button>
             );
           })}
+          {itemsTotal > 20 && (
+            <div ref={itemsSentinelRef} style={{ textAlign: 'center', fontSize: 12, fontWeight: 700, color: 'var(--ak-text-muted)', padding: '12px 0 4px' }}>
+              {pagedStatusText({ shown: items.length, total: itemsTotal, hasMore: itemsHasMore })}
+            </div>
+          )}
         </div>
 
         {/* The Now-Studying bar, pinned to the column's bottom edge —

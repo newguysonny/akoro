@@ -6,6 +6,7 @@ import { ZapIcon, BrainIcon, SparkleIcon, XIcon, Icon } from '../common/Icons.js
 import { AgentAvatar } from '../common/AgentAvatar.jsx';
 import FortizoChatComposer, { ModelSwitch } from '../common/FortizoChatComposer.jsx';
 import { chatPicker, applyModelPick, applyModePick } from '../../lib/chatModels.js';
+import { useSentinel, pagedStatusText } from '../../lib/usePagedList.js';
 
 /* One gutter for the conversation and the composer, so messages line up with the input box. */
 const CHAT_GUTTER = 16;
@@ -453,6 +454,11 @@ function AgentChatTab({
   const openAgentInbox = () => { if (innerTab !== "chat") setInnerTab("chat"); if (!running) sendMessage("What's in my agent inbox?"); };
   const [drawerOpen,    setDrawerOpen]    = useState(false);
   const [sessionsLoading, setSessionsLoading] = useState(false);
+  /* Drawer list paging (scroll-to-fetch-more, 20 at a time): the total
+     comes from the server; the cursor lives in a ref because creates and
+     deletes mutate the list between page fetches. */
+  const [sessionsTotal, setSessionsTotal] = useState(0);
+  const sessionsPageRef = useRef({ cursor: null, done: true, loading: false });
   // A failed history load must never look like an EMPTY history — that exact
   // confusion hid the persistence bug for weeks ("my chats are gone" vs "the
   // list didn't load"). { kind:"sessions" } = the past-chats list failed;
@@ -467,10 +473,13 @@ function AgentChatTab({
   const loadSessions = async () => {
     setSessionsLoading(true);
     try {
-      const d = await apiGet(`${CHAT_BASE}/sessions`);
-      setSessions(d?.sessions ?? []);
+      const d = await apiGet(`${CHAT_BASE}/sessions?limit=20`);
+      const page = d?.sessions ?? [];
+      setSessions(page);
+      setSessionsTotal(typeof d?.total === "number" ? d.total : page.length);
+      sessionsPageRef.current = { cursor: d?.nextCursor || null, done: !d?.nextCursor, loading: false };
       setHistoryError(null);
-      return d?.sessions ?? [];
+      return page;
     } catch {
       // apiGet only throws when BOTH the network and the offline cache came
       // up empty — show the banner so "couldn't load" is never mistaken for
@@ -481,6 +490,27 @@ function AgentChatTab({
     finally { setSessionsLoading(false); }
   };
 
+  /* The drawer's next page. The cursor is value-based (last_message_at,
+     id), so a chat created or deleted above it never shifts the pages. */
+  const loadMoreSessions = async () => {
+    const st = sessionsPageRef.current;
+    if (st.loading || st.done || !st.cursor) return;
+    st.loading = true;
+    try {
+      const d = await apiGet(`${CHAT_BASE}/sessions?limit=20&cursor=${encodeURIComponent(st.cursor)}`);
+      const page = d?.sessions ?? [];
+      st.cursor = d?.nextCursor || null;
+      st.done = !d?.nextCursor;
+      if (typeof d?.total === "number") setSessionsTotal(d.total);
+      setSessions((prev) => {
+        const seen = new Set(prev.map((s) => s.id));
+        return [...prev, ...page.filter((s) => !seen.has(s.id))];
+      });
+    } catch { /* keep what's shown — the sentinel can retry */ }
+    st.loading = false;
+  };
+  const sessionsSentinelRef = useSentinel(loadMoreSessions, sessionsTotal > sessions.length);
+
   // Lazily create a session on first message; concurrency-safe.
   const ensureSession = async (firstText) => {
     if (sessionIdRef.current) return sessionIdRef.current;
@@ -489,7 +519,7 @@ function AgentChatTab({
       try {
         const d = await apiPost(`${CHAT_BASE}/sessions`, { title: firstText || "" });
         const id = d?.session?.id ?? null;
-        if (id) { setSession(id); setSessions(prev => [d.session, ...prev]); }
+        if (id) { setSession(id); setSessions(prev => [d.session, ...prev]); setSessionsTotal(n => n + 1); }
         return id;
       } catch { return null; }
       finally { creatingRef.current = null; }
@@ -657,6 +687,7 @@ function AgentChatTab({
   const removeSession = async (id, e) => {
     e?.stopPropagation?.();
     setSessions(prev => prev.filter(s => s.id !== id));
+    setSessionsTotal(n => Math.max(0, n - 1));
     try { await apiDelete(`${CHAT_BASE}/sessions/${id}`); } catch { /* ignore */ }
     if (id === sessionIdRef.current) newChat();
   };
@@ -2006,6 +2037,11 @@ function AgentChatTab({
                 </div>
               );
             })}
+            {sessionsTotal > 20 && (
+              <div ref={sessionsSentinelRef} style={{ textAlign:"center",fontSize:11.5,fontWeight:700,color:"var(--ak-text-muted)",padding:"12px 0 4px" }}>
+                {pagedStatusText({ shown: sessions.length, total: sessionsTotal, hasMore: sessionsTotal > sessions.length })}
+              </div>
+            )}
           </div>
           <div style={{ borderTop:"1px solid var(--ak-border)",padding:"10px 16px",flexShrink:0 }}>
             <button type="button" role="switch" aria-checked={devView} onClick={toggleDevView}
