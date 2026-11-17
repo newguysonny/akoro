@@ -42,7 +42,14 @@ export function coerceInput(params, input = {}) {
   const out = {};
   for (const [k, p] of Object.entries(paramProps(params))) {
     let v = input?.[k];
-    if (v === undefined || v === null || v === "") v = p.default;
+    // An explicitly passed "" is a VALUE for a string param, not a missing
+    // input — honour it (a blank text filter then matches nothing; ops.js).
+    // Before this, "" silently became the param's default, so "run with an
+    // empty phrase" ran with whatever target the default named (live,
+    // 2026-11-17). Defaults fill only absent values (undefined/null), plus
+    // "" for non-string params, where "" cannot be a real value.
+    const isStringParam = p.type === "string" || p.type == null || Array.isArray(p.enum);
+    if (v === undefined || v === null || (v === "" && !isStringParam)) v = p.default;
     if (v === undefined) continue;
     if (p.type === "number" || p.type === "integer") { v = Number(v); if (!Number.isFinite(v)) throw new ToolError(`${k} must be a number`); if (p.type === "integer") v = Math.round(v); }
     else if (p.type === "boolean") v = v === true || v === "true";

@@ -159,17 +159,39 @@ export function hardCodedTargets(def, goal, params = {}) {
     }
   };
   const scanWhere = (where) => { for (const w of [].concat(where || [])) if (w && typeof w === "object") consider(String(w.field || ""), w.value); };
+  // A param DEFAULT that names the row from this request bakes the target
+  // into the saved tool just as surely as a hard-coded filter literal:
+  // every later run that omits the param (or, before the coerceInput fix,
+  // passed "") silently acts on the stale row (live, 2026-11-17: a
+  // contains-delete tool whose title default named a chat proposed that
+  // chat on a card whenever the phrase came in empty). Flagged with
+  // paramDefault — the stage loop skips these (the builder cannot edit
+  // the agent's params); register strips the default from the SAVED
+  // schema while this build's own runs keep the value via the run pin.
+  const scanDefaults = () => {
+    for (const [k, p] of Object.entries(props)) {
+      const d = p?.default;
+      if (typeof d !== "string" || d.trim().length < 6 || !inGoal(d)) continue;
+      const key = `${k}:${d}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({ param: k, field: k, value: d, paramDefault: true,
+        message: `the $${k} param's default ("${d}") names the specific row from this request — a saved tool must not carry its target as a default: whoever runs it supplies the row, and a run with no value must act on nothing` });
+    }
+  };
   if (def.kind === "recipe") {
     const writes = [].concat(def.then || []).filter((op) => op?.op === "write");
     if (writes.length) {
       for (const s of [].concat(def.steps || [])) scanWhere(s?.where);
       for (const op of [].concat(def.then || [])) if (op?.op === "filter") scanWhere(op.where);
+      scanDefaults();
     }
   } else if (def.kind === "code") {
     const hasWriteStep = [].concat(def.steps || []).some((s) => CAPABILITIES[s?.cap]?.kind === "write");
     if (hasWriteStep) {
       for (const s of [].concat(def.steps || [])) scanWhere(s?.where);
       for (const m of String(def.source || "").matchAll(/["']([^"']{6,})["']/g)) consider("title", m[1]);
+      scanDefaults();
     }
   }
   return out;
@@ -760,6 +782,7 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
       // send the build back with feedback naming the param to bind.
       if (v.ok) {
         for (const h of hardCodedTargets(built.definition, goal, params)) {
+          if (h.paramDefault) continue; // register strips it from the saved schema; the builder cannot edit params
           if (!params[h.param]) {
             params[h.param] = { type: "string", description: `The ${h.field} of the specific row this tool acts on — named by the learner each run`, default: h.value };
             autoTargetValues[h.param] = h.value;
@@ -849,6 +872,18 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
     const runNow = await tryRun(built.definition, params, runInput, ctx);
     const def = { name, label, goal, mode: stage, definition: built.definition, params_schema: params,
       capabilities: v.uses.capabilities, views: [...new Set(v.uses.views)], verification };
+    // Strip baked targets from the SAVED schema: a param default that names
+    // this request's row (flagged by hardCodedTargets) must not persist —
+    // later runs would inherit it as their target. This build's own runs
+    // already happened above (runNow) or ride the explicit run pin on the
+    // card, so nothing about this request changes.
+    const bakedDefaults = hardCodedTargets(built.definition, goal, params).filter((h) => h.paramDefault);
+    if (bakedDefaults.length) {
+      const clean = JSON.parse(JSON.stringify(params || {}));
+      const cleanProps = clean?.properties && typeof clean.properties === "object" ? clean.properties : clean;
+      for (const h of bakedDefaults) if (cleanProps[h.param]) delete cleanProps[h.param].default;
+      def.params_schema = clean;
+    }
     // One taxonomy: the area is derived from the main read, never chosen.
     Object.assign(def, deriveToolArea(def));
     if (draftCap) return draftAndAsk({ def, runNow });

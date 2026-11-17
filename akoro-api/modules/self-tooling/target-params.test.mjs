@@ -78,3 +78,34 @@ test("code without a write step is not flagged", () => {
     source: "function run(input, data, akoro) { return data.c.filter(function (r) { return r.title === 'Civic Education — Rule of law'; }); }" };
   assert.deepEqual(hardCodedTargets(def, GOAL, {}), []);
 });
+
+// --- Param defaults: a default that names the goal's row is a baked
+// target too (live, 2026-11-17: the contains-delete tool's title default
+// named a chat, so empty/absent runs proposed that chat). Flagged as
+// paramDefault — register strips it from the saved schema.
+
+test("flags a write recipe whose param default names the goal's row", () => {
+  const def = recipeWrite([{ field: "title", op: "contains", value: "$title" }]);
+  const out = hardCodedTargets(def, GOAL, { title: { type: "string", default: "Civic Education — Rule of law" } });
+  assert.equal(out.length, 1);
+  assert.equal(out[0].paramDefault, true);
+  assert.equal(out[0].param, "title");
+  assert.equal(out[0].value, "Civic Education — Rule of law");
+});
+
+test("no default flag when the default is not in the goal (an ordinary fallback)", () => {
+  const def = recipeWrite([{ field: "title", op: "contains", value: "$title" }]);
+  const out = hardCodedTargets(def, GOAL, { title: { type: "string", default: "Untitled" } });
+  assert.deepEqual(out, []);
+});
+
+test("no default flag for short or non-string defaults", () => {
+  const def = recipeWrite([{ field: "title", op: "contains", value: "$title" }]);
+  assert.deepEqual(hardCodedTargets(def, "delete my Law chat", { title: { type: "string", default: "Law" } }), []);
+  assert.deepEqual(hardCodedTargets(def, GOAL, { n: { type: "number", default: 30 } }), []);
+});
+
+test("no default flag on a READ definition", () => {
+  const read = { kind: "recipe", steps: [{ id: "a", view: "my_chats", where: [{ field: "title", op: "contains", value: "$title" }] }], then: [{ op: "from", ref: "a" }] };
+  assert.deepEqual(hardCodedTargets(read, GOAL, { title: { type: "string", default: "Civic Education — Rule of law" } }), []);
+});
