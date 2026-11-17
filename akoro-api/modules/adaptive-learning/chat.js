@@ -6188,7 +6188,7 @@ router.post("/agent", async (req, res) => {
     const tools = null;   // the preflight loop above is the only executor
     let reply = "";
     let thinking = "";
-    let usedModel = "gpt-4o-mini";
+    let usedModel = OPENAI_MODEL;
 
     if (!wantsStream) {
       // A final function-disabled call makes the model explain completed tool
@@ -6204,7 +6204,7 @@ router.post("/agent", async (req, res) => {
         try { ({ reply, thinking } = await thinkChatOnce({ messages: finalMessages, model: chatModel || OPENAI_MODEL, trace })); usedModel = chatModel || OPENAI_MODEL; } catch { /* fallback below */ }
       }
       if (!reply) {
-        usedModel = isResearch ? (chatModel || runtimeFeatureModel("research_mode") || RESEARCH_MODEL) : (chatModel || "gpt-4o-mini");
+        usedModel = isResearch ? (chatModel || runtimeFeatureModel("research_mode") || RESEARCH_MODEL) : (chatModel || OPENAI_MODEL);
         const completion = await openai.chat.completions.create({
           model: usedModel,
           temperature: 0.6,
@@ -6229,7 +6229,7 @@ router.post("/agent", async (req, res) => {
       }
       if (!reply && !stopped()) {
         if (isResearch) status("synthesis", "Writing it up…");
-        usedModel = isResearch ? (chatModel || runtimeFeatureModel("research_mode") || RESEARCH_MODEL) : (chatModel || "gpt-4o-mini");
+        usedModel = isResearch ? (chatModel || runtimeFeatureModel("research_mode") || RESEARCH_MODEL) : (chatModel || OPENAI_MODEL);
         try {
           reply = await streamChat({
             send,
@@ -6242,7 +6242,7 @@ router.post("/agent", async (req, res) => {
           });
         } catch (error) {
           if (!isResearch && !chatModel) throw error;
-          usedModel = "gpt-4o-mini";   // the chosen / research model failed — the default answers
+          usedModel = OPENAI_MODEL;   // the chosen / research model failed — the default answers
           reply = await streamChat({ send, messages: finalMessages, model: usedModel, max_tokens: 900, tools, toolChoice: "none", isAborted });
         }
       }
