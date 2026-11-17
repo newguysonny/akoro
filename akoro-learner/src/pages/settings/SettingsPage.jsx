@@ -161,7 +161,7 @@ export default function SettingsPage() {
           notif: {
             email:true,sms:false,push:true,whatsapp:false,whatsappNumber:'',
             sessionReminders:true,sessionStarted:true,sessionCancelled:true,
-            announcements:true,qaReplies:true,reminderEmails:true,
+            announcements:true,qaReplies:true,
             ...(data.notif || {}),
           },
         });
@@ -207,7 +207,7 @@ export default function SettingsPage() {
             memberId:user.id,memberSince:'—',
             notif:{ email:true,sms:false,push:true,whatsapp:false,whatsappNumber:'',
               sessionReminders:true,sessionStarted:true,sessionCancelled:true,
-              announcements:true,qaReplies:true,reminderEmails:true },
+              announcements:true,qaReplies:true },
           });
           setAgent({ name:'My Agent',emoji:'🤖',photoUrl:null,color:ORANGE,bg:'#FEF0E6',
             personality:'',studyLevel:'',yearGroup:'',examBoard:'',subjects:[],goal:'',

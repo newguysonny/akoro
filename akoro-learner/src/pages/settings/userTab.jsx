@@ -124,7 +124,6 @@ function NotifSection({ notif, setNotif, onSaveNotif }) {
         <NotifRow icon="ti-player-stop"    label={t('settings.notif_cancelled')}  sub={t('settings.notif_cancelled_sub')}        field="sessionCancelled"/>
         <NotifRow icon="ti-speakerphone"   label={t('settings.notif_announcements')}      sub={t('settings.notif_announcements_sub')}     field="announcements"/>
         <NotifRow icon="ti-message-circle" label={t('settings.notif_qa')}        sub={t('settings.notif_qa_sub')}    field="qaReplies"/>
-        <NotifRow icon="ti-mail-forward"   label="Email reminders"               sub="Also email my agent's scheduled reminders" field="reminderEmails"/>
       </Section>
     </>
   );
