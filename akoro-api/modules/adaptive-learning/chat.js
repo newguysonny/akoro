@@ -5321,6 +5321,12 @@ async function runAgentToolLoop({ systemContent, messages, studentId, conversati
       // A card the learner must act on goes out NOW, not with "done": it used to
       // appear only after the whole reply had been written (2026-11-06).
       if (executions.at(-1)?.confirm) trace?.card?.({ tool, confirm: executions.at(-1).confirm });
+      // A result can carry a FOLLOW-UP card: await_decision applying a build
+      // or permission runs the tool, and the run's own change proposal rides
+      // back as `next`. It must reach the learner too — without it the agent
+      // waits on a card nobody can see or tap, and the turn (and the client's
+      // post-reply card refetch) never settles (live, 2026-11-17).
+      if (toolResult?.next?.confirmationId) trace?.card?.({ tool, confirm: toolResult.next });
       // Phase 22: persist this step (redacted, capped) so the full path — tool,
       // real error class/message, duration, retry — survives the turn.
       await recordStep(runId, stepRow({ runId, iteration, tool, input, success: observation.success,
