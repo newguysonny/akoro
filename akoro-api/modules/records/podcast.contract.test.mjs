@@ -49,10 +49,10 @@ test("script shaping: cites map to passages, bad turns drop, the length budget c
     ],
   }, passages);
   assert.equal(out.title, "Light work");
-  assert.deepEqual(out.turns.map((t) => t.speaker), ["Host", "Host", "Guest"]);
-  assert.equal(out.turns[0].text, "Today: how plants eat light.");
+  assert.deepEqual(out.turns.map((t) => t.speaker), ["Host", "Guest"], "consecutive same-speaker turns merge into one");
+  assert.equal(out.turns[0].text, "Today: how plants eat light. Chlorophyll is picky about colour.");
   assert.deepEqual(out.turns[0].cite, { n: 1, pageNumber: 2, bbox: [10, 20, 900, 80], startMs: null, endMs: null, quote: passages[0].text });
-  assert.equal(out.turns[2].cite, null);
+  assert.equal(out.turns[1].cite, null);
   const long = shapePodcastScript({ turns: Array.from({ length: 50 }, () => ({ speaker: "Host", text: "x".repeat(500), source: 1 })) }, passages, PODCAST_LENGTHS.short);
   assert.ok(long.turns.length <= Math.ceil((PODCAST_LENGTHS.short.chars * 1.3) / 500));
   assert.equal(shapePodcastScript({}, passages).title, "Study podcast");
@@ -153,4 +153,25 @@ test("routes: made by the server, polled, never client-writable, audio deleted w
   assert.match(routes, /ownsRecordFileKey\(raw\.audioKey, userId\)/);                   // presign only own keys
   assert.match(routes, /gone\.kind === "podcast"[\s\S]{0,200}removeRecordFile\(audioKey\)/);
   assert.match(artifacts, /SERVER_MADE_KINDS = Object\.freeze\(\["podcast"\]\)/);
+});
+
+test("the script prompt shows the target voice: personas, a hook, confusion mining, a recap", () => {
+  const [system] = buildPodcastMessages({ docName: "Biology", passages, length: PODCAST_LENGTHS.medium });
+  assert.match(system.content, /curious learner/);
+  assert.match(system.content, /Open on a hook/);
+  assert.match(system.content, /confusing points/);
+  assert.match(system.content, /analogy or a concrete picture/);
+  assert.match(system.content, /End with a recap/);
+  assert.match(system.content, /coronary arteries/, "an example exchange in the target voice, on a different topic");
+});
+
+test("alternation: a Guest paragraph split in two merges; order is preserved", () => {
+  const out = shapePodcastScript({ turns: [
+    { speaker: "Host", text: "Why does the cell need a skin?", source: 1 },
+    { speaker: "Guest", text: "Part one of the answer.", source: 1 },
+    { speaker: "Guest", text: "Part two of the answer.", source: 2 },
+    { speaker: "Host", text: "And the energy?", source: 2 },
+  ] }, passages);
+  assert.deepEqual(out.turns.map((t) => t.speaker), ["Host", "Guest", "Host"]);
+  assert.equal(out.turns[1].text, "Part one of the answer. Part two of the answer.");
 });

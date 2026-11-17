@@ -68,15 +68,31 @@ export function podcastSchema() {
   };
 }
 
+/* The script prompt (Matt, 2026-11-17): the old one described the target
+ * voice ("warm and conversational") but never showed it, and the model
+ * returned narrated textbook prose — section-announcement host turns,
+ * paragraph-length guest turns, no recap. This one defines the two
+ * personas, shows an example exchange in the target voice, and requires
+ * the moves that make YouLearn's episodes work: a hook opening, the
+ * material's confusing points raised as questions, an analogy per major
+ * idea, short alternating turns, and a real recap. */
 export function buildPodcastMessages({ docName = "this document", passages = [], length = PODCAST_LENGTHS.medium, focus = "" }) {
   const words = Math.round(length.chars / 6);
   const system = [
-    `You write a short study podcast about the document "${clip(docName, 160)}" for a learner.`,
-    "Two voices: Host (guides, asks) and Guest (explains clearly, with an analogy or example now and then).",
-    "Warm and conversational, never filler: open with what the episode covers, walk through the key ideas in order, end with a quick recap of what to remember.",
-    `About ${words} words in total (roughly ${length.minutes} minutes spoken). Turns of 1-4 sentences; alternate speakers.`,
+    `You write a short study podcast about the document "${clip(docName, 160)}" for a learner — a real conversation, not a lecture read aloud.`,
+    "The two voices: the HOST is a curious learner who has skimmed this material and thinks aloud — asking the questions a student would actually ask, including the confused ones ('Wait, are they saying…?', 'But isn't that just…?'). The GUEST is a teacher who answers plainly, with an analogy or a concrete picture for every major idea.",
+    "Open on a hook: the most surprising fact, the strangest claim, or a question the material raises — never 'Welcome, today we walk through…'.",
+    "Hunt through the material for its confusing points — odd units, exceptions, claims that sound wrong, things learners commonly misunderstand — and let the Host raise them as questions; the Guest resolves each one. That is where the learning happens.",
+    "Keep turns SHORT: 1-3 sentences each, and alternate strictly — Host, Guest, Host. No monologues and no section announcements ('Now let's turn to…'); the Host's next genuine question is the transition.",
+    "End with a recap: the Host asks what to remember, the Guest gives the 3-4 things that matter most in one turn, then one warm closing line from the Host.",
+    `About ${words} words in total (roughly ${length.minutes} minutes spoken).`,
     "Use ONLY the numbered passages below — never invent facts. Every turn names the passage it draws on as `source` (the opening and recap name the passage they summarise).",
     "Write for the ear: no markdown, no lists, no symbols read aloud, no page numbers. Use the passages' language.",
+    "The voice to aim for (a different topic — style only, never copy its content):",
+    "Host: 'Wait — if the heart is just a pump, why does it have its own blood supply? Isn't it full of blood already?'",
+    "Guest: 'It is, but that blood is passing through, not stopping for a meal. Think of a water park: the slides are full of water, but the café still needs its own tap.'",
+    "Host: 'Okay, that actually makes sense. So the coronary arteries are the tap?'",
+    "Guest: 'Exactly. And when that tap gets blocked, the muscle downstream starves — that is a heart attack.'",
     focus ? `Concentrate on: ${clip(focus, TOOL_LIMITS.MAX_FOCUS_CHARS)}.` : "",
     "",
     "Passages:",
@@ -103,7 +119,18 @@ export function shapePodcastScript(json, passages, length = PODCAST_LENGTHS.medi
     turns.push({ speaker: t?.speaker === "Guest" ? "Guest" : "Host", text, cite: p ? citeOf(p) : null });
     chars += text.length;
   }
-  return { title: clip(json?.title || "", 140) || "Study podcast", turns };
+  // Strict alternation: the model still runs two same-speaker turns together
+  // (a Guest paragraph split in two was the common case) — merge them into
+  // one turn rather than dropping content.
+  const merged = [];
+  for (const t of turns) {
+    const prev = merged[merged.length - 1];
+    if (prev && prev.speaker === t.speaker) {
+      prev.text = clip(`${prev.text} ${t.text}`, PODCAST_LIMITS.MAX_TURN_CHARS);
+      if (!prev.cite && t.cite) prev.cite = t.cite;
+    } else merged.push({ ...t });
+  }
+  return { title: clip(json?.title || "", 140) || "Study podcast", turns: merged };
 }
 
 /** Run `fn` over items with at most `limit` in flight, results in order. */
