@@ -1607,6 +1607,7 @@ const BUILTIN_TOOL_NAMES = new Set([...CHAT_TOOLS, ...INSTRUCTOR_TOOLS].map((t) 
  *  the golden-pinned static doctrine) and dropped when the kill switch is
  *  off, so the prompt never promises what the loop won't do. */
 export const PARALLEL_READS_NOTE = "\n\n## Gathering what you need\nWhen your answer needs several independent lookups (progress, goals, tasks, sessions, weak topics, the Library), ask for them all in ONE reply — put every independent read in the same response instead of one per turn. They run together, and you answer sooner with fewer steps. Call one at a time only when a later call needs an earlier call's result, or when a call changes something: changes always go one by one, in order.";
+export const STEP_NARRATION_NOTE = "\n\n## Narrating your work\nKeep the learner informed while you work, in your own words. With every reply that calls tools, include one short sentence saying what you are doing and why — as you start the step, not after the whole job is done. When a step's results come back and you go on to another step, first say in one short sentence what that step found or changed. These lines appear between your steps in the chat, so keep each to a single plain sentence, specific to what is actually happening (name the thing you are checking, drafting or changing). Do not narrate a step you are not taking, do not repeat a line you already said, and keep your final answer as the summary of the outcome — it does not need to repeat the step lines.";
 
 /** A read helper that throws reaches the model as {error} naming what failed,
  *  not the loop's generic "could not be completed". */
@@ -4762,7 +4763,7 @@ function safeMemoryUpdates(message) {
  * finds them by (session, turn, role) and enriches instead of duplicating.
  * Returns the assistant message id, or null when the write failed.
  */
-async function appendFastChatTurn({ conversationId, userId, sessionId, turnId, userMessage, assistantMessage }) {
+async function appendFastChatTurn({ conversationId, userId, sessionId, turnId, userMessage, assistantMessage, agentOnly = false }) {
   const { data: session, error: sessionError } = await db.from("chat_sessions")
     .select("id, title").eq("id", conversationId).eq("user_id", userId).maybeSingle();
   if (sessionError || !session) return null;
@@ -4781,26 +4782,26 @@ async function appendFastChatTurn({ conversationId, userId, sessionId, turnId, u
     return null;
   };
   const now = Date.now();
-  const userIdRow = await ensure("user", userMessage, new Date(now).toISOString());
+  const userIdRow = agentOnly ? null : await ensure("user", userMessage, new Date(now).toISOString());
   const assistantId = await ensure("agent", assistantMessage, new Date(now + 1).toISOString());
   const patch = { last_message_at: new Date().toISOString(), updated_at: new Date().toISOString() };
-  if (!session.title || session.title === "New chat") patch.title = sessionTitleFrom(userMessage);
+  if (!agentOnly && (!session.title || session.title === "New chat")) patch.title = sessionTitleFrom(userMessage);
   try { await db.from("chat_sessions").update(patch).eq("id", conversationId).eq("user_id", userId); } catch { /* best effort */ }
-  return userIdRow && assistantId ? assistantId : null;
+  return agentOnly ? assistantId : (userIdRow && assistantId ? assistantId : null);
 }
 
-async function appendBasicChatTurn({ conversationId, userId, userMessage, assistantMessage }) {
+async function appendBasicChatTurn({ conversationId, userId, userMessage, assistantMessage, agentOnly = false }) {
   const { data: session, error: sessionError } = await db.from("chat_sessions")
     .select("id, title").eq("id", conversationId).eq("user_id", userId).maybeSingle();
   if (sessionError || !session) throw new Error("Agent Chat session was not found");
   const now = new Date().toISOString();
   const { data: inserted, error } = await db.from("chat_messages").insert([
-    { session_id: conversationId, user_id: userId, role: "user", text: userMessage },
+    ...(agentOnly ? [] : [{ session_id: conversationId, user_id: userId, role: "user", text: userMessage }]),
     { session_id: conversationId, user_id: userId, role: "agent", text: assistantMessage },
   ]).select("id, role");
   if (error) throw error;
   const patch = { last_message_at: now, updated_at: now };
-  if (!session.title || session.title === "New chat") patch.title = sessionTitleFrom(userMessage);
+  if (!agentOnly && (!session.title || session.title === "New chat")) patch.title = sessionTitleFrom(userMessage);
   const { error: updateError } = await db.from("chat_sessions").update(patch).eq("id", conversationId).eq("user_id", userId);
   if (updateError) throw updateError;
   return { assistantMessageId: (inserted || []).find((row) => row.role === "agent")?.id ?? null };
@@ -5235,6 +5236,17 @@ async function runAgentToolLoop({ systemContent, messages, studentId, conversati
           toolResult = { ...toolResult, sayFirst: "Before your next step, tell the learner in one short sentence what this found." };
         }
       }
+      // Step narration (Matt, 2026-11-17): after EVERY step, not just the
+      // Library/past-paper pair above, the agent tells the learner in its
+      // own words what the step did or found before going on — the line
+      // streams as an activity block between the steps, so the learner is
+      // never left watching silent tool rows until one final wall of text.
+      // Failed steps carry their recovery steer instead.
+      if (process.env.AKORO_STEP_NARRATION !== "false"
+        && toolResult && typeof toolResult === "object" && !Array.isArray(toolResult)
+        && !toolResult.sayFirst && !toolFailed(toolResult)) {
+        toolResult = { ...toolResult, sayFirst: "Before your next step, tell the learner in one short sentence what this step did or found, in your own words." };
+      }
       // Structured observation: the tool's real backend outcome becomes the
       // model's next input, so the reply confirms facts, not intent.
       // create_tool built a tool: offer it for the rest of this turn.
@@ -5635,6 +5647,11 @@ async function agentChatHandler(req, res) {
   const isAborted = () => Boolean(stopEntry?.stop);
   // Developer view (opt-in from the app): raw tool I/O on the live stream only.
   const trace = createChatTrace({ send: wantsStream ? send : null, developer: req.body?.developer === true });
+  // A tap continuation resumes the SAME flow (scheduleDecisionContinuation):
+  // its body text is an internal event cue for the model only — no user
+  // message is saved for it, so the chat gains only the agent's outcome
+  // narration under the card (Matt, 2026-11-17).
+  const isContinuation = req.internalContinuation === true;
 
   try {
     const {
@@ -5981,7 +5998,8 @@ async function agentChatHandler(req, res) {
       durableMemory: durable,
       currentTimeContext: promptTailOn ? "" : CURRENT_TIME_CONTEXT,
     })) +
-      (process.env.AKORO_PARALLEL_READS !== "false" ? PARALLEL_READS_NOTE : "");
+      (process.env.AKORO_PARALLEL_READS !== "false" ? PARALLEL_READS_NOTE : "")
+      + (process.env.AKORO_STEP_NARRATION !== "false" ? STEP_NARRATION_NOTE : "");
     const systemDynamic = (promptTailOn ? CURRENT_TIME_CONTEXT : "") +
       (conversation?.summary ? `\n\n## Compact conversation summary\n${conversation.summary}` : "") +
       renderRelevantMemory(relevantMemories) +
@@ -6369,7 +6387,7 @@ async function agentChatHandler(req, res) {
       try {
         fastSavedId = await timed("fastSave", appendFastChatTurn({
           conversationId, userId: req.user.id, sessionId: agentSessionId(conversationId), turnId,
-          userMessage, assistantMessage: reply,
+          userMessage, assistantMessage: reply, agentOnly: isContinuation,
         }));
       } catch (e) { console.warn("[/chat/agent] fast save failed:", e?.message || e); }
     }
@@ -6395,9 +6413,10 @@ async function agentChatHandler(req, res) {
             turnId,
             userMessage,
             assistantMessage: reply,
-            summary: compactAgentSummary(conversation?.summary, userMessage, reply),
-            scratchpad: nextLedger(ledgerIn, prepared.ledger || null, userMessage, prepared.toolExecutions),
-            memories: safeMemoryUpdates(userMessage),
+            agentOnly: isContinuation,
+            summary: compactAgentSummary(conversation?.summary, isContinuation ? "The learner tapped Allow on the pending card." : userMessage, reply),
+            scratchpad: nextLedger(ledgerIn, prepared.ledger || null, isContinuation ? "The learner tapped Allow on the pending card." : userMessage, prepared.toolExecutions),
+            memories: isContinuation ? [] : safeMemoryUpdates(userMessage),
           }));
           turnSaved = true;
           await timed("saveTrace", saveTurn(persisted?.assistantMessageId || fastSavedId));
@@ -6412,13 +6431,13 @@ async function agentChatHandler(req, res) {
           else if (fastSavedId) { turnSaved = true; savedReplyId = fastSavedId; await saveTurn(fastSavedId).catch(() => {}); }
           else if (turnId) {
             const retried = await appendFastChatTurn({ conversationId, userId: req.user.id,
-              sessionId: agentSessionId(conversationId), turnId, userMessage, assistantMessage: reply }).catch(() => null);
+              sessionId: agentSessionId(conversationId), turnId, userMessage, assistantMessage: reply, agentOnly: isContinuation }).catch(() => null);
             if (retried) { turnSaved = true; savedReplyId = retried; await saveTurn(retried).catch(() => {}); }
-            else await appendBasicChatTurn({ conversationId, userId: req.user.id, userMessage, assistantMessage: reply })
+            else await appendBasicChatTurn({ conversationId, userId: req.user.id, userMessage, assistantMessage: reply, agentOnly: isContinuation })
               .then(async (saved) => { turnSaved = true; savedReplyId = saved?.assistantMessageId; await saveTurn(saved?.assistantMessageId); })
               .catch((e) => console.error("[/chat/agent] basic transcript append failed:", e.message));
           }
-          else await appendBasicChatTurn({ conversationId, userId: req.user.id, userMessage, assistantMessage: reply })
+          else await appendBasicChatTurn({ conversationId, userId: req.user.id, userMessage, assistantMessage: reply, agentOnly: isContinuation })
             .then(async (saved) => { turnSaved = true; await saveTurn(saved?.assistantMessageId); })
             .catch((e) => console.error("[/chat/agent] basic transcript append failed:", e.message));
         }
@@ -6428,13 +6447,13 @@ async function agentChatHandler(req, res) {
         await saveTurn(fastSavedId).catch(() => {});
       } else if (turnId) {
         const retried = await appendFastChatTurn({ conversationId, userId: req.user.id,
-          sessionId: agentSessionId(conversationId), turnId, userMessage, assistantMessage: reply }).catch(() => null);
+          sessionId: agentSessionId(conversationId), turnId, userMessage, assistantMessage: reply, agentOnly: isContinuation }).catch(() => null);
         if (retried) { turnSaved = true; savedReplyId = retried; await saveTurn(retried).catch(() => {}); }
-        else await appendBasicChatTurn({ conversationId, userId: req.user.id, userMessage, assistantMessage: reply })
+        else await appendBasicChatTurn({ conversationId, userId: req.user.id, userMessage, assistantMessage: reply, agentOnly: isContinuation })
           .then(async (saved) => { turnSaved = true; savedReplyId = saved?.assistantMessageId; await saveTurn(saved?.assistantMessageId); })
           .catch((e) => console.error("[/chat/agent] basic transcript append failed:", e.message));
       } else {
-        await appendBasicChatTurn({ conversationId, userId: req.user.id, userMessage, assistantMessage: reply })
+        await appendBasicChatTurn({ conversationId, userId: req.user.id, userMessage, assistantMessage: reply, agentOnly: isContinuation })
           .then(async (saved) => { turnSaved = true; savedReplyId = saved?.assistantMessageId; await saveTurn(saved?.assistantMessageId); })
           .catch((e) => console.error("[/chat/agent] basic transcript append failed:", e.message));
       }
@@ -6489,7 +6508,7 @@ async function agentChatHandler(req, res) {
           await appendFastChatTurn({
             conversationId: turnCtx.conversationId, userId: req.user.id,
             sessionId: agentSessionId(turnCtx.conversationId), turnId: turnCtx.turnId,
-            userMessage: turnCtx.userMessage,
+            userMessage: turnCtx.userMessage, agentOnly: isContinuation,
             assistantMessage: partial
               ? `${partial}\n\n_The connection dropped while the agent was working. Please try again._`
               : "_The connection dropped while the agent was working before it could answer. Please try again._",
@@ -6516,10 +6535,13 @@ router.post("/agent", agentChatHandler);
 
 // ── Tap-triggered continuation (Option A — Matt, 2026-11-17) ───────────────
 // A card tap records the decision only. When no turn is live in that chat,
-// the tap itself starts the agent's continuation turn (headless, below):
-// the turn opens with the decision already injected, the agent applies it
-// with await_decision and narrates the outcome — the learner sends nothing,
-// and the server posts nothing of its own into the chat. A tap that lands
+// the tap itself resumes the SAME flow (headless, below): the turn opens
+// with the decision already injected, the agent applies it with
+// await_decision and narrates the outcome. The cue is an internal event for
+// the model only — no user message is created or saved for the tap, so the
+// chat gains only the agent's narration, appended under the card (Matt,
+// 2026-11-17: "the tap should not send a new prompt"). The learner sends
+// nothing, and the server posts nothing of its own into the chat. A tap that lands
 // mid-turn is caught by the live turn's await_decision poll, or by the
 // end-of-turn recheck in the handler's finally above.
 // Kill switch: AKORO_TAP_CONTINUATION=false restores the old behaviour
@@ -6551,7 +6573,7 @@ export function scheduleDecisionContinuation({ userId, user = null, sessionId } 
       reportAgentActivity(userId, "Finishing what you approved…");
       const req = {
         user: user || { id: userId, role: "student" },
-        body: { message: "I tapped Allow", conversationId: sessionId, turnId: `tap${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}` },
+        body: { message: "[Card tap] The learner tapped Allow on the pending card in this chat — the decision is already recorded. Apply it now and narrate the outcome.", conversationId: sessionId, turnId: `tap${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}` },
         query: {}, headers: {}, internalContinuation: true,
       };
       await agentChatHandler(req, headlessRes());

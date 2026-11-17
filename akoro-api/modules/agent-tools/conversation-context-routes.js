@@ -379,10 +379,14 @@ async function persistTurn({ request, userId }) {
   try {
     const now = new Date();
     const contextUpdatedAt = now.toISOString();
-    const userMessage = await messageForTurn({
-      conversationId: request.conversationId, userId, sessionId: request.sessionId, turnId: request.turnId,
-      role: "user", text: request.userMessage, createdAt: now.toISOString(),
-    });
+    // Agent-only turns (a card-tap continuation) save no user message:
+    // the tap is an event, not a learner prompt (Matt, 2026-11-17).
+    const userMessage = request.agentOnly
+      ? null
+      : await messageForTurn({
+        conversationId: request.conversationId, userId, sessionId: request.sessionId, turnId: request.turnId,
+        role: "user", text: request.userMessage, createdAt: now.toISOString(),
+      });
     // The 1ms offset preserves deterministic chronological role ordering when
     // Postgres timestamps are otherwise identical.
     const assistantMessage = await messageForTurn({
@@ -456,12 +460,12 @@ async function persistTurn({ request, userId }) {
       patch: {
         status: "completed",
         error_code: contextErrors.length ? "context_incomplete" : null,
-        user_message_id: userMessage.id,
+        user_message_id: userMessage?.id ?? null,
         agent_message_id: assistantMessage.id,
         completed_at: new Date().toISOString(),
       },
     });
-    return { saved: true, replayed: false, userMessageId: userMessage.id, assistantMessageId: assistantMessage.id,
+    return { saved: true, replayed: false, userMessageId: userMessage?.id ?? null, assistantMessageId: assistantMessage.id,
       ...(contextErrors.length ? { contextIncomplete: contextErrors } : {}) };
   } catch (error) {
     try {
@@ -542,7 +546,7 @@ export async function completedLearnerAgentConversationTurn({ conversationId, us
 
 export async function persistLearnerAgentConversationTurn({
   conversationId, userId, sessionId, turnId, userMessage, assistantMessage,
-  summary, scratchpad, memories = [],
+  summary, scratchpad, memories = [], agentOnly = false,
 }) {
   const request = {
     conversationId,
@@ -551,6 +555,7 @@ export async function persistLearnerAgentConversationTurn({
     userMessage: boundedText(userMessage, 12_000),
     assistantMessage: boundedText(assistantMessage, 12_000),
     summary: boundedText(summary, 4_000),
+    agentOnly: agentOnly === true,
     scratchpad: normaliseScratchpad(scratchpad),
     memories: Array.isArray(memories) ? memories.slice(0, 4).map((memory) => ({
       kind: memory?.kind,
@@ -560,7 +565,7 @@ export async function persistLearnerAgentConversationTurn({
     })).filter((memory) => MEMORY_KINDS.has(memory.kind) && memory.content) : [],
   };
   if (!CONVERSATION_ID.test(request.conversationId) || !AGENT_ID.test(request.sessionId)
-      || !TURN_ID.test(request.turnId) || !request.userMessage || !request.assistantMessage || !request.summary) {
+      || !TURN_ID.test(request.turnId) || (!request.userMessage && !request.agentOnly) || !request.assistantMessage || !request.summary) {
     throw new ConversationGatewayError(422, "Agent conversation turn is invalid");
   }
   return persistTurn({ request, userId });
