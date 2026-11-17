@@ -6191,6 +6191,12 @@ router.post("/agent", async (req, res) => {
     // (where tools are offered). The loop's decisions — the token volume —
     // keep the tail layout; these once-per-turn calls use the proven shape.
     const finalMessages = [{ role: "system", content: systemContent }, ...prepared.messages];
+    // The closing instruction for an answer-call retry (below): a transcript
+    // full of tool calls can pull the model into imitating another call as
+    // DSML text (which the scrubber then removes, leaving an empty reply),
+    // and on reasoning models the whole token budget can go to hidden
+    // reasoning — both ended live turns on the empty-reply line (2026-11-17).
+    const answerClosing = { role: "user", content: "Write your reply to the learner now, in plain words, from the results above. Do not call any tool and do not describe tools — just answer." };
     const tools = null;   // the preflight loop above is the only executor
     let reply = "";
     let thinking = "";
@@ -6219,6 +6225,17 @@ router.post("/agent", async (req, res) => {
           ...(tools ? { tools, tool_choice: "none" } : {}),
         });
         reply = completion.choices?.[0]?.message?.content?.trim() || "";
+        if (!reply) {
+          // Empty answer — one retry with the closing instruction and room
+          // to answer (see answerClosing above).
+          const retry = await openai.chat.completions.create({
+            model: usedModel,
+            temperature: 0.6,
+            max_tokens: 2000,
+            messages: [...finalMessages, answerClosing],
+          }).catch(() => null);
+          reply = retry?.choices?.[0]?.message?.content?.trim() || "";
+        }
       }
     } else {
       if (!stopped() && prepared.finalText && !(isThink && canThinkChat)) {
@@ -6250,6 +6267,19 @@ router.post("/agent", async (req, res) => {
           if (!isResearch && !chatModel) throw error;
           usedModel = OPENAI_MODEL;   // the chosen / research model failed — the default answers
           reply = await streamChat({ send, messages: finalMessages, model: usedModel, max_tokens: 900, tools, toolChoice: "none", isAborted });
+        }
+        if (!reply.trim() && !stopped()) {
+          // Empty answer — one retry with the closing instruction and room
+          // to answer (see answerClosing above).
+          reply = await streamChat({
+            send,
+            messages: [...finalMessages, answerClosing],
+            model: usedModel,
+            max_tokens: 2000,
+            tools,
+            toolChoice: "none",
+            isAborted,
+          }).catch(() => "");
         }
       }
     }
