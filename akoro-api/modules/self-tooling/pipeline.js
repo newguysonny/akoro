@@ -791,7 +791,11 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
       status: "disabled", verification: { ...def.verification, awaitingPermission: draftCap }, usage_count: 0 }).select("id").single();
     if (error) return finish("failed", reject(`Couldn't save the draft: ${error.message}`));
     ev.tool_id = row.id; ev.mode = def.mode; ev.capabilities = def.capabilities;
-    const out = await proposePermission({ learnerId, conversationId, capability: draftCap, proposed: { name, label, goal }, toolId: row.id, changes });
+    // The card must carry this request's run values: at tap time the tool
+    // runs again from proposed.run, and a parameterized tool (its target
+    // title, say) acts on nothing without them. autoTargetValues pins any
+    // row-identity param the validation check declared mid-build.
+    const out = await proposePermission({ learnerId, conversationId, capability: draftCap, proposed: { name, label, goal, run: { ...(input?.run && typeof input.run === "object" ? input.run : {}), ...autoTargetValues } }, toolId: row.id, changes });
     await finish("escalated", {});   // logged as asked-for (stages_tried says "draft"), the outcome list is fixed
     return { ...out, tool: name, label, drafted: true };
   }
@@ -808,7 +812,7 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
       : rowsText(runNow.rows || []).split("\n").map((s) => s.replace(/^• /, ""))) : [];
     const card = await proposeBuild({ learnerId, conversationId, toolId: row.id,
       refs: runNow.write ? (runNow.write.targets || []).map((t) => String(t.ref)) : [],
-      proposed: { name, label, goal, run: input?.run && typeof input.run === "object" ? input.run : {} },
+      proposed: { name, label, goal, run: { ...(input?.run && typeof input.run === "object" ? input.run : {}), ...autoTargetValues } },
       does: runNow.write ? "It can change your data — only ever after you confirm each change on a card." : "It only reads your own data.",
       writes: !!runNow.write, items, more: runNow.write?.more || 0 });
     await finish("escalated", {});

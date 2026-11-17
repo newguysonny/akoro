@@ -17,6 +17,15 @@ test("no 'shall I build it?' round: a change the learner can allow is drafted wi
   assert.match(read("../adaptive-learning/chat.js"), /in this same turn — don't ask 'shall I build it\?' first/);
 });
 
+test("the drafted tool's card carries this request's run values — the tap-time run acts on them (parameterized tools)", () => {
+  const src = read("./pipeline.js");
+  // draftAndAsk (permission card for a drafted tool): proposed must include run,
+  // or executePermission re-runs the tool with {} and a title param matches nothing.
+  assert.match(src, /capability: draftCap, proposed: \{ name, label, goal, run: \{ \.\.\.\(input\?\.run && typeof input\.run === "object" \? input\.run : \{\}\), \.\.\.autoTargetValues \} \}/);
+  // draftBuildAndAsk (Keep card): same carry, with the auto-declared target pinned.
+  assert.match(src, /proposed: \{ name, label, goal, run: \{ \.\.\.\(input\?\.run && typeof input\.run === "object" \? input\.run : \{\}\), \.\.\.autoTargetValues \} \}/);
+});
+
 test("after Approve/Confirm the tap records ONLY the decision — the agent's await_decision applies it (2026-11-16: model-driven, no server post)", () => {
   const src = read("./confirmations.js");
   assert.doesNotMatch(src, /postIntoChat/, "the server never posts the outcome into the chat");
