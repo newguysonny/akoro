@@ -216,30 +216,40 @@ function Rail({ title, accent, count, loading, expanded, onToggle, children, emp
   );
 }
 
-/* ── Category chips ────────────────────────────────────────── */
-function Categories({ value, onChange }) {
+/* ── Category chips ──────────────────────────────────────────
+   Subject chips filter every rail by subject. The two TYPE chips
+   (Teaching guides / Live classes, Matt 2026-11-17) instead narrow
+   the feed to that one rail, expanded — same idea as the hub's
+   focused pages, without leaving the feed. Full feed only: the
+   focused pages (focus prop) keep subject chips alone. */
+function Categories({ value, onChange, includeTypes = false }) {
   const { t } = useLang();
   const keys = Object.keys(SUBJECTS);
+  const types = includeTypes ? [
+    { key: 'guides', label: t('discovery.cat_guides'), icon: 'ti-school',    color: BRAND },
+    { key: 'live',   label: t('discovery.cat_live'),   icon: 'ti-broadcast', color: RED },
+  ] : [];
+  const chip = (key, label, icon, color) => {
+    const on = value === key;
+    return (
+      <button key={key} onClick={() => onChange(key)} style={{
+        flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6, padding: '11px 18px', borderRadius: 100,
+        border: on ? `1.5px solid ${color}` : '1.5px solid var(--ak-border3)',
+        background: on ? `${color}12` : 'var(--ak-surface)', cursor: 'pointer', fontFamily: FONT,
+      }}>
+        <Icon name={icon} size={15} color={on ? color : 'var(--ak-text-muted)'} />
+        <span style={{ fontSize: 13.5, fontWeight: 800, color: on ? color : 'var(--ak-text)', whiteSpace: 'nowrap' }}>{label}</span>
+      </button>
+    );
+  };
   return (
     <div style={{ marginTop: 8 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 14px' }}>
         <h2 style={{ fontSize: 21, fontWeight: 900, color: 'var(--ak-text)', margin: 0 }}>{t('discovery.categories')}</h2>
       </div>
       <div style={{ display: 'flex', gap: 9, marginTop: 12, padding: '0 14px 2px', overflowX: 'auto', scrollbarWidth: 'none' }}>
-        {keys.map((key) => {
-          const s = SUBJECTS[key];
-          const on = value === key;
-          return (
-            <button key={key} onClick={() => onChange(key)} style={{
-              flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6, padding: '11px 18px', borderRadius: 100,
-              border: on ? `1.5px solid ${s.color}` : '1.5px solid var(--ak-border3)',
-              background: on ? `${s.color}12` : 'var(--ak-surface)', cursor: 'pointer', fontFamily: FONT,
-            }}>
-              <span style={{ fontSize: 14 }}>{s.icon}</span>
-              <span style={{ fontSize: 13.5, fontWeight: 800, color: on ? s.color : 'var(--ak-text)', whiteSpace: 'nowrap' }}>{s.label}</span>
-            </button>
-          );
-        })}
+        {keys.map((key) => { const s = SUBJECTS[key]; return chip(key, s.label, s.icon, s.color); })}
+        {types.map((ty) => chip(ty.key, ty.label, ty.icon, ty.color))}
       </div>
     </div>
   );
@@ -491,9 +501,14 @@ export default function DiscoveryTab({ initialQuery = '', focus = null }) {
   const livePool   = hits ? (hits.live   ?? []) : live;
   const videoPool  = hits ? (hits.video  ?? []) : video;
 
-  const fAgents = useMemo(() => agentsPool.filter(a => matchCat(a.subject, cat) && byQuery(`${a.title} ${a.teacher_name} ${a.subject}`)), [agentsPool, cat, q]);
-  const fLive   = useMemo(() => livePool.filter(c => matchCat(c.subject, cat) && byQuery(`${c.title} ${c.subject}`)), [livePool, cat, q]);
-  const fVideo  = useMemo(() => videoPool.filter(c => matchCat(c.subject, cat) && byQuery(`${c.title} ${c.subject}`)), [videoPool, cat, q]);
+  // 'guides' / 'live' are TYPE categories: they narrow the feed to that
+  // one rail (below) instead of filtering every rail by subject, so the
+  // subject filter reads 'all' while one of them is selected.
+  const typeCat = cat === 'guides' || cat === 'live';
+  const subjectCat = typeCat ? 'all' : cat;
+  const fAgents = useMemo(() => agentsPool.filter(a => matchCat(a.subject, subjectCat) && byQuery(`${a.title} ${a.teacher_name} ${a.subject}`)), [agentsPool, subjectCat, q]);
+  const fLive   = useMemo(() => livePool.filter(c => matchCat(c.subject, subjectCat) && byQuery(`${c.title} ${c.subject}`)), [livePool, subjectCat, q]);
+  const fVideo  = useMemo(() => videoPool.filter(c => matchCat(c.subject, subjectCat) && byQuery(`${c.title} ${c.subject}`)), [videoPool, subjectCat, q]);
 
   // Curated Udemy-style sections, derived from the combined course pool.
   const pool = useMemo(() => [...fLive, ...fVideo], [fLive, fVideo]);
@@ -508,17 +523,21 @@ export default function DiscoveryTab({ initialQuery = '', focus = null }) {
 
   const loadingCourses = lLive || lVideo;
   const toggle = (k) => setExpanded(e => ({ ...e, [k]: !e[k] }));
+  const guidesOpen = !!expanded.guides || cat === 'guides';
 
-  const courseRail = (key, titleObj, accent, items, loading) => (
+  const courseRail = (key, titleObj, accent, items, loading, forceOpen = false) => {
+    const open = !!expanded[key] || forceOpen;
+    return (
     <Rail
       title={titleObj} accent={accent} count={items.length} loading={loading}
-      expanded={!!expanded[key]} onToggle={() => toggle(key)}
+      expanded={open} onToggle={() => toggle(key)}
       emptyText={t('discovery.no_courses')}>
-      {(expanded[key] ? items : items.slice(0, 10)).map((c, i) => (
-        <CourseCard key={`${key}-${c.id}-${i}`} course={c} wide={expanded[key]} inCart={inCart(c.id)} onOpen={(co) => navigate(`/course/${co.slug}`)} />
+      {(open ? items : items.slice(0, 10)).map((c, i) => (
+        <CourseCard key={`${key}-${c.id}-${i}`} course={c} wide={open} inCart={inCart(c.id)} onOpen={(co) => navigate(`/course/${co.slug}`)} />
       ))}
     </Rail>
-  );
+    );
+  };
 
   return (
     <div style={{ padding: '4px 0 90px', fontFamily: FONT }}>
@@ -554,35 +573,35 @@ export default function DiscoveryTab({ initialQuery = '', focus = null }) {
         </button>
       </div>
 
-      <Categories value={cat} onChange={setCat} />
+      <Categories value={cat} onChange={setCat} includeTypes={!focus} />
 
       {/* Recommended for you */}
-      {!focus && courseRail('reco', { pre: t('discovery.rail_reco_pre'), hi: t('discovery.rail_reco_hi') }, BRAND, recommended, loadingCourses)}
+      {!focus && !typeCat && courseRail('reco', { pre: t('discovery.rail_reco_pre'), hi: t('discovery.rail_reco_hi') }, BRAND, recommended, loadingCourses)}
 
       {/* Teaching Guides */}
-      {(!focus || focus === 'guides') && (
+      {(!focus || focus === 'guides') && cat !== 'live' && (
       <Rail
         title={{ pre: t('discovery.rail_guides_pre'), hi: t('discovery.cat_guides') }}
         accent={BRAND} count={fAgents.length} loading={lAgents}
-        expanded={!!expanded.guides} onToggle={() => toggle('guides')}
+        expanded={guidesOpen} onToggle={() => toggle('guides')}
         emptyText={t('discovery.no_agents')}>
-        {(expanded.guides ? fAgents : fAgents.slice(0, 10)).map((a) => (
-          <AgentCard key={a.id} listing={a} owned={ownedIds.has(a.agent_id)} inCart={inCart(a.id)} wide={expanded.guides} onOpen={(li) => navigate(`/agent/${li.id}`)} />
+        {(guidesOpen ? fAgents : fAgents.slice(0, 10)).map((a) => (
+          <AgentCard key={a.id} listing={a} owned={ownedIds.has(a.agent_id)} inCart={inCart(a.id)} wide={guidesOpen} onOpen={(li) => navigate(`/agent/${li.id}`)} />
         ))}
       </Rail>
       )}
 
       {/* Live Classes */}
-      {(!focus || focus === 'live') && courseRail('live', { pre: t('discovery.rail_live_pre'), hi: t('discovery.cat_live') }, RED, fLive, lLive)}
+      {(!focus || focus === 'live') && cat !== 'guides' && courseRail('live', { pre: t('discovery.rail_live_pre'), hi: t('discovery.cat_live') }, RED, fLive, lLive, cat === 'live')}
 
       {/* Video Courses */}
-      {!focus && courseRail('video', { pre: t('discovery.rail_video_pre'), hi: t('discovery.cat_video') }, GREEN, fVideo, lVideo)}
+      {!focus && !typeCat && courseRail('video', { pre: t('discovery.rail_video_pre'), hi: t('discovery.cat_video') }, GREEN, fVideo, lVideo)}
 
       {/* Trending courses */}
-      {!focus && courseRail('trending', { pre: t('discovery.rail_trending_pre'), hi: t('discovery.rail_trending_hi') }, '#E8884A', trending, loadingCourses)}
+      {!focus && !typeCat && courseRail('trending', { pre: t('discovery.rail_trending_pre'), hi: t('discovery.rail_trending_hi') }, '#E8884A', trending, loadingCourses)}
 
       {/* Featured courses */}
-      {!focus && courseRail('featured', { pre: t('discovery.rail_featured_pre'), hi: t('discovery.rail_featured_hi') }, '#EC4899', featured, loadingCourses)}
+      {!focus && !typeCat && courseRail('featured', { pre: t('discovery.rail_featured_pre'), hi: t('discovery.rail_featured_hi') }, '#EC4899', featured, loadingCourses)}
 
       {historyOpen && <PurchaseHistorySheet onClose={() => setHistoryOpen(false)} />}
       {toast && <Toast msg={toast.msg} color={toast.color} onDone={() => setToast(null)} />}
