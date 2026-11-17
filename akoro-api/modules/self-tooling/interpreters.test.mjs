@@ -207,3 +207,27 @@ test("validation accepts percentOf on a real field and rejects a bad one", async
   assert.equal(badShape.ok, false);
   assert.ok(badShape.errors.some((e) => /percentOf needs/.test(e)), badShape.errors.join("; "));
 });
+
+test("on a WRITE recipe, an unset identity filter is kept as match-nothing, not dropped", () => {
+  // Live, 2026-11-18: a delete-by-title tool run with NO title proposed
+  // the learner's only chat, because the unset $title filter was
+  // dropped and the write inherited every row.
+  const def = { kind: "recipe", steps: [{ id: "s", view: "my_chats", where: [{ field: "title", op: "contains", value: "$title" }] }],
+    then: [{ op: "from", ref: "s" }, { op: "write", cap: "chats.delete" }] };
+  const out = dropUnsetFilters(def, {}, { write: true });
+  assert.equal(out.steps[0].where.length, 1);
+  assert.equal(out.steps[0].where[0].__unset, true);
+  // Same def, param provided: untouched.
+  const given = dropUnsetFilters(def, { title: "Basic" }, { write: true });
+  assert.equal(given.steps[0].where[0].__unset, undefined);
+  // Same def as a READ (no write flag): the filter is dropped, as before.
+  const read = dropUnsetFilters(def, {});
+  assert.equal(read.steps[0].where.length, 0);
+});
+
+test("on a WRITE recipe, an unset CONDITION filter (status) is still dropped", () => {
+  const def = { kind: "recipe", steps: [{ id: "s", view: "my_chats", where: [{ field: "status", op: "eq", value: "$status" }] }],
+    then: [{ op: "from", ref: "s" }, { op: "write", cap: "chats.delete" }] };
+  const out = dropUnsetFilters(def, {}, { write: true });
+  assert.equal(out.steps[0].where.length, 0);
+});

@@ -50,7 +50,19 @@ const cmp = (a, b) => {
   return String(a).localeCompare(String(b));
 };
 
-export function matches(row, { field, op, value }) {
+// Fields that identify ONE specific row (a chat's title, an item's
+// name) — as opposed to condition fields (status, kind) that name a
+// class of rows. Shared by the pipeline's baked-target scan and the
+// interpreter's unset-filter rule.
+export const IDENTITY_FIELDS = new Set(["title", "name"]);
+
+export function matches(row, w) {
+  // A where marked __unset was a filter on a param the caller never
+  // supplied, kept (not dropped) because the definition WRITES and the
+  // field identifies the target row: it must match nothing, so the
+  // write proposes nothing. See dropUnsetFilters in interpreters.js.
+  if (w?.__unset) return false;
+  const { field, op, value } = w;
   const v = row[field];
   switch (op) {
     case "eq": return typeof v === "string" && typeof value === "string" ? v.toLowerCase() === value.toLowerCase() : v == value; // eslint-disable-line eqeqeq

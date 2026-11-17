@@ -43,3 +43,9 @@ test("other ops are untouched: eq can still find an empty field", () => {
   assert.equal(matches(row, { field: "title", op: "eq", value: "" }), false);
   assert.equal(matches(row, { field: "title", op: "neq", value: "" }), true);
 });
+
+test("a where marked __unset matches nothing, whatever its value would have done", () => {
+  assert.equal(matches(row, { field: "title", op: "contains", value: "Basic", __unset: true }), false);
+  assert.equal(matches(row, { field: "title", op: "eq", value: "Basic Science — Matter and its states", __unset: true }), false);
+  assert.deepEqual(filter([row], [{ field: "title", op: "contains", value: "Basic", __unset: true }]), []);
+});

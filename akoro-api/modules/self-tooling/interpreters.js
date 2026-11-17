@@ -304,14 +304,41 @@ const pathGet = (obj, path) => (path ? String(path).split(".").reduce((o, k) => 
  * an existing learner tool as that learner (injected: chat.js executeChatTool).
  * → { rows, total, truncated }
  */
-/** A filter on an optional param the caller didn't give is skipped, not matched against null. */
-export function dropUnsetFilters(value, input) {
+/** A filter on an optional param the caller didn't give is skipped, not
+ * matched against null — for READS. For a definition that WRITES, an
+ * unset filter on an identity field (title/name) is the tool's TARGET
+ * selector: dropping it would widen the write to every row (live,
+ * 2026-11-18: a delete-by-title tool run with no title proposed the
+ * learner's only chat). There the where is kept and marked __unset,
+ * and matches() (ops.js) makes it match nothing, so the write proposes
+ * nothing. Unset filters on condition fields (status, kind) are still
+ * dropped — they narrow a class, they don't name the target. */
+export function dropUnsetFilters(value, input, { write = false } = {}) {
+  const isUnsetParamWhere = (w) => w && typeof w === "object" && "field" in w && "op" in w && typeof w.value === "string"
+    && /^\$[a-zA-Z][a-zA-Z0-9_]*$/.test(w.value) && input[w.value.slice(1)] == null;
   if (Array.isArray(value)) {
-    return value.filter((w) => !(w && typeof w === "object" && "field" in w && "op" in w && typeof w.value === "string"
-      && /^\$[a-zA-Z][a-zA-Z0-9_]*$/.test(w.value) && input[w.value.slice(1)] == null)).map((v) => dropUnsetFilters(v, input));
+    const out = [];
+    for (const w of value) {
+      if (isUnsetParamWhere(w)) {
+        if (write && O.IDENTITY_FIELDS.has(w.field)) out.push({ ...w, __unset: true });
+        continue;
+      }
+      out.push(dropUnsetFilters(w, input, { write }));
+    }
+    return out;
   }
-  if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, dropUnsetFilters(v, input)]));
+  if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, dropUnsetFilters(v, input, { write })]));
   return value;
+}
+
+/** True when a definition can change data (a recipe write step, or a
+ * code step on a write capability) — the same test the pipeline's
+ * baked-target scan uses. */
+export function definitionWrites(def) {
+  if (!def || typeof def !== "object") return false;
+  if (def.kind === "recipe") return [].concat(def.then || []).some((o) => o?.op === "write");
+  if (def.kind === "code") return [].concat(def.steps || []).some((s) => CAPABILITIES[s?.cap]?.kind === "write");
+  return false;
 }
 
 /**
@@ -331,7 +358,8 @@ export function resolveTotal(rows, matched = null) {
 }
 
 export async function runDefinition(def, input, { learnerId, callCapability }) {
-  const d = bind(dropUnsetFilters(normalizeDefinition(def), input), input);
+  const nd = normalizeDefinition(def);
+  const d = bind(dropUnsetFilters(nd, input, { write: definitionWrites(nd) }), input);
   let rows;
   let matched = null;   // source records that matched, before group/select/limit
   let write = null;   // a recipe's write step: the change it PROPOSES (S6)
