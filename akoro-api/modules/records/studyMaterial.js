@@ -232,18 +232,21 @@ export async function startPodcast({ userId, target, scope = "document", pageNum
     gather: (args) => gatherToolPassages({ ...args, search: searchRecordChunks }),
     chat: async (messages, len) => {
       const base = { __role: "background", temperature: 0.7, max_tokens: len.maxTokens, __userId: userId, __billTo: billTo, __feature: "reader_podcast" };
-      const first = await openai.chat.completions.create({
-        ...base, messages,
-        response_format: { type: "json_schema", json_schema: { name: "reader_podcast", strict: true, schema: podcastSchema() } },
-      });
-      const firstText = first.choices?.[0]?.message?.content || "{}";
+      // Streamed, deliberately: a medium/long script is a 3-4k-token answer,
+      // and a plain request for one sits silent past the gateway's response
+      // timeout and dies — episodes failed at the same age (~80s) every
+      // time while short ones (half the tokens) squeaked through. Streaming
+      // starts the bytes at once and assembles the same text.
+      const ask = async (msgs, response_format) => {
+        const stream = await openai.chat.completions.create({ ...base, messages: msgs, response_format, stream: true });
+        let text = "";
+        for await (const chunk of stream) text += chunk.choices?.[0]?.delta?.content || "";
+        return text;
+      };
+      const firstText = await ask(messages, { type: "json_schema", json_schema: { name: "reader_podcast", strict: true, schema: podcastSchema() } }).catch(() => "");
       if (parsePodcastScriptText(firstText)?.turns?.length) return firstText;
-      const second = await openai.chat.completions.create({
-        ...base,
-        messages: [...messages, { role: "system", content: `Return ONLY one JSON object matching this JSON Schema:\n${JSON.stringify(podcastSchema())}` }],
-        response_format: { type: "json_object" },
-      }).catch(() => null);
-      return second?.choices?.[0]?.message?.content || firstText;
+      const secondText = await ask([...messages, { role: "system", content: `Return ONLY one JSON object matching this JSON Schema:\n${JSON.stringify(podcastSchema())}` }], { type: "json_object" }).catch(() => "");
+      return secondText || firstText;
     },
     speak: async (input, voice) => {
       const { model, buffer } = await deps.speakBuffer({ text: input, voice, openai });

@@ -148,6 +148,7 @@ test("routes: made by the server, polled, never client-writable, audio deleted w
   assert.match(start, /__userId: userId, __billTo: billTo/);
   assert.match(start, /coinsForTtsChars\(spokeWith, chars\)/, "charged at the rate of the provider that narrated");
   assert.match(start, /await deps\.speakBuffer\(\{ text: input, voice, openai \}\)/, "Deepgram first, OpenAI as fallback");
+  assert.match(start, /stream: true/, "the script call streams — a silent multi-thousand-token request dies at the gateway timeout");
   assert.match(routes, /SERVER_MADE_KINDS\.includes\(v\.row\.kind\)\) return res400/);   // no client-made podcasts
   assert.match(routes, /SERVER_MADE_KINDS\.includes\(row\.kind\)\) return res400/);      // no content patches
   assert.match(routes, /ownsRecordFileKey\(raw\.audioKey, userId\)/);                   // presign only own keys
