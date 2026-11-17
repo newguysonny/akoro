@@ -1607,7 +1607,7 @@ const BUILTIN_TOOL_NAMES = new Set([...CHAT_TOOLS, ...INSTRUCTOR_TOOLS].map((t) 
  *  the golden-pinned static doctrine) and dropped when the kill switch is
  *  off, so the prompt never promises what the loop won't do. */
 export const PARALLEL_READS_NOTE = "\n\n## Gathering what you need\nWhen your answer needs several independent lookups (progress, goals, tasks, sessions, weak topics, the Library), ask for them all in ONE reply — put every independent read in the same response instead of one per turn. They run together, and you answer sooner with fewer steps. Call one at a time only when a later call needs an earlier call's result, or when a call changes something: changes always go one by one, in order.";
-export const STEP_NARRATION_NOTE = "\n\n## Narrating your work\nKeep the learner informed while you work, in your own words. With every reply that calls tools, include one short sentence saying what you are doing and why — as you start the step, not after the whole job is done. When a step's results come back and you go on to another step, first say in one short sentence what that step found or changed. These lines appear between your steps in the chat, so keep each to a single plain sentence, specific to what is actually happening (name the thing you are checking, drafting or changing). Do not narrate a step you are not taking, do not repeat a line you already said, and keep your final answer as the summary of the outcome — it does not need to repeat the step lines.";
+export const STEP_NARRATION_NOTE = "\n\n## Narrating your work\nKeep the learner informed while you work, in your own words. With every reply that calls tools, include one short sentence saying what you are doing and why — as you start the step, not after the whole job is done. When a step's results come back and you go on to another step, first say in one short sentence what that step found or changed. If a step fails, say that in one short sentence too, with what you are doing about it — never let a step pass in silence. These lines appear between your steps in the chat, so keep each to a single plain sentence, specific to what is actually happening (name the thing you are checking, drafting or changing). Do not narrate a step you are not taking, do not repeat a line you already said, and keep your final answer as the summary of the outcome — it does not need to repeat the step lines.";
 
 /** A read helper that throws reaches the model as {error} naming what failed,
  *  not the loop's generic "could not be completed". */
@@ -5229,23 +5229,28 @@ async function runAgentToolLoop({ systemContent, messages, studentId, conversati
     };
     const applyPrepared = async ({ p, toolResult, traceRow, durationMs }) => {
       const { call, tool, input, changes } = p;
+      const who = role === "instructor" ? "the instructor" : "the learner";
       if (traceRow) trace.toolEnd(traceRow, toolResult);
       if (TALK_AFTER_TOOLS.includes(tool)) {
         owedLine = talkAfterTool(tool, input, toolResult);
-        if (toolResult && typeof toolResult === "object" && !Array.isArray(toolResult)) {
-          toolResult = { ...toolResult, sayFirst: "Before your next step, tell the learner in one short sentence what this found." };
+        if (toolResult && typeof toolResult === "object" && !Array.isArray(toolResult) && !toolFailed(toolResult)) {
+          toolResult = { ...toolResult, sayFirst: `Before your next step, tell ${who} in one short sentence what this found.` };
         }
       }
       // Step narration (Matt, 2026-11-17): after EVERY step, not just the
-      // Library/past-paper pair above, the agent tells the learner in its
-      // own words what the step did or found before going on — the line
-      // streams as an activity block between the steps, so the learner is
-      // never left watching silent tool rows until one final wall of text.
-      // Failed steps carry their recovery steer instead.
+      // Library/past-paper pair above, the agent tells the user in its own
+      // words what the step did or found before going on — the line streams
+      // as an activity block between the steps, so the user is never left
+      // watching silent tool rows until one final wall of text. A FAILED
+      // step is narrated too (extended 2026-11-17 late): one short line
+      // saying it didn't work and what happens next, alongside the recovery
+      // steer below — never a silent retry the user can't follow.
       if (process.env.AKORO_STEP_NARRATION !== "false"
         && toolResult && typeof toolResult === "object" && !Array.isArray(toolResult)
-        && !toolResult.sayFirst && !toolFailed(toolResult)) {
-        toolResult = { ...toolResult, sayFirst: "Before your next step, tell the learner in one short sentence what this step did or found, in your own words." };
+        && !toolResult.sayFirst) {
+        toolResult = toolFailed(toolResult)
+          ? { ...toolResult, sayFirst: `Before your next step, tell ${who} in one short sentence that this step didn't work and what you're doing about it, in your own words — no internal details.` }
+          : { ...toolResult, sayFirst: `Before your next step, tell ${who} in one short sentence what this step did or found, in your own words.` };
       }
       // Structured observation: the tool's real backend outcome becomes the
       // model's next input, so the reply confirms facts, not intent.
