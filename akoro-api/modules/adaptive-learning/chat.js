@@ -1574,6 +1574,31 @@ export const isSideEffectingAction = (tool, input) =>
   ["study_buddy", "daily_challenge", "revision_circle"].includes(tool) && !["list", "status", "ranking", "search", undefined, null, ""].includes(input?.action);
 export const isSideEffecting = (tool, input) => SIDE_EFFECT_TOOLS.includes(tool) || isSideEffectingAction(tool, input);
 
+/** Parallel read batches in the chat loop (2026-11-17): a decision's
+ *  independent READ calls may run together, but these must always run one at
+ *  a time, in the order the model gave them — each either changes something,
+ *  depends on an earlier call's result, or changes what the rest of the turn
+ *  can do. Side-effecting calls (isSideEffecting above) and tools the learner
+ *  built themselves (not in the built-in catalogue) are likewise never
+ *  batched. Kill switch: AKORO_PARALLEL_READS=false restores one-at-a-time
+ *  execution everywhere, prompt steer included. */
+export const PARALLEL_CALL_BARRIERS = new Set([
+  UPDATE_PLAN_TOOL.name, // the plan ledger applies against earlier steps, in order
+  "await_decision", // waits on the learner's tap, then applies the frozen proposal (a change)
+  "create_tool", // its result can add a tool for the rest of the turn (__newTool)
+  "get_agent_capabilities", // its result can load an area's tools (__addTools)
+  "make_study_material", // the source cascade is a dependent chain; the taught source writes a record
+  "read_upload", "retry_extraction", "file_upload", // the upload pipeline is one stateful sequence
+  ...TALK_AFTER_TOOLS, // the owed narration line belongs between steps, in order
+]);
+/** Widest batch the loop runs at once — the reads share the database pool with every other turn. */
+export const PARALLEL_READ_BATCH = 4;
+const BUILTIN_TOOL_NAMES = new Set([...CHAT_TOOLS, ...INSTRUCTOR_TOOLS].map((t) => t.name));
+/** The batching steer: appended to the system prompt per turn (never part of
+ *  the golden-pinned static doctrine) and dropped when the kill switch is
+ *  off, so the prompt never promises what the loop won't do. */
+export const PARALLEL_READS_NOTE = "\n\n## Gathering what you need\nWhen your answer needs several independent lookups (progress, goals, tasks, sessions, weak topics, the Library), ask for them all in ONE reply — put every independent read in the same response instead of one per turn. They run together, and you answer sooner with fewer steps. Call one at a time only when a later call needs an earlier call's result, or when a call changes something: changes always go one by one, in order.";
+
 /** A read helper that throws reaches the model as {error} naming what failed,
  *  not the loop's generic "could not be completed". */
 const asToolError = (what) => (e) => ({ error: `Couldn't load ${what} just now${e?.message ? ` (${String(e.message).slice(0, 120)})` : ""}.` });
@@ -5102,16 +5127,19 @@ async function runAgentToolLoop({ systemContent, messages, studentId, conversati
     else if (owedLine) trace?.activity(owedLine);
     owedLine = null;
     transcript.push(assistant);
-    for (const call of calls) {
-      if (isAborted()) return { messages: transcript, toolExecutions: executions, ledger: ledgerNow, aborted: true };
-      const callStarted = Date.now();
+    // ── Executing the decision's calls (parallel reads, 2026-11-17).
+    // Independent READ calls in one decision run together; everything else —
+    // and every call when AKORO_PARALLEL_READS=false — runs one at a time, in
+    // the order the model gave, exactly as before. Either way the outcomes are
+    // APPLIED in the model's order (trace, observations, executions,
+    // transcript), so the rest of the turn cannot tell the difference.
+    // prepareCall does the pure per-call work (parse, the two input massages,
+    // the basis check); runPrepared executes one call; applyPrepared records
+    // its outcome, in order.
+    const prepareCall = (call) => {
       const tool = call?.function?.name;
       let input = {};
       try { input = JSON.parse(call?.function?.arguments || "{}"); } catch { input = {}; }
-      status?.("tool", "Checking your Akoro study data…");
-      // The header stream too - the same labels the background workers send,
-      // so the agent's subtitle shows live work during active chats as well.
-      agentToolActivity(studentId, tool);
       // A follow-up on a draft's questions goes to the paper writer in the
       // teacher's own words: the model rewrote "Remove question 3" as the
       // whole question list, and the revision changed other questions too.
@@ -5121,14 +5149,23 @@ async function runAgentToolLoop({ systemContent, messages, studentId, conversati
         const { __agreed, ...rest } = input;
         input = role === "student" && agreesToBuild(latestUserText(transcript)) ? { ...rest, __agreed: true } : rest;
       }
+      const changes = isSideEffecting(tool, input);
+      // Asked or inferred (actionBasis.js): an inferred change with no rule allowing it is refused, not run.
+      const refused = changes ? basisRefusal(turnBasis, { action: tool }) : null;
+      return { call, tool, input, changes, refused };
+    };
+    const runPrepared = async (p) => {
+      const { tool, input, changes, refused } = p;
+      const callStarted = Date.now();
+      status?.("tool", "Checking your Akoro study data…");
+      // The header stream too - the same labels the background workers send,
+      // so the agent's subtitle shows live work during active chats as well.
+      agentToolActivity(studentId, tool);
       const traceRow = trace?.toolStart(tool, input);
       let toolResult;
       // The important fields come from the TEACHER (activityFields.js): a subject, an audience or a
       // topic they never said is asked for, not filled in — nothing is prepared until they answer.
       const unsaid = role === "instructor" ? await unsaidActivityFields(tool, input, transcript).catch(() => null) : null;
-      const changes = isSideEffecting(tool, input);
-      // Asked or inferred (actionBasis.js): an inferred change with no rule allowing it is refused, not run.
-      const refused = changes ? basisRefusal(turnBasis, { action: tool }) : null;
       // Each call within its time limit (toolLimits.js): past it, a `timeout` observation, never a stalled turn.
       const timed = () => runWithinLimit(() => runTool(tool, input), tool, { sideEffecting: changes, limitMs: toolLimitMs });
       if (tool === UPDATE_PLAN_TOOL.name) {
@@ -5155,6 +5192,10 @@ async function runAgentToolLoop({ systemContent, messages, studentId, conversati
         console.warn(`[agent-chat] tool ${tool} error:`, error?.message || error);
         toolResult = { success: false, error: "The requested Akoro action could not be completed." };
       }
+      return { p, toolResult, traceRow, durationMs: Date.now() - callStarted };
+    };
+    const applyPrepared = async ({ p, toolResult, traceRow, durationMs }) => {
+      const { call, tool, input, changes } = p;
       if (traceRow) trace.toolEnd(traceRow, toolResult);
       if (TALK_AFTER_TOOLS.includes(tool)) {
         owedLine = talkAfterTool(tool, input, toolResult);
@@ -5250,9 +5291,29 @@ async function runAgentToolLoop({ systemContent, messages, studentId, conversati
       // Phase 22: persist this step (redacted, capped) so the full path — tool,
       // real error class/message, duration, retry — survives the turn.
       await recordStep(runId, stepRow({ runId, iteration, tool, input, success: observation.success,
-        result: toolResult, durationMs: Date.now() - callStarted, retries: toolResult?.retried ? 1 : 0, requestId: observation.request_id,
+        result: toolResult, durationMs, retries: toolResult?.retried ? 1 : 0, requestId: observation.request_id,
         sideEffecting: changes }));
       transcript.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify(observation) });
+    };
+    const preparedCalls = calls.map(prepareCall);
+    const parallelReadsOn = process.env.AKORO_PARALLEL_READS !== "false";
+    const isParallelRead = (p) => parallelReadsOn && !p.changes && !PARALLEL_CALL_BARRIERS.has(p.tool) && BUILTIN_TOOL_NAMES.has(p.tool);
+    let callIndex = 0;
+    while (callIndex < preparedCalls.length) {
+      if (isAborted()) return { messages: transcript, toolExecutions: executions, ledger: ledgerNow, aborted: true };
+      let runEnd = callIndex;
+      while (runEnd < preparedCalls.length && runEnd - callIndex < PARALLEL_READ_BATCH && isParallelRead(preparedCalls[runEnd])) runEnd += 1;
+      if (runEnd - callIndex >= 2) {
+        const ranBatch = await Promise.all(preparedCalls.slice(callIndex, runEnd).map((p) => runPrepared(p)));
+        for (const ran of ranBatch) {
+          if (isAborted()) return { messages: transcript, toolExecutions: executions, ledger: ledgerNow, aborted: true };
+          await applyPrepared(ran);
+        }
+        callIndex = runEnd;
+      } else {
+        await applyPrepared(await runPrepared(preparedCalls[callIndex]));
+        callIndex += 1;
+      }
     }
   }
   // Phase 22: close the run. An aborted/excepted turn never reaches here, so it
@@ -5850,6 +5911,7 @@ router.post("/agent", async (req, res) => {
       durableMemory: durable,
       currentTimeContext: CURRENT_TIME_CONTEXT,
     })) +
+      (process.env.AKORO_PARALLEL_READS !== "false" ? PARALLEL_READS_NOTE : "") +
       (conversation?.summary ? `\n\n## Compact conversation summary\n${conversation.summary}` : "") +
       renderRelevantMemory(relevantMemories) +
       renderLedger(conversation?.scratchpad ? { ...conversation.scratchpad, progressSummary: "" } : null) +
