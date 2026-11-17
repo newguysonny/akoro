@@ -7,7 +7,12 @@
 // let the loop recognise that shape — and a plan the agent itself left
 // unfinished — so it can continue the turn once instead.
 
-const INTENT_LEAD = /^(i['’]ll|i will|let me|i['’]m (going to|checking|running|looking|searching|getting|fetching|creating|building|deleting|removing|updating|drafting|retrying|working|pulling|gathering)|checking|running|looking|searching|getting|fetching|creating|building|deleting|removing|updating|drafting|retrying|working|pulling|gathering|finding|reading|loading|preparing|opening|now (i|let me)|one (moment|sec|second))\b/i;
+// Gerunds that announce a step. The re- prefix matters: "Rebuilding
+// first, then I'll run it…" stalled a live verification turn on
+// 2026-11-17 because the list had "building" but not "rebuilding" —
+// the lead is anchored at the string start, so the prefix hid it.
+const GERUND = "(?:re-?)?(?:checking|running|looking|searching|getting|fetching|creating|building|deleting|removing|updating|drafting|retrying|working|pulling|gathering|finding|reading|loading|preparing|opening)";
+const INTENT_LEAD = new RegExp(`^(i['’]ll|i will|let me|i['’]m (?:going to|${GERUND})|${GERUND}|now (?:i|let me)|one (?:moment|sec|second))\\b`, "i");
 
 /** True when a text-only reply reads as a step announcement rather than
  * an answer: short, intent-led, and not a question back to the learner.

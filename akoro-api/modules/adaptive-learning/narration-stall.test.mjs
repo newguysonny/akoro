@@ -51,3 +51,12 @@ test("the loop wires the guard: one-shot, streamed turns only, kill switch, narr
   assert.match(src, /const owesWork = planHasOpenSteps\(ledgerNow\) \|\| \(executions\.length === 0 && looksLikeStepNarration\(content\)\);/);
   assert.match(src, /The sentence must ride in the SAME reply as the tool call it describes/);
 });
+
+test("re- prefixed gerunds also read as step narration (live miss, 2026-11-17)", () => {
+  // This exact sentence ended a verification turn with zero tool calls:
+  // the lead list had "building" but the string starts with "Rebuilding".
+  assert.equal(looksLikeStepNarration("Rebuilding first, then I'll run it with the title parameter left out entirely."), true);
+  assert.equal(looksLikeStepNarration("Re-running the check now."), true);
+  assert.equal(looksLikeStepNarration("Rechecking your chat list."), true);
+  assert.equal(looksLikeStepNarration("I'm rebuilding it as a contains-match version."), true);
+});
