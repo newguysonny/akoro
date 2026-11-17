@@ -103,27 +103,33 @@ export async function generateToolResult({ userId = null, target, tool, scope = 
       __role: "background", temperature: 0.3, max_tokens: tool === "quiz" ? 2400 : 1600,
       ...(userId ? { __userId: userId } : {}), ...(feature ? { __feature: feature } : {}),
     };
-    // 1) strict schema where the provider honours it (OpenAI-family models).
-    let completion = null, json = null, firstError = null;
-    try {
-      completion = await openai.chat.completions.create({
-        ...base, messages,
-        response_format: { type: "json_schema", json_schema: { name: `reader_${tool}`, strict: true, schema: toolSchema(tool) } },
-      });
-      json = parseJson(completion.choices?.[0]?.message?.content);
-    } catch (e) { firstError = e; }
-    // 2) JSON mode + the schema in the prompt. DeepSeek/GLM via OpenCode often
-    // ignore json_schema and answer in prose; this keeps generation working.
-    if (!itemsOf(json || {}).length) {
+    // One generation attempt: 1) strict schema where the provider honours it
+    // (OpenAI-family models); 2) JSON mode + the schema in the prompt —
+    // DeepSeek/GLM via OpenCode often ignore json_schema and answer in prose;
+    // this keeps generation working.
+    const callModel = async (msgs) => {
+      let completion = null, json = null, error = null;
       try {
         completion = await openai.chat.completions.create({
-          ...base,
-          messages: [...messages, { role: "system", content: `Return ONLY one JSON object matching this JSON Schema:\n${JSON.stringify(toolSchema(tool))}` }],
-          response_format: { type: "json_object" },
+          ...base, messages: msgs,
+          response_format: { type: "json_schema", json_schema: { name: `reader_${tool}`, strict: true, schema: toolSchema(tool) } },
         });
         json = parseJson(completion.choices?.[0]?.message?.content);
-      } catch (e) { firstError = firstError || e; }
-    }
+      } catch (e) { error = e; }
+      if (!itemsOf(json || {}).length) {
+        try {
+          completion = await openai.chat.completions.create({
+            ...base,
+            messages: [...msgs, { role: "system", content: `Return ONLY one JSON object matching this JSON Schema:\n${JSON.stringify(toolSchema(tool))}` }],
+            response_format: { type: "json_object" },
+          });
+          const j2 = parseJson(completion.choices?.[0]?.message?.content);
+          if (j2) json = j2;
+        } catch (e) { error = error || e; }
+      }
+      return { completion, json, error };
+    };
+    let { completion, json, error: firstError } = await callModel(messages);
     if (!json) {
       const raw = String(completion?.choices?.[0]?.message?.content || "");
       console.warn("[records-tools] unparseable", tool, raw.slice(0, 300));
@@ -138,8 +144,35 @@ export async function generateToolResult({ userId = null, target, tool, scope = 
       }
       throw firstError || new Error("the model returned no JSON");
     }
-    const result = shapeToolResult(tool, json, passages, values);
-    const items = result.summaryPoints || result.quizQuestions || result.cardSet || [];
+    let result = shapeToolResult(tool, json, passages, values);
+    let items = result.summaryPoints || result.quizQuestions || result.cardSet || [];
+    // Quality top-up: shapeToolResult's gate drops items that copy the source
+    // word-for-word or ask about the document itself. When it fired, ask ONCE
+    // for replacements that fix the fault — a shorter, honest set beats a
+    // padded one, but a fixable rejection shouldn't shrink the set either.
+    const wanted = toolCount(tool, values);
+    if (tool !== "summary" && itemsOf(json).length > items.length && items.length < wanted) {
+      const keptKeys = items.map((it) => String(it.prompt || it.front || "").toLowerCase().trim()).filter(Boolean);
+      const note = `${itemsOf(json).length - items.length} of your items were rejected: they copied the source text word-for-word or asked about the document itself (its sections, title or structure) instead of the material. Write ${wanted - items.length} replacement item(s) that test the material in your own words, in the same JSON shape, with only the replacements. Do not repeat these kept items: ${keptKeys.map((k) => `"${k.slice(0, 80)}"`).join("; ") || "none"}.`;
+      const second = await callModel([...messages, { role: "system", content: note }]).catch(() => ({ json: null }));
+      if (second.json) {
+        const extra = shapeToolResult(tool, second.json, passages, values);
+        const extraItems = extra.quizQuestions || extra.cardSet || [];
+        const seen = new Set(keptKeys);
+        const merged = [...items];
+        for (const it of extraItems) {
+          const key = String(it.prompt || it.front || "").toLowerCase().trim();
+          if (key && seen.has(key)) continue;
+          seen.add(key);
+          merged.push(it);
+          if (merged.length >= wanted) break;
+        }
+        if (merged.length > items.length) {
+          result = tool === "quiz" ? { quizQuestions: merged } : { cardSet: merged };
+          items = merged;
+        }
+      }
+    }
     if (!items.length) {
       // Bounded diagnostics: enough to see why a batch was dropped.
       console.warn("[records-tools] empty result", tool, JSON.stringify(json).slice(0, 600));

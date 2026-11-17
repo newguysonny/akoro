@@ -22,9 +22,9 @@ import { contentWords, gatherPassages, passageWhere, pastedPagesFor } from "./as
 export const TOOL_IDS = Object.freeze(["summary", "quiz", "flashcards"]);
 export const TOOL_LIMITS = Object.freeze({
   MAX_PAGE_TEXT_CHARS: 8000,
-  MAX_PASSAGES: 16,
-  MAX_CONTEXT_CHARS: 9500,
-  MAX_PASSAGE_CHARS: 900,
+  MAX_PASSAGES: 24,
+  MAX_CONTEXT_CHARS: 24000,
+  MAX_PASSAGE_CHARS: 1200,
   MAX_FOCUS_CHARS: 200,
 });
 
@@ -37,6 +37,37 @@ const usableBlock = (b) => {
   const t = blockText(b);
   return t && t !== "<image>" && Array.isArray(b?.bbox_2d) && b.bbox_2d.length === 4;
 };
+
+/* ── Passage hygiene ──────────────────────────────────────────────────────
+ * Front matter and bare headings are not study material. A title block
+ * ("BIO 111 | GENERAL BIOLOGY | … lecture note • Designed for first-year…")
+ * fed to the model comes back as a fake flashcard, and headings come back
+ * as document-trivia questions ("Section 1 covers which topic?") — the
+ * quality gap Matt flagged against YouLearn, 2026-11-17. Content blocks
+ * are preferred wherever a page has any; a page of nothing else (a title
+ * page, a slide) keeps its blocks so it never goes empty. */
+const FRONT_MATTER_MARKERS = [
+  /\|/, /•/, /lecture notes?\b/i, /designed for/i, /textbook/i,
+  /©|copyright|isbn/i, /faculty of|department of|school of/i, /all rights reserved/i,
+];
+export function isFrontMatter(text) {
+  const t = String(text || "");
+  let hits = 0;
+  for (const re of FRONT_MATTER_MARKERS) if (re.test(t)) hits += 1;
+  if ((t.match(/\b[A-Z]{2,4}\s?\d{3}\b/g) || []).length >= 2) hits += 1; // course code twice = title block
+  return hits >= 2;
+}
+export function isBareHeading(text) {
+  const t = String(text || "").trim().replace(/^\d+(\.\d+)*[.)]?\s*/, "");
+  if (!t || t.length > 120 || /[.!?…]/.test(t)) return false;
+  const words = t.split(/\s+/).filter(Boolean);
+  if (words.length < 2 || words.length > 12) return false;
+  const letters = t.replace(/[^A-Za-z]/g, "");
+  const upperRatio = letters ? letters.replace(/[^A-Z]/g, "").length / letters.length : 0;
+  const capWords = words.filter((w) => /^[A-Z]/.test(w)).length / words.length;
+  return capWords >= 0.6 || upperRatio >= 0.55;
+}
+const isContentText = (t) => !isFrontMatter(t) && !isBareHeading(t);
 
 /** How many items each tool makes, from the form's values. */
 export function toolCount(tool, values = {}) {
@@ -66,14 +97,19 @@ export function pagePassages(pageNumber, page) {
   const blocks = (page?.blocks || []).filter(usableBlock)
     .map((b) => ({ kind: "block", pageNumber, bbox: b.bbox_2d.map(Number), startMs: null, endMs: null, text: blockText(b) }))
     .sort((a, b) => a.bbox[1] - b.bbox[1] || a.bbox[0] - b.bbox[0]);
-  if (blocks.length) return finalize(blocks);
+  if (blocks.length) {
+    const content = blocks.filter((b) => isContentText(b.text));
+    return finalize(content.length ? content : blocks);
+  }
   return page?.markdown ? textPassages(pageNumber, page.markdown) : [];
 }
 
 /** Plain page text (never extracted) as paragraph passages — page-level cites. */
 export function textPassages(pageNumber, text) {
-  const paras = String(text || "").slice(0, TOOL_LIMITS.MAX_PAGE_TEXT_CHARS)
+  const allParas = String(text || "").slice(0, TOOL_LIMITS.MAX_PAGE_TEXT_CHARS)
     .split(/\n\s*\n|(?<=[.!?])\s{2,}/).map((s) => s.trim()).filter((s) => s.length >= 20);
+  const bodyParas = allParas.filter((s) => !isFrontMatter(s));
+  const paras = bodyParas.length ? bodyParas : allParas;
   // Long runs without breaks → ~600-char slices on sentence ends.
   const pieces = [];
   for (const p of paras.length ? paras : [String(text || "").trim()]) {
@@ -105,7 +141,9 @@ export function samplePassages(pages /* Map(pageNumber → {markdown, blocks}) *
   const raw = [];
   for (const pageNumber of [...new Set(pick)]) {
     const page = pages.get(pageNumber);
-    const blocks = (page?.blocks || []).filter(usableBlock);
+    const allBlocks = (page?.blocks || []).filter(usableBlock);
+    const contentBlocks = allBlocks.filter((b) => isContentText(blockText(b)));
+    const blocks = contentBlocks.length ? contentBlocks : allBlocks;
     if (blocks.length) {
       const longest = [...blocks].sort((a, b) => blockText(b).length - blockText(a).length).slice(0, perPage)
         .sort((a, b) => a.bbox_2d[1] - b.bbox_2d[1]);
@@ -159,14 +197,15 @@ export function buildToolMessages({ tool, docName = "this document", passages = 
   const focus = clip(values.focus || "", TOOL_LIMITS.MAX_FOCUS_CHARS);
   const difficulty = ["Easy", "Medium", "Hard"].includes(values.difficulty) ? values.difficulty : "Medium";
   const task = {
-    summary: `Write ${count} summary points: each one a clear, self-contained sentence or two capturing a key idea, in the order the ideas appear.`,
-    quiz: `Write ${count} multiple-choice questions at ${difficulty} difficulty. Each has exactly 4 options, one correct (correctIndex 0-3), plausible distractors drawn from the material's own ideas, and a one-sentence explanation of why the answer is right. Test understanding, not trivia; never "all/none of the above".`,
-    flashcards: `Write ${count} flashcards: front = a key term, concept or question (short); back = its explanation from the material (1-3 sentences).`,
+    summary: `Write ${count} summary points: each one a clear, self-contained sentence or two capturing a key idea, in the order the ideas appear. State the ideas themselves — do not quote the document's headings or title as points.`,
+    quiz: `Write ${count} multiple-choice questions at ${difficulty} difficulty, in the voice of a real exam testing understanding of the material. Each has exactly 4 options, one correct (correctIndex 0-3), and a one-sentence explanation that states the fact behind the answer in your own words. Every wrong option must be a plausible mistake: a confusion between two ideas in the material, a reversed cause and effect, a wrong value, or a common misconception — never unrelated facts, and never "all/none of the above". Example of the standard: for material on photosynthesis, "Which gas do plants absorb for photosynthesis?" with correct "Carbon dioxide" and wrong options "Oxygen" (what plants release), "Nitrogen" (abundant in air but not used) and "Hydrogen" — each wrong option is a real confusion, not filler.`,
+    flashcards: `Write ${count} flashcards. front = ONE key term from the material, or ONE short question about it — never a sentence, heading or title copied from the material. back = the explanation in your own words, grounded in the passage (1-3 sentences). Example of the standard: front "Osmosis", back "The movement of water across a partially permeable membrane, from a dilute solution to a more concentrated one."`,
   }[tool];
   const system = [
-    `You create study material from the document "${String(docName).slice(0, 160)}" for a learner.`,
+    `You are an experienced teacher creating study material from the document "${String(docName).slice(0, 160)}" to prepare a learner for an exam on this material.`,
     "Use ONLY the numbered passages below; every item must name the passage it comes from as `source`.",
     "Never invent facts that are not in the passages. Use the learner's language (the passages' language).",
+    "Test the MATERIAL ITSELF — the facts, ideas and processes it teaches. Never ask about the document as an object: no questions about its sections, headings, pages, title or structure, and never write \"in the passage\", \"according to the text\" or \"the document says\" — write as if the material is simply what the learner is studying. Never copy a passage's wording as a question or card front; phrase everything in your own words.",
     focus ? `Concentrate on: ${focus}.` : "",
     task,
     "",
@@ -182,6 +221,35 @@ export function buildToolMessages({ tool, docName = "this document", passages = 
 export function citeOf(p) {
   return { n: p.n, pageNumber: p.pageNumber ?? null, bbox: p.bbox ?? null, startMs: p.startMs ?? null, endMs: p.endMs ?? null, quote: clip(p.text, 200),
     ...(p.sourceName ? { sourceName: p.sourceName, sourceRecordId: p.sourceRecordId ?? null } : {}) };
+}
+
+/* ── Quality gate ─────────────────────────────────────────────────────────
+ * The validator used to check shape only (4 options, non-empty text), so a
+ * flashcard whose front was the document's title block copied word-for-word,
+ * or a question about the document itself ("Section 1 covers which topic?"),
+ * shipped as-is. These pure checks drop both failure modes; the caller
+ * (generateToolResult) asks once for replacements when the gate fires. */
+const normForCopy = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ").trim();
+
+/** True when `item` lifts `passage` word-for-word (a long verbatim run). */
+export function isVerbatimCopy(item, passage) {
+  const a = normForCopy(item);
+  const b = normForCopy(passage);
+  if (a.length < 35 || !b) return false;
+  return b.includes(a.slice(0, 70));
+}
+
+const META_QUESTION = [
+  /\b(section|chapter|unit|part|page|passage)\s+\d+\b/i,
+  /\baccording to the (passage|text|document|author)\b/i,
+  /\bin the (passage|above passage)\b/i,
+  /\bthe (passage|document|text|author) (says|states|describes|mentions|covers|is titled)\b/i,
+  /\b(described as covering|is titled|covers? which topic)\b/i,
+  /\bwhat is the title of\b/i,
+];
+/** True when the text asks about the document itself instead of the material. */
+export function isMetaQuestion(text) {
+  return META_QUESTION.some((re) => re.test(String(text || "")));
 }
 
 /**
@@ -212,6 +280,8 @@ export function shapeToolResult(tool, json, passages, values = {}) {
       correctIndex = Number(correctIndex);
       if (!String(q?.prompt || "").trim() || options.length !== 4 || new Set(options.map((o) => o.toLowerCase())).size !== 4) continue;
       if (!Number.isInteger(correctIndex) || correctIndex < 0 || correctIndex > 3) continue;
+      const qPassage = src(q.source);
+      if (isMetaQuestion(q.prompt) || (qPassage && isVerbatimCopy(q.prompt, qPassage.text))) continue;
       questions.push({
         prompt: clip(q.prompt, 400),
         options: options.map((text, i) => ({ key: "ABCD"[i], text, correct: i === correctIndex })),
@@ -222,10 +292,16 @@ export function shapeToolResult(tool, json, passages, values = {}) {
     }
     return { quizQuestions: questions };
   }
-  const cards = (json?.cards || [])
-    .filter((c) => String(c?.front || "").trim() && String(c?.back || "").trim())
-    .slice(0, max)
-    .map((c) => ({ front: clip(c.front, 160), back: clip(c.back, 500), cite: src(c.source) ? citeOf(src(c.source)) : null }));
+  const cards = [];
+  for (const c of json?.cards || []) {
+    if (!String(c?.front || "").trim() || !String(c?.back || "").trim()) continue;
+    const cPassage = src(c.source);
+    if (isMetaQuestion(c.front) || String(c.front).includes("|")) continue;
+    if (cPassage && isVerbatimCopy(c.front, cPassage.text)) continue;
+    if (cPassage && normForCopy(c.back).length >= 80 && isVerbatimCopy(c.back, cPassage.text)) continue;
+    cards.push({ front: clip(c.front, 160), back: clip(c.back, 500), cite: cPassage ? citeOf(cPassage) : null });
+    if (cards.length >= max) break;
+  }
   return { cardSet: cards };
 }
 

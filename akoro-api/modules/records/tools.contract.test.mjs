@@ -8,6 +8,7 @@ process.env.SUPABASE_SERVICE_KEY ||= "test-service-key";
 const {
   TOOL_IDS, TOOL_LIMITS, toolCount, pagePassages, textPassages, samplePassages, chunkPassages,
   toolSchema, buildToolMessages, shapeToolResult, gatherToolPassages, mergeToolFolderPassages, citeOf,
+  isFrontMatter, isBareHeading, isVerbatimCopy, isMetaQuestion,
 } = await import("./toolsLib.js");
 const routes = await readFile(new URL("./routes.js", import.meta.url), "utf8");
 // The generation itself lives in studyMaterial.js (shared with Agent Chat).
@@ -136,4 +137,54 @@ test("folder tool passages pool across documents under the single-document caps"
   assert.equal(cite.sourceRecordId, "id-Beta");
   const single = citeOf({ n: 1, pageNumber: 2, text: "plain" });
   assert.ok(!("sourceName" in single), "single-document citations are unchanged");
+});
+
+test("passage hygiene: title blocks and bare headings never reach the model", () => {
+  const title = "BIO 111 | GENERAL BIOLOGY | BIO 111 GENERAL BIOLOGY | CELL STRUCTURE AND ORGANIZATION Textbook-level lecture note • Core cell biology • Designed for first-year Pharm.D";
+  assert.equal(isFrontMatter(title), true);
+  assert.equal(isFrontMatter("Cells acquire and transform matter and energy to stay alive."), false);
+  assert.equal(isBareHeading("3. Cellular Scale and the Methods Used to Study Cells"), true);
+  assert.equal(isBareHeading("Robert Hooke used the word cells in 1665 after examining cork."), false);
+  const ps = pagePassages(1, { markdown: "", blocks: [
+    block(50, title),
+    block(150, "Cell Structure and Organization"),
+    block(300, "A cell is the smallest organisational unit that can perform the processes of living systems."),
+  ] });
+  assert.deepEqual(ps.map((p) => p.text), ["A cell is the smallest organisational unit that can perform the processes of living systems."], "only the body block becomes a passage");
+  const titleOnly = pagePassages(1, { markdown: "", blocks: [block(50, title)] });
+  assert.equal(titleOnly.length, 1, "a page with nothing else keeps its block rather than going empty");
+});
+
+test("the prompt bans document-meta questions and copied wording", () => {
+  const ps = pagePassages(1, { blocks: [block(100, "Enzymes lower activation energy.")] });
+  const quiz = buildToolMessages({ tool: "quiz", docName: "Bio", passages: ps, values: { count: "3" } });
+  assert.match(quiz[0].content, /Never ask about the document as an object/);
+  assert.match(quiz[0].content, /voice of a real exam/);
+  const cards = buildToolMessages({ tool: "flashcards", docName: "Bio", passages: ps, values: { count: "3" } });
+  assert.match(cards[0].content, /never a sentence, heading or title copied/);
+});
+
+test("quality gate: meta questions and verbatim copies are dropped, real items kept", () => {
+  assert.equal(isMetaQuestion("Section 1 of the document is described as covering which topic?"), true);
+  assert.equal(isMetaQuestion("Under the octet rule described in the passage, how many electrons are shared?"), true, "'in the passage' is the fake-exam tell Matt flagged");
+  assert.equal(isMetaQuestion("According to the passage, what did Hooke observe?"), true);
+  assert.equal(isMetaQuestion("Which scientist first observed living microorganisms?"), false);
+  const passage = "The mitochondria is the powerhouse of the cell and it produces most of the cell's supply of ATP energy for work.";
+  assert.equal(isVerbatimCopy("The mitochondria is the powerhouse of the cell and it produces most of the cell's supply", passage), true);
+  assert.equal(isVerbatimCopy("Which organelle produces most of the cell's ATP?", passage), false);
+
+  const ps = [{ n: 1, pageNumber: 1, bbox: [0, 0, 10, 10], text: passage }];
+  const quiz = shapeToolResult("quiz", { questions: [
+    { prompt: "Section 1 of the document is described as covering which topic?", options: ["a", "b", "c", "d"], correctIndex: 0, explanation: "x", source: 1 },
+    { prompt: "The mitochondria is the powerhouse of the cell and it produces most of the cell's supply of ATP energy for work.", options: ["a", "b", "c", "d"], correctIndex: 0, explanation: "x", source: 1 },
+    { prompt: "Which organelle produces most of the cell's ATP?", options: ["Mitochondria", "Nucleus", "Ribosome", "Golgi body"], correctIndex: 0, explanation: "It makes ATP.", source: 1 },
+  ] }, ps, { count: "5" });
+  assert.deepEqual(quiz.quizQuestions.map((q) => q.prompt), ["Which organelle produces most of the cell's ATP?"], "only the real question survives");
+
+  const cards = shapeToolResult("flashcards", { cards: [
+    { front: "BIO 111 | GENERAL BIOLOGY | CELL STRUCTURE AND ORGANIZATION", back: "x", source: 1 },
+    { front: "The mitochondria is the powerhouse of the cell and it produces most of the cell's supply", back: "x", source: 1 },
+    { front: "Mitochondria", back: "The organelle that produces most of the cell's ATP, its main energy supply.", source: 1 },
+  ] }, ps, { count: "6" });
+  assert.deepEqual(cards.cardSet.map((c) => c.front), ["Mitochondria"], "the title card and the copied card are dropped");
 });
