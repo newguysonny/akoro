@@ -39,7 +39,7 @@ const GATE_CONFIG = path.resolve(HERE, '../vite.gate.config.mjs');
 const args = process.argv.slice(2);
 const flag = (name) => args.includes(`--${name}`);
 
-const API = process.env.UI_GATE_API || 'https://akoro-sandbox.onrender.com';
+const API = process.env.UI_GATE_API || 'https://sandbox.akoro.ng';
 // It signs up accounts: never against production by accident.
 if (!/sandbox|localhost|127\.0\.0\.1/.test(new URL(API).hostname) && !flag('allow-api')) {
   console.error(`Refusing ${API}: this journey creates real accounts, so it runs against a sandbox API. Pass --allow-api if this API is disposable.`);
