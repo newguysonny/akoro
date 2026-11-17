@@ -23,3 +23,18 @@ test("no match or an ambiguous prefix resolves to nothing", () => {
   assert.equal(pickReplacement(rows, "goals"), null);   // prefixes two tools
   assert.equal(pickReplacement(rows, ""), null);
 });
+
+test("a same-name swap retires the old row BEFORE inserting the new one (live duplicate-key failure, 2026-11-17)", async () => {
+  const { readFileSync } = await import("node:fs");
+  const src = readFileSync(new URL("./pipeline.js", import.meta.url), "utf8");
+  // The helper exists and only fires on an exact name collision.
+  assert.match(src, /const retireReplacedBeforeInsert = async \(\) => \{\n    if \(!replaced\?\.id \|\| replaced\.name !== name\) return;/);
+  // Every register save site calls it ahead of its insert: domain saves,
+  // the permission draft, and the direct register insert.
+  const calls = src.match(/await retireReplacedBeforeInsert\(\);/g) || [];
+  assert.ok(calls.length >= 3, `expected >=3 retire-before-insert calls, got ${calls.length}`);
+  // The direct register insert is preceded by the retire call (not just archiveReplaced after).
+  const insertAt = src.indexOf('insert({ owner_id: learnerId, scope: "learner", audience, ...def, domain: (def.views || [])[0] || null');
+  const retireAt = src.lastIndexOf("await retireReplacedBeforeInsert();", insertAt);
+  assert.ok(retireAt > 0 && insertAt - retireAt < 160, "the retire call immediately precedes the register insert");
+});

@@ -378,6 +378,19 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
     } catch { /* best-effort */ }
   };
 
+  /** A same-name replacement collides with the live unique index
+   * (owner, name) WHERE status IN ('active','disabled'): the old row must
+   * retire BEFORE the new row inserts, not after — insert-first failed the
+   * swap with a raw duplicate-key error (live, 2026-11-17). Every caller is
+   * past verification, so a rejected build never reaches this. */
+  const retireReplacedBeforeInsert = async () => {
+    if (!replaced?.id || replaced.name !== name) return;
+    try {
+      await edu().from("agent_tools").update({ status: "archived", updated_at: new Date().toISOString() })
+        .eq("id", replaced.id).eq("owner_id", learnerId);
+    } catch { /* best-effort */ }
+  };
+
   /** Actions a replaced tool had, when it belongs to the domain being rebuilt. */
   const carriedActions = (view) => {
     if (!replaced) return [];
@@ -478,6 +491,7 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
     // OFF with a card asking the learner to keep it. Extending a tool the
     // learner already has active keeps the consent they already gave; an
     // unapproved draft of it is simply replaced by the new draft.
+    await retireReplacedBeforeInsert();
     if (audience === "learner" && !resumed && (!existing || existingDraft)) {
       if (existing?.id) await edu().from("agent_tools").update({ status: "archived", updated_at: new Date().toISOString() }).eq("id", existing.id).eq("owner_id", learnerId);
       const { data: row, error } = await edu().from("agent_tools").insert({
@@ -787,6 +801,7 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
       return { status: "needs_permission", dryRun: true, tool: name, label, wouldChange: changes.items,
         note: "DRY RUN — the tool was drafted and checked but NOT saved, and no card was made. Live, the learner gets a card showing what it would change; Approve turns it on." };
     }
+    await retireReplacedBeforeInsert();
     const { data: row, error } = await edu().from("agent_tools").insert({ owner_id: learnerId, scope: "learner", audience, ...def,
       status: "disabled", verification: { ...def.verification, awaitingPermission: draftCap }, usage_count: 0 }).select("id").single();
     if (error) return finish("failed", reject(`Couldn't save the draft: ${error.message}`));
@@ -861,6 +876,7 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
     // it is the silent dry run that makes the card's ask honest. (Resumed
     // builds were approved on a card or by an admin; draftCap has its own card.)
     if (audience === "learner" && !resumed && !replaced) return draftBuildAndAsk({ def, runNow });
+    await retireReplacedBeforeInsert();
     const { data: row, error } = await edu().from("agent_tools").insert({ owner_id: learnerId, scope: "learner", audience, ...def, domain: (def.views || [])[0] || null, actions: def.params_schema?.action?.enum || null, usage_count: runNow.ok ? 1 : 0, last_used_at: new Date().toISOString() }).select("id").single();
     if (error) return finish("failed", reject(`Couldn't save the tool: ${error.message}`));
     ev.tool_id = row.id;
