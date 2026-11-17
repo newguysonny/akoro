@@ -328,6 +328,11 @@ export const CHAT_TOOLS = [
     input_schema: { type: "object", properties: {}, required: [] },
   },
   {
+    name: "get_progress_overview",
+    description: "The student's WHOLE progress picture in ONE call: course progress and XP (check_progress), the learning overview (get_learning_overview), leaderboard ranking (get_ranking) and the knowledge map (get_knowledge_map), returned together as { progress, overview, ranking, knowledgeMap }. Prefer this single call whenever the learner asks how they are doing, their progress, or where they stand — do NOT call the four tools separately for that; call them individually only when the learner asks about one specific part.",
+    input_schema: { type: "object", properties: {}, required: [] },
+  },
+  {
     name: "get_my_school",
     description: "Read the signed-in learner's school identity: the school's public profile (name, description, website, address) and the learner's class. Use for ANY question about their school — its name, what it is, where it is — or their class/level. If no school is linked, say exactly that; never guess a school. Public information only: never expose staff contact details or internal school records.",
     input_schema: { type: "object", properties: {}, required: [] },
@@ -2141,6 +2146,20 @@ async function runChatTool(name, input, studentId, { conversationId = null, role
         total_xp: xpRow?.[0]?.total_xp ?? 0,
         rank:     xpRow?.[0]?.rank ?? "—",
       };
+    }
+    case "get_progress_overview": {
+      // The progress bundle in ONE call (2026-11-17): the four reads a
+      // "how am I doing?" answer needs, run together server-side. Each part
+      // keeps the shape its own tool returns; a part that fails carries its
+      // error in place so the rest still answer.
+      const part = async (tool) => {
+        try { return await runChatTool(tool, {}, studentId, { conversationId, role, channel }); }
+        catch { return { error: "Couldn't load this part just now." }; }
+      };
+      const [progress, overview, ranking, knowledgeMap] = await Promise.all([
+        part("check_progress"), part("get_learning_overview"), part("get_ranking"), part("get_knowledge_map"),
+      ]);
+      return { progress, overview, ranking, knowledgeMap };
     }
     case "get_my_school": {
       try {
@@ -4531,10 +4550,10 @@ async function streamDecision({ messages, tools, toolChoice, onText = null, isAb
  * uses. Throws when the model or API surface is unavailable so the loop can
  * fall back to the standard model.
  */
-async function thinkDecision({ systemContent, transcript, tools, toolChoice, onReasoning = () => {}, onText = null, isAborted = () => false }) {
+async function thinkDecision({ systemContent, transcript, tailContent = null, tools, toolChoice, onReasoning = () => {}, onText = null, isAborted = () => false }) {
   const stream = await openai.responses.create({
     model: THINK_MODEL,
-    input: toResponsesInput([{ role: "system", content: systemContent }, ...transcript], { native: true }),
+    input: toResponsesInput([{ role: "system", content: systemContent }, ...transcript, ...(tailContent ? [{ role: "system", content: tailContent }] : [])], { native: true }),
     tools: toResponsesTools(tools),
     tool_choice: toolChoice?.function?.name ? { type: "function", name: toolChoice.function.name } : "auto",
     reasoning: { effort: THINK_DECISION_EFFORT, summary: "auto" },
@@ -5016,7 +5035,7 @@ export const shouldPlanFirst = (intent) => !!(intent?.multiStep && intent.next =
 // `basis` (Phase 18 item 6): a turn a person's message started is explicit; a turn
 // started for them (a proactive kind, a workflow) passes { basis: "inferred", rule }.
 // `toolLimitMs`: one time limit for every call (tests, the benchmark); else each tool's own (toolLimits.js).
-async function runAgentToolLoop({ systemContent, messages, studentId, conversationId = null, turnId = null, status, tools = openAiChatTools(), requiredTool = null, role = "student", trace = null, isAborted = () => false, think = false, streamText = true, model = null, teacherWords = null, ledger = null, callTool = null, recorder = null, meta = null, basis = "explicit", toolLimitMs = null, planFirst = false }) {
+async function runAgentToolLoop({ systemContent, messages, studentId, conversationId = null, turnId = null, status, tools = openAiChatTools(), requiredTool = null, role = "student", trace = null, isAborted = () => false, think = false, streamText = true, model = null, teacherWords = null, ledger = null, callTool = null, recorder = null, meta = null, basis = "explicit", toolLimitMs = null, planFirst = false, tailContent = null }) {
   const turnBasis = actionBasis(basis, { basis: "explicit" });
   const runTool = callTool || ((name, input) => executeChatTool(name, input, studentId, { conversationId, role, basis: turnBasis }));
   // The loop guard (loopGuard.js): the same call again in a row gets a reminder in its observation.
@@ -5056,9 +5075,16 @@ async function runAgentToolLoop({ systemContent, messages, studentId, conversati
     // Phase 22 Part E: a multi-step request the agent is to act on starts by writing its plan
     // (update_plan with steps and done_when) — enforced on the first step, not left to a prompt hint.
     const planStep = iteration === 0 && !requiredTool && planFirst && !(Array.isArray(ledgerNow?.plan) && ledgerNow.plan.some((st) => st && !["done", "completed"].includes(st.status)));
+    // Final iteration (2026-11-17): a streamed, non-think turn still calling
+    // tools on its last step answers with what it has — tool_choice "none"
+    // makes this decision the reply, so the handler never pays for a
+    // separate full-context answer call after the loop. (Think and Research
+    // turns keep their designed answer passes; a forced tool or plan step
+    // only ever occupies iteration 0, so they never collide with this.)
+    const lastChance = iteration === CHAT_TOOL_LOOP_MAX_ITERATIONS - 1 && streamText && !think && !requiredTool && !planStep;
     const toolChoice = iteration === 0 && requiredTool
       ? { type: "function", function: { name: requiredTool } }
-      : planStep ? { type: "function", function: { name: UPDATE_PLAN_TOOL.name } } : "auto";
+      : planStep ? { type: "function", function: { name: UPDATE_PLAN_TOOL.name } } : lastChance ? "none" : "auto";
     // Words the model writes stream live as an activity block. The step's
     // thinking row closes when they start (they narrate the step themselves).
     // Research mode buffers instead: its answer is regenerated on the
@@ -5079,7 +5105,7 @@ async function runAgentToolLoop({ systemContent, messages, studentId, conversati
     if (reasonDecisions) {
       try {
         const decision = await thinkDecision({
-          systemContent, transcript, tools, toolChoice, isAborted, onText,
+          systemContent, transcript, tailContent, tools, toolChoice, isAborted, onText,
           onReasoning: (text) => { if (thinkOpen) trace.thinkDelta(thinkId, text); },
         });
         if (decision.aborted) return stoppedHere(decision.assistant);
@@ -5094,7 +5120,9 @@ async function runAgentToolLoop({ systemContent, messages, studentId, conversati
     }
     if (!assistant) {
       const decision = await streamDecision({
-        messages: [{ role: "system", content: systemContent }, ...transcript],
+        // Cache layout (2026-11-17): the volatile tail rides AFTER the
+        // transcript, so the static system + history stay a stable prefix.
+        messages: [{ role: "system", content: systemContent }, ...transcript, ...(tailContent ? [{ role: "system", content: tailContent }] : [])],
         tools, toolChoice, onText, isAborted, model, meta,
       });
       if (decision.aborted) return stoppedHere(decision.assistant);
@@ -5850,6 +5878,13 @@ router.post("/agent", async (req, res) => {
       ingests, pendingUploads, chatFilesCtx, inboxCtx, runningCtx, att, { on: selfToolOn, forced: forceSelfTool }, protege, pendingDrafts, approvedDecisions,
     ] = await Promise.all([goalsP, groundingP, ingestsP, pendingUploadsP, chatFilesP, inboxP, runningP, attP, selfToolP, protegeP, draftsP, decisionsP]
       .map((pr, i) => timed(["goals", "grounding", "ingests", "pendingUploads", "chatFiles", "inbox", "running", "attachments", "selfTool", "protege", "drafts", "decisions"][i], pr)));
+    // The learner's own tool defs (turnTools assembly, far below) depend on
+    // nothing between here and there — launch now, await there, so their
+    // database time overlaps the prompt assembly and the intent step
+    // (turn-prep overlap, 2026-11-17).
+    const learnerDefsP = role === "student" && selfToolOn
+      ? learnerToolDefsWithAreas(req.user.id).catch(() => ({ defs: [], areas: new Map() }))
+      : null;
     const protegeCtx = taught ? `\n\n${await loadDoctrine("policies/PROTEGE.md")}${renderTaughtContext(taught)}` : "";
     // The reply's trace and meta (previews, materials, the uploads' cards), and the uploads pointed at it.
     let savedReplyId = null;   // the stored reply's id: the episode's label key comes from it
@@ -5902,16 +5937,29 @@ router.post("/agent", async (req, res) => {
       }).join("\n") + "\nThe instructor's follow-ups about a draft — questions, parts, diagrams, marks, types, versions, title, instructions — change the NEWEST draft: call revise_activity_draft with its draftId (their words about the questions verbatim in question_request, or about a teaching resource verbatim in change_request; base_version when they name a version). Call prepare_activity only for a new activity, run_teaching_tool only for a new resource."
       : "";
     mark("prework");
-    const systemContent = (await assembleChatDoctrine({
+    // Prompt-cache layout (2026-11-17): providers cache the longest matching
+    // token PREFIX of a request, so anything volatile inside the system
+    // message poisons the match for the whole conversation history behind
+    // it. With the tail layout on (default), the prompt splits: systemStatic
+    // (the doctrine with NO clock in it, plus the parallel-reads note —
+    // byte-stable across turns) leads, the transcript follows, and
+    // systemDynamic (the clock + every per-turn context) rides as a trailing
+    // message the loop appends after the transcript. systemContent keeps the
+    // combined text for the consumers that want it whole (the budget count,
+    // the episode record, the flag-off path). AKORO_PROMPT_TAIL=false
+    // restores the single combined system message, byte-identical to before.
+    const promptTailOn = process.env.AKORO_PROMPT_TAIL !== "false";
+    const systemStatic = (await assembleChatDoctrine({
       agentName: safeAgentName || "Akoro",
       protege,
       role,
       think: isThink,
       research: isResearch,
       durableMemory: durable,
-      currentTimeContext: CURRENT_TIME_CONTEXT,
+      currentTimeContext: promptTailOn ? "" : CURRENT_TIME_CONTEXT,
     })) +
-      (process.env.AKORO_PARALLEL_READS !== "false" ? PARALLEL_READS_NOTE : "") +
+      (process.env.AKORO_PARALLEL_READS !== "false" ? PARALLEL_READS_NOTE : "");
+    const systemDynamic = (promptTailOn ? CURRENT_TIME_CONTEXT : "") +
       (conversation?.summary ? `\n\n## Compact conversation summary\n${conversation.summary}` : "") +
       renderRelevantMemory(relevantMemories) +
       renderLedger(conversation?.scratchpad ? { ...conversation.scratchpad, progressSummary: "" } : null) +
@@ -5921,6 +5969,7 @@ router.post("/agent", async (req, res) => {
       (pastCtx ? `\n\n${pastCtx}` : "") +
       (curriculumCtx ? `\n\n${curriculumCtx}` : "") +
       (att.docContext ? `\n\n${att.docContext}` : "");
+    const systemContent = systemStatic + systemDynamic;
 
     const userText = userMessage + (att.notes.length ? `\n\n(Attachments: ${att.notes.join(" ")})` : "");
     const userContent = att.visionParts.length
@@ -5941,20 +5990,23 @@ router.post("/agent", async (req, res) => {
     const fit = fitDialogue(dialogue, { systemText: systemContent, current: { role: "user", content: userText } });
     let summaryNow = conversation?.scratchpad?.progressSummary || "";
     let summaryMark = summaryMarkOf(conversation?.scratchpad);
-    if (durable && fit.dropped.length) {
-      const merged = await summariseEarlier({
-        previous: summaryNow, mark: summaryMark, dropped: fit.dropped,
-        create: (body) => openai.chat.completions.create({ ...body, __role: "background", __payer: "platform", __feature: "chat_summary", __userId: req.user.id, __timeoutMs: 45_000, __maxRetries: 0 }),   // the turn waits 8 s (contextBudget.js); a slow answer is ignored, never counted against the shared breaker
-      });
-      if (merged) { summaryNow = merged.summary; summaryMark = merged.mark; }
-    }
+    // Launched, not awaited (turn-prep overlap, 2026-11-17): the merge runs
+    // during the tool assembly below and is awaited at first use, just
+    // before turnSystem is built. Same inputs, same result.
+    const summaryP = durable && fit.dropped.length ? summariseEarlier({
+      previous: summaryNow, mark: summaryMark, dropped: fit.dropped,
+      create: (body) => openai.chat.completions.create({ ...body, __role: "background", __payer: "platform", __feature: "chat_summary", __userId: req.user.id, __timeoutMs: 45_000, __maxRetries: 0 }),   // the turn waits 8 s (contextBudget.js); a slow answer is ignored, never counted against the shared breaker
+    }).catch(() => null) : null;
     mark("summary");
     // The intent step (intentStep.js): what the learner wants, read before tool choice. Fail-open.
-    const intent = process.env.AGENT_INTENT_STEP === "off" ? null : await runIntentStep({
+    // Launched, not awaited (turn-prep overlap, 2026-11-17): it runs during
+    // the forced-tool and tool-list assembly below and is awaited at first
+    // use, just before turnSystem is built. The catch guard keeps a
+    // rejection from surfacing unhandled if the turn fails before the await.
+    const intentP = process.env.AGENT_INTENT_STEP === "off" ? Promise.resolve(null) : runIntentStep({
       message: userMessage, recent: fit.kept,
       create: (body) => openai.chat.completions.create({ ...body, __role: "background", __payer: "platform", __feature: "chat_intent", __userId: req.user.id, __timeoutMs: 45_000, __maxRetries: 0 }),   // the turn waits 4 s (intentStep.js); a slow answer is ignored, never counted against the shared breaker
-    });
-    mark("intent");
+    }).catch(() => null);
     // The turn's forced tool, computed before the tool list: runtime area
     // selection must include the forced tool's area (the loop refuses a
     // required tool it cannot see). Learners: capability questions are
@@ -6002,7 +6054,7 @@ router.post("/agent", async (req, res) => {
     let selectionNote = "";
     if (role === "student") {
       const { defs: learnerDefs, areas: learnerAreas } = selfToolOn
-        ? await learnerToolDefsWithAreas(req.user.id).catch(() => ({ defs: [], areas: new Map() }))
+        ? await learnerDefsP
         : { defs: [], areas: new Map() };
       let allTools = openAiChatTools({
         allowToolRequest: hasExplicitToolRequestConsent(userMessage, { previousAgentText: lastAgentText(fit.kept) }),
@@ -6070,12 +6122,28 @@ router.post("/agent", async (req, res) => {
         }
       }
     }
+    // Prep overlap, awaited at first use (2026-11-17): the summary merge and
+    // the intent step, launched above, ran during the tool assembly.
+    if (summaryP) { const merged = await summaryP; if (merged) { summaryNow = merged.summary; summaryMark = merged.mark; } }
+    const intent = await intentP;
+    mark("intent");
     const turnSystem = systemContent
       + (summaryNow ? `\n\n## Earlier in this chat (summary)\n${summaryNow}` : "")
       + renderIntent(intent)
       // Phase 22 Part E: a multi-step request gets a starting plan to adopt (kept only if the agent adopts it).
       + (intent?.multiStep ? renderDraftPlan(intent.steps, conversation?.scratchpad || null) : "")
       + selectionNote;
+    // The loop's volatile tail in the cache layout: the dynamic context plus
+    // this turn's summary/intent/selection notes (turnSystem above keeps the
+    // combined text for the episode record). Null when the layout is off —
+    // the loop then receives turnSystem whole, exactly as before.
+    const loopTail = promptTailOn
+      ? systemDynamic
+        + (summaryNow ? `\n\n## Earlier in this chat (summary)\n${summaryNow}` : "")
+        + renderIntent(intent)
+        + (intent?.multiStep ? renderDraftPlan(intent.steps, conversation?.scratchpad || null) : "")
+        + selectionNote
+      : null;
     const ledgerIn = conversation?.scratchpad ? { ...conversation.scratchpad, progressSummary: summaryNow, summaryMark } : (summaryNow ? { progressSummary: summaryNow, summaryMark } : null);
     const recorder = (await recordsRealTraffic(req.user.id).catch(() => false))
       ? createEpisodeRecorder({ surface: "agent_chat", role, system: turnSystem, source: "real",
@@ -6087,7 +6155,8 @@ router.post("/agent", async (req, res) => {
       ledger: ledgerIn,
       planFirst: shouldPlanFirst(intent),
       teacherWords: draftFollowUp ? userMessage.slice(0, 1500) : null,
-      systemContent: turnSystem,
+      systemContent: promptTailOn ? systemStatic : turnSystem,
+      tailContent: loopTail,
       messages: [...fit.kept, { role: "user", content: userContent }],
       studentId: req.user.id,
       conversationId,
@@ -6113,7 +6182,9 @@ router.post("/agent", async (req, res) => {
     });
     mark("agentLoop");
     const stopped = () => Boolean(prepared.aborted) || isAborted();
-    const finalMessages = [{ role: "system", content: systemContent }, ...prepared.messages];
+    const finalMessages = promptTailOn
+      ? [{ role: "system", content: systemStatic }, ...prepared.messages, ...(systemDynamic ? [{ role: "system", content: systemDynamic }] : [])]
+      : [{ role: "system", content: systemContent }, ...prepared.messages];
     const tools = null;   // the preflight loop above is the only executor
     let reply = "";
     let thinking = "";

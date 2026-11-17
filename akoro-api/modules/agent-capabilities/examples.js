@@ -44,6 +44,7 @@ export const TOOL_EXAMPLES = Object.freeze({
   get_weak_topics: e("progress", "What are my weak topics?", "What should I revise first?"),
   get_learning_overview: e("progress", "Give me an overview of my studies."),
   get_knowledge_map: e("progress", "Show my knowledge map for Biology.", "Which topics are due for review?"),
+  get_progress_overview: e("progress", "How am I doing this week?", "Give me my whole progress picture."),
   get_past_question_practice: e("progress", "How have my past-question practices gone?"),
   log_past_question_practice: e("progress", "Log that I did 20 WAEC Physics 2019 questions and got 14."),
   get_concept_tracker_summary: e("progress", "Where did I stop in Algebra?", "What am I still confused about?"),

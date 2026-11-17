@@ -35,6 +35,12 @@ export function materialsFrom(tool, result) {
       return [r.blogId ? link("my_blog", r.title, `/write/blog/${r.blogId}`) : null];
     case "check_progress":
       return (r.courses || []).map((c) => (c.slug ? link("course", c.title, `/course/${c.slug}`) : null));
+    case "get_progress_overview":
+      // The bundle's course links ride from its progress + overview parts.
+      return [
+        ...materialsFrom("check_progress", r.progress),
+        ...materialsFrom("get_learning_overview", r.overview),
+      ];
     case "get_learning_overview":
       return (r.courses || []).map((c) => (c.slug ? link("course", c.title, `/course/${c.slug}`) : null));
     case "analyse_past_papers":
