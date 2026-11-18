@@ -8,15 +8,14 @@
 
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { API, rememberExpiry, refreshSession } from '../services/api.js';
+import { createSessionUser } from '../client/sessionUser';
 
 const AuthContext = createContext(null);
 
-const USER_KEY     = 'akoro_user';
 const REDIRECT_KEY = 'akoro_redirect';
 
-function getStoredUser() {
-  try { return JSON.parse(localStorage.getItem(USER_KEY)); } catch { return null; }
-}
+const sessionUser = createSessionUser();
+const getStoredUser = () => sessionUser.read();
 
 async function authFetch(path, body) {
   const res = await fetch(`${API}${path}`, {
@@ -53,13 +52,13 @@ export function AuthProvider({ children }) {
   const isAuthenticated = !!user;
 
   const saveUser = useCallback((userObj) => {
-    localStorage.setItem(USER_KEY, JSON.stringify(userObj));
+    sessionUser.save(userObj);
     setUser(userObj);
     setError(null);
   }, []);
 
   const clearUser = useCallback(() => {
-    localStorage.removeItem(USER_KEY);
+    sessionUser.clear();
     setUser(null);
   }, []);
 
@@ -68,7 +67,7 @@ export function AuthProvider({ children }) {
     setUser(prev => {
       if (!prev) return prev;
       const next = { ...prev, onboardingCompleted: true };
-      localStorage.setItem(USER_KEY, JSON.stringify(next));
+      sessionUser.save(next);
       return next;
     });
   }, []);

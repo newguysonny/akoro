@@ -3958,6 +3958,18 @@ flag-by-flag rollout; old paths removed only after a release with flags on.
   sign-out (9/9); learner typecheck and build clean; frontend gate
   `reader.opens_text` PASS (phone) against the sandbox. Remaining in step 5:
   auth/WebSocket/i18n and the shared pages.
+- **Status (2026-11-18): socket options and the persisted user are shared.**
+  `design-system/client/socket.ts` (`socketOptions`: credentials on, portal in
+  the handshake auth, websocket→polling, optional reconnect ceiling) replaces
+  the admin and instructor copies; `client/sessionUser.ts`
+  (`createSessionUser`: read/save/clear, private mode safe, only the safe user
+  object) is on `akoro-admin`'s AuthContext. Both are dependency-free and
+  erasable; copies in all four apps, byte-checked. `test:client` 22/22
+  (contract + core, socket and session-user behaviour), structure 2/2, admin
+  and instructor build and typecheck, learner typecheck and school build clean.
+  Remaining in step 5: adopt the socket and user store in learner/school, the
+  shared auth context, i18n, and the Sign in/Sign up/Wallet/Settings/Terms
+  pages.
 - **Status (2026-11-18): step 1 (guardrails) ✅ built.** `akoro-api/scripts/
   structure-scan.mjs` + `modules/structure.contract.test.mjs`, ratcheted against
   `modules/structure-baseline.json` (regenerate with `npm run structure:baseline`,

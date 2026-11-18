@@ -1,13 +1,14 @@
 import { useEffect, useRef } from 'react';
 import { io } from 'socket.io-client';
 import { WS_URL } from '../constants.js';
+import { socketOptions } from '../client/socket';
 
 export function useInstructorSocket(userId) {
   const socketRef = useRef(null);
 
   useEffect(() => {
     if (!userId) return;
-    const socket = io(WS_URL, { withCredentials: true, transports: ['websocket', 'polling'], auth: { portal: 'admin' } });
+    const socket = io(WS_URL, socketOptions({ portal: 'admin' }));
     socketRef.current = socket;
     socket.on('connect', () => {
       socket.emit('subscribe-notifications', userId);
