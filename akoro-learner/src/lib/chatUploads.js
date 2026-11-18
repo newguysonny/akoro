@@ -54,6 +54,25 @@ async function pagesOf(record) {
  *  presign → PUT (progress + AbortSignal) → register the record. Runs the
  *  moment the file is picked, while the learner composes. */
 export async function uploadChatFile(file, { onProgress, signal } = {}) {
+  // One automatic retry on a transient failure (a dropped connection, a
+  // slow presign, a 5xx): an attach that dies on a network blip shouldn't
+  // be the learner's problem to notice and retry by hand. A rejection the
+  // server actually decided (4xx) is final, and an abort is the learner's.
+  let lastErr;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try { return await uploadChatFileOnce(file, { onProgress, signal }); }
+    catch (e) {
+      lastErr = e;
+      if (signal?.aborted || e?.name === 'AbortError') throw e;
+      const status = e?.status;
+      if (!(status == null || status >= 500 || status === 424)) throw e;
+      if (attempt === 0) await new Promise((r) => setTimeout(r, 1500));
+    }
+  }
+  throw lastErr;
+}
+
+async function uploadChatFileOnce(file, { onProgress, signal } = {}) {
   const up = await presignRecordUpload({ name: file.name, mime: file.type || '', size: file.size });
   if (!up?.uploadUrl) throw new Error('The Library is not taking uploads right now.');
   await putFileTo(up.uploadUrl, file, onProgress, { signal });

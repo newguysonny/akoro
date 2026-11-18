@@ -5,9 +5,10 @@
  * it to the real API as runRecordExtraction.
  */
 /**
- * runExtraction — batch → submit → poll → merge. Each ≤8-page batch is
- * SUBMITTED (the API answers at once) and then polled until every page is
- * settled; the API releases the file's claim then, so the next batch can go.
+ * runExtraction — batch → submit → poll → merge. Each batch (up to
+ * EXTRACT_BATCH_PAGES pages, size-capped) is SUBMITTED (the API answers at
+ * once) and then polled until every page is settled; the API releases the
+ * file's claim then, so the next batch can go.
  * No GPU work rides an open request, so a slow worker can't trip a proxy.
  *
  * Resolves with { pages: [{pageNumber, markdown, blocks}], failed:
@@ -16,6 +17,28 @@
  * file's cache (discovered records) instead of the owner's record.
  * `isCancelled()` stops polling when the reader closes.
  */
+export const EXTRACT_BATCH_PAGES = 16;
+export const EXTRACT_BATCH_MAX_B64_CHARS = 14 * 1024 * 1024;   // one POST stays well under the API's 25 MB JSON cap
+
+/** Greedy batches: at most EXTRACT_BATCH_PAGES pages and at most
+ *  EXTRACT_BATCH_MAX_B64_CHARS of base64 per batch (a batch always holds
+ *  at least one page, however large). Bigger batches mean fewer serial
+ *  claim rounds per document — the claim allows one live batch per file,
+ *  so rounds, not pages, are what a long document pays for. */
+export function extractionBatches(pages) {
+  const batches = [];
+  let cur = [], chars = 0;
+  for (const p of pages || []) {
+    const c = typeof p?.imageBase64 === 'string' ? p.imageBase64.length : 0;
+    if (cur.length && (cur.length >= EXTRACT_BATCH_PAGES || chars + c > EXTRACT_BATCH_MAX_B64_CHARS)) {
+      batches.push(cur); cur = []; chars = 0;
+    }
+    cur.push(p); chars += c;
+  }
+  if (cur.length) batches.push(cur);
+  return batches;
+}
+
 export const EXTRACT_POLL_MS = 3000;
 export const EXTRACT_BATCH_DEADLINE_MS = 12 * 60_000;   // the API fails a page after 10 min
 // A 429 is "slow down", not "failed": the work is still running server-side.
@@ -38,7 +61,6 @@ export async function runExtraction({
   pollMs = EXTRACT_POLL_MS, sleep = (ms) => new Promise((r) => setTimeout(r, ms)), now = Date.now,
   readSaved = null,
 } = {}) {
-  const BATCH = 8;
   const target = { recordId, contentKey };
   const byPage = new Map();          // pageNumber → { pageNumber, markdown, blocks }
   const failedByPage = new Map();    // pageNumber → { pageNumber, error }
@@ -81,8 +103,8 @@ export async function runExtraction({
   };
 
   let error = null;
-  for (let i = 0; i < pages.length && !error; i += BATCH) {
-    const batch = pages.slice(i, i + BATCH);
+  for (const batch of extractionBatches(pages)) {
+    if (error) break;
     try {
       // Submit; a 409 means another opener's batch holds the file — help
       // finish it, then submit ours (twice at most).

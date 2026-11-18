@@ -93,7 +93,7 @@ export async function getContentJob(contentKey, lane) {
 const RUNPOD_API     = "https://api.runpod.ai";
 const RUNSYNC_TIMEOUT_MS = 150_000;   // one 4B-model page ≈ seconds; queue spikes happen
 
-export const MAX_PAGES_PER_REQUEST = 8;
+export const MAX_PAGES_PER_REQUEST = 16;   // a document pays per claim round, not per page — 16 halves the rounds of 8
 export const MAX_RECORD_PAGES      = 60;    // a 60-page scan is ~15 batched requests
 export const MAX_IMAGE_B64_CHARS   = 8 * 1024 * 1024;   // ≈ 6 MB JPEG after base64
 

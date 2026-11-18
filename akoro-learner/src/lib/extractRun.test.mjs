@@ -38,14 +38,22 @@ function fakeApi({ script = () => 'ok', busyFirst = 0 } = {}) {
 const pages = (n) => Array.from({ length: n }, (_, i) => ({ pageNumber: i + 1, imageBase64: 'x' }));
 const fast = { pollMs: 0, sleep: async () => {} };
 
-test('pages go up in batches of 8; each batch is polled to completion before the next', async () => {
+test('pages go up in batches of 16; each batch is polled to completion before the next', async () => {
   const api = fakeApi();
   const progress = [];
   const res = await runExtraction({ ...api, ...fast, recordId: 'r', pages: pages(20), onProgress: (d, t) => progress.push([d, t]) });
-  assert.deepEqual(api.calls.submits, [[1, 2, 3, 4, 5, 6, 7, 8], [9, 10, 11, 12, 13, 14, 15, 16], [17, 18, 19, 20]]);
+  assert.deepEqual(api.calls.submits, [Array.from({ length: 16 }, (_, i) => i + 1), [17, 18, 19, 20]]);
   assert.deepEqual(res.pages.map((p) => p.pageNumber), Array.from({ length: 20 }, (_, i) => i + 1));
   assert.equal(res.error, null);
   assert.deepEqual(progress.at(-1), [20, 20]);
+});
+
+test('a batch also closes when the base64 budget fills, however few pages that is', async () => {
+  const api = fakeApi();
+  const big = Array.from({ length: 3 }, (_, i) => ({ pageNumber: i + 1, imageBase64: 'x'.repeat(8 * 1024 * 1024) }));
+  const res = await runExtraction({ ...api, ...fast, recordId: 'r', pages: big });
+  assert.deepEqual(api.calls.submits, [[1], [2], [3]], 'two 8 MB pages would breach the 14 MB batch budget');
+  assert.equal(res.pages.length, 3);
 });
 
 test('failed pages are reported with a readable error; saved pages are kept', async () => {

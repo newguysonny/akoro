@@ -679,7 +679,7 @@ router.post("/folders/items", authenticateToken, asyncHandler(async (req, res) =
  * first-opens from double-spending: the loser gets 409 + the job row and
  * polls instead.
  *
- *   POST /api/records/extract              { recordId|contentKey, pages:≤8 }
+ *   POST /api/records/extract              { recordId|contentKey, pages:≤16 }
  *   GET  /api/records/extract/:recordId    cached extraction (your record)
  *   GET  /api/records/extract/content/:key cached extraction (shared file)
  *
@@ -705,7 +705,7 @@ function pageSizeOf(p) {
 }
 
 /*
- * POST /extract — SUBMIT a batch (≤8 rendered pages) and return at once.
+ * POST /extract — SUBMIT a batch (≤16 rendered pages) and return at once.
  * Each page becomes one async RunPod job; the job ids ride the single-flight
  * claim's result, and GET /extract/status collects them. A GPU page used to
  * ride this request via /runsync — up to 8 × 150 s — past Cloudflare's
@@ -748,14 +748,21 @@ router.post("/extract", authenticateToken, asyncHandler(async (req, res) => {
   const submittedAt = new Date().toISOString();
   const jobs = [];
   let submitError = null;
-  for (const { pageNumber, b64, size } of work) {
-    try {
-      const { jobId } = await parsePageRunAsync({ imageBase64: b64 });
-      jobs.push({ pageNumber, jobId, state: "pending", ...(size ? { size } : {}) });
-    } catch (err) {
-      submitError = { pageNumber, error: String(err?.message || err).slice(0, 200) };
-      break;   // the endpoint is refusing work — don't keep hammering it
-    }
+  // Submit in concurrent waves: each /run call is quick, but sixteen of
+  // them in series added seconds before the first page even queued. A
+  // refusal still stops the run — later waves are never submitted.
+  const SUBMIT_WAVE = 8;
+  for (let i = 0; i < work.length && !submitError; i += SUBMIT_WAVE) {
+    const wave = work.slice(i, i + SUBMIT_WAVE);
+    const results = await Promise.allSettled(wave.map(({ b64 }) => parsePageRunAsync({ imageBase64: b64 })));
+    results.forEach((r, j) => {
+      const { pageNumber, size } = wave[j];
+      if (r.status === "fulfilled") {
+        jobs.push({ pageNumber, jobId: r.value.jobId, state: "pending", ...(size ? { size } : {}) });
+      } else if (!submitError) {
+        submitError = { pageNumber, error: String(r.reason?.message || r.reason).slice(0, 200) };
+      }
+    });
   }
   if (!jobs.length) {
     await finishContentJob(contentKey, "parse", "failed", { error: submitError?.error || "Submit failed" });
@@ -797,13 +804,20 @@ router.get("/extract/status", authenticateToken, asyncHandler(async (req, res) =
     return okExtract(res, { contentKey, running: job?.status === "running", done: job?.status !== "running", pages: [], failed: [], pending: [] });
   }
 
+  // Poll every pending job concurrently — in series, one status round
+  // cost up to sixteen sequential RunPod calls before anything saved.
+  const polledByJob = new Map();
+  await Promise.all(batch.jobs.filter((e) => e.state === "pending").map(async (entry) => {
+    try { polledByJob.set(entry.jobId, await getParseJob({ jobId: entry.jobId })); }
+    catch { /* a status hiccup — try again on the next poll */ }
+  }));
+
   const saved = [];
   let changed = false;
   for (const entry of batch.jobs) {
     if (entry.state !== "pending") continue;
-    let polled;
-    try { polled = await getParseJob({ jobId: entry.jobId }); }
-    catch { continue; }   // a status hiccup — try again on the next poll
+    const polled = polledByJob.get(entry.jobId);
+    if (!polled) continue;
     const settled = settleParseJob(polled, { submittedAt: batch.submittedAt });
     if (settled.state === "pending") continue;
     changed = true;
