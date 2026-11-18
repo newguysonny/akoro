@@ -26,6 +26,11 @@ test("naming a tool without asking to run it forces nothing", () => {
   assert.equal(namedLearnerTool("My Delete a chat by title tool — is it active?", TOOLS), null);
   assert.equal(namedLearnerTool("The Delete a chat by title tool is broken.", TOOLS), null);
   assert.equal(namedLearnerTool("What does my Delete a chat by title tool do?", TOOLS), null);
+  // A NEGATED run verb is the opposite instruction (live miss,
+  // 2026-11-18: this exact status question was forced into a call).
+  assert.equal(namedLearnerTool("My Delete a chat by title tool — is it active? Just tell me its status, do not run it.", TOOLS), null);
+  assert.equal(namedLearnerTool("Please do not use my Weekly XP summary tool today.", TOOLS), null);
+  assert.equal(namedLearnerTool("Never run my Delete a chat by title tool without asking me.", TOOLS), null);
   // A run verb with no named tool forces nothing either.
   assert.equal(namedLearnerTool("Run a quick check on my progress.", TOOLS), null);
   // Short names never force — too collision-prone.

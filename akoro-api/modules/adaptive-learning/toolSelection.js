@@ -53,6 +53,10 @@ export const AREA_KEYWORDS = Object.freeze({
 // about ("my X tool is broken" must not fire it; "can you run my X
 // tool?" must).
 const RUN_VERB = /\b(run|use|using|execute|apply|invoke)\b/i;
+// A negated run verb is the opposite instruction ("do not run it",
+// "never use my X tool") — live, 2026-11-18: a status question ending
+// "do not run it" was forced into a call by the bare verb match.
+const NEGATED_RUN = /\b(do not|don't|dont|never|not)\s+(\w+\s+)?(run|use|using|execute|apply|invoke)\b/i;
 const normWords = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 
 /**
@@ -69,7 +73,7 @@ const normWords = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " 
  */
 export function namedLearnerTool(message, tools) {
   const text = ` ${normWords(message)} `;
-  if (!RUN_VERB.test(text)) return null;
+  if (!RUN_VERB.test(text) || NEGATED_RUN.test(text)) return null;
   let best = null;
   for (const t of tools || []) {
     if (!t?.name) continue;
