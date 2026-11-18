@@ -22,7 +22,8 @@
     "smoke:instructor": "node scripts/smoke-instructor.mjs",
     "preflight": "node scripts/preflight-security.mjs",
     "test:structure": "node --test modules/structure.contract.test.mjs",
-    "structure:baseline": "node scripts/structure-baseline.mjs"
+    "structure:baseline": "node scripts/structure-baseline.mjs",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.131.0",
@@ -77,6 +78,7 @@
     "form-data": "^4.0.6"
   },
   "devDependencies": {
-    "patch-package": "^8.0.1"
+    "patch-package": "^8.0.1",
+    "typescript": "^5.9.3"
   }
 }

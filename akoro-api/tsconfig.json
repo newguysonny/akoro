@@ -1,0 +1,11 @@
+{
+  // Phase 20 Part B, step 1: the API checker. No .ts files yet; this exists so
+  // the first converted file is type-checked in CI from the start.
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2022"],
+    "types": ["node"]
+  },
+  "include": ["types/**/*.ts", "modules/**/*.js", "lib/**/*.js", "scripts/**/*.mjs"],
+  "exclude": ["node_modules"]
+}

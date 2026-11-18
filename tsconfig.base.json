@@ -1,0 +1,25 @@
+{
+  // Shared TypeScript settings (Grand Plan Phase 20 Part B, step 1).
+  //
+  // Today every app is JavaScript; this file only turns the checker on. Files
+  // stay .js/.jsx until they are converted, so allowJs is on and checkJs is off:
+  // .js files are parsed, never type-checked, and the build is unchanged.
+  //
+  // Strictness rises only as areas finish converting (Part B step 5):
+  //   strict → noUncheckedIndexedAccess → exactOptionalPropertyTypes
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "allowJs": true,
+    "checkJs": false,
+    "noEmit": true,
+    "strict": false,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": false
+  }
+}
