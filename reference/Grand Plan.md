@@ -3915,6 +3915,15 @@ flag-by-flag rollout; old paths removed only after a release with flags on.
   `adaptive-learning/` with no loose top-level files; the four apps on one client
   core.
 - **Status (2026-11-02):** planned.
+- **Status (2026-11-18): step 5 started — shared HTTP core.** One source
+  `design-system/client/apiCore.ts` (TypeScript from day one), copied into all
+  four apps as `src/client/` by `design-system/sync.mjs` (`CLIENT_TARGETS`),
+  byte-checked by `akoro-api/modules/client-core.contract.test.mjs`. It carries
+  the API base, cookies-only auth with the portal header, one deduped
+  refresh-and-replay on 401, the per-request deadline and one `ApiError` shape;
+  each app keeps its endpoints, offline queue, SSE and hand-off tokens. Not yet
+  imported by the apps (no behaviour change). Still open in step 5: auth,
+  WebSocket, i18n and the shared pages, then rewire each app to the core.
 - **Status (2026-11-18): step 1 (guardrails) ✅ built.** `akoro-api/scripts/
   structure-scan.mjs` + `modules/structure.contract.test.mjs`, ratcheted against
   `modules/structure-baseline.json` (regenerate with `npm run structure:baseline`,
