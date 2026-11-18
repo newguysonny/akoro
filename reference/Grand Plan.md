@@ -3924,6 +3924,16 @@ flag-by-flag rollout; old paths removed only after a release with flags on.
   each app keeps its endpoints, offline queue, SSE and hand-off tokens. Not yet
   imported by the apps (no behaviour change). Still open in step 5: auth,
   WebSocket, i18n and the shared pages, then rewire each app to the core.
+- **Status (2026-11-18): admin and instructor rewired.** The core now carries
+  the full session contract those two copies had — deduped refresh returning
+  `{ok,status,json}` (only a 401/403 refresh ends a session), expiry
+  pre-refresh from `accessExpiresAt`, the 401 replay, network vs offline
+  errors, and connection state. `akoro-admin/src/services/api.js` and
+  `akoro-instructor/src/services/api.js` are thin portal bindings plus the
+  instructor file/blob helpers. Both apps `vite build` clean; the frontend
+  gate's instructor suite `instructor.routes_baseline` PASS (login + navigation
+  through the shared core). Next: `akoro-school` (hand-off tokens) and the
+  learner (offline queue + SSE).
 - **Status (2026-11-18): step 1 (guardrails) ✅ built.** `akoro-api/scripts/
   structure-scan.mjs` + `modules/structure.contract.test.mjs`, ratcheted against
   `modules/structure-baseline.json` (regenerate with `npm run structure:baseline`,

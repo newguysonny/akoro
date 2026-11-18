@@ -4,15 +4,13 @@
 // `node design-system/sync.mjs` (copy-and-check, same method as the UI kit).
 // A contract test fails if a copy differs.
 //
-// Scope is deliberately small — the part that was copied four times and must
-// behave identically:
-//   · the API base URL
-//   · cookies-only auth (no token in JS memory) with the portal header
-//   · one transparent refresh-and-replay on 401, deduped across parallel calls
-//   · a per-request deadline, and one error shape (ApiError)
+// Everything here already existed in two or four copies and must behave the
+// same everywhere: cookies-only auth with the portal header, one deduped
+// refresh per tab, refresh-before-the-herd when the expiry is known, a single
+// user-facing error shape, and connection state for the banner.
 //
-// Each app keeps what is its own: endpoint functions, offline cache/queue
-// (learner), SSE streaming, hand-off tokens (school).
+// Each app keeps what is its own: endpoint functions, the learner's offline
+// cache/queue and SSE streaming, the school portal's hand-off tokens.
 //
 // TypeScript from day one (Phase 20 Part B step 3). Erasable syntax only.
 
@@ -21,93 +19,208 @@ export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 export interface ApiCoreOptions {
   /** Canonical API origin, e.g. https://api.akoro.name.ng */
   apiBase: string;
-  /** Sent as X-Akoro-Portal; decides which session the API reads. */
+  /** Sent as X-Akoro-Portal; it decides which session the API reads. */
   portalId: "student" | "admin" | "instructor" | "school";
-  /** Per-request deadline. Default 30s: a stalled mobile request never rejects on its own. */
-  timeoutMs?: number;
   /** localStorage key holding the signed-in user (default akoro_user). */
-  userStorageKey?: string;
-  /** Called once when the session is genuinely over, after a failed refresh. */
-  onSessionEnd?: (reason: string) => void;
+  sessionUserKey?: string;
+  /** localStorage key holding the access-token expiry the API reported. */
+  expiryKey?: string;
+  /** Where a dead session sends the browser (default /signin?error=session_expired). */
+  signInPath?: string;
+  /** Per-request deadline in ms; 0/undefined leaves the request unbounded. */
+  timeoutMs?: number;
+  /** Overrides the redirect when a session is genuinely over. */
+  onSessionEnd?: () => void;
 }
 
 export interface RequestOptions {
   timeout?: number;
-  signal?: AbortSignal;
-  /** Set false for endpoints that must not trigger a refresh (e.g. the refresh route itself). */
-  retryOn401?: boolean;
+  /** Skip the expiry pre-check (the auth endpoints do their own). */
+  skipPreRefresh?: boolean;
 }
 
-export type ApiErrorBody = { message?: string; error?: string; code?: string } & Record<string, unknown>;
-
-export class ApiError extends Error {
+export interface RefreshResult {
+  ok: boolean;
   status: number;
-  code: string | null;
-  body: ApiErrorBody | null;
-  path: string;
+  json: unknown;
+}
 
-  constructor(status: number, message: string, path: string, body: ApiErrorBody | null = null) {
-    super(message);
-    this.name = "ApiError";
-    this.status = status;
-    this.code = body?.code ?? null;
-    this.body = body;
-    this.path = path;
-  }
+export interface ClientError extends Error {
+  status?: number;
+  path?: string;
+  method?: string;
+  /** For logs only, never for users. */
+  detail?: string;
+  isNetwork?: boolean;
+  offline?: boolean;
+  code?: string | null;
+  body?: unknown;
+}
+
+export interface ConnectionState {
+  ok: boolean;
+  offline: boolean;
 }
 
 export interface ApiCore {
   readonly API: string;
-  request<T = unknown>(method: HttpMethod, path: string, body?: unknown, opts?: RequestOptions): Promise<T>;
-  get<T = unknown>(path: string, opts?: RequestOptions): Promise<T>;
-  post<T = unknown>(path: string, body?: unknown, opts?: RequestOptions): Promise<T>;
-  put<T = unknown>(path: string, body?: unknown, opts?: RequestOptions): Promise<T>;
-  patch<T = unknown>(path: string, body?: unknown, opts?: RequestOptions): Promise<T>;
-  del<T = unknown>(path: string, opts?: RequestOptions): Promise<T>;
-  /** Spend the refresh cookie once; resolves true when a new access cookie is set. */
-  refreshSession(): Promise<boolean>;
-  /** Server-reported access-token expiry (ms epoch, 0 when unknown). */
-  accessExpiresAt(): number;
-  /** Record the expiry the API returned in a sign-in / refresh response. */
-  rememberExpiry(json: unknown): void;
+  /** Record the expiry the API returned (ms epoch) and pass the payload through. */
+  rememberExpiry<T>(json: T): T;
+  accessExpired(): boolean;
+  /** ONE refresh per tab, whoever asks. */
+  refreshSession(): Promise<RefreshResult>;
+  /** fetch + one transparent refresh-and-retry on 401. */
+  authedFetch(url: string, init?: RequestInit & { timeout?: number }): Promise<Response>;
+  request(method: HttpMethod, path: string, body?: unknown, opts?: RequestOptions): Promise<unknown>;
+  apiGet(path: string, opts?: RequestOptions): Promise<unknown>;
+  apiPost(path: string, body?: unknown, opts?: RequestOptions): Promise<unknown>;
+  apiPut(path: string, body?: unknown, opts?: RequestOptions): Promise<unknown>;
+  apiPatch(path: string, body?: unknown, opts?: RequestOptions): Promise<unknown>;
+  apiDelete(path: string, opts?: RequestOptions): Promise<unknown>;
+  /** Turn a failed response into the error every call site shows. */
+  errorFor(res: Response, method: string, path: string): Promise<ClientError>;
+  onConnectionChange(fn: (state: ConnectionState) => void): () => void;
 }
 
-const DEFAULT_TIMEOUT_MS = 30_000;
+/* ── Errors users can act on ─────────────────────────────────────────────
+   Every call site shows err.message somewhere — a toast, a form, a page. So
+   what we throw IS the user-facing copy, and "POST /api/self-study -> 500" is
+   not copy. The server's own message wins when there is one; otherwise the
+   status becomes a sentence. The technical detail stays on the error object
+   (err.status, err.path, err.method, err.detail) for logs and branching. */
+const STATUS_COPY: Record<number, string> = {
+  400: "Something in that request wasn't right. Check the details and try again.",
+  401: "Your session has expired. Please sign in again.",
+  403: "You don't have permission to do that.",
+  404: "We couldn't find that — it may have been deleted.",
+  409: "That conflicts with something that already exists.",
+  413: "That file is too large.",
+  422: "Some of those details are not valid. Please check them.",
+  429: "That's a lot of requests — please wait a moment and try again.",
+  500: "Something went wrong on our side. Please try again.",
+  502: "Akoro is having trouble right now. Please try again in a moment.",
+  503: "Akoro is temporarily unavailable. Please try again in a moment.",
+  504: "That took too long to respond. Please try again.",
+};
+
+const isAbort = (err: unknown): boolean =>
+  typeof err === "object" && err !== null && (err as { name?: string }).name === "AbortError";
 
 const trimBase = (url: string): string => url.replace(/\/+$/, "");
-
-function toApiError(res: Response, body: ApiErrorBody | null, path: string): ApiError {
-  const fallback =
-    res.status === 401 ? "Your session expired — please sign in again."
-    : res.status === 403 ? "You do not have access to that."
-    : res.status === 429 ? "Too many requests — please wait a moment."
-    : res.status >= 500 ? "Something went wrong on our side. Please try again."
-    : `Request failed (${res.status}).`;
-  return new ApiError(res.status, body?.message || body?.error || fallback, path, body);
-}
 
 export function createApiCore(options: ApiCoreOptions): ApiCore {
   const API = trimBase(options.apiBase);
   const portalId = options.portalId;
-  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-  const userKey = options.userStorageKey ?? "akoro_user";
+  const userKey = options.sessionUserKey ?? "akoro_user";
+  const expiryKey = options.expiryKey ?? "akoro_access_exp";
+  const signInPath = options.signInPath ?? "/signin?error=session_expired";
+  const defaultTimeout = options.timeoutMs ?? 0;
 
-  let refreshing: Promise<boolean> | null = null;
-  let expiresAt = 0;
-  let sessionEnded = false;
+  let refreshing: Promise<RefreshResult> | null = null;
 
-  const endSession = (reason: string): void => {
-    if (sessionEnded) return;
-    sessionEnded = true;
-    expiresAt = 0;
+  function rememberExpiry<T>(json: T): T {
+    const payload = json as { accessExpiresAt?: unknown; data?: { accessExpiresAt?: unknown } } | null;
+    const exp = payload?.accessExpiresAt ?? payload?.data?.accessExpiresAt;
+    if (!exp) return json;
+    try { localStorage.setItem(expiryKey, String(exp)); } catch { /* private mode */ }
+    return json;
+  }
+
+  function accessExpired(): boolean {
+    try {
+      const at = Number(localStorage.getItem(expiryKey) || 0);
+      // 0 = we've never been told; let the request go and 401 if it must.
+      return at > 0 && at <= Date.now() + 5000;   // 5s skew for a slow request
+    } catch { return false; }
+  }
+
+  function forgetExpiry(): void {
+    try { localStorage.removeItem(expiryKey); } catch { /* private mode */ }
+  }
+
+  function refreshSession(): Promise<RefreshResult> {
+    if (!refreshing) {
+      refreshing = fetch(`${API}/api/auth/refresh`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json", "X-Akoro-Portal": portalId },
+        body: "{}",
+      }).then(async (r) => {
+        const json = r.ok ? await r.json().catch(() => null) : null;
+        if (json) rememberExpiry(json);
+        // The STATUS, not just ok: a 429 or a 502 means we never got an answer,
+        // and bouncing someone to /signin for that throws away a live session.
+        return { ok: r.ok, status: r.status, json };
+      }).catch(() => ({ ok: false, status: 0, json: null }))
+        .finally(() => { refreshing = null; });
+    }
+    return refreshing;
+  }
+
+  function endSession(): void {
+    forgetExpiry();
     try { localStorage.removeItem(userKey); } catch { /* private mode */ }
-    if (options.onSessionEnd) options.onSessionEnd(reason);
-  };
+    if (options.onSessionEnd) { options.onSessionEnd(); return; }
+    if (typeof window !== "undefined" && !window.location.pathname.startsWith("/signin")) {
+      window.location.href = signInPath;
+    }
+  }
 
-  const isAbort = (err: unknown): boolean =>
-    typeof err === "object" && err !== null && (err as { name?: string }).name === "AbortError";
+  /* ── Connection state ──────────────────────────────────────────────────
+     Reads that pages choose to swallow still tell us something: whether the
+     API is reachable at all. One banner explains an outage that would
+     otherwise render as "you have nothing". */
+  const connListeners = new Set<(state: ConnectionState) => void>();
+  let connOk = true;
+
+  function reportConnection(ok: boolean, offline = false): void {
+    if (ok === connOk) return;              // only announce transitions
+    connOk = ok;
+    connListeners.forEach((fn) => { try { fn({ ok, offline }); } catch { /* a bad listener must not break fetch */ } });
+  }
+
+  /* A thrown fetch means the request never reached us — offline, DNS, CORS, a
+     dead API. "Failed to fetch" tells the user nothing, so name the likely
+     cause and mark it so callers can offer Retry rather than treat it as a bug. */
+  function networkError(cause: unknown, method: string, path: string): ClientError {
+    const offline = typeof navigator !== "undefined" && navigator.onLine === false;
+    const err = new Error(offline
+      ? "You're offline. Reconnect and try again."
+      : "Couldn't reach Akoro. Check your connection and try again.") as ClientError;
+    err.isNetwork = true;
+    err.offline = offline;
+    err.path = path;
+    err.method = method;
+    err.detail = (cause as { message?: string } | null)?.message || "network error";
+    return err;
+  }
+
+  async function errorFor(res: Response, method: string, path: string): Promise<ClientError> {
+    let serverMsg = "";
+    let body: unknown = null;
+    try {
+      body = await res.json();
+      const j = body as { error?: string; message?: string };
+      serverMsg = j.error || j.message || "";
+    } catch { /* HTML error page or empty body — fall through to the status copy */ }
+
+    const err = new Error(
+      serverMsg ||
+      STATUS_COPY[res.status] ||
+      (res.status >= 500
+        ? "Something went wrong on our side. Please try again."
+        : "That did not work. Please try again."),
+    ) as ClientError;
+    err.status = res.status;
+    err.path = path;
+    err.method = method;
+    err.detail = `${method} ${path} -> ${res.status}`;   // for logs, never for users
+    err.body = body;
+    return err;
+  }
 
   async function fetchWithTimeout(url: string, init: RequestInit, timeout: number): Promise<Response> {
+    if (!timeout) return fetch(url, init);
     const controller = new AbortController();
     const outer = init.signal;
     const onOuterAbort = () => controller.abort();
@@ -120,93 +233,88 @@ export function createApiCore(options: ApiCoreOptions): ApiCore {
       return await fetch(url, { ...init, signal: controller.signal });
     } catch (err) {
       if (isAbort(err)) {
-        const reason = outer?.aborted ? "cancelled" : "timeout";
-        throw new ApiError(0, reason === "timeout" ? "The server took too long. Please try again." : "Request cancelled.", url, null);
+        const timedOut = !outer?.aborted;
+        const e = new Error(timedOut
+          ? "The server took too long. Please try again."
+          : "Request cancelled.") as ClientError;
+        e.isNetwork = true;
+        e.path = url;
+        throw e;
       }
-      throw new ApiError(0, "You appear to be offline. Check your connection.", url, null);
+      throw err;
     } finally {
       clearTimeout(timer);
       outer?.removeEventListener("abort", onOuterAbort);
     }
   }
 
-  async function refreshSession(): Promise<boolean> {
-    if (refreshing) return refreshing;
-    refreshing = (async () => {
-      try {
-        const res = await fetchWithTimeout(`${API}/api/auth/refresh`, {
-          method: "POST",
-          credentials: "include",
-          headers: { "X-Akoro-Portal": portalId },
-        }, timeoutMs);
-        if (!res.ok) return false;
-        const json = await res.json().catch(() => null);
-        rememberExpiry(json);
-        return true;
-      } catch {
-        return false;
-      } finally {
-        refreshing = null;
-      }
-    })();
-    return refreshing;
-  }
+  async function authedFetch(url: string, init: RequestInit & { timeout?: number } = {}): Promise<Response> {
+    const method = String(init.method || "GET").toUpperCase();
+    const path = url.startsWith(API) ? url.slice(API.length) : url;
+    const timeout = init.timeout ?? defaultTimeout;
 
-  function rememberExpiry(json: unknown): void {
-    const expiresIn = (json as { data?: { expiresIn?: unknown } } | null)?.data?.expiresIn;
-    if (typeof expiresIn === "number" && Number.isFinite(expiresIn) && expiresIn > 0) {
-      expiresAt = Date.now() + expiresIn * 1000;
+    // Known-expired token: refresh once up front instead of letting every
+    // request in this batch discover it independently.
+    if (accessExpired()) await refreshSession();
+
+    let res: Response;
+    try { res = await fetchWithTimeout(url, init, timeout); }
+    catch (e) {
+      reportConnection(false, typeof navigator !== "undefined" && navigator.onLine === false);
+      throw e instanceof Error && (e as ClientError).isNetwork ? e : networkError(e, method, path);
+    }
+    reportConnection(true);
+
+    if (res.status !== 401) return res;
+    // Never recurse on the auth endpoints themselves.
+    if (url.includes("/api/auth/")) return res;
+
+    const r2 = await refreshSession();
+    // Only end the session when the server actually rejected the refresh. A
+    // network drop, a rate limit or a gateway error leaves a valid refresh
+    // cookie in place — retrying later is right; signing out is not.
+    if (!r2.ok) {
+      if (r2.status === 401 || r2.status === 403) endSession();
+      return res;
+    }
+    try { return await fetchWithTimeout(url, init, timeout); }
+    catch (e) {
+      reportConnection(false, typeof navigator !== "undefined" && navigator.onLine === false);
+      throw e instanceof Error && (e as ClientError).isNetwork ? e : networkError(e, method, path);
     }
   }
 
-  async function once(method: HttpMethod, path: string, body: unknown, opts: RequestOptions): Promise<Response> {
+  async function request(method: HttpMethod, path: string, body?: unknown, opts: RequestOptions = {}): Promise<unknown> {
     const headers: Record<string, string> = { "X-Akoro-Portal": portalId };
-    let payload: BodyInit | undefined;
-    if (body !== undefined) {
-      headers["Content-Type"] = "application/json";
-      payload = JSON.stringify(body);
-    }
-    return fetchWithTimeout(`${API}${path}`, {
+    if (body !== undefined) headers["Content-Type"] = "application/json";
+    const res = await authedFetch(`${API}${path}`, {
       method,
-      headers,
-      body: payload,
       credentials: "include",
-      signal: opts.signal,
-    }, opts.timeout ?? timeoutMs);
-  }
-
-  async function request<T>(method: HttpMethod, path: string, body?: unknown, opts: RequestOptions = {}): Promise<T> {
-    let res = await once(method, path, body, opts);
-
-    if (res.status === 401 && opts.retryOn401 !== false) {
-      const refreshed = await refreshSession();
-      if (refreshed) {
-        res = await once(method, path, body, opts);
-      }
-      if (!refreshed || res.status === 401 || res.status === 403) {
-        endSession("expired");
-        throw toApiError(res, await res.json().catch(() => null), path);
-      }
-    }
-
-    const json = await res.json().catch(() => null) as (ApiErrorBody & { data?: unknown }) | null;
-    if (!res.ok) throw toApiError(res, json, path);
-
-    // The API wraps payloads as { success, data }; keep the unwrapping rule here.
-    if (json && typeof json === "object" && "data" in json) return json.data as T;
-    return json as T;
+      headers,
+      body: body === undefined ? undefined : JSON.stringify(body),
+      timeout: opts.timeout,
+    });
+    if (!res.ok) throw await errorFor(res, method, path);
+    return res.json();
   }
 
   return {
     API,
-    request,
-    get: (path, opts) => request("GET", path, undefined, opts),
-    post: (path, body, opts) => request("POST", path, body, opts),
-    put: (path, body, opts) => request("PUT", path, body, opts),
-    patch: (path, body, opts) => request("PATCH", path, body, opts),
-    del: (path, opts) => request("DELETE", path, undefined, opts),
-    refreshSession,
-    accessExpiresAt: () => expiresAt,
     rememberExpiry,
+    accessExpired,
+    refreshSession,
+    authedFetch,
+    request,
+    apiGet: (path, opts) => request("GET", path, undefined, opts),
+    apiPost: (path, body, opts) => request("POST", path, body, opts),
+    apiPut: (path, body, opts) => request("PUT", path, body, opts),
+    apiPatch: (path, body, opts) => request("PATCH", path, body, opts),
+    apiDelete: (path, opts) => request("DELETE", path, undefined, opts),
+    errorFor,
+    onConnectionChange: (fn) => {
+      connListeners.add(fn);
+      fn({ ok: connOk, offline: typeof navigator !== "undefined" && navigator.onLine === false });
+      return () => { connListeners.delete(fn); };
+    },
   };
 }

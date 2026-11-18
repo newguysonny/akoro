@@ -34,6 +34,8 @@ test("the client core stays dependency-free and erasable (Node type stripping, P
 test("the client core keeps the cookie-only contract (no token in JS memory)", () => {
   const core = read("design-system/client/apiCore.ts");
   assert.match(core, /credentials:\s*["']include["']/, "cookies are sent");
-  assert.doesNotMatch(core, /localStorage\.setItem\(/, "never stores a token in local storage");
+  // Only the expiry timestamp is stored — never a token.
+  assert.doesNotMatch(core, /accessToken|refreshToken/, "no token name appears in the core");
+  assert.match(core, /localStorage\.setItem\(expiryKey/, "only the access-expiry key is written");
   assert.match(core, /X-Akoro-Portal/, "the portal header decides which session is read");
 });
