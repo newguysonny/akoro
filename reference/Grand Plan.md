@@ -3915,6 +3915,17 @@ flag-by-flag rollout; old paths removed only after a release with flags on.
   `adaptive-learning/` with no loose top-level files; the four apps on one client
   core.
 - **Status (2026-11-02):** planned.
+- **Status (2026-11-18): step 1 (guardrails) ✅ built.** `akoro-api/scripts/
+  structure-scan.mjs` + `modules/structure.contract.test.mjs`, ratcheted against
+  `modules/structure-baseline.json` (regenerate with `npm run structure:baseline`,
+  check with `npm run test:structure`): new files over 600 lines fail and
+  baselined ones may only shrink; a module is entered through its `index.js`,
+  never another module's internals; no import cycles between modules; every
+  module needs a `README.md`. Stale baseline entries fail, so a cleanup and its
+  baseline update land together. Proved to bite on a planted 702-line file and
+  a cross-module internal import. Baseline today: 41 oversized files, 576
+  cross-module internal imports, 29 modules in the cycle, 48 modules without a
+  README. Module README rules: `akoro-api/modules/README.md`. Steps 2–6 open.
 
 ### Phase 20 — Session plugins: learner-made teaching recipes (from DeepSeek Harness Creator Mode, 2026-11-03)
 - **Why.** DeepSeek Harness's Creator Mode (the `cordis` preset in
