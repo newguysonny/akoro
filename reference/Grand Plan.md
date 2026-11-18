@@ -3934,6 +3934,19 @@ flag-by-flag rollout; old paths removed only after a release with flags on.
   gate's instructor suite `instructor.routes_baseline` PASS (login + navigation
   through the shared core). Next: `akoro-school` (hand-off tokens) and the
   learner (offline queue + SSE).
+- **Status (2026-11-18): school rewired; the core gained its two app hooks.**
+  `apiCore` now takes a `portalId` getter (the school build serves two portals)
+  and an `authorize(init)` hook, applied to the FIRST attempt as well as the
+  replay (a tenant bearer request must go out with `credentials: 'omit'`), plus
+  a `refresh()` override so the school site chat keeps its token-in-body
+  refresh and rotated-token storage. `akoro-school/src/services/api.js` is now
+  the hand-off/token/portal helpers plus one core instance; both school bundles
+  build and its 7 tests pass. Added `modules/client-core.behavior.test.mjs`
+  (mocked fetch): authorize on the first try, one refresh across a parallel
+  herd, the app-supplied refresh, no token storage, and the error shape.
+  Admin and instructor also gained tsconfig + `npm run typecheck`.
+  Remaining in step 5: the learner, then auth/WebSocket/i18n and the shared
+  pages.
 - **Status (2026-11-18): step 1 (guardrails) ✅ built.** `akoro-api/scripts/
   structure-scan.mjs` + `modules/structure.contract.test.mjs`, ratcheted against
   `modules/structure-baseline.json` (regenerate with `npm run structure:baseline`,

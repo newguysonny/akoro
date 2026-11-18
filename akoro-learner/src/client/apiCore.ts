@@ -20,8 +20,17 @@ export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 export interface ApiCoreOptions {
   /** Canonical API origin, e.g. https://api.akoro.name.ng */
   apiBase: string;
-  /** Sent as X-Akoro-Portal; it decides which session the API reads. */
-  portalId: "student" | "admin" | "instructor" | "school";
+  /**
+   * Sent as X-Akoro-Portal; it decides which session the API reads. The school
+   * app passes a getter because it serves two portals (school admin and the
+   * public site chat) from one build.
+   */
+  portalId: string | (() => string);
+  /**
+   * Adjust the transport per request — the school app uses it to switch from
+   * cookies to a tenant-site bearer token (which must omit credentials).
+   */
+  authorize?: (init: RequestInit) => RequestInit;
   /** localStorage key holding the signed-in user (default akoro_user). */
   sessionUserKey?: string;
   /** localStorage key holding the access-token expiry the API reported. */
@@ -32,6 +41,12 @@ export interface ApiCoreOptions {
   timeoutMs?: number;
   /** Overrides the redirect when a session is genuinely over. */
   onSessionEnd?: () => void;
+  /**
+   * Replaces the cookie refresh when it returns a promise (the school build
+   * refreshes a tenant bearer token, which needs credentials omitted and the
+   * token in the body). Returning null keeps the cookie refresh.
+   */
+  refresh?: () => Promise<RefreshResult> | null;
 }
 
 export interface RequestOptions {
@@ -111,7 +126,8 @@ const trimBase = (url: string): string => url.replace(/\/+$/, "");
 
 export function createApiCore(options: ApiCoreOptions): ApiCore {
   const API = trimBase(options.apiBase);
-  const portalId = options.portalId;
+  const resolvePortal = (): string =>
+    typeof options.portalId === "function" ? options.portalId() : options.portalId;
   const userKey = options.sessionUserKey ?? "akoro_user";
   const expiryKey = options.expiryKey ?? "akoro_access_exp";
   const signInPath = options.signInPath ?? "/signin?error=session_expired";
@@ -141,10 +157,15 @@ export function createApiCore(options: ApiCoreOptions): ApiCore {
 
   function refreshSession(): Promise<RefreshResult> {
     if (!refreshing) {
+      const custom = options.refresh?.() ?? null;
+      if (custom) {
+        refreshing = custom.finally(() => { refreshing = null; });
+        return refreshing;
+      }
       refreshing = fetch(`${API}/api/auth/refresh`, {
         method: "POST",
         credentials: "include",
-        headers: { "Content-Type": "application/json", "X-Akoro-Portal": portalId },
+        headers: { "Content-Type": "application/json", "X-Akoro-Portal": resolvePortal() },
         body: "{}",
       }).then(async (r) => {
         const json = r.ok ? await r.json().catch(() => null) : null;
@@ -250,7 +271,8 @@ export function createApiCore(options: ApiCoreOptions): ApiCore {
   }
 
   async function authedFetch(url: string, init: RequestInit & { timeout?: number } = {}): Promise<Response> {
-    const method = String(init.method || "GET").toUpperCase();
+    const authed = options.authorize ? options.authorize(init) : init;
+    const method = String(authed.method || "GET").toUpperCase();
     const path = url.startsWith(API) ? url.slice(API.length) : url;
     const timeout = init.timeout ?? defaultTimeout;
 
@@ -259,7 +281,7 @@ export function createApiCore(options: ApiCoreOptions): ApiCore {
     if (accessExpired()) await refreshSession();
 
     let res: Response;
-    try { res = await fetchWithTimeout(url, init, timeout); }
+    try { res = await fetchWithTimeout(url, authed, timeout); }
     catch (e) {
       reportConnection(false, typeof navigator !== "undefined" && navigator.onLine === false);
       throw e instanceof Error && (e as ClientError).isNetwork ? e : networkError(e, method, path);
@@ -278,7 +300,7 @@ export function createApiCore(options: ApiCoreOptions): ApiCore {
       if (r2.status === 401 || r2.status === 403) endSession();
       return res;
     }
-    try { return await fetchWithTimeout(url, init, timeout); }
+    try { return await fetchWithTimeout(url, authed, timeout); }
     catch (e) {
       reportConnection(false, typeof navigator !== "undefined" && navigator.onLine === false);
       throw e instanceof Error && (e as ClientError).isNetwork ? e : networkError(e, method, path);
@@ -286,7 +308,7 @@ export function createApiCore(options: ApiCoreOptions): ApiCore {
   }
 
   async function request(method: HttpMethod, path: string, body?: unknown, opts: RequestOptions = {}): Promise<unknown> {
-    const headers: Record<string, string> = { "X-Akoro-Portal": portalId };
+    const headers: Record<string, string> = { "X-Akoro-Portal": resolvePortal() };
     if (body !== undefined) headers["Content-Type"] = "application/json";
     const res = await authedFetch(`${API}${path}`, {
       method,
