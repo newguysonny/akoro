@@ -3947,6 +3947,17 @@ flag-by-flag rollout; old paths removed only after a release with flags on.
   Admin and instructor also gained tsconfig + `npm run typecheck`.
   Remaining in step 5: the learner, then auth/WebSocket/i18n and the shared
   pages.
+- **Status (2026-11-18): learner session state moved to the core.** The learner
+  keeps its transport (offline cache and queue, the 30s deadline that covers
+  the body, uploads, SSE) and takes `rememberExpiry`, `refreshSession`,
+  `accessExpired` and `endSession` from the core, so all four apps now share
+  one refresh (deduped, status-aware) and one expiry/sign-out rule. The core
+  gained `refreshTimeoutMs` (connection and body: the learner's 15s hung-refresh
+  guard) and an exposed `endSession`. `api.js` 508 → 437 lines;
+  `client-core.behavior.test.mjs` now also covers the refresh deadline and
+  sign-out (9/9); learner typecheck and build clean; frontend gate
+  `reader.opens_text` PASS (phone) against the sandbox. Remaining in step 5:
+  auth/WebSocket/i18n and the shared pages.
 - **Status (2026-11-18): step 1 (guardrails) ✅ built.** `akoro-api/scripts/
   structure-scan.mjs` + `modules/structure.contract.test.mjs`, ratcheted against
   `modules/structure-baseline.json` (regenerate with `npm run structure:baseline`,

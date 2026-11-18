@@ -9,106 +9,9 @@
 import { cacheGet, cacheSet } from './offlineCache.js';
 import { enqueue, allItems, remove, queueSize } from './offlineQueue.js';
 import { API } from '../config/urls.js';
+import { createApiCore } from '../client/apiCore';
 
 export { API };
-
-/* ── Session recovery ────────────────────────────────────────────────────────
- * The access token lives ~15 minutes. Leave a tab idle past that and the next
- * request comes back 401 with the raw backend message ("Access token required"),
- * which used to land in the UI as if it were a real error.
- *
- * Instead: on a 401 we silently spend the (30-day) refresh cookie once and
- * replay the request, so an idle user notices nothing. Only if the refresh
- * ALSO fails is the session genuinely over — then we clear it and send them to
- * sign-in with an explanation, rather than showing a cryptic string.
- *
- * `refreshing` dedupes: when a page fires six requests at once they all 401
- * together, and without it we'd hit /refresh six times and rotate the token
- * out from under ourselves.
- */
-const PORTAL_ID = 'student';
-const SESSION_USER_KEY = 'akoro_user';
-let refreshing = null;
-
-/* ── Refresh before the herd, not after it ───────────────────────────────
-   The access token lives 15 minutes. A screen that opens after that fires its
-   whole first batch of requests in parallel, every one 401s, ONE refresh runs
-   (refreshSession dedupes), and all of them retry — double the traffic on every
-   return visit, and a wall of red in the server logs for something that is
-   working exactly as designed.
-
-   The access cookie is HttpOnly and set on the API's domain, so this app cannot
-   read its expiry. The API hands it back as accessExpiresAt instead; we stash
-   it and, when it has passed, refresh FIRST. Concurrent callers all await the
-   same refreshSession() promise, so 16 requests still cost one refresh — they
-   just no longer cost 16 rejections first.
-
-   If storage is unavailable (private mode) this is a no-op and the old
-   401-then-retry path still carries the request. */
-const EXP_KEY = 'akoro_access_exp';
-
-export function rememberExpiry(json) {
-  const exp = json?.accessExpiresAt ?? json?.data?.accessExpiresAt;
-  if (!exp) return json;
-  try { localStorage.setItem(EXP_KEY, String(exp)); } catch { /* private mode */ }
-  return json;
-}
-
-function accessExpired() {
-  try {
-    const at = Number(localStorage.getItem(EXP_KEY) || 0);
-    // 0 = we've never been told; let the request go and 401 if it must.
-    return at > 0 && at <= Date.now() + 5000;   // 5s skew for a slow request
-  } catch { return false; }
-}
-
-function forgetExpiry() {
-  try { localStorage.removeItem(EXP_KEY); } catch { /* private mode */ }
-}
-
-/**
- * ONE refresh per tab, whoever asks.
- *
- * AuthContext used to POST /api/auth/refresh itself, on its own 13-minute
- * timer, while this module did the same on a 401 — two in-flight requests
- * carrying the SAME refresh cookie. Rotation spends a token on first use, so
- * the loser presented a spent one, the server called it replay and revoked the
- * whole family, and the user was signed out everywhere. Exporting this makes
- * both paths share one promise, so a tab can no longer race itself.
- *
- * (Two TABS still can; the server's grace window covers that.)
- */
-export function refreshSession() {
-  if (!refreshing) {
-    // One deadline for the whole refresh: connection AND body. A refresh
-    // whose response stalls mid-body must not pin `refreshing` (and every
-    // authed request behind it) open forever.
-    const deadline = armDeadline(REFRESH_TIMEOUT_MS);
-    refreshing = fetch(`${API}/api/auth/refresh`, {
-      method: 'POST', credentials: 'include',
-      headers: { 'Content-Type': 'application/json', 'X-Akoro-Portal': PORTAL_ID },
-      body: '{}',
-      signal: deadline.signal,
-    }).then(async (r) => {
-      const json = r.ok ? await r.json().catch(() => null) : null;
-      if (json) rememberExpiry(json);
-      // The STATUS, not just ok/not-ok: a 429 or a 502 means we never got an
-      // answer, and bouncing someone to /signin for that throws away a session
-      // the server would still honour.
-      return { ok: r.ok, status: r.status, json };
-    }).catch(() => ({ ok: false, status: 0, json: null }))
-      .finally(() => { refreshing = null; deadline.settle(); });
-  }
-  return refreshing;
-}
-
-function endSession() {
-  forgetExpiry();
-  try { localStorage.removeItem(SESSION_USER_KEY); } catch { /* private mode */ }
-  if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/signin')) {
-    window.location.href = '/signin?error=session_expired';
-  }
-}
 
 /* ── Request timeout ───────────────────────────────────────────────────────
    A stalled connection never rejects a fetch — the browser sits on a dead
@@ -132,6 +35,32 @@ function endSession() {
 const DEFAULT_TIMEOUT_MS = Number(import.meta.env?.VITE_API_TIMEOUT_MS) || 30000;
 const REFRESH_TIMEOUT_MS = 15000;   // a hung refresh must not hang every request behind it
 const UPLOAD_TIMEOUT_MS  = 120000;  // bodies can be big; slow is expected, dead is not
+
+const PORTAL_ID = 'student';
+
+/* ── Session state ──────────────────────────────────────────────────────────
+ * Shared with the three console apps (design-system/client/apiCore.ts →
+ * src/client). The rules are the same everywhere and used to be copied here:
+ * on a 401 the (30-day) refresh cookie is spent once and the request replayed;
+ * ONE refresh per tab, deduped, so a batch of requests cannot rotate the token
+ * out from under itself; when the API has told us the access expiry, refresh
+ * FIRST instead of letting the whole batch 401; only a REJECTED refresh ends
+ * the session. The refresh gets its own 15s deadline (connection and body), so
+ * a hung refresh cannot pin every request behind it.
+ *
+ * The transport below stays learner-specific on purpose: offline cache and
+ * queue, the 30s request deadline that also covers the body, uploads and SSE.
+ */
+const core = createApiCore({
+  apiBase: API,
+  portalId: PORTAL_ID,
+  refreshTimeoutMs: REFRESH_TIMEOUT_MS,
+});
+
+export const rememberExpiry = core.rememberExpiry;
+export const refreshSession = core.refreshSession;
+const accessExpired = core.accessExpired;
+const endSession = core.endSession;
 
 /* Recast an abort as the same shape every other network failure has, so the
    cache fallback, offline queue and page error states all engage — whether it

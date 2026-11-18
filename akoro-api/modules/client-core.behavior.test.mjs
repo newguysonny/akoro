@@ -106,3 +106,32 @@ test("only the expiry is stored, and the server's error message is what the user
   assert.equal(err.method, "GET");
   assert.equal(err.detail, "GET /api/battle -> 409");
 });
+
+test("a hung refresh is abandoned at its deadline and never pins the herd", async () => {
+  stubStorage(); stubNavigator();
+  globalThis.fetch = (url, init) => new Promise((_, reject) => {
+    if (String(url).endsWith("/api/auth/refresh")) {
+      init.signal?.addEventListener("abort", () => {
+        const e = new Error("aborted"); e.name = "AbortError"; reject(e);
+      });
+    }
+  });
+
+  const core = coreFor({ refreshTimeoutMs: 15 });
+  const r = await core.refreshSession();
+  assert.equal(r.ok, false);
+  assert.equal(r.status, 0, "a timeout is not a rejection");
+});
+
+test("endSession clears the expiry and calls the app's handler", async () => {
+  const store = stubStorage(); stubNavigator();
+  coreFor().rememberExpiry({ accessExpiresAt: 1790000000000 });
+  assert.equal(store.size, 1);
+
+  let called = 0;
+  const core = coreFor({ onSessionEnd: () => { called++; } });
+  core.rememberExpiry({ accessExpiresAt: 1790000000000 });
+  core.endSession();
+  assert.equal(called, 1, "the app's sign-out handler ran");
+  assert.equal(store.has("akoro_access_exp"), false, "the expiry is gone");
+});

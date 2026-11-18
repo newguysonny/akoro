@@ -9,6 +9,7 @@ Akoro monorepo. The API is `akoro-api/`; the apps are `akoro-learner/`, `akoro-s
 # API tests (node:test; there is no aggregate runner)
 cd akoro-api
 npm run test:structure        # structural guardrails (Phase 19) — always run
+npm run test:client           # shared client core: copies + behaviour
 npm run test:agent-chat
 npm run test:task-scheduling
 npm run test:agent-context
@@ -18,7 +19,8 @@ npm run typecheck             # tsc --noEmit (Phase 20 Part B)
 cd akoro-learner
 npm run typecheck
 npx vite build
-npm test                      # ui-gate-free unit tests, see package.json
+npm run test:onboarding       # source-contract unit tests (also test:agent-actions, test:settings)
+node ui-gate/run.mjs --scenario reader.opens_text --device phone   # real browser, sandbox API
 ```
 
 `node --test <file>` runs one test file. The API suite needs `npm ci` in

@@ -39,6 +39,12 @@ export interface ApiCoreOptions {
   signInPath?: string;
   /** Per-request deadline in ms; 0/undefined leaves the request unbounded. */
   timeoutMs?: number;
+  /**
+   * Deadline for the refresh itself, covering the body read too (a hung
+   * refresh would otherwise pin every request behind it open). 0/undefined
+   * leaves it unbounded. The learner passes 15s.
+   */
+  refreshTimeoutMs?: number;
   /** Overrides the redirect when a session is genuinely over. */
   onSessionEnd?: () => void;
   /**
@@ -85,6 +91,8 @@ export interface ApiCore {
   accessExpired(): boolean;
   /** ONE refresh per tab, whoever asks. */
   refreshSession(): Promise<RefreshResult>;
+  /** Clear the stored session and send the browser to sign-in. */
+  endSession(): void;
   /** fetch + one transparent refresh-and-retry on 401. */
   authedFetch(url: string, init?: RequestInit & { timeout?: number }): Promise<Response>;
   request(method: HttpMethod, path: string, body?: unknown, opts?: RequestOptions): Promise<unknown>;
@@ -162,11 +170,17 @@ export function createApiCore(options: ApiCoreOptions): ApiCore {
         refreshing = custom.finally(() => { refreshing = null; });
         return refreshing;
       }
+      // One deadline for connection AND body: a refresh whose response stalls
+      // mid-body must not pin every request behind it open.
+      const refreshTimeout = options.refreshTimeoutMs ?? 0;
+      const ctrl = refreshTimeout > 0 ? new AbortController() : null;
+      const timer = ctrl ? setTimeout(() => ctrl.abort(), refreshTimeout) : null;
       refreshing = fetch(`${API}/api/auth/refresh`, {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json", "X-Akoro-Portal": resolvePortal() },
         body: "{}",
+        signal: ctrl?.signal,
       }).then(async (r) => {
         const json = r.ok ? await r.json().catch(() => null) : null;
         if (json) rememberExpiry(json);
@@ -174,7 +188,7 @@ export function createApiCore(options: ApiCoreOptions): ApiCore {
         // and bouncing someone to /signin for that throws away a live session.
         return { ok: r.ok, status: r.status, json };
       }).catch(() => ({ ok: false, status: 0, json: null }))
-        .finally(() => { refreshing = null; });
+        .finally(() => { if (timer) clearTimeout(timer); refreshing = null; });
     }
     return refreshing;
   }
@@ -326,6 +340,7 @@ export function createApiCore(options: ApiCoreOptions): ApiCore {
     rememberExpiry,
     accessExpired,
     refreshSession,
+    endSession,
     authedFetch,
     request,
     apiGet: (path, opts) => request("GET", path, undefined, opts),
