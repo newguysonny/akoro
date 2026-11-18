@@ -8,10 +8,14 @@
 //   node scripts/capture.mjs /app learner-dashboard 1280
 //
 // Env overrides:
-//   AKORO_APP_URL, AKORO_DEMO_EMAIL, AKORO_DEMO_PASSWORD
+//   AKORO_APP_URL, AKORO_DEMO_EMAIL, AKORO_DEMO_PASSWORD, AKORO_OUT_DIR
+//
+// AKORO_OUT_DIR=/artifacts/screenshots keeps previews out of the repo: the
+// platform auto-commits and pushes the worktree, and the branch auto-deploys,
+// so a screenshot written under docs/ ships to production.
 //
 // Requires Playwright + Chromium once per sandbox:
-//   npm i -D playwright && npx playwright install chromium
+//   npm i playwright && npx playwright install chromium
 
 import { chromium } from 'playwright';
 import { mkdirSync } from 'node:fs';
@@ -24,8 +28,9 @@ const route = process.argv[2] || '/';
 const name = process.argv[3] || 'preview';
 const width = Number(process.argv[4] || 1280);
 
-const out = `docs/screenshots/${name}.png`;
-mkdirSync('docs/screenshots', { recursive: true });
+const outDir = (process.env.AKORO_OUT_DIR || 'docs/screenshots').replace(/\/+$/, '');
+const out = `${outDir}/${name}.png`;
+mkdirSync(outDir, { recursive: true });
 
 const target = APP + (route.startsWith('/') ? route : `/${route}`);
 const browser = await chromium.launch();
