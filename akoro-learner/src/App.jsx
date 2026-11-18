@@ -11,6 +11,7 @@ import ErrorBoundary    from './components/common/ErrorBoundary.jsx';
 import ConfirmHost      from './components/common/ConfirmHost.jsx';
 import OfflineBanner     from './components/common/OfflineBanner.jsx';
 import UpdatePrompt      from './components/common/UpdatePrompt.jsx';
+import InstallIntent     from './components/common/InstallIntent.jsx';
 import PresenceHeartbeat from './components/network/PresenceHeartbeat.jsx';
 import { TARGET, APP_HOME, whereTo } from './config/target.js';
 
@@ -228,6 +229,7 @@ export default function App() {
                 {/* One host for every confirmDialog() call in the app. */}
                 <ConfirmHost />
                 {PRODUCT_BUILD && <UpdatePrompt />}
+                {PRODUCT_BUILD && <InstallIntent />}
                 {PRODUCT_BUILD && <PresenceHeartbeat />}
               </BrowserRouter>
             </CartProvider>

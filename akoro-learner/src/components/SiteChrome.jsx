@@ -181,10 +181,13 @@ export function SFSHeader() {
   const { hidden: installHidden, canPrompt, platform, promptInstall } = usePwaInstall();
   const [sheetOpen, setSheetOpen] = useState(false);
 
-  // The landing is a plain website (no manifest, no service worker): the app is installed from the app's own host.
+  // The landing is a plain website (no manifest, no service worker) on its own
+  // origin, so it cannot install the app itself: it hands over an install
+  // intent (?install=1) and the app's InstallIntent host runs the real
+  // install flow — native prompt or per-platform steps — on arrival.
   const toApp = TARGET === 'landing';
   const onInstallClick = async () => {
-    if (toApp) { window.location.assign(`${APP_URL}/`); return; }
+    if (toApp) { window.location.assign(`${APP_URL}/?install=1`); return; }
     if (canPrompt) { await promptInstall(); return; }   // Android/desktop: native dialog
     setSheetOpen(true);                                 // no native prompt on this browser — its exact steps
   };

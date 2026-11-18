@@ -14,6 +14,8 @@ import { featureGated, effectivePlan } from '../utils/planOverride.js';
 import { drawerItems, tierPill } from './drawerItems.js';
 import { tr } from '../pages/settings/groups.js';
 import { LogoutModal } from '../pages/settings/sheets.jsx';
+import { usePwaInstall } from '../hooks/usePwaInstall.js';
+import InstallInstructionsSheet from './common/InstallInstructionsSheet.jsx';
 
 const BRAND = '#6C3BFF';
 
@@ -23,6 +25,8 @@ export default function ProfileDrawer({ open, onClose, profile, higherEd = false
   const { t } = useLang();
   const [menu, setMenu] = useState(false);
   const [confirmOut, setConfirmOut] = useState(false);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const { hidden: installHidden, canPrompt, platform, promptInstall } = usePwaInstall();
 
   useEffect(() => {
     if (!open) { setMenu(false); return undefined; }
@@ -31,8 +35,13 @@ export default function ProfileDrawer({ open, onClose, profile, higherEd = false
     return () => document.removeEventListener('keydown', onKey);
   }, [open, menu, onClose]);
 
-  if (!open && !confirmOut) return null;
+  if (!open && !confirmOut && !sheetOpen) return null;
   const go = (to) => { onClose(); navigate(to); };
+  const onInstall = async () => {
+    if (canPrompt) { const p = promptInstall(); onClose(); await p; return; }
+    setSheetOpen(true);   // no native prompt on this browser — show its exact steps
+    onClose();
+  };
   const name = profile?.fullName || profile?.username || '…';
   const items = drawerItems({ higherEd, gradebookGated: !!featureGated('Gradebook') });
   const label = (k) => tr(t, k, { 'nav.wallet': 'Wallet' }[k] || k);
@@ -88,6 +97,13 @@ export default function ProfileDrawer({ open, onClose, profile, higherEd = false
                   {it.wallet && <span style={{ fontSize: 13.5, fontWeight: 900, color: 'var(--ak-text-muted)' }}>{(coinBalance || 0).toLocaleString()}</span>}
                 </button>
               ))}
+              {!installHidden && (
+                <button type="button" onClick={onInstall} data-testid="drawer-install"
+                  style={{ display: 'flex', alignItems: 'center', gap: 18, width: '100%', padding: '15px 20px', border: 'none', background: 'none', cursor: 'pointer', textAlign: 'left', fontFamily: "'Nunito',sans-serif" }}>
+                  <Icon name="ti-download" size={24} color="var(--ak-text)"/>
+                  <span style={{ flex: 1, fontSize: 18, fontWeight: 800, color: 'var(--ak-text)' }}>{tr(t, 'drawer.install_app', 'Install app')}</span>
+                </button>
+              )}
             </nav>
             <div style={{ borderTop: '1px solid var(--ak-border)', padding: '6px 0' }}>
               <button type="button" onClick={() => setConfirmOut(true)} data-testid="drawer-logout"
@@ -99,6 +115,7 @@ export default function ProfileDrawer({ open, onClose, profile, higherEd = false
         </div>
       )}
       {confirmOut && <LogoutModal onClose={() => setConfirmOut(false)} onConfirm={() => { setConfirmOut(false); onClose(); logout(); }}/>}
+      <InstallInstructionsSheet open={sheetOpen} onClose={() => setSheetOpen(false)} platform={platform} />
     </>
   );
 }

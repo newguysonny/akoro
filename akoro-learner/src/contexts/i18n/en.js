@@ -1197,4 +1197,5 @@ export const EN = {
   'drawer.upgrade': "Upgrade",
   'drawer.logout': "Log out",
   'drawer.edit_profile': "Edit profile",
+  'drawer.install_app': "Install app",
 };
