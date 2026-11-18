@@ -1,3 +1,4 @@
+// GENERATED from design-system/pages/PrivacyPolicyPage.jsx — edit it there, then run: node design-system/sync.mjs
 import { Archive, Ban, Bot, ClipboardList, GraduationCap, Link2, Lock, Mail, PencilLine, Scale, Settings } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';

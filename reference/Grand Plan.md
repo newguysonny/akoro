@@ -3983,6 +3983,21 @@ flag-by-flag rollout; old paths removed only after a release with flags on.
   settings 7/7; school build ×2, tests 7/7; `test:client` 22/22.
   Remaining in step 5: the shared auth context, i18n, and the Sign in/Sign
   up/Wallet/Settings/Terms pages.
+- **Status (2026-11-18): auth-refresh policy and the still-identical pages are
+  shared.** `client/authSession.ts` (`refreshAuth`): ok → store the user from
+  `data.user`/`user`; 401/403 → sign out; 0/429/5xx → keep the session and log
+  a soft failure. Admin and instructor AuthContexts use it (instructor keeps its
+  onboarding-flag merge), and instructor's storage moved to
+  `createSessionUser` as well — all four apps now share the user store.
+  `design-system/pages/` holds `TermsOfServicePage` and `PrivacyPolicyPage`,
+  which were still byte-identical in admin and school; copied with a banner
+  (diff per file: +1 line, no markup change), byte-checked by
+  `modules/shared-pages.contract.test.mjs`. `test:client` now 27/27.
+  Audit note for the rest of step 5: the other "shared" pages have already
+  diverged per app (Wallet 4 different files, Settings 4, Terms 4, Privacy 4),
+  so unifying them is a UI decision per page — previews first — not a
+  mechanical copy. i18n exists only in the learner (8 languages, 480 KB); the
+  consoles use no translation layer yet.
 - **Status (2026-11-18): step 1 (guardrails) ✅ built.** `akoro-api/scripts/
   structure-scan.mjs` + `modules/structure.contract.test.mjs`, ratcheted against
   `modules/structure-baseline.json` (regenerate with `npm run structure:baseline`,

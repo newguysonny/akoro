@@ -24,7 +24,7 @@
     "test:structure": "node --test modules/structure.contract.test.mjs",
     "structure:baseline": "node scripts/structure-baseline.mjs",
     "typecheck": "tsc --noEmit",
-    "test:client": "node --test modules/client-core.contract.test.mjs modules/client-core.behavior.test.mjs modules/client-socket.behavior.test.mjs modules/client-session-user.behavior.test.mjs"
+    "test:client": "node --test modules/client-core.contract.test.mjs modules/client-core.behavior.test.mjs modules/client-auth.behavior.test.mjs modules/client-socket.behavior.test.mjs modules/client-session-user.behavior.test.mjs modules/shared-pages.contract.test.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.131.0",

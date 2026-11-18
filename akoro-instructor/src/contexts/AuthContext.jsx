@@ -8,15 +8,15 @@
 
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { API, rememberExpiry, refreshSession } from '../services/api.js';
+import { refreshAuth } from '../client/authSession';
+import { createSessionUser } from '../client/sessionUser';
 
 const AuthContext = createContext(null);
 
-const USER_KEY     = 'akoro_user';
 const REDIRECT_KEY = 'akoro_redirect';
 
-function getStoredUser() {
-  try { return JSON.parse(localStorage.getItem(USER_KEY)); } catch { return null; }
-}
+const sessionUser = createSessionUser();
+const getStoredUser = () => sessionUser.read();
 
 async function authFetch(path, body) {
   const res = await fetch(`${API}${path}`, {
@@ -52,13 +52,13 @@ export function AuthProvider({ children }) {
   const isAuthenticated = !!user;
 
   const saveUser = useCallback((userObj) => {
-    localStorage.setItem(USER_KEY, JSON.stringify(userObj));
+    sessionUser.save(userObj);
     setUser(userObj);
     setError(null);
   }, []);
 
   const clearUser = useCallback(() => {
-    localStorage.removeItem(USER_KEY);
+    sessionUser.clear();
     setUser(null);
   }, []);
 
@@ -67,7 +67,7 @@ export function AuthProvider({ children }) {
     setUser(prev => {
       if (!prev) return prev;
       const next = { ...prev, onboardingCompleted: true };
-      localStorage.setItem(USER_KEY, JSON.stringify(next));
+      sessionUser.save(next);
       return next;
     });
   }, []);
@@ -138,24 +138,20 @@ export function AuthProvider({ children }) {
    * the server revoked every session the user had.
    */
   const refresh = useCallback(async () => {
-    const r = await refreshSession();
-    if (r.ok) {
-      const u = r.json?.data?.user ?? r.json?.user;
-      if (u) {
-        // Keep a locally-completed onboarding flag: the server row can lag
-        // behind the wizard, and regressing it re-gates the user.
-        const prev = getStoredUser();
-        saveUser(prev?.onboardingCompleted && u.onboardingCompleted === false
-          ? { ...u, onboardingCompleted: true } : u);
-      }
-      return true;
-    }
-    // Only a real REJECTION ends a session. A 429, a 502 or a dropped
-    // connection means we never got an answer — the 30-day refresh cookie is
-    // still valid and the next attempt should use it, so the session stays.
-    if (r.status === 401 || r.status === 403) { clearUser(); return false; }
-    console.warn(`[auth] refresh could not complete (status ${r.status}), keeping the session`);
-    return false;
+    // Keep a locally-completed onboarding flag: the server row can lag behind
+    // the wizard, and regressing it re-gates the user.
+    const keepOnboarded = (u) => {
+      const prev = getStoredUser();
+      return prev?.onboardingCompleted && u.onboardingCompleted === false
+        ? { ...u, onboardingCompleted: true } : u;
+    };
+    const res = await refreshAuth({
+      refreshSession,
+      saveUser: (u) => saveUser(keepOnboarded(u)),
+      clearUser,
+      onSoftFailure: (status) => console.warn(`[auth] refresh could not complete (status ${status}), keeping the session`),
+    });
+    return res.ok;
   }, [saveUser, clearUser]);
 
   const logout = useCallback(async () => {

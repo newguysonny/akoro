@@ -1,3 +1,4 @@
+// GENERATED from design-system/pages/TermsOfServicePage.jsx — edit it there, then run: node design-system/sync.mjs
 import { AlertTriangle, Ban, Copyright, CreditCard, DoorOpen, GraduationCap, Lock, Mail, Ruler, Scale, ScrollText, ShieldCheck, Timer, User } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
