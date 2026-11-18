@@ -18,7 +18,8 @@ const STOP = new Set(('a an the and or but if then than that this these those th
   'has have had do does did done which who whom whose what when where why how all any each every some many much more most other ' +
   'one two three first second also very just only same both between within without through during before after above below up down out ' +
   'we our you your he she his her him i me my page pages figure fig table chapter section example examples called known used use using ' +
-  'however therefore thus because while although whereas etc e.g i.e per via').split(/\s+/));
+  'however therefore thus because while although whereas etc e.g i.e per via ' +
+  'row rows column columns heading headings paragraph paragraphs sentence sentences diagram diagrams').split(/\s+/));
 
 const ICONS = Object.freeze({ summary: 'ti-notes', explain: 'ti-bulb', quiz: 'ti-help-circle', example: 'ti-world' });
 export const LEARN_EXCERPT_CHARS = 3000;
@@ -40,7 +41,7 @@ export function materialText({ content = null, reference = null } = {}) {
  */
 export function keyTerms(text, max = 3) {
   const words = clean(text).toLowerCase().replace(/[^a-z0-9À-ɏ\s-]/g, ' ').split(/\s+/)
-    .filter((w) => w.length > 2 && !/^\d+$/.test(w));
+    .filter((w) => w.length > 2 && !/^\d+$/.test(w) && !/^\d+(st|nd|rd|th)$/.test(w));
   const pairs = new Map(), singles = new Map();
   for (let i = 0; i < words.length; i++) {
     const w = words[i];
@@ -96,6 +97,13 @@ export function learnSuggestionInput({ topic = '', subject = '', title = '', tex
  * `cited` (the open document's own): [{ text, citation }] — each keeps the
  * page it is about, shown as a chip that jumps the reader there.
  */
+/* A suggestion about the document's STRUCTURE rather than its content —
+ * an ordinal + layout word ("Quiz me on the 2nd row"), or a layout word as
+ * the topic ("Explain row elements…"). Never shown, whoever produced it. */
+const STRUCTURAL_ASK = /\b(?:\d+(?:st|nd|rd|th)|first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth)\s+(?:row|column|section|chapter|page|paragraph|figure|table|part)\b/i;
+const STRUCT_OBJECT = /\b(?:row|column)\s+(?:elements|items|values|data|numbers|entries)\b/i;
+export const isStructuralSuggestion = (s) => STRUCTURAL_ASK.test(s) || STRUCT_OBJECT.test(s);
+
 export function shapeLearnSuggestions(list, cited = null) {
   const pageOf = new Map((Array.isArray(cited) ? cited : []).map((c) => [clean(c?.text).toLowerCase(), c?.citation || null]));
   const kinds = ['summary', 'explain', 'quiz', 'example'];
@@ -104,7 +112,7 @@ export function shapeLearnSuggestions(list, cited = null) {
   for (const s of Array.isArray(list) ? list : []) {
     const raw = clean(s);
     const label = raw ? raw[0].toUpperCase() + raw.slice(1) : '';   // the model sometimes starts lowercase
-    if (!label || label.length > 90 || seen.has(label.toLowerCase())) continue;
+    if (!label || label.length > 90 || seen.has(label.toLowerCase()) || isStructuralSuggestion(label)) continue;
     seen.add(label.toLowerCase());
     const id = kinds[out.length] || `more-${out.length}`;
     const citation = pageOf.get(raw.toLowerCase()) || null;
