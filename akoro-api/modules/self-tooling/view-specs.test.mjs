@@ -80,7 +80,7 @@ test("schema: columns must exist and types must be compatible", () => {
   assert.equal(validateViewAgainstSchema(norm, COLUMNS).ok, true);
   const missing = validateViewAgainstSchema(normalizeViewSpec({ ...goodSpec, fields: { nope: { type: "string" } } }), COLUMNS);
   assert.equal(missing.ok, false);
-  assert.match(missing.errors.join(" "), /not a column/);
+  assert.match(missing.errors.join(" "), /does not exist/);
   const wrongType = validateViewAgainstSchema(normalizeViewSpec({ ...goodSpec, fields: { scheduled_at: { type: "string" } } }), COLUMNS);
   assert.equal(wrongType.ok, false);
   assert.match(wrongType.errors.join(" "), /claims type string/);

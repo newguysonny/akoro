@@ -65,14 +65,14 @@ export function validateViewShape(name, spec) {
   const src = spec.source;
   if (!isObj(src)) errors.push("source must be an object { schema, table, owner }");
   else {
-    if (!VIEW_SCHEMAS.includes(src.schema)) errors.push(`source.schema must be one of: ${VIEW_SCHEMAS.join(", ")}`);
+    if (!VIEW_SCHEMAS.includes(src.schema)) errors.push(`source must name one of the known namespaces: ${VIEW_SCHEMAS.join(", ")}`);
     if (!IDENT_RE.test(String(src.table || ""))) errors.push("source.table must be a table name");
     if (src.ownerPath !== undefined) errors.push("source.ownerPath is not supported in stored specs (v1)");
     const owners = [src.owner].flat().filter(Boolean);
     if (spec.scope === "self") {
       if (!owners.length || owners.length > 2 || owners.some((o) => !IDENT_RE.test(String(o))))
         errors.push('a "self" view needs source.owner: the owner column (or two) that scopes rows to the viewer');
-      for (const o of owners) if (sensitiveName(o)) errors.push(`owner column "${o}" looks sensitive — refused`);
+      for (const o of owners) if (sensitiveName(o)) errors.push(`owner "${o}" looks sensitive — refused`);
     }
     if (src.where !== undefined) {
       if (!isObj(src.where) || Object.keys(src.where).length > 6 || Object.values(src.where).some((v) => !isScalar(v)))
@@ -124,16 +124,16 @@ const TYPE_COMPAT = {
 export function validateViewAgainstSchema(spec, columns) {
   const errors = [];
   const cols = new Map((columns || []).map((c) => [c.column_name, c.data_type]));
-  if (!cols.size) return { ok: false, errors: [`table ${spec?.source?.schema}.${spec?.source?.table} not found (or has no columns)`] };
-  const need = (col, what) => { if (!cols.has(col)) errors.push(`${what} "${col}" is not a column of ${spec.source.table}`); };
-  for (const o of [spec.source.owner].flat().filter(Boolean)) need(o, "owner column");
+  if (!cols.size) return { ok: false, errors: ["the chosen source was not found"] };
+  const need = (col, what) => { if (!cols.has(col)) errors.push(`${what} "${col}" does not exist on the chosen source`); };
+  for (const o of [spec.source.owner].flat().filter(Boolean)) need(o, "owner");
   if (spec.ref) need(spec.ref, "ref");
   for (const k of Object.keys(spec.source.where || {})) need(k, "where key");
   for (const [fname, fdef] of Object.entries(spec.fields || {})) {
     need(fname, "field");
     const real = cols.get(fname);
     if (real && !(TYPE_COMPAT[fdef.type] || []).includes(real))
-      errors.push(`field "${fname}" claims type ${fdef.type} but the column is ${real}`);
+      errors.push(`field "${fname}" claims type ${fdef.type} but the real type is ${real}`);
   }
   return { ok: !errors.length, errors };
 }
