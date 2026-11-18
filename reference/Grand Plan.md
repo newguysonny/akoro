@@ -3970,6 +3970,19 @@ flag-by-flag rollout; old paths removed only after a release with flags on.
   Remaining in step 5: adopt the socket and user store in learner/school, the
   shared auth context, i18n, and the Sign in/Sign up/Wallet/Settings/Terms
   pages.
+- **Status (2026-11-18): all four apps use the shared socket options and user
+  store.** Learner: 10 socket sites (hook, activity socket, dashboard, battle,
+  Agent Chat, Discover, reader discussion, teaching and decay modals) build
+  their options with `socketOptions({ portal: 'student' })`, keeping the 30s
+  reconnect ceiling where it existed; declaring `student` is equivalent to the
+  server's fallback (`authenticateSocket` defaults an undeclared portal to
+  `student`). School: three sites, with `AssessmentRoom` passing `getPortal()`
+  so the handshake matches the HTTP portal in the tenant bundle. Both
+  AuthContexts (and admin's) store the safe user through
+  `createSessionUser()`. Verified: learner typecheck + build, onboarding 10/10,
+  settings 7/7; school build ×2, tests 7/7; `test:client` 22/22.
+  Remaining in step 5: the shared auth context, i18n, and the Sign in/Sign
+  up/Wallet/Settings/Terms pages.
 - **Status (2026-11-18): step 1 (guardrails) ✅ built.** `akoro-api/scripts/
   structure-scan.mjs` + `modules/structure.contract.test.mjs`, ratcheted against
   `modules/structure-baseline.json` (regenerate with `npm run structure:baseline`,

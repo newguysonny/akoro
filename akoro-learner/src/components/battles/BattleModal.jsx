@@ -12,6 +12,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { BRAND, RED, GREEN, GOLD } from '../../constants.js';
 import { API, apiGet, apiPost } from '../../services/api.js';
+import { socketOptions } from '../../client/socket';
 import { downloadBattleQuestionsPdf } from '../../services/activityApi.js';
 import { useAuth } from '../../contexts/AuthContext.jsx';
 import { useLang } from '../../contexts/LanguageContext.jsx';
@@ -127,7 +128,7 @@ export default function BattleModal({ battle: initialBattle, onClose, onMinimize
   // Live socket wiring.
   useEffect(() => {
     if (!battleId || typeof window === 'undefined' || !window.io) return;
-    const s = window.io(API, { transports: ['websocket', 'polling'], withCredentials: true });
+    const s = window.io(API, socketOptions({ portal: 'student' }));
     const join = () => s.emit('join-battle', battleId);
     s.on('connect', join); join();
 

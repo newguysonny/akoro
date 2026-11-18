@@ -25,6 +25,7 @@ import { useNavigate } from 'react-router-dom';
 import { Icon } from '../common/Icons.jsx';
 import { BRAND, RED, GREEN, GOLD, SUBJECTS, SUBJECT_COLORS, STUDENT_ID } from '../../constants.js';
 import { API, apiGet } from '../../services/api.js';
+import { socketOptions } from '../../client/socket';
 import useDebouncedValue from '../../hooks/useDebouncedValue.js';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 import { useCart } from '../../contexts/CartContext.jsx';
@@ -467,7 +468,7 @@ export default function DiscoveryTab({ initialQuery = '', focus = null }) {
     if (typeof window === 'undefined' || !window.io) return;
     let socket;
     try {
-      socket = window.io(API, { transports: ['websocket', 'polling'], withCredentials: true });
+      socket = window.io(API, socketOptions({ portal: 'student' }));
       const subscribe = () => socket.emit('subscribe-student', STUDENT_ID);
       subscribe();
       socket.on('connect', subscribe);

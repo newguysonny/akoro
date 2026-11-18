@@ -24,6 +24,7 @@ import { useState, useEffect, useRef } from 'react';
 import { io } from 'socket.io-client';
 import { X, Trophy, Users, Radio, Square, Gavel , Flame, Swords, Flag, Ban, OctagonX } from 'lucide-react';
 import { apiGet, apiPost } from '../services/api.js';
+import { socketOptions } from '../client/socket';
 import { WS_URL } from '../constants.js';
 import { AMBER, INK, MUTED, BORDER, LIGHT, WHITE, GREEN, PURPLE, BLUE, RED, FONT } from '../constants.js';
 import { confirmDialog } from './ConfirmHost.jsx';
@@ -119,7 +120,7 @@ export default function WatchBattleModal({ battle, onClose, onEnded }) {
   // ── Live ─────────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!battleId) return;
-    const s = io(WS_URL, { withCredentials: true, transports: ['websocket', 'polling'], auth: { portal: 'school' } });
+    const s = io(WS_URL, socketOptions({ portal: 'school' }));
     const join = () => s.emit('join-battle', battleId);
     s.on('connect', join);
     join();

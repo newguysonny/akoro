@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { API } from '../services/api.js';
+import { socketOptions } from '../client/socket';
 
 /**
  * Connects to the backend WebSocket and registers all
@@ -13,7 +14,7 @@ export function useWebSocket({
     let socket;
     try {
       if (typeof window !== 'undefined' && window.io) {
-        socket = window.io(API, { transports: ['websocket', 'polling'], withCredentials: true, reconnectionDelayMax: 30000 });
+        socket = window.io(API, socketOptions({ portal: 'student', reconnectionDelayMax: 30000 }));
 
         socket.on('connect', () => {
           // The server joins only rooms for the authenticated socket identity.

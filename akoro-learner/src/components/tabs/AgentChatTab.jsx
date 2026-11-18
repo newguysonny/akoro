@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
 import { BRAND, RED, GREEN, GOLD, STUDENT_ID } from '../../constants.js';
 import { API, apiGet, apiPost, apiPatch, apiDelete, streamPost } from '../../services/api.js';
+import { socketOptions } from '../../client/socket';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 import { ZapIcon, BrainIcon, SparkleIcon, XIcon, Icon } from '../common/Icons.jsx';
 import { AgentAvatar } from '../common/AgentAvatar.jsx';
@@ -604,7 +605,7 @@ function AgentChatTab({
     if (typeof window === "undefined" || !window.io) return;
     let socket;
     try {
-      socket = window.io(API, { transports: ["websocket", "polling"], withCredentials: true });
+      socket = window.io(API, socketOptions({ portal: "student" }));
       const subscribe = () => socket.emit("subscribe-student", STUDENT_ID);
       subscribe();
       socket.on("connect", subscribe);

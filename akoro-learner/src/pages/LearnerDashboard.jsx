@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { BRAND, RED, GREEN, GOLD, SUBJECTS, SUBJECT_COLORS, PRIORITY_CONFIG, STUDENT_ID } from '../constants.js';
 import { useWallet } from '../hooks/useWallet.js';
 import { API, apiGet, apiPost, apiPatch } from '../services/api.js';
+import { socketOptions } from '../client/socket';
 import { listRecords, setRecordProgress as setRecordProgressApi } from '../services/recordsApi.js';
 import { useLocalList, useSentinel, pagedStatusText } from '../lib/usePagedList.js';
 import RecordTeachSession from '../components/library/RecordTeachSession.jsx';
@@ -665,7 +666,7 @@ export default function LearnerDashboard() {
     let socket;
     try {
       if (typeof window !== "undefined" && window.io) {
-        socket = window.io(API, { transports: ["websocket","polling"], withCredentials: true });
+        socket = window.io(API, socketOptions({ portal: "student" }));
 
         socket.on("connect", () => {
           // The server joins only rooms for the authenticated socket identity.

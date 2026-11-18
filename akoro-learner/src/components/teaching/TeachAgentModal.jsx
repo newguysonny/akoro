@@ -6,6 +6,7 @@ import { BRAND, RED, GREEN, GOLD, SUBJECTS, SUBJECT_COLORS, STUDENT_ID } from '.
 import { acquireActivityLock } from '../../utils/activityLock.js';
 import { useWakeLock } from '../../hooks/useWakeLock.js';
 import { API, apiGet, apiPost } from '../../services/api.js';
+import { socketOptions } from '../../client/socket';
 const AGENT_CONFIG = { name: '', emoji: '🤖', guideName: 'NaNa Esumai', guideEmoji: '🧠', guideRenderStyle: {} };
 import { XIcon, SparkleIcon, ZapIcon, BrainIcon, Icon } from '../common/Icons.jsx';
 import SessionChatView from './SessionChatView.jsx';
@@ -303,7 +304,7 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
     // in some builds).
     const connect = io || (typeof window !== "undefined" ? window.io : null);
     if (connect) {
-      const ws = connect(API, { transports:["websocket","polling"], withCredentials:true });
+      const ws = connect(API, socketOptions({ portal: "student" }));
       wsRef.current = ws;
 
       // The server derives the learner from the authenticated socket. Do not

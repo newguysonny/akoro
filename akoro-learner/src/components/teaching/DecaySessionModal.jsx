@@ -4,6 +4,7 @@ import { BRAND, RED, GREEN, GOLD } from '../../constants.js';
 import { acquireActivityLock } from '../../utils/activityLock.js';
 import { useWakeLock } from '../../hooks/useWakeLock.js';
 import { API } from '../../services/api.js';
+import { socketOptions } from '../../client/socket';
 const AGENT_CONFIG = { name: '', emoji: '🤖' };
 import SessionChatView from './SessionChatView.jsx';
 import WhiteboardModal from './WhiteboardModal.jsx';
@@ -58,7 +59,7 @@ function DecaySessionModal({ alert, onClose, onMinimize, agentProfile, reviewWor
     // (don't depend on a global window.io that may be unset in some builds).
     const connect = io || (typeof window !== "undefined" ? window.io : null);
     if (connect) {
-      const ws = connect(API, { transports:["websocket","polling"], withCredentials:true });
+      const ws = connect(API, socketOptions({ portal: "student" }));
       wsRef.current = ws;
 
       // The server derives the learner from the authenticated socket. Do not

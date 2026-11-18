@@ -20,6 +20,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { API } from '../../services/api.js';
+import { socketOptions } from '../../client/socket';
 import { fetchDiscussionMessages, postDiscussionMessage } from '../../services/communityApi.js';
 import { BRAND, STUDENT_ID } from '../../constants.js';
 
@@ -85,7 +86,7 @@ export default function ReaderDiscussion({ communities = [] }) {
   useEffect(() => {
     if (!active || typeof window === 'undefined' || !window.io) return;
     const room = active.id;
-    const s = window.io(API, { transports: ['websocket', 'polling'], withCredentials: true });
+    const s = window.io(API, socketOptions({ portal: 'student' }));
     s.on('connect', () => s.emit('join-discussion', room));
     s.on('discussion:message', (p) => { if (p?.communityId === room && p.message) merge([p.message]); });
     s.on('discussion:error', (e) => {

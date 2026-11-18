@@ -11,6 +11,7 @@
  */
 import { io } from 'socket.io-client';
 import { API } from './api.js';
+import { socketOptions } from '../client/socket';
 
 let socket = null;
 const listeners = new Set();        // self_study_assigned — a new activity
@@ -22,7 +23,7 @@ function ensureSocket() {
   if (socket) return true;
   const connect = io || (typeof window !== 'undefined' ? window.io : null);
   if (!connect) return false;
-  socket = connect(API, { transports: ['websocket', 'polling'], withCredentials: true });
+  socket = connect(API, socketOptions({ portal: 'student' }));
   socket.on('self_study_assigned', (payload) => fire(listeners, payload));
   socket.on('activity_graded', (payload) => fire(gradedListeners, payload));
   return true;
