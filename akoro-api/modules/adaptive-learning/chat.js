@@ -135,7 +135,7 @@ import { createTool, runLearnerTool, learnerToolDefs, learnerToolDefsWithAreas, 
 import { mergedLibraryEnabled, mergedLibraryDef, libraryDeltaActions, LIBRARY_BASE_ACTIONS, LIBRARY_MERGED_ACTIONS } from "../self-tooling/mergedLibrary.js";
 import { mergedChatsEnabled, mergedChatsDef, chatsDeltaActions, CHATS_BASE_ACTIONS, CHATS_MERGED_ACTIONS } from "../self-tooling/mergedChats.js";
 import { MERGED_DOMAINS, MERGED_DOMAIN_LIST } from "../self-tooling/mergedDomains.js";
-import { AREAS, areaSelectionEnabled, areasForMessage, filterDefsByAreas, toolArea } from "./toolSelection.js";
+import { AREAS, areaSelectionEnabled, areasForMessage, filterDefsByAreas, namedLearnerTool, toolArea } from "./toolSelection.js";
 import { agreesToBuild } from "../self-tooling/capabilities.js";
 import { selfToolingEnabled, selfToolingAllowedFor } from "../self-tooling/access.js";
 import { createLearnerToolRequest } from "../agent-tool-requests/service.js";
@@ -5954,7 +5954,7 @@ async function agentChatHandler(req, res) {
     // database time overlaps the prompt assembly and the intent step
     // (turn-prep overlap, 2026-11-17).
     const learnerDefsP = role === "student" && selfToolOn
-      ? learnerToolDefsWithAreas(req.user.id).catch(() => ({ defs: [], areas: new Map() }))
+      ? learnerToolDefsWithAreas(req.user.id).catch(() => ({ defs: [], areas: new Map(), labels: new Map() }))
       : null;
     const protegeCtx = taught ? `\n\n${await loadDoctrine("policies/PROTEGE.md")}${renderTaughtContext(taught)}` : "";
     // The reply's trace and meta (previews, materials, the uploads' cards), and the uploads pointed at it.
@@ -6125,9 +6125,21 @@ async function agentChatHandler(req, res) {
     let turnTools = instructorTools;
     let selectionNote = "";
     if (role === "student") {
-      const { defs: learnerDefs, areas: learnerAreas } = selfToolOn
+      const { defs: learnerDefs, areas: learnerAreas, labels: learnerLabels } = selfToolOn
         ? await learnerDefsP
-        : { defs: [], areas: new Map() };
+        : { defs: [], areas: new Map(), labels: new Map() };
+      // Named-tool force (2026-11-18): "run my Delete a chat by title
+      // tool" names one of the learner's own tools with a run verb —
+      // force that call. The tool was already being LOADED (its area
+      // was active); the model still declined it and claimed it did
+      // not exist. Forcing rides the existing required-tool machinery:
+      // the area-add and the survival net below see it too. A write
+      // still lands on its confirmation card, so a forced run cannot
+      // change anything unconfirmed.
+      if (!forcedTool && learnerLabels?.size) {
+        const named = namedLearnerTool(userMessage, [...learnerLabels].map(([name, label]) => ({ name, label })));
+        if (named) forcedTool = named;
+      }
       let allTools = openAiChatTools({
         allowToolRequest: hasExplicitToolRequestConsent(userMessage, { previousAgentText: lastAgentText(fit.kept) }),
         selfTooling: selfToolOn,

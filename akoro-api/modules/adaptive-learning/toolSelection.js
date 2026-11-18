@@ -49,6 +49,40 @@ export const AREA_KEYWORDS = Object.freeze({
   activities: ["activity", "activities", "assignment", "classwork", "homework", "draft", "drafts", "routine", "routines", "roster", "outcomes", "submissions", "class", "classes", "classroom", "student", "students"],
 });
 
+// A run verb: the learner is asking for the tool to be USED, not talked
+// about ("my X tool is broken" must not fire it; "can you run my X
+// tool?" must).
+const RUN_VERB = /\b(run|use|using|execute|apply|invoke)\b/i;
+const normWords = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+
+/**
+ * PURE: the learner tool a message NAMES with intent to run it, or null.
+ * `tools` is [{ name, label }]. A tool is named when its label — or its
+ * function name spelled out ("delete_chat_by_title" → "delete chat by
+ * title") — appears in the message as whole words, and a run verb
+ * appears too. Live, 2026-11-18: the tool was loaded (its area was
+ * active) yet the model repeatedly declined to call it and claimed it
+ * did not exist; naming a tool with a run verb is the strongest signal
+ * a turn can carry, so the caller forces the call. Longest spoken form
+ * wins when several tools match. Short forms (<3 words and <14 chars)
+ * never match — too collision-prone to force a call on.
+ */
+export function namedLearnerTool(message, tools) {
+  const text = ` ${normWords(message)} `;
+  if (!RUN_VERB.test(text)) return null;
+  let best = null;
+  for (const t of tools || []) {
+    if (!t?.name) continue;
+    for (const form of [normWords(t.label), normWords(t.name)]) {
+      if (!form) continue;
+      const words = form.split(" ").length;
+      if (words < 3 && form.length < 14) continue;
+      if (text.includes(` ${form} `) && (!best || form.length > best.form.length)) best = { name: t.name, form };
+    }
+  }
+  return best?.name || null;
+}
+
 /** PURE: the areas a message points at. */
 export function areasForMessage(text) {
   const t = ` ${String(text || "").toLowerCase()} `;

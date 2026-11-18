@@ -994,7 +994,8 @@ export async function learnerToolDefsWithAreas(learnerId, audience = "learner") 
   const rows = [...(mine || []), ...(platform || []).filter((t) => !own.has(t.name))];
   // Rows built before areas were stored derive theirs on the fly — nothing is area-less.
   const areas = new Map(rows.map((t) => [t.name, t.area || deriveToolArea(t).area]));
-  return { defs: rows.map(toolDef).filter(Boolean), areas };
+  const labels = new Map(rows.map((t) => [t.name, t.label || t.name]));
+  return { defs: rows.map(toolDef).filter(Boolean), areas, labels };
 }
 
 export async function learnerToolDefs(learnerId, audience = "learner") {
