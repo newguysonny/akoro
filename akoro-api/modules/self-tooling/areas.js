@@ -14,12 +14,14 @@
  * runtime selection key on the primary only. Nothing is hidden.
  *
  * Areas are never auto-created: a tool can only be built from registry
- * views/capabilities, which all have areas. A genuinely new kind of data
- * arrives when a developer adds a Data View in code — that same change adds
- * its line below.
+ * views/capabilities, which all have areas. A built-in view gets its line
+ * below in the same change that adds it; a database-registered view carries
+ * its area in its spec (viewAreaOf falls back to it), and a spec without
+ * one derives "other" rather than breaking.
  */
 import { TOOL_EXAMPLES } from "../agent-capabilities/examples.js";
 import { CAPABILITIES } from "./capabilities.js";
+import { DATA_VIEWS } from "./views.js";
 
 /** Every Data View's area (all 19 — the areas test holds this to DATA_VIEWS). */
 export const VIEW_AREA = Object.freeze({
@@ -35,6 +37,7 @@ export const VIEW_AREA = Object.freeze({
   my_library: "files",
   my_study_notes: "files",
   my_chats: "chats",
+  my_tools: "building",
   public_blog_posts: "blogs",
   my_courses: "profile",
   my_classes: "activities",
@@ -43,6 +46,12 @@ export const VIEW_AREA = Object.freeze({
   my_activity_results: "activities",
   my_activity_drafts: "activities",
 });
+
+/** A view's area: the curated map first; a database-registered view
+ *  (data-driven registry) may carry its own `area` in its spec. */
+export function viewAreaOf(view) {
+  return VIEW_AREA[view] || DATA_VIEWS[view]?.area || null;
+}
 
 /** A capability's area: the chat tool it wraps, or the view it writes. */
 export function capabilityArea(name) {
@@ -59,7 +68,7 @@ export function capabilityArea(name) {
  * → { area, secondary_areas }
  */
 export function deriveToolArea({ views = [], capabilities = [] } = {}) {
-  const readAreas = (views || []).map((v) => VIEW_AREA[v]).filter(Boolean);
+  const readAreas = (views || []).map((v) => viewAreaOf(v)).filter(Boolean);
   const primary = readAreas.length ? readAreas[readAreas.length - 1] : null;
   const secondary = new Set(readAreas.slice(0, -1));
   for (const c of capabilities || []) {

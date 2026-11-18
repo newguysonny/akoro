@@ -23,7 +23,7 @@ const flag = (ops) => f("boolean", ops);
 /** A person's display name, looked up from a user-id column (never their email or anything else). */
 const person = (col, ops) => f("string", { person: col, ...ops });
 
-export const DATA_VIEWS = Object.freeze({
+const BUILTIN_VIEWS = Object.freeze({
   my_tasks: {
     description: "The learner's own tasks (to-dos): title, priority, status, due time.",
     keywords: ["task", "todo", "to-do", "due", "deadline", "reminder"],
@@ -112,6 +112,12 @@ export const DATA_VIEWS = Object.freeze({
     scope: "self", source: { schema: "edu", table: "agent_messages", owner: "to_user" }, ref: "id",
     fields: { kind: text(), subject: text(), topic: text(), status: text(), created_at: time(), answered_at: time(), read_at: time() },
   },
+  my_tools: {
+    description: "Tools the learner has built and saved with their agent: label, what it was built for, kind (mode), status, its domain and area, how often it has run and when it last ran. Only the learner's own tools — platform tools are not listed.",
+    keywords: ["tool", "tools", "my tools", "built", "created", "saved tools", "agent tools"],
+    scope: "self", source: { schema: "edu", table: "agent_tools", owner: "owner_id" },
+    fields: { label: text({ sort: false }), goal: text({ sort: false }), mode: text(), status: text(), domain: text(), area: text(), usage_count: int(), last_used_at: time(), created_at: time() },
+  },
   public_blog_posts: {
     description: "Published Akoro blog articles: title, category, author, reading time, publish date.",
     keywords: ["blog", "article", "articles", "post", "read"],
@@ -167,6 +173,51 @@ export const DATA_VIEWS = Object.freeze({
     fields: { title: text({ sort: false }), type: text(), subject: text(), topic: text(), status: text(), created_at: time() },
   },
 });
+
+/** The built-in views above, exactly as shipped in code. */
+export const BUILTIN_DATA_VIEWS = BUILTIN_VIEWS;
+
+/**
+ * The LIVE registry every consumer reads. It starts as the built-ins;
+ * viewRegistry.js merges ACTIVE rows from edu.self_tool_views into it at
+ * runtime (the data-driven registry, 2026-11-18) so a new kind of data can
+ * become buildable without a code deploy. Additions only: a database row
+ * can never shadow or remove a built-in, and disabling the row removes the
+ * view again on the next refresh. Mutated in place, so every importer
+ * holding this reference sees updates without a restart. Database specs
+ * are stored in the resolved field format ({ type, filter, sort, ... }).
+ */
+export const DATA_VIEWS = { ...BUILTIN_VIEWS };
+
+const dbViewNames = new Set();
+
+/**
+ * PURE: merge active DB rows into the live registry. Rows arrive
+ * pre-validated (viewSpecs.js, checked at write/approve time); this only
+ * enforces the invariants that protect the built-ins. A DB view missing
+ * from `rows` (disabled or deleted since the last refresh) is removed.
+ * Returns { applied: [names], skipped: [{ name, why }] }.
+ */
+export function applyDbViewRows(rows) {
+  const applied = [], skipped = [];
+  const seen = new Set();
+  for (const row of rows || []) {
+    const name = row?.name, spec = row?.spec;
+    if (!name || !spec || typeof spec !== "object" || Array.isArray(spec)) { skipped.push({ name: name || "?", why: "malformed row" }); continue; }
+    if (name in BUILTIN_VIEWS) { skipped.push({ name, why: "shadows a built-in view" }); continue; }
+    seen.add(name);
+    DATA_VIEWS[name] = spec;
+    dbViewNames.add(name);
+    applied.push(name);
+  }
+  for (const name of [...dbViewNames]) {
+    if (!seen.has(name)) { delete DATA_VIEWS[name]; dbViewNames.delete(name); }
+  }
+  return { applied, skipped };
+}
+
+/** Names currently supplied by the database registry (not by code). */
+export const dbViewNameSet = () => new Set(dbViewNames);
 
 /** Who a view is for: "learner" (default) or "instructor". */
 export const audienceOf = (view) => view?.audience || "learner";

@@ -8,16 +8,18 @@ import "../../test-env.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { VIEW_AREA, capabilityArea, deriveToolArea } from "./areas.js";
-import { DATA_VIEWS, describeView } from "./views.js";
+import { DATA_VIEWS, BUILTIN_DATA_VIEWS, describeView } from "./views.js";
 import { AREAS } from "../agent-capabilities/examples.js";
 
-test("every Data View has exactly one curated area, and every area used exists", () => {
-  for (const name of Object.keys(DATA_VIEWS)) assert.ok(VIEW_AREA[name], `view ${name} has no area`);
+test("every built-in Data View has exactly one curated area, and every area used exists", () => {
+  // Built-ins only: a database-registered view carries its own area in its
+  // spec (or derives "other") — it has no line in the curated map by design.
+  for (const name of Object.keys(BUILTIN_DATA_VIEWS)) assert.ok(VIEW_AREA[name], `view ${name} has no area`);
   for (const [view, area] of Object.entries(VIEW_AREA)) {
-    assert.ok(DATA_VIEWS[view], `${view} is not a Data View`);
+    assert.ok(BUILTIN_DATA_VIEWS[view], `${view} is not a built-in Data View`);
     assert.ok(AREAS[area], `${view}: unknown area ${area}`);
   }
-  assert.equal(Object.keys(VIEW_AREA).length, 19);
+  assert.equal(Object.keys(VIEW_AREA).length, 20);
 });
 
 test("a capability's area comes from the tool it wraps or the view it writes", () => {

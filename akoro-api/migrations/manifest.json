@@ -264,6 +264,7 @@
     "2026-agent-reminder-email.sql",
     "2026-self-tooling-disabled-actions.sql",
     "2026-self-tooling-oneoff-traces.sql",
+    "2026-self-tooling-views.sql",
     "2026-agent-tools-areas.sql",
     "2026-record-sources.sql",
     "2026-record-folder-anchors.sql",

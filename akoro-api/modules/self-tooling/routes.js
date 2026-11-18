@@ -17,6 +17,10 @@ import { listMyTools, updateMyTool } from "./pipeline.js";
 import { selfToolingAllowedFor } from "./access.js";
 import { listMyRequests, cancelMyRequest } from "./escalation.js";
 import { getConfirmation, decideConfirmation, listPendingConfirmations } from "./confirmations.js";
+import db from "../../db.js";
+import { BUILTIN_DATA_VIEWS, DATA_VIEWS, dbViewNameSet } from "./views.js";
+import { validateViewShape, validateViewForActivation, normalizeViewSpec } from "./viewSpecs.js";
+import { refreshDbViews, viewRegistryStatus } from "./viewRegistry.js";
 
 const router = express.Router();
 const asyncHandler = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
@@ -76,6 +80,80 @@ router.post("/confirmations/:id/confirm", authenticateToken, confirmationRoute(a
     scheduleDecisionContinuation({ userId: req.user.id, user: req.user, sessionId: decided.sessionId });
   }
   return decided;
+}));
+
+// ── Data-driven Data View registry (admin, 2026-11-18) ───────────────────
+// Stored specs in edu.self_tool_views extend what learners' agents can
+// build tools over, with no code deploy. A spec may only be ACTIVATED after
+// it validates against the live database schema (viewSpecs.js); activation
+// and disabling take effect on the next registry refresh, forced here so
+// the change is immediate. Built-in views are code-owned and read-only here.
+const eduViews = () => db.schema("edu");
+const adminOnly = (req, res) => {
+  if (req.user?.role === "admin") return true;
+  res.status(403).json({ success: false, error: "Admin only" });
+  return false;
+};
+const viewNameOk = (name) => /^[a-z][a-z0-9_]{2,47}$/.test(String(name || ""));
+
+router.get("/views", authenticateToken, asyncHandler(async (req, res) => {
+  if (!adminOnly(req, res)) return;
+  const { data } = await eduViews().from("self_tool_views").select("name, spec, status, origin, note, proposed_by, approved_by, approved_at, created_at, updated_at").order("created_at", { ascending: false });
+  const live = dbViewNameSet();
+  res.json({ success: true, data: {
+    registry: viewRegistryStatus(),
+    builtins: Object.keys(BUILTIN_DATA_VIEWS).map((name) => ({ name, origin: "builtin", live: name in DATA_VIEWS })),
+    stored: (data || []).map((r) => ({ ...r, live: live.has(r.name) })),
+  } });
+}));
+
+router.post("/views", authenticateToken, asyncHandler(async (req, res) => {
+  if (!adminOnly(req, res)) return;
+  const { name, spec, note, activate } = req.body || {};
+  if (!viewNameOk(name)) return res.status(400).json({ success: false, error: "Bad view name" });
+  if (name in BUILTIN_DATA_VIEWS) return res.status(409).json({ success: false, error: `"${name}" is a built-in view — stored views are additions only` });
+  const shape = validateViewShape(name, spec);
+  if (!shape.ok) return res.status(400).json({ success: false, error: shape.errors.join("; ") });
+  let stored = normalizeViewSpec(spec);
+  if (activate) {
+    const gate = await validateViewForActivation(name, spec);
+    if (!gate.ok) return res.status(400).json({ success: false, error: gate.errors.join("; ") });
+    stored = gate.spec;
+  }
+  const { data, error } = await eduViews().from("self_tool_views").insert({
+    name, spec: stored, status: activate ? "active" : "proposed", origin: "admin",
+    note: typeof note === "string" ? note.slice(0, 500) : null,
+    proposed_by: req.user.id,
+    ...(activate ? { approved_by: req.user.id, approved_at: new Date().toISOString() } : {}),
+    updated_at: new Date().toISOString(),
+  }).select("name, status").single();
+  if (error) return res.status(error.code === "23505" ? 409 : 500).json({ success: false, error: error.message });
+  if (activate) await refreshDbViews();
+  res.json({ success: true, data });
+}));
+
+router.post("/views/:name/approve", authenticateToken, asyncHandler(async (req, res) => {
+  if (!adminOnly(req, res)) return;
+  if (!viewNameOk(req.params.name)) return res.status(400).json({ success: false, error: "Bad view name" });
+  const { data: row } = await eduViews().from("self_tool_views").select("name, spec, status").eq("name", req.params.name).maybeSingle();
+  if (!row) return res.status(404).json({ success: false, error: "No such stored view" });
+  const gate = await validateViewForActivation(row.name, row.spec);
+  if (!gate.ok) return res.status(400).json({ success: false, error: gate.errors.join("; ") });
+  const { error } = await eduViews().from("self_tool_views").update({
+    spec: gate.spec, status: "active", approved_by: req.user.id, approved_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+  }).eq("name", row.name);
+  if (error) return res.status(500).json({ success: false, error: error.message });
+  await refreshDbViews();
+  res.json({ success: true, data: { name: row.name, status: "active", live: dbViewNameSet().has(row.name) } });
+}));
+
+router.post("/views/:name/disable", authenticateToken, asyncHandler(async (req, res) => {
+  if (!adminOnly(req, res)) return;
+  if (!viewNameOk(req.params.name)) return res.status(400).json({ success: false, error: "Bad view name" });
+  const { error } = await eduViews().from("self_tool_views").update({ status: "disabled", updated_at: new Date().toISOString() }).eq("name", req.params.name);
+  if (error) return res.status(500).json({ success: false, error: error.message });
+  await refreshDbViews();
+  res.json({ success: true, data: { name: req.params.name, status: "disabled", live: dbViewNameSet().has(req.params.name) } });
 }));
 
 export default router;
