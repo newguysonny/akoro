@@ -78,3 +78,12 @@ test("the turn: waiting uploads are listed, the first call is forced, nothing is
   assert.match(chat, /pendingUploads\.length \? "read_upload"/, "read_upload is forced when uploads wait");
   assert.doesNotMatch(chat, /ingestRecordsContext/, "no extracted-text injection remains");
 });
+
+test("the upload tools carry their own trace display — the turn tells the file story", () => {
+  const trace = readFileSync(new URL("./chat-trace.js", import.meta.url), "utf8");
+  for (const [name, headline] of [["read_upload", "Reading your file"], ["retry_extraction", "Re-reading your file"], ["list_folders", "Checking your folders"], ["file_upload", "Filing your file"]]) {
+    assert.match(trace, new RegExp(`${name}:\\s+\\{[^}]*headline: "${headline}"`), `${name} has its own headline, not the fallback`);
+  }
+  assert.match(trace, /toolResult\.state === "filed"/, "a filing's change row comes from its state");
+  assert.match(trace, /chatToolResultLine\(tool, toolResult\)/, "result lines are per-tool, so a read says Read, not a count");
+});

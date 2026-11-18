@@ -26,6 +26,10 @@
 export const CHAT_TOOL_DISPLAY = Object.freeze({
   get_learner_context:            { category: "research", headline: "Reviewing your study profile",        description: "Looking at your class, subjects and recent activity" },
   get_agent_capabilities:         { category: "research", headline: "Checking what I can do for you",      description: "Reading the list of things your agent can help with" },
+  read_upload:                    { category: "read",     headline: "Reading your file",                   description: "Reading the file you sent, so I can work with it" },
+  retry_extraction:               { category: "action",   headline: "Re-reading your file",                 description: "The first read didn't come through — reading it again" },
+  list_folders:                   { category: "research", headline: "Checking your folders",                 description: "Looking for the Library folder this file belongs in" },
+  file_upload:                    { category: "action",   headline: "Filing your file",                      description: "Putting it in the Library folder it belongs in", done: "Filed your file" },
   make_study_material:            { category: "action",   headline: "Making your study material",          description: "Building it from your document and saving it in the reader", done: "Made your study material" },
   analyse_past_papers:            { category: "research", headline: "Looking across your past papers",     description: "Finding the topics that keep coming up" },
   search_my_library:              { category: "research", headline: "Searching your library",              description: "Looking through the materials you saved" },
@@ -158,12 +162,29 @@ function primaryCount(result) {
  * One short, learner-safe outcome line — never the raw result. Counts and
  * outcomes only; anything richer stays in the model's observation.
  */
-export function chatToolResultLine(toolResult) {
+export function chatToolResultLine(tool, toolResult) {
   if (toolResult == null) return { ok: true, result: "Done" };
   if (typeof toolResult !== "object") return { ok: true, result: "Done" };
   if (toolResult.needsClarification) return { ok: true, result: "Needs one detail from you" };
   if (toolResult.success === false || toolResult.error) return { ok: false, result: "Couldn't complete this step" };
   if (toolResult.disabled || toolResult.enabled === false) return { ok: true, result: "Not available yet" };
+  // The upload tools report a state, not a list — say the state plainly
+  // (2026-11-18: the file work speaks in the turn's own trace now).
+  if (tool === "read_upload") {
+    if (toolResult.state === "ready") return { ok: true, result: "Read" };
+    if (toolResult.state === "extracting") return { ok: true, result: "Still being read" };
+    if (toolResult.state === "failed") return { ok: false, result: "Couldn't read it" };
+    if (toolResult.state === "undone") return { ok: true, result: "Removed earlier" };
+  }
+  if (tool === "retry_extraction") {
+    if (toolResult.state === "retrying") return { ok: true, result: "Reading it again" };
+    if (toolResult.state === "nothing_to_retry") return { ok: true, result: "Nothing to re-read" };
+  }
+  if (tool === "file_upload") {
+    if (toolResult.state === "filed") return { ok: true, result: "Filed" };
+    if (toolResult.state === "already_filed") return { ok: true, result: "Already filed" };
+    if (toolResult.state === "not_read") return { ok: false, result: "Not read yet" };
+  }
   const count = primaryCount(toolResult);
   if (count !== null) return { ok: true, result: count === 0 ? "Nothing found" : `${count} found` };
   return { ok: true, result: "Done" };
@@ -224,6 +245,16 @@ export function chatToolChange(tool, toolResult, input = {}) {
   }
   if (tool === "save_computation") {
     return toolResult.status === "saved" ? { label: "Saved a tool", title: clip(toolResult.label || "", ITEM_CHARS), fields: [] } : null;
+  }
+  // file_upload: the change is the filing itself — the folder as the title,
+  // the subject and a readable kind as fields; only a real filing counts.
+  if (tool === "file_upload") {
+    if (toolResult.state !== "filed") return null;
+    const fields = [];
+    if (typeof toolResult.subject === "string" && toolResult.subject) fields.push({ label: "Subject", value: clip(toolResult.subject, ITEM_CHARS) });
+    const kind = { past_paper: "Past paper", notes: "Notes", textbook: "Textbook", syllabus: "Syllabus", slides: "Slides", other: "Material" }[toolResult.kind];
+    if (kind) fields.push({ label: "Type", value: kind });
+    return { label: done, title: clip(toolResult.folder || "", ITEM_CHARS), fields };
   }
   // Read-only actions of the multi-action tools change nothing — no "Updated…" row.
   if (["study_buddy", "daily_challenge", "revision_circle"].includes(String(tool)) && ["list", "status", "ranking", "search", undefined, null, ""].includes(input?.action)) return null;
@@ -363,7 +394,7 @@ export function createChatTrace({ send = null, now = () => Date.now(), developer
     toolEnd({ id, display, tool, input }, toolResult) {
       const started = open.get(id) ?? now();
       open.delete(id);
-      const { ok, result } = chatToolResultLine(toolResult);
+      const { ok, result } = chatToolResultLine(tool, toolResult);
       const change = ok ? chatToolChange(tool, toolResult, input) : null;
       const items = ok && !change ? chatToolFoundItems(toolResult) : [];
       const block = {
