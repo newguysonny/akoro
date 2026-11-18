@@ -13,6 +13,17 @@ import './index.css';
 // The whole module graph loaded and is running — tell the boot watchdog in
 // index.html not to repair (it resets the SW/caches if this never happens).
 window.__akoroBooted = true;
+
+// Landing install intent: the landing's Install button arrives with
+// ?install=1, but on the app build a signed-out visitor is routed straight
+// to /signin — and that navigation can rewrite the URL before the
+// InstallIntent host's effect ever reads it. Stash the intent in
+// sessionStorage NOW, before React mounts, so it survives the hop.
+try {
+  if (new URLSearchParams(window.location.search).get('install') === '1') {
+    sessionStorage.setItem('akoro_install_intent', '1');
+  }
+} catch { /* private mode — the URL path in InstallIntent still applies */ }
 try { localStorage.removeItem('akoro_boot_repair'); } catch { /* private mode */ }
 
 // Global net for stale-chunk failures after a deploy — covers dynamic imports
