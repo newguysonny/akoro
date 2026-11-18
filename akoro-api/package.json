@@ -20,7 +20,9 @@
     "test:agent-chat": "node --test lib/aiModel.responses.contract.test.mjs modules/adaptive-learning/think-loop.contract.test.mjs modules/adaptive-learning/agent-chat-route.contract.test.mjs modules/adaptive-learning/chat-trace.contract.test.mjs modules/adaptive-learning/agent-chat-intent.test.mjs modules/adaptive-learning/agent-tool-request-intent.test.mjs modules/adaptive-learning/websocket-identity.contract.test.mjs",
     "test:adaptive-teaching": "node --test modules/adaptive-learning/teaching-evidence.test.mjs modules/adaptive-learning/teaching-workflow/runner.test.mjs modules/adaptive-learning/document-grounding.contract.test.mjs",
     "smoke:instructor": "node scripts/smoke-instructor.mjs",
-    "preflight": "node scripts/preflight-security.mjs"
+    "preflight": "node scripts/preflight-security.mjs",
+    "test:structure": "node --test modules/structure.contract.test.mjs",
+    "structure:baseline": "node scripts/structure-baseline.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.131.0",
