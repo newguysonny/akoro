@@ -4,7 +4,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
-import { looksLikeStepNarration, containsDeferral, admitsNonCompletion, planHasOpenSteps } from "./narration-stall.js";
+import { looksLikeStepNarration, containsDeferral, admitsNonCompletion, looksTruncated, planHasOpenSteps } from "./narration-stall.js";
 
 test("tonight's stall lines are recognised as step narration, not answers", () => {
   assert.equal(looksLikeStepNarration("Checking which Akoro capability can delete a chat, so the tool is drafted against the real action rather than a lookalike."), true);
@@ -45,7 +45,7 @@ test("an unfinished plan in the turn's own ledger means work is owed", () => {
 
 test("the loop wires the guard: one-shot, streamed turns only, kill switch, narration kept as activity", () => {
   const src = readFileSync(new URL("./chat.js", import.meta.url), "utf8");
-  assert.match(src, /import \{ looksLikeStepNarration, containsDeferral, admitsNonCompletion, planHasOpenSteps \} from "\.\/narration-stall\.js";/);
+  assert.match(src, /import \{ looksLikeStepNarration, containsDeferral, admitsNonCompletion, looksTruncated, planHasOpenSteps \} from "\.\/narration-stall\.js";/);
   assert.match(src, /narrationContinuationUsed = false/);
   assert.match(src, /process\.env\.AKORO_NARRATION_CONTINUATION !== "false"/);
   assert.match(src, /const owesWork = planHasOpenSteps\(ledgerNow\) \|\| \(executions\.length === 0 && \(looksLikeStepNarration\(content\) \|\| containsDeferral\(content\) \|\| admitsNonCompletion\(content\)\)\);/);
@@ -102,8 +102,33 @@ test("the fallback answer call carries the anti-deferral closing on every attemp
   // the retry-only closing never fired for these shapes — live,
   // 2026-11-18, the answer call ended a turn on "I'm checking what I
   // can actually do before answering…". The closing therefore rides on
-  // the first attempts too (non-stream + stream + both retries = 4).
+  // the first attempts too (non-stream + stream + both retries + the
+  // fragment retry = 5).
   const chat = readFileSync(new URL("./chat.js", import.meta.url), "utf8");
   assert.match(chat, /nothing runs after you, so do not defer/);
-  assert.equal(chat.split("[...finalMessages, answerClosing]").length - 1, 4);
+  assert.equal(chat.split("[...finalMessages, answerClosing]").length - 1, 5);
+});
+
+test("a reply cut off mid-sentence is recognised as a fragment (live, 2026-11-18)", () => {
+  // The exact fragment the answer call ended a zero-execution turn on.
+  assert.equal(looksTruncated("Nothing was rebuilt and nothing was run — this turn produced"), true);
+  assert.equal(looksTruncated("Here is what I found:"), true);
+});
+
+test("ended replies are not fragments", () => {
+  assert.equal(looksTruncated("Your earliest chat is Computer Studies — Software, from 7 October."), false);
+  assert.equal(looksTruncated("Should I delete it?"), false);
+  assert.equal(looksTruncated("Done!"), false);
+  assert.equal(looksTruncated("Wait…"), false);
+  assert.equal(looksTruncated(""), false);
+  assert.equal(looksTruncated(null), false);
+  // Long replies are out of scope even when they end abruptly.
+  const long = "word ".repeat(120).trim();
+  assert.ok(long.length > 400);
+  assert.equal(looksTruncated(long), false);
+});
+
+test("the answer call retries a fragment once, only when the turn did no work", () => {
+  const chat = readFileSync(new URL("./chat.js", import.meta.url), "utf8");
+  assert.match(chat, /looksTruncated\(reply\) && !prepared\.toolExecutions\.length/);
 });

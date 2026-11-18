@@ -61,6 +61,20 @@ export function admitsNonCompletion(text) {
   return NON_COMPLETION.test(t);
 }
 
+/** True when a reply reads as CUT OFF mid-sentence rather than ended:
+ * short, and no sentence-final punctuation. Live, 2026-11-18: the
+ * fallback answer call's stream ended on "Nothing was rebuilt and
+ * nothing was run — this turn produced" (61 chars, zero executions)
+ * and the fragment became the turn's reply — the empty-reply retry
+ * never sees it, because the reply is not empty. Deliberate trailing
+ * off ("…") and long replies are not this check's business. */
+export function looksTruncated(text) {
+  const t = String(text || "").trim();
+  if (!t || t.length > 400) return false;
+  if (/[.!?…]["'”’)\]]*$/.test(t)) return false;
+  return true;
+}
+
 /** True when the turn's own plan still has steps the agent has not done. */
 export function planHasOpenSteps(ledger) {
   const plan = ledger?.plan;

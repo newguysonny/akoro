@@ -24,7 +24,7 @@ import { materialsFrom, collectMaterials } from "./chat-materials.js";
 import { renderRelevantMemory } from "./chat-memory.js";
 import { ensureNotTaughtOpener, promisedTeachTopic, scrubInternalIds, stripDsmlMarkup, hasDsmlMarkup, stripToolCallMarkup, hasToolCallMarkup } from "./reply-scrub.js";
 import { recurringTopics } from "../materials/structureCore.js";
-import { looksLikeStepNarration, containsDeferral, admitsNonCompletion, planHasOpenSteps } from "./narration-stall.js";
+import { looksLikeStepNarration, containsDeferral, admitsNonCompletion, looksTruncated, planHasOpenSteps } from "./narration-stall.js";
 import { resolveMaterialsFolder } from "../materials/studySource.js";
 import { akoroMaterialFor } from "../materials/akoroMaterial.js";
 import { gatherPassages, extractCitations } from "../records/askLib.js";
@@ -6366,6 +6366,20 @@ async function agentChatHandler(req, res) {
           }).catch(() => "");
         }
       }
+    }
+    // Fragment answer (2026-11-18): the answer call can end mid-sentence
+    // ("Nothing was rebuilt and nothing was run — this turn produced") on
+    // a turn where nothing ran, and the empty-reply retries above never
+    // see it — the reply is not empty. One non-streamed retry with the
+    // closing instruction; only when the turn did no work, since after
+    // real executions the corrections below append rather than replace.
+    if (!stopped() && reply.trim() && looksTruncated(reply) && !prepared.toolExecutions.length) {
+      const retry = await openai.chat.completions.create({
+        model: usedModel, temperature: 0.6, max_tokens: 2000,
+        messages: [...finalMessages, answerClosing],
+      }).catch(() => null);
+      const retryText = retry?.choices?.[0]?.message?.content?.trim() || "";
+      if (retryText) reply = retryText;
     }
     // A stopped turn keeps whatever streamed so far, marked as stopped, so the
     // saved transcript matches what the learner saw.
