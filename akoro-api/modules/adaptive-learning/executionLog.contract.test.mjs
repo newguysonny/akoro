@@ -57,7 +57,7 @@ test("Phase 22: a failed step stores a real error class and message, never raw a
 });
 
 test("Phase 22 #1: user message persisted at turn start; a crashed turn re-runs once, safely", () => {
-  const chat = read("modules/adaptive-learning/chat.js");
+  const chat = read("modules/adaptive-learning/chat/turn-prepare.js");
   const loop = read("modules/adaptive-learning/chat/agent-loop.js");
   assert.match(chat, /persistLearnerAgentUserTurnMessage\(/, "persists the user message at turn start");
   assert.match(loop, /startRun\(\{ sessionId: conversationId, userId: studentId, model, turnId \}\)/, "run carries the turn id");

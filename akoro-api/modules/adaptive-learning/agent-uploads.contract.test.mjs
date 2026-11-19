@@ -12,6 +12,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 const chat = readFileSync(new URL("./chat.js", import.meta.url), "utf8");
+const turnPrepare = readFileSync(new URL("./chat/turn-prepare.js", import.meta.url), "utf8");
 const network = readFileSync(new URL("./chat/handlers-network-study.js", import.meta.url), "utf8");
 const toolCatalogue = readFileSync(new URL("./chat/tool-catalogue-rest.js", import.meta.url), "utf8");
 const tools = readFileSync(new URL("../materials/uploadTools.js", import.meta.url), "utf8");
@@ -76,9 +77,9 @@ test("filingDb exports everything its importers name (the 2026-11-16 deploy cras
 });
 
 test("the turn: waiting uploads are listed, the first call is forced, nothing is injected", () => {
-  assert.match(chat, /const pendingUploadsP = /, "the session's unfiled uploads join the turn's own");
-  assert.match(chat, /pendingUploads\.length \? "read_upload"/, "read_upload is forced when uploads wait");
-  assert.doesNotMatch(chat, /ingestRecordsContext/, "no extracted-text injection remains");
+  assert.match(turnPrepare, /const pendingUploadsP = /, "the session's unfiled uploads join the turn's own");
+  assert.match(turnPrepare, /pendingUploads\.length \? "read_upload"/, "read_upload is forced when uploads wait");
+  assert.doesNotMatch(turnPrepare, /ingestRecordsContext/, "no extracted-text injection remains");
 });
 
 test("the upload tools carry their own trace display — the turn tells the file story", () => {

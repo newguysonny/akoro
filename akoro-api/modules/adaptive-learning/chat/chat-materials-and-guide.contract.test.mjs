@@ -9,6 +9,8 @@ import { memoryForPrompt, renderRelevantMemory } from "./chat-memory.js";
 const chat = await readFile(new URL("../chat.js", import.meta.url), "utf8");
 const turnStore = await readFile(new URL("./turn-store.js", import.meta.url), "utf8");
 const agentLoop = await readFile(new URL("./agent-loop.js", import.meta.url), "utf8");
+const turnAnswer = await readFile(new URL("./turn-answer.js", import.meta.url), "utf8");
+const socialHandlers = await readFile(new URL("./handlers-social.js", import.meta.url), "utf8");
 const toolCatalogue = await readFile(new URL("./tool-catalogue-rest.js", import.meta.url), "utf8");
 const ID = "0f8fad5b-d9cb-469f-a165-70867728950e";
 
@@ -80,7 +82,7 @@ test("study tools: the agent sends learners to the reader, the link opens it on 
 test("the chips under a reply survive a refresh (saved on its meta)", () => {
   // Saved by suggestionsFor — the same for POST /suggestions and the chips sent on the reply's stream.
   assert.match(turnStore, /void saveReplyIdeas\(\{ userId: user\?\.id, conversationId: body\?\.conversationId, reply, ideas: suggestions \}\)/);
-  assert.match(chat, /send\("suggestions", \{ suggestions \}\)/, "the chips ride the reply's stream");
+  assert.match(turnAnswer, /send\("suggestions", \{ suggestions \}\)/, "the chips ride the reply's stream");
   assert.match(turnStore, /\.eq\("role", "agent"\)\.order\("created_at", \{ ascending: false \}\)\.limit\(1\)/, "only the latest agent message");
   assert.match(turnStore, /if \(!last \|\| norm\(last\.text\) !== norm\(reply\)\) return false;/, "only the reply they were made for");
 });
@@ -88,8 +90,8 @@ test("the chips under a reply survive a refresh (saved on its meta)", () => {
 test("not taught yet: Akoro's own material on the topic, as links; never study material from general knowledge", async () => {
   assert.deepEqual(materialsFrom("ask_to_be_taught", { materials: [{ kind: "course", title: "Photosynthesis basics", href: "/course/photosynthesis-basics" }, { kind: "blog", title: "x", href: "https://evil.example" }] }),
     [{ kind: "course", title: "Photosynthesis basics", href: "/course/photosynthesis-basics" }, null]);
-  assert.match(chat, /const materials = await akoroMaterialFor\(teach\.topic\)/);
-  assert.match(chat, /don't explain it or write study material \(flashcards, notes, a quiz\) on it yourself/);
+  assert.match(turnAnswer, /const found = await akoroMaterialFor\(teach\.topic\)/);
+  assert.match(socialHandlers, /don't explain it or write study material \(flashcards, notes, a quiz\) on it yourself/);
   const protege = await readFile(new URL("../../../akoro-agent/policies/PROTEGE.md", import.meta.url), "utf8");
   assert.match(protege, /Flashcards, notes, summaries and quizzes are study material: write them only from what you were taught/);
 });

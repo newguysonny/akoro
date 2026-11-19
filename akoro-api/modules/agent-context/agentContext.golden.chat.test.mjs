@@ -47,6 +47,7 @@ test("the voice bootstrap prompt is byte-identical: chat persona + speech channe
 
 test("single-source rule (D4): the chat/voice prompt literals exist only as workspace files", async () => {
   const chat = await readFile(new URL("../adaptive-learning/chat.js", import.meta.url), "utf8");
+  const prepare = await readFile(new URL("../adaptive-learning/chat/turn-prepare.js", import.meta.url), "utf8");
   const voice = await readFile(new URL("../../modules/voice/routes.js", import.meta.url), "utf8");
   // none of the migrated doctrine may live in code again
   assert.doesNotMatch(chat, /Formatting contract \(the chat renders/, "base persona still hardcoded in chat.js");
@@ -59,9 +60,9 @@ test("single-source rule (D4): the chat/voice prompt literals exist only as work
   // and the surfaces really load the files through the seam — IMPORTED
   // locally, not just re-exported: `export { x } from` does not bind x, and
   // the /agent route calls assembleChatDoctrine directly (the P1 outage)
-  assert.match(chat, /import \{ tutorSystemPrompt, assembleChatDoctrine \} from "\.\.\/agent-context\/chat-doctrine\.js";/, "chat imports the doctrine seam locally");
+  assert.match(prepare, /import \{ tutorSystemPrompt, assembleChatDoctrine \} from "\.\.\/\.\.\/agent-context\/chat-doctrine\.js";/, "chat imports the doctrine seam locally");
   assert.match(chat, /export \{ tutorSystemPrompt, assembleChatDoctrine \};/, "chat re-exports the doctrine seam for voice");
-  assert.match(chat, /assembleChatDoctrine\(\{/, "the /agent route assembles doctrine through the seam");
+  assert.match(prepare, /assembleChatDoctrine\(\{/, "the /agent route assembles doctrine through the seam");
   assert.match(voice, /await tutorSystemPrompt\(/, "voice awaits the async persona builder");
   assert.match(voice, /loadDoctrine\("channels\/SPEECH\.md"\)/, "voice loads the speech channel rules");
 });

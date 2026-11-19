@@ -19,7 +19,7 @@ test("reply materials and ideas merge atomically instead of overwriting", () => 
 });
 
 test("the visible reply is saved before done, keyed by the turn", () => {
-  const chat = read("../chat.js");
+  const chat = read("turn-answer.js");
   const turnStore = read("turn-store.js");
   assert.match(turnStore, /async function appendFastChatTurn/, "a fast transcript writer exists");
   assert.match(turnStore, /agent_session_id: sessionId, agent_turn_id: turnId/, "rows carry the turn key (idempotent with the durable save)");

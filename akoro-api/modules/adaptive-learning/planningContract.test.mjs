@@ -64,7 +64,7 @@ test("a multi-step request gets a starting plan to adopt; never over an open pla
 });
 
 test("wiring: the chat turn shows the starting plan for multi-step requests; the intent call has room for the steps", async () => {
-  const chat = await readFile(new URL("./chat.js", import.meta.url), "utf8");
+  const chat = await readFile(new URL("./chat/turn-answer.js", import.meta.url), "utf8");
   const intent = await readFile(new URL("./intentStep.js", import.meta.url), "utf8");
   assert.match(chat, /\+ \(intent\?\.multiStep \? renderDraftPlan\(intent\.steps, conversation\?\.scratchpad \|\| null\) : ""\)/);
   assert.match(intent, /max_tokens: 320/);

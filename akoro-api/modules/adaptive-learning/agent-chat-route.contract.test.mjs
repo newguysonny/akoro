@@ -4,6 +4,10 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const source = await readFile(new URL("./chat.js", import.meta.url), "utf8");
+const turnPrepare = await readFile(new URL("./chat/turn-prepare.js", import.meta.url), "utf8");
+const turnAnswer = await readFile(new URL("./chat/turn-answer.js", import.meta.url), "utf8");
+const turn = `${turnPrepare}\n${turnAnswer}`;
+const networkStudyHandlers = await readFile(new URL("./chat/handlers-network-study.js", import.meta.url), "utf8");
 const turnStore = await readFile(new URL("./chat/turn-store.js", import.meta.url), "utf8");
 const handlers = await readFile(new URL("./chat/handlers-instructor-learner.js", import.meta.url), "utf8");
 const toolRuntime = await readFile(new URL("./chat/tool-runtime.js", import.meta.url), "utf8");
@@ -24,24 +28,29 @@ const studyPrepDoctrine = await readFile(
   new URL("../../akoro-agent/channels/STUDY_PREP.md", import.meta.url), "utf8");
 
 test("the sole Agent Chat response authority is the unified /agent route", () => {
-  assert.match(source, /router\.post\("\/agent", async \(req, res\) =>/);
+  // Phase 19 step 3 (6/7): the route is a thin registration. The turn itself
+  // is split into prepareTurn (request, context and prompt) and answerTurn
+  // (tool list, loop, answer and saves).
+  assert.match(source, /router\.post\("\/agent", agentChatHandler\);/);
+  assert.match(source, /const ctx = await prepareTurn\(req, res\);\s*\n\s*await answerTurn\(ctx\);/);
   assert.doesNotMatch(source, /router\.post\("\/tutor"/);
   assert.doesNotMatch(source, /router\.post\("\/chat"/);
 });
 
 test("the unified route assembles study grounding and invokes the authorised tool loop", () => {
-  const route = source.slice(source.indexOf('router.post("/agent"'));
+  const route = turn;
   assert.match(route, /getSyllabusGrounding\(userMessage/);
   assert.match(route, /getPastQuestionGrounding\(userMessage/);
   assert.match(route, /processAttachments\(rawAttachments\)/);
   assert.match(route, /runAgentToolLoop\(/);
   assert.match(route, /requiresAgentCapabilitiesTool\(userMessage\)/);
-  assert.match(route, /requiredTool:.*get_agent_capabilities/s);
+  assert.match(turnPrepare, /requiresAgentCapabilitiesTool\(userMessage\) \? "get_agent_capabilities"/);
+  assert.match(turnAnswer, /requiredTool: forcedTool/);
   assert.match(route, /toolChoice: "none"/);
 });
 
 test("durable Agent Chat context stays server-owned and uses an idempotent turn", () => {
-  const route = source.slice(source.indexOf('router.post("/agent"'));
+  const route = turn;
   assert.match(route, /loadLearnerAgentConversationContext/);
   assert.match(route, /retrieveLearnerAgentMemory/);
   assert.match(route, /completedLearnerAgentConversationTurn/);
@@ -66,7 +75,7 @@ test("a failed history load is surfaced with a retry — never silent", () => {
 });
 
 test("every completed turn persists — the save is never gated on client socket state", () => {
-  const route = source.slice(source.indexOf('router.post("/agent"'));
+  const route = turnAnswer;
   // Regression (2026-10-01, observed live): the old save gate
   // `conversationId && !req.destroyed && !res.destroyed` meant NO turn ever
   // persisted behind Cloudflare + Render, where the socket reads destroyed
@@ -88,7 +97,7 @@ test("learner study projections remain bounded tools and product feedback needs 
     "get_chat_memory", "get_agent_preferences", "get_autonomy_status", "submit_tool_request",
   ]) assert.match(toolCatalogue, new RegExp(`name: "${tool}"`));
   // Consent is the learner's own message (a plain yes counts only after the agent's own offer).
-  assert.match(source, /hasExplicitToolRequestConsent\(userMessage, \{ previousAgentText: lastAgentText\(fit\.kept\) \}\)/);
+  assert.match(turnAnswer, /hasExplicitToolRequestConsent\(userMessage, \{ previousAgentText: lastAgentText\(fit\.kept\) \}\)/);
   // P1: the agent-chat operating doctrine loads from the workspace.
   assert.match(agentChatDoctrine, /never submit one automatically/);
   assert.match(source, /assembleChatDoctrine/);
@@ -138,7 +147,7 @@ test("school/class/teacher directory tools are privacy-bounded and forced for id
     assert.match(toolCatalogue, new RegExp(`name: "${tool}"`), `${tool} missing from the learner catalogue`);
     assert.match(handlers, new RegExp(`\\b${tool}\\(input, ctx\\)`), `${tool} missing from executeChatTool`);
   }
-  assert.match(source, /requiredLearnerDataTool\(userMessage\)/,
+  assert.match(turnPrepare, /requiredLearnerDataTool\(userMessage\)/,
     "the identity-question force is not wired into the /agent route");
   // The doctrine owns the rule: no tool result, no school/class/teacher facts.
   assert.match(toolObservationsDoctrine, /FACT questions about data you cannot see in this conversation/);
@@ -172,7 +181,7 @@ test("school/class/teacher directory tools are privacy-bounded and forced for id
 });
 
 test("test/exam preparation forces the study-prep session tool — the questionnaire detour is closed", () => {
-  const route = source.slice(source.indexOf('router.post("/agent"'));
+  const route = turnPrepare;
   // The 2026-10-01 live transcript: "let's plan for a test" twice, tools=0
   // both times, a generic four-question planning questionnaire instead of
   // the study-prep workflow that was already in the tool list.
@@ -183,9 +192,9 @@ test("test/exam preparation forces the study-prep session tool — the questionn
   // Repeated asks must never stack unconfirmed sessions on top of each other.
   // (2026-10-03: reuse applies only when a plan actually exists — a plan-less
   // "planning" zombie from a failed planning step is re-planned, not echoed.)
-  assert.match(source, /session\.status === "awaiting_confirmation" \|\| \(session\.status === "planning" && hasPlan\(session\)\)/,
+  assert.match(networkStudyHandlers, /session\.status === "awaiting_confirmation" \|\| \(session\.status === "planning" && hasPlan\(session\)\)/,
     "start_study_prep_session must reuse an unconfirmed PLANNED session instead of creating another");
-  assert.match(source, /planInBackground\(\{ sessionId: stalled\.sessionId, learnerId: studentId, conversationId \}\)/,
+  assert.match(networkStudyHandlers, /planInBackground\(\{ sessionId: stalled\.sessionId, learnerId: studentId, conversationId \}\)/,
     "a stalled plan-less planning session must be re-planned, never echoed as a dead card");
   // The doctrine owns the rule: test preparation is a session, never a chat
   // questionnaire, and the plan card is where the learner approves the cost.
@@ -240,10 +249,10 @@ test("draft cards survive a reload — tool previews ride the persisted message 
   assert.match(migration, /ADD COLUMN IF NOT EXISTS meta jsonb/);
   // The server derives preview meta from the turn's tool executions …
   assert.match(turnStore, /function previewMetaFrom\(/);
-  assert.match(source, /prepare_activity|revise_activity_draft/);
+  assert.match(turn, /prepare_activity|revise_activity_draft/);
   // … saves it beside the trace …
-  assert.match(source, /\.\.\.\(previewMetaFrom\(prepared\.toolExecutions\) \|\| \{\}\)/);
-  assert.match(source, /saveMessageTrace\(\{ messageId, userId: req\.user\.id, trace: traceBlocks, meta:/);
+  assert.match(turnAnswer, /\.\.\.\(previewMetaFrom\(prepared\.toolExecutions\) \|\| \{\}\)/);
+  assert.match(turnAnswer, /saveMessageTrace\(\{ messageId, userId: req\.user\.id, trace: traceBlocks, meta:/);
   assert.match(turnStore, /update\(\{ \.\.\.\(hasTrace \? \{ trace \} : \{\}\), \.\.\.\(meta \? \{ meta \} : \{\}\) \}\)/, "meta is saved even on a turn with no trace");
   // … and serves it with a rolling-deploy fallback.
   assert.match(source, /loadMessages\("id, role, text, created_at, trace, meta"\)/);

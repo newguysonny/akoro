@@ -104,7 +104,7 @@ test("the fallback answer call carries the anti-deferral closing on every attemp
   // can actually do before answering…". The closing therefore rides on
   // the first attempts too (non-stream + stream + both retries + the
   // fragment retry = 5).
-  const chat = readFileSync(new URL("./chat.js", import.meta.url), "utf8");
+  const chat = readFileSync(new URL("./chat/turn-answer.js", import.meta.url), "utf8");
   assert.match(chat, /nothing runs after you, so do not defer/);
   assert.equal(chat.split("[...finalMessages, answerClosing]").length - 1, 5);
 });
@@ -129,6 +129,6 @@ test("ended replies are not fragments", () => {
 });
 
 test("the answer call retries a fragment once, only when the turn did no work", () => {
-  const chat = readFileSync(new URL("./chat.js", import.meta.url), "utf8");
+  const chat = readFileSync(new URL("./chat/turn-answer.js", import.meta.url), "utf8");
   assert.match(chat, /looksTruncated\(reply\) && !prepared\.toolExecutions\.length/);
 });

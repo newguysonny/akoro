@@ -120,10 +120,11 @@ test("Scenario K: a Pilot learner can switch to DeepSeek and to nothing else; ou
 });
 
 test("the chat reads the payer's tier list only with the picker on, and reports the notice", () => {
-  const chat = readFileSync(new URL("../modules/adaptive-learning/chat.js", import.meta.url), "utf8");
+  const chat = readFileSync(new URL("../modules/adaptive-learning/chat/turn-prepare.js", import.meta.url), "utf8");
+  const answer = readFileSync(new URL("../modules/adaptive-learning/chat/turn-answer.js", import.meta.url), "utf8");
   assert.match(chat, /picked && pickerEnabled\(\) \? await allowedModelsFor\(req\.user\.id\)/);
   assert.match(chat, /if \(modeNotice && wantsStream\) status\("model", modeNotice\);/);
-  assert.match(chat, /\.\.\.\(modeNotice \? \{ modeNotice \} : \{\}\),/);
+  assert.match(answer, /\.\.\.\(modeNotice \? \{ modeNotice \} : \{\}\),/);
   const manifest = JSON.parse(readFileSync(new URL("../migrations/manifest.json", import.meta.url), "utf8"));
   assert.ok(manifest.schema.includes("2026-tier-allowed-models.sql"));
   const sql = readFileSync(new URL("../migrations/2026-tier-allowed-models.sql", import.meta.url), "utf8");

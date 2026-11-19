@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { ensureNotTaughtOpener, promisedTeachTopic, scrubInternalIds } from "./reply-scrub.js";
 
-const chat = await readFile(new URL("./chat.js", import.meta.url), "utf8");
+const chat = await readFile(new URL("./chat/turn-answer.js", import.meta.url), "utf8");
 
 test("internal ids the model saw in tool results never reach the learner", () => {
   assert.equal(scrubInternalIds("Done! I'll message you here in 10 minutes (request req_1c3838ef)."), "Done! I'll message you here in 10 minutes.");
@@ -16,7 +16,7 @@ test("internal ids the model saw in tool results never reach the learner", () =>
 });
 
 test("wired into every Agent Chat reply before it is shown or saved", () => {
-  assert.match(chat, /reply = scrubInternalIds\(reply\);\n\s*if \(!stopped\(\)\) reply = ensureNotTaughtOpener\(reply, prepared\.toolExecutions\);\n[\s\S]{0,1500}?\n\s*if \(!reply\.trim\(\)\)/);
+  assert.match(chat, /reply = scrubInternalIds\(stripToolCallMarkup\(stripDsmlMarkup\(reply\)\)\);\n\s*if \(!stopped\(\)\) reply = ensureNotTaughtOpener\(reply, prepared\.toolExecutions\);\n[\s\S]{0,1500}?\n\s*if \(!reply\.trim\(\)\)/);
 });
 
 test("Teach me given: the reply opens by saying it wasn't taught, unless it already does", () => {

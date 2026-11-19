@@ -6,8 +6,10 @@ import {
 } from "./chat-trace.js";
 
 const chatSource = await readFile(new URL("../chat.js", import.meta.url), "utf8");
+const turnPrepare = await readFile(new URL("./turn-prepare.js", import.meta.url), "utf8");
+const turnAnswer = await readFile(new URL("./turn-answer.js", import.meta.url), "utf8");
 const agentLoop = await readFile(new URL("./agent-loop.js", import.meta.url), "utf8");
-const route = chatSource.slice(chatSource.indexOf('router.post("/agent"'));
+const route = `${turnPrepare}\n${turnAnswer}`;
 const loop = agentLoop;
 
 test("every Agent Chat tool has learner-language display — no backend name ever reaches a row", () => {
