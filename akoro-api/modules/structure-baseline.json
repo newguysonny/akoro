@@ -29,7 +29,6 @@
     "modules/ranking/routes.js": 639,
     "modules/records/routes.js": 1428,
     "modules/records/studyMaterial.js": 863,
-    "modules/school/mgmt.js": 2549,
     "modules/self-study/drafts.js": 1013,
     "modules/self-study/questionPaper.js": 683,
     "modules/self-study/routes.js": 1379,

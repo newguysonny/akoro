@@ -22,6 +22,11 @@ transactions across tables) lives in the `service*.js` files, split by resource
 normalisers and column maps live in `rules.js`. Every Supabase query lives in
 `store.js` / `store-*.js`, grouped by table.
 
+The management router follows the same layers: `mgmt.js` is the entry router
+(custom routes then `/learning` then the generic CRUD), `mgmt-routes.js` is the
+path/middleware list, `mgmt-service*.js` holds request orchestration,
+`mgmt-rules.js` the registry and pure helpers, and `mgmt-store.js` the queries.
+
 ## Extend
 
 Add a helper file under this module and re-export its public names from
@@ -31,7 +36,7 @@ the query in a store.
 
 ## Limits
 
-`mgmt.js` is the module's remaining large file; new behaviour belongs in a
-smaller sibling. Template hosting needs Supabase Storage (`school-sites`
-bucket); the default document/website templates are code-resident JSON/JS, not
-per-school rows.
+No school file is over the 600-line limit; new behaviour belongs in the
+matching `service*.js` / `store*.js` split. Template hosting needs Supabase
+Storage (`school-sites` bucket); the default document/website templates are
+code-resident JSON/JS, not per-school rows.

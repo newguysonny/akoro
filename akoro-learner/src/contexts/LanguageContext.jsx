@@ -7,8 +7,12 @@
  *
  * Source of truth is the English (`en`) catalog below. Every other language
  * provides as many keys as it can; any missing key falls back to English.
+ * Detection, lookup and `{var}` interpolation come from the shared client
+ * core (design-system/client/i18n.ts, copied to src/client); the catalogs and
+ * React state stay in this app.
  */
-import { createContext, useContext, useState, useCallback } from 'react';
+import { createContext, useContext, useState, useCallback, useMemo } from 'react';
+import { createTranslator, detectLanguage } from '../client/i18n';
 import { EN } from './i18n/en.js';
 import { TRANSLATIONS } from './i18n/index.js';
 
@@ -31,21 +35,27 @@ export const LANG_NAME_TO_CODE = {
   Yoruba: 'yo', Igbo: 'ig', Hausa: 'ha', Pidgin: 'pcm', Arabic: 'ar',
 };
 
+export const LANG_CODE_TO_NAME = Object.fromEntries(
+  SUPPORTED_LANGUAGES.map(({ code, label }) => [code, label]),
+);
+
 const STRINGS = { en: EN, ...TRANSLATIONS };
 
 const RTL_CODES = new Set(['ar']);
 
-/* ── Translate helper (falls back to English, then to the key) ─── */
-function translate(langCode, key) {
-  return STRINGS[langCode]?.[key] ?? STRINGS.en[key] ?? key;
-}
-
 const LanguageContext = createContext(null);
 
 export function LanguageProvider({ children }) {
-  const [language, setLanguageState] = useState(
-    () => localStorage.getItem(LS_LANGUAGE) || 'English'
-  );
+  const [language, setLanguageState] = useState(() => {
+    const code = detectLanguage({
+      supported: SUPPORTED_LANGUAGES,
+      fallback: 'en',
+      storageKey: LS_LANGUAGE,
+      // The learner has always started in English when nothing is stored.
+      detectBrowser: false,
+    });
+    return LANG_CODE_TO_NAME[code] || 'English';
+  });
 
   const langCode = LANG_NAME_TO_CODE[language] || 'en';
   const isRtl    = RTL_CODES.has(langCode);
@@ -66,7 +76,12 @@ export function LanguageProvider({ children }) {
     applyLang(lang);
   }, []);
 
-  const t = useCallback((key) => translate(langCode, key), [langCode]);
+  const translator = useMemo(
+    () => createTranslator({ dictionaries: STRINGS, language: langCode, fallback: 'en' }),
+    [langCode],
+  );
+
+  const t = useCallback((key, vars) => translator.t(key, vars), [translator]);
 
   return (
     <LanguageContext.Provider value={{ language, langCode, isRtl, setLanguage, t }}>
