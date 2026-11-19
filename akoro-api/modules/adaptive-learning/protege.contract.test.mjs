@@ -5,7 +5,7 @@ import test from "node:test";
 const { loadTaughtKnowledge, renderTaughtContext, buildGuideMessages, shapeGuideAnswer, teachRequest, PROTEGE_LIMITS } = await import("./protege.js");
 const read = (p) => readFile(new URL(p, import.meta.url), "utf8");
 const [chat, doctrine, manifest, trace, learnerTab, dashboard] = await Promise.all([
-  read("./chat.js"), read("../../akoro-agent/policies/PROTEGE.md"), read("../agent-context/manifest.mjs"), read("./chat-trace.js"),
+  read("./chat.js"), read("../../akoro-agent/policies/PROTEGE.md"), read("../agent-context/manifest.mjs"), read("./chat/chat-trace.js"),
   read("../../../akoro-learner/src/components/tabs/AgentChatTab.jsx"), read("../../../akoro-learner/src/pages/LearnerDashboard.jsx"),
 ]);
 

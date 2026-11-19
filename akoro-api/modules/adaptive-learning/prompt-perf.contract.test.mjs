@@ -59,7 +59,7 @@ test.after(() => {
 });
 
 const { runAgentToolLoop, CHAT_TOOLS, CHAT_TOOL_LOOP_MAX_ITERATIONS } = await import("./chat.js");
-const { materialsFrom } = await import("./chat-materials.js");
+const { materialsFrom } = await import("./chat/chat-materials.js");
 const { TOOL_EXAMPLES } = await import("../agent-capabilities/examples.js");
 
 const READ_DEF = {

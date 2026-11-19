@@ -6,7 +6,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { chatToolChange } from "../adaptive-learning/chat-trace.js";
+import { chatToolChange } from "../adaptive-learning/chat/chat-trace.js";
 
 const read = (p) => readFileSync(new URL(p, import.meta.url), "utf8");
 

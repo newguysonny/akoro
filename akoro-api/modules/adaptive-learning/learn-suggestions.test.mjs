@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { buildLearnSuggestionMessages, shapeSuggestions, LEARN_LIMITS } from "./chatSuggestions.js";
+import { buildLearnSuggestionMessages, shapeSuggestions, LEARN_LIMITS } from "./chat/chatSuggestions.js";
 
 test("learn suggestions ground in the material when there is some", () => {
   const [sys, user] = buildLearnSuggestionMessages({ topic: "Cells", subject: "Biology", title: "BIO 111", excerpt: "The cell wall is made of cellulose. ".repeat(200) });

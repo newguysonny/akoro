@@ -38,7 +38,7 @@ test("stored options drop what the row holds; a recurring row is released under 
 test("the far-off producers use addLater; the release claims a row before adding it", async () => {
   const [deferred, routes, network, followUps, autonomy, quiet, tasks] = await Promise.all([
     read("./deferredJobs.js"), read("../modules/battle/routes.js"), read("../modules/battle/networkBattle.js"),
-    read("../modules/adaptive-learning/chat-follow-ups.js"), read("../modules/adaptive-learning/learner-autonomy.js"),
+    read("../modules/adaptive-learning/chat/chat-follow-ups.js"), read("../modules/adaptive-learning/learner-autonomy.js"),
     read("../modules/agent-memory/quietLearning.js"), read("../modules/tasks/scheduler.js"),
   ]);
   assert.doesNotMatch(routes, /\bq\.add\("(expire|start)-battle"/);

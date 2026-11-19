@@ -13,7 +13,7 @@ import test from "node:test";
 
 const service = await readFile(new URL("./exam-prep-service.js", import.meta.url), "utf8");
 const router = await readFile(new URL("./exam-prep-confidence.js", import.meta.url), "utf8");
-const engine = await import("./study-prep/education-engine.js");
+const engine = await import("../study-prep/education-engine.js");
 
 test("the router is a thin envelope over the extracted service", () => {
   assert.match(router, /from "\.\/exam-prep-service\.js"/);
@@ -29,7 +29,7 @@ test("the service owns generation and run lifecycle on top of the engine", () =>
   assert.match(service, /export async function startExamPrepRun/);
   assert.match(service, /export async function submitExamPrepAttempt/);
   assert.match(service, /export async function startExamPrepRetest/);
-  assert.match(service, /from "\.\/study-prep\/education-engine\.js"/);
+  assert.match(service, /from "\.\.\/study-prep\/education-engine\.js"/);
   // Study-prep linkage lands with the session tables (Phase 2).
   assert.match(service, /study_prep_topic_id/);
 });

@@ -18,10 +18,10 @@ import { jsonbArray, jsonbObject } from "../../lib/jsonb.js";
 import { authenticateToken } from "../auth/routes.js";
 import pkg from "pg";
 import { OPENAI_MODEL, openai } from "../../lib/aiModel.js";
-import { buildSuggestionMessages, notTaughtFrom, guideChip, uploadsFrom, uploadChip, shapeSuggestions, buildLearnSuggestionMessages, LEARN_LIMITS, buildCitedLearnSuggestionMessages, citedLearnSchema, shapeCitedLearnSuggestions } from "./chatSuggestions.js";
+import { buildSuggestionMessages, notTaughtFrom, guideChip, uploadsFrom, uploadChip, shapeSuggestions, buildLearnSuggestionMessages, LEARN_LIMITS, buildCitedLearnSuggestionMessages, citedLearnSchema, shapeCitedLearnSuggestions } from "./chat/chatSuggestions.js";
 import { resolveAskTargetFor } from "../records/access.js";
-import { materialsFrom, collectMaterials } from "./chat-materials.js";
-import { renderRelevantMemory } from "./chat-memory.js";
+import { materialsFrom, collectMaterials } from "./chat/chat-materials.js";
+import { renderRelevantMemory } from "./chat/chat-memory.js";
 import { ensureNotTaughtOpener, promisedTeachTopic, scrubInternalIds, stripDsmlMarkup, hasDsmlMarkup, stripToolCallMarkup, hasToolCallMarkup } from "./reply-scrub.js";
 import { recurringTopics } from "../materials/structureCore.js";
 import { looksLikeStepNarration, containsDeferral, admitsNonCompletion, looksTruncated, planHasOpenSteps } from "./narration-stall.js";
@@ -99,7 +99,7 @@ import {
   cancelChatFollowUp,
   listChatFollowUps,
   scheduleChatFollowUp,
-} from "./chat-follow-ups.js";
+} from "./chat/chat-follow-ups.js";
 import { sendNotificationEmail } from "../auth/emails.js";
 import {
   getLearnerAutonomy,
@@ -124,12 +124,12 @@ import { labelKeyFor } from "../agent-ratings/ratings.js";
 import { requiresAgentCapabilitiesTool, requiresActivityPreparation, isDraftFollowUp, isToolDraftFollowUp, requiredLearnerDataTool, requiredStudyPrepTool, classForExam } from "./agent-chat-intent.js";
 import { agentToolActivity, reportAgentActivity } from "../../lib/agentActivity.js";
 import { noteChatTurn } from "../agent-memory/quietLearning.js";
-import { createChatTrace, decisionNarration, TALK_AFTER_TOOLS, talkAfterTool } from "./chat-trace.js";
+import { createChatTrace, decisionNarration, TALK_AFTER_TOOLS, talkAfterTool } from "./chat/chat-trace.js";
 import { toResponsesInput, toResponsesTools } from "./responses-input.js";
 import { hasExplicitToolRequestConsent } from "./agent-tool-request-intent.js";
 import { getLearnerProfileContext } from "./learner-profile-context.js";
 import { validateLearnerTaskInput } from "./learner-task-validation.js";
-import { listChats, readChat, postToChat, ownedChatId, searchChats } from "./chat-history-tools.js";
+import { listChats, readChat, postToChat, ownedChatId, searchChats } from "./chat/chat-history-tools.js";
 import { schemaLookup } from "../self-tooling/registry.js";
 import { createTool, runLearnerTool, learnerToolDefs, learnerToolDefsWithAreas, forcedSelfTool, saveComputation, getLibraryToolState, runLibraryViewAction, getChatsToolState, runChatsViewAction, getMergedToolState, runMergedViewAction } from "../self-tooling/pipeline.js";
 import { mergedLibraryEnabled, mergedLibraryDef, libraryDeltaActions, LIBRARY_BASE_ACTIONS, LIBRARY_MERGED_ACTIONS } from "../self-tooling/mergedLibrary.js";

@@ -21,7 +21,7 @@ export async function runDecisionFollowUp({ userId, conversationId = null, outco
     const [{ runAgentToolLoop, getLearnerChatTools, SIDE_EFFECT_TOOLS }, { postIntoChat }, { readChat }] = await Promise.all([
       import("../adaptive-learning/chat.js"),
       import("./escalation.js"),
-      import("../adaptive-learning/chat-history-tools.js"),
+      import("../adaptive-learning/chat/chat-history-tools.js"),
     ]);
 
     // Read-only tool set: no create/delete/send tools reach the model here.

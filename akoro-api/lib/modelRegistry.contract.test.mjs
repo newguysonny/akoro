@@ -84,7 +84,7 @@ test("no new OPENAI_MODEL imports: new code names a role (§7.11.6 step 3)", () 
   // The call sites that still import it — to move to roles. Shrink this list; never grow it.
   const ALLOWED = new Set([
     "lib/aiModel.js", "lib/modelRegistry.js",
-    "modules/adaptive-learning/chat.js", "modules/adaptive-learning/draw.js", "modules/adaptive-learning/exam-prep-service.js",
+    "modules/adaptive-learning/chat.js", "modules/adaptive-learning/draw.js", "modules/adaptive-learning/exam-prep/exam-prep-service.js",
     "modules/adaptive-learning/peerConsult.js", "modules/adaptive-learning/study-prep/syllabus-generator.js",
     "modules/agent-network/messaging.js", "modules/autonomy/cycle.js", "modules/battle/questionSource.js", "modules/battle/routes.js",
     "modules/instructor/routes.js", "modules/instructor/tools.js", "modules/records/routes.js", "modules/pharmd/routes.js", "modules/school/aiConcierge.js",

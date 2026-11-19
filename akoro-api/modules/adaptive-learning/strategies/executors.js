@@ -236,7 +236,7 @@ export function defaultExecutorDeps({ learnerId, store, now = () => new Date().t
   return {
     store, now,
     prerequisites: async ({ subject }) => (await import("../study-prep/syllabus-resolver.js")).prerequisiteEdges({ subject }),
-    scheduleFollowUp: async (input) => (await import("../chat-follow-ups.js")).scheduleChatFollowUp({ userId: learnerId, input }),
+    scheduleFollowUp: async (input) => (await import("../chat/chat-follow-ups.js")).scheduleChatFollowUp({ userId: learnerId, input }),
     evidenceNotes: async ({ subject, topic }) => {
       const { resolveConceptId } = await import("../learning-events.js");
       const concept = await resolveConceptId({ subject, topic });

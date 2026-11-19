@@ -6,14 +6,14 @@
  * turn's reply and the server's "filed" post carry the ingest id. The
  * server's completion post is idempotent against client retries.
  */
-import "../../test-env.mjs";
+import "../../../test-env.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-const tab = readFileSync(new URL("../../../akoro-learner/src/components/tabs/AgentChatTab.jsx", import.meta.url), "utf8");
-const routes = readFileSync(new URL("../materials/routes.js", import.meta.url), "utf8");
-const filingDb = readFileSync(new URL("../materials/filingDb.js", import.meta.url), "utf8");
+const tab = readFileSync(new URL("../../../../akoro-learner/src/components/tabs/AgentChatTab.jsx", import.meta.url), "utf8");
+const routes = readFileSync(new URL("../../materials/routes.js", import.meta.url), "utf8");
+const filingDb = readFileSync(new URL("../../materials/filingDb.js", import.meta.url), "utf8");
 
 test("sent tiles leave the composer at send-commit, before the turn runs", () => {
   const commit = tab.indexOf("their tiles leave the\n    // box NOW, as the send commits");

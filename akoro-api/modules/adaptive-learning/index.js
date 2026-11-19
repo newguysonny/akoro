@@ -30,7 +30,7 @@ import chatRouter                from "./chat.js";
 import drawRouter                from "./draw.js";
 import { syllabusRouter }        from "./syllabus.js";
 import teachingSessionRouter     from "./teachingSession.js";
-import examPrepConfidenceRouter  from "./exam-prep-confidence.js";
+import examPrepConfidenceRouter  from "./exam-prep/exam-prep-confidence.js";
 import studyPrepRouter         from "./study-prep/routes.js";
 import decayReviewRouter       from "./decay-review/routes.js";
 import agentRatingsRouter      from "../agent-ratings/routes.js";

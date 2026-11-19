@@ -82,7 +82,7 @@ test.after(() => {
 });
 
 const { runAgentToolLoop } = await import("./chat.js");
-const { createChatTrace } = await import("./chat-trace.js");
+const { createChatTrace } = await import("./chat/chat-trace.js");
 const tools = [{ type: "function", function: { name: "get_agent_capabilities", description: "What the agent can do", parameters: { type: "object", properties: {} } } }];
 
 test("Think mode: real reasoning per step, the tool runs, the last decision is the answer", async () => {

@@ -10,8 +10,8 @@ process.env.SUPABASE_SERVICE_KEY ||= "test";
 process.env.OPENAI_API_KEY ||= "test";
 delete process.env.AKORO_ADAPTIVE_WORKFLOWS_ENABLED;
 
-const { default: db } = await import("../../db.js");
-const { installFakeDb } = await import("../../lib/testing/fakeDb.mjs");
+const { default: db } = await import("../../../db.js");
+const { installFakeDb } = await import("../../../lib/testing/fakeDb.mjs");
 const {
   startExamPrepWorkflow, transitionExamPrepWorkflow, listLearnerWorkflows, publicWorkflow,
 } = await import("./exam-prep-service.js");

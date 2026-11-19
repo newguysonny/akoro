@@ -8,7 +8,7 @@
 
 import {
   examPrepPolicyFor, publicAttempt, publicRun, startExamPrepRetest, startExamPrepRun, submitStudyPrepAttempt,
-} from "../exam-prep-service.js";
+} from "../exam-prep/exam-prep-service.js";
 import { InsufficientBalanceError, createHarness } from "./harness.js";
 import { STUDY_PREP_COST } from "./education-engine.js";
 import { supabaseStore as store } from "./store.js";

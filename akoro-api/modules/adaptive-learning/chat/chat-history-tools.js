@@ -1,10 +1,10 @@
 // Agent tools over the learner's own Agent Chat history: list their chats,
 // read one, and drop a message into one. Every query is scoped to the
 // learner (user_id) — a chatId from anywhere else simply isn't found.
-import db from "../../db.js";
-import { notifyUser } from "../notify.js";
-import { embedForSearch } from "../../lib/searchEmbedding.js";
-import { appLink } from "../../lib/urls.js";
+import db from "../../../db.js";
+import { notifyUser } from "../../notify.js";
+import { embedForSearch } from "../../../lib/searchEmbedding.js";
+import { appLink } from "../../../lib/urls.js";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const clip = (text, max) => { const s = String(text ?? ""); return s.length > max ? `${s.slice(0, max - 1)}…` : s; };

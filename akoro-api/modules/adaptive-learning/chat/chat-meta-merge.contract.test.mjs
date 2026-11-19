@@ -4,9 +4,9 @@ import { readFileSync } from "node:fs";
 const read = (p) => readFileSync(new URL(p, import.meta.url), "utf8");
 
 test("reply materials and ideas merge atomically instead of overwriting", () => {
-  const chat = read("./chat.js");
-  const sql = read("../../migrations/2026-chat-message-meta-merge.sql");
-  const manifest = JSON.parse(read("../../migrations/manifest.json"));
+  const chat = read("../chat.js");
+  const sql = read("../../../migrations/2026-chat-message-meta-merge.sql");
+  const manifest = JSON.parse(read("../../../migrations/manifest.json"));
   assert.match(sql, /create or replace function public\.merge_chat_message_meta/);
   assert.match(sql, /coalesce\(meta, '\{\}'::jsonb\) \|\| coalesce\(p_patch/, "jsonb || merge in one UPDATE");
   assert.ok(manifest.schema.includes("2026-chat-message-meta-merge.sql"));
@@ -18,7 +18,7 @@ test("reply materials and ideas merge atomically instead of overwriting", () => 
 });
 
 test("the visible reply is saved before done, keyed by the turn", () => {
-  const chat = read("./chat.js");
+  const chat = read("../chat.js");
   assert.match(chat, /async function appendFastChatTurn/, "a fast transcript writer exists");
   assert.match(chat, /agent_session_id: sessionId, agent_turn_id: turnId/, "rows carry the turn key (idempotent with the durable save)");
   const fast = chat.indexOf("fastSave\", appendFastChatTurn");

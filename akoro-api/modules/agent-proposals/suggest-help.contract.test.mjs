@@ -14,7 +14,7 @@ import { readFileSync } from "node:fs";
 
 const read = (p) => readFileSync(new URL(p, import.meta.url), "utf8");
 const chat = read("../adaptive-learning/chat.js");
-const trace = read("../adaptive-learning/chat-trace.js");
+const trace = read("../adaptive-learning/chat/chat-trace.js");
 const resumeQueue = read("../self-tooling/resumeQueue.js");
 const toolSuggestions = read("../self-tooling/toolSuggestions.js");
 const suggestHelp = read("./suggestHelp.js");

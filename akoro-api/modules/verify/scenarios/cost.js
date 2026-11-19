@@ -28,7 +28,7 @@ export const memoryPrefilter = {
   name: "cost.memory_prefilter", area: "cost", risk: "read",
   description: "Recalled learner memory is deduped (whitespace-insensitive) and capped by count and characters before it enters the prompt — same distinct memory, fewer tokens.",
   async run(ctx) {
-    const { preFilterMemories } = await import("../../adaptive-learning/chat-memory.js");
+    const { preFilterMemories } = await import("../../adaptive-learning/chat/chat-memory.js");
     const { memories, stats } = preFilterMemories([
       { kind: "note", content: "Likes fractions" },
       { kind: "note", content: "  Likes   fractions " },

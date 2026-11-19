@@ -18,7 +18,7 @@ import db from "../../db.js";
 import { notifyUser } from "../notify.js";
 import { inQuiet, quietOf } from "./quietHours.js";
 import { READY } from "./readyKinds.js";
-import { collectMaterials, materialsFrom } from "../adaptive-learning/chat-materials.js";
+import { collectMaterials, materialsFrom } from "../adaptive-learning/chat/chat-materials.js";
 import { RULES, actionBasis, basisRefusal } from "../agent-runtime/actionBasis.js";
 import { modesFor } from "./kindModes.js";
 import { appLink } from "../../lib/urls.js";

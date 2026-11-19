@@ -37,7 +37,7 @@ test("mergeChatHits: found both ways ranks first; message hit keeps its time for
 });
 
 test("search_chats is a read tool, owner-scoped, and read_chat can land around a match", async () => {
-  const [chat, history] = await Promise.all([read("./chat.js"), read("./chat-history-tools.js")]);
+  const [chat, history] = await Promise.all([read("../chat.js"), read("./chat-history-tools.js")]);
   assert.match(chat, /name: "search_chats",/);
   assert.match(chat, /case "search_chats": \{/);
   assert.doesNotMatch(chat.match(/export const SIDE_EFFECT_TOOLS = \[[^\]]*\]/)[0], /"search_chats"/);

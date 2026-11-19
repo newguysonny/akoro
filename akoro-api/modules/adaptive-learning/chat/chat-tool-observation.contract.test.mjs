@@ -12,10 +12,10 @@ import test from "node:test";
  * utils/toolObservation.test.mjs; this pins the loops to keep using it.
  */
 const read = (name) => readFile(new URL(name, import.meta.url), "utf8");
-const chat = await read("./chat.js");
-const toolObservationsDoctrine = await read("../../akoro-agent/policies/TOOL_OBSERVATIONS.md");
-const taskLoop = await read("../tasks/lib/agentLoop.js");
-const util = await read("../../utils/toolObservation.js");
+const chat = await read("../chat.js");
+const toolObservationsDoctrine = await read("../../../akoro-agent/policies/TOOL_OBSERVATIONS.md");
+const taskLoop = await read("../../tasks/lib/agentLoop.js");
+const util = await read("../../../utils/toolObservation.js");
 
 test("learner Agent Chat observes tools through the structured envelope", () => {
   assert.match(chat, /import \{ newToolRequestId, toolObservation \} from "\.\.\/\.\.\/utils\/toolObservation\.js"/);

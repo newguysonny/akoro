@@ -1,8 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-const chat = readFileSync(new URL("./chat.js", import.meta.url), "utf8");
-const api = readFileSync(new URL("../../../akoro-learner/src/services/api.js", import.meta.url), "utf8");
+const chat = readFileSync(new URL("../chat.js", import.meta.url), "utf8");
+const api = readFileSync(new URL("../../../../akoro-learner/src/services/api.js", import.meta.url), "utf8");
 
 test("an interrupted stream persists what the learner saw", () => {
   assert.match(chat, /let streamedAnswer = ""/, "answer deltas are accumulated");

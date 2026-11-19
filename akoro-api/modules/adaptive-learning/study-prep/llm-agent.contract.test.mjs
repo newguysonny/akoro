@@ -44,7 +44,7 @@ test("replies are mapped back to registry names; the call is bounded and labelle
 });
 
 test("a Study Prep practice is charged once: flat price, platform-paid generation", () => {
-  const service = readFileSync(new URL("../exam-prep-service.js", import.meta.url), "utf8");
+  const service = readFileSync(new URL("../exam-prep/exam-prep-service.js", import.meta.url), "utf8");
   assert.match(service, /\.\.\.\(prepaid \? \{ __payer: "platform" \} : \{\}\)/);
   assert.match(service, /kind: "diagnostic", prepaid \}/);
   assert.match(service, /kind: "retest", prepaid \}/);
@@ -52,7 +52,7 @@ test("a Study Prep practice is charged once: flat price, platform-paid generatio
   assert.match(wiring, /startExamPrepRun\(\{ learnerId, request, studyPrepTopicId, prepaid: true \}\)/);
   assert.match(wiring, /startExamPrepRetest\(\{ learnerId, runId, learnerConfirmedReady, prepaid: true \}\)/);
   // The standalone exam-prep route has no flat charge, so it stays metered.
-  const route = readFileSync(new URL("../exam-prep-confidence.js", import.meta.url), "utf8");
+  const route = readFileSync(new URL("../exam-prep/exam-prep-confidence.js", import.meta.url), "utf8");
   assert.doesNotMatch(route, /prepaid/);
 });
 
@@ -80,7 +80,7 @@ test("the agent knows its budget and its last step can only finish", () => {
   assert.match(src, /Iteration \$\{iteration\} of \$\{maxIterations\}/);
 });
 
-for (const [file, name] of [["./routes.js", "UUID"], ["../exam-prep-service.js", "RUN_ID"]]) test(`${file} ${name} accepts real ids`, async () => {
+for (const [file, name] of [["./routes.js", "UUID"], ["../exam-prep/exam-prep-service.js", "RUN_ID"]]) test(`${file} ${name} accepts real ids`, async () => {
   const { randomUUID } = await import("node:crypto");
   const src = readFileSync(new URL(file, import.meta.url), "utf8");
   const pattern = new RegExp(`const ${name} = \\/(.+)\\/i;`).exec(src)?.[1];

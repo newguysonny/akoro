@@ -71,7 +71,7 @@ export const quizFromFolder = {
     const used = (turn.tools || []).find((t) => t.tool === "make_study_material");
     ctx.note(`turn tools: ${(turn.tools || []).map((t) => t.tool).join(", ")} · reply: ${String(turn.reply || turn.text || "").slice(0, 200)}`);
     ctx.expect.ok("the agent calls make_study_material", !!used, (turn.tools || []).map((t) => t.tool));
-    const { materialsFrom } = await import("../../adaptive-learning/chat-materials.js");
+    const { materialsFrom } = await import("../../adaptive-learning/chat/chat-materials.js");
     const card = materialsFrom("make_study_material", used?.result || {}).find((m) => m?.kind === "study_output");
     ctx.expect.ok("the reply carries the quiz card (opens the reader on its tab)", !!card && /^Quiz · /.test(card.title) && /&artifact=/.test(card.href || ""), used?.result);
   },
@@ -91,7 +91,7 @@ export const folderAsks = {
     ctx.note(`tool: ${JSON.stringify(r).slice(0, 300)}`);
     ctx.expect.ok("it asks which document (nothing made)", r?.needsChoice === true && !r?.made, r);
     ctx.expect.eq("…offering both", (r?.records || []).length, 2);
-    const { materialsFrom } = await import("../../adaptive-learning/chat-materials.js");
+    const { materialsFrom } = await import("../../adaptive-learning/chat/chat-materials.js");
     const chips = materialsFrom("make_study_material", r);
     ctx.expect.ok("each is a chip that sends the choice", chips.length === 2 && chips.every((c) => c.kind === "choice" && /^Make the flashcards from /.test(c.action?.text || "")), chips);
   },

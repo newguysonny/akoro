@@ -3,9 +3,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
 import { validateFollowUpInput } from "./chat-follow-up-validation.js";
-import { validateLearnerTaskInput } from "./learner-task-validation.js";
+import { validateLearnerTaskInput } from "../learner-task-validation.js";
 
-const chat = readFileSync(new URL("./chat.js", import.meta.url), "utf8");
+const chat = readFileSync(new URL("../chat.js", import.meta.url), "utf8");
 const followUps = readFileSync(new URL("./chat-follow-ups.js", import.meta.url), "utf8");
 const history = readFileSync(new URL("./chat-history-tools.js", import.meta.url), "utf8");
 

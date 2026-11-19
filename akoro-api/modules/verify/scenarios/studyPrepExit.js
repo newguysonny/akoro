@@ -240,7 +240,7 @@ export const capOut = {
   params: { learner: { default: "@tester47" } },
   async run(ctx, p) {
     const { getPracticeHarness } = await import("../../adaptive-learning/study-prep/wiring.js");
-    const { examPrepPolicyFor } = await import("../../adaptive-learning/exam-prep-service.js");
+    const { examPrepPolicyFor } = await import("../../adaptive-learning/exam-prep/exam-prep-service.js");
     const harness = getPracticeHarness();
     const { me, session, s, topics } = await freshSession(ctx, p, harness);
     if (topics.length < 2) ctx.expect.blocked(`no ${CLASS} ${SUBJECT} syllabus with two topics to plan from`);
@@ -373,7 +373,7 @@ export const submitAtomic = {
   params: { learner: { default: "@tester08" } },
   async run(ctx, p) {
     const { getPracticeHarness } = await import("../../adaptive-learning/study-prep/wiring.js");
-    const { submitStudyPrepAttempt } = await import("../../adaptive-learning/exam-prep-service.js");
+    const { submitStudyPrepAttempt } = await import("../../adaptive-learning/exam-prep/exam-prep-service.js");
     const harness = getPracticeHarness();
     const { me, session, s, topics } = await freshSession(ctx, p, harness);
     if (!topics.length) ctx.expect.blocked(`no ${CLASS} ${SUBJECT} syllabus to plan from`);

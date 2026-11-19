@@ -1,5 +1,5 @@
 /** Input validation kept dependency-free so timing/timezone policy is testable. */
-import { intervalSeconds, MIN_REMINDER_SECONDS, MAX_INTERVAL_SECONDS, seriesSpanMs } from "../../lib/scheduleInterval.js";
+import { intervalSeconds, MIN_REMINDER_SECONDS, MAX_INTERVAL_SECONDS, seriesSpanMs } from "../../../lib/scheduleInterval.js";
 
 const MIN_DELAY_MS = 60_000;
 const MAX_DELAY_MS = 180 * 24 * 60 * 60 * 1000;

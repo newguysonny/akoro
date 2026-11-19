@@ -7,16 +7,16 @@
  * chat IDs stored on the schedule make a retry safe after a process crash.
  */
 import { randomUUID } from "node:crypto";
-import { reportAgentActivity, clearAgentActivity } from "../../lib/agentActivity.js";
-import { backgroundQueue, handleBackground } from "../../lib/backgroundQueue.js";
-import { addLater, cancelLater } from "../../lib/deferredJobs.js";
+import { reportAgentActivity, clearAgentActivity } from "../../../lib/agentActivity.js";
+import { backgroundQueue, handleBackground } from "../../../lib/backgroundQueue.js";
+import { addLater, cancelLater } from "../../../lib/deferredJobs.js";
 
-import db from "../../db.js";
-import { notifyUser } from "../notify.js";
-import { workerJob } from "../../lib/workerLog.js";
+import db from "../../../db.js";
+import { notifyUser } from "../../notify.js";
+import { workerJob } from "../../../lib/workerLog.js";
 import { validateFollowUpId, validateFollowUpInput, nextOccurrence } from "./chat-follow-up-validation.js";
-import { assertQueueCapacity } from "../../lib/queueGuard.js";
-import { appLink } from "../../lib/urls.js";
+import { assertQueueCapacity } from "../../../lib/queueGuard.js";
+import { appLink } from "../../../lib/urls.js";
 
 const STALE_DELIVERY_MS = 5 * 60 * 1000;
 const OVERDUE_SWEEP_GRACE_MS = 3 * 60 * 1000;    // let the queue job try first; only recover after this
@@ -106,8 +106,8 @@ export function formatToolRows(out, { max = 12 } = {}) {
 async function freshToolText(followUp) {
   if (!followUp.run_tool) return null;
   try {
-    const { runLearnerTool } = await import("../self-tooling/pipeline.js");
-    const { selfToolDeps } = await import("./chat.js");
+    const { runLearnerTool } = await import("../../self-tooling/pipeline.js");
+    const { selfToolDeps } = await import("../chat.js");
     const out = await runLearnerTool(followUp.run_tool, {}, followUp.user_id, {
       callCapability: selfToolDeps(followUp.user_id).callCapability, conversationId: followUp.chat_session_id, dry: true,
     });

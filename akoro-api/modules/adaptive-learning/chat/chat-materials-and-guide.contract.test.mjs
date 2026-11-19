@@ -3,10 +3,10 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { collectMaterials, materialsFrom } from "./chat-materials.js";
 import { buildCitedLearnSuggestionMessages, buildSuggestionMessages, guideChip, notTaughtFrom, shapeCitedLearnSuggestions } from "./chatSuggestions.js";
-import { guidePassagesBlock } from "./documentGrounding.js";
+import { guidePassagesBlock } from "../documentGrounding.js";
 import { memoryForPrompt, renderRelevantMemory } from "./chat-memory.js";
 
-const chat = await readFile(new URL("./chat.js", import.meta.url), "utf8");
+const chat = await readFile(new URL("../chat.js", import.meta.url), "utf8");
 const ID = "0f8fad5b-d9cb-469f-a165-70867728950e";
 
 test("materials: links only from tool results, only to the app's own pages", () => {
@@ -87,7 +87,7 @@ test("not taught yet: Akoro's own material on the topic, as links; never study m
     [{ kind: "course", title: "Photosynthesis basics", href: "/course/photosynthesis-basics" }, null]);
   assert.match(chat, /const materials = await akoroMaterialFor\(teach\.topic\)/);
   assert.match(chat, /don't explain it or write study material \(flashcards, notes, a quiz\) on it yourself/);
-  const protege = await readFile(new URL("../../akoro-agent/policies/PROTEGE.md", import.meta.url), "utf8");
+  const protege = await readFile(new URL("../../../akoro-agent/policies/PROTEGE.md", import.meta.url), "utf8");
   assert.match(protege, /Flashcards, notes, summaries and quizzes are study material: write them only from what you were taught/);
 });
 

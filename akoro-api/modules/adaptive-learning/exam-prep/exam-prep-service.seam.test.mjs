@@ -9,8 +9,8 @@ process.env.SUPABASE_URL ||= "http://localhost:1";
 process.env.SUPABASE_SERVICE_KEY ||= "test";
 process.env.OPENAI_API_KEY ||= "test";
 
-const { default: db } = await import("../../db.js");
-const { installFakeDb } = await import("../../lib/testing/fakeDb.mjs");
+const { default: db } = await import("../../../db.js");
+const { installFakeDb } = await import("../../../lib/testing/fakeDb.mjs");
 const svc = await import("./exam-prep-service.js");
 const {
   examPrepInput, publicRun, publicAttempt, scoreSubmission, nextRunStatus, getOwnedExamPrepRun,

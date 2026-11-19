@@ -5,7 +5,7 @@ import { readFileSync, existsSync } from "node:fs";
 const read = (p) => readFileSync(new URL(p, import.meta.url), "utf8");
 
 test("scheduled reminders can also be delivered by email", () => {
-  const followUps = read("./chat-follow-ups.js");
+  const followUps = read("./chat/chat-follow-ups.js");
   // The check-in passes an email to notifyUser, gated by the reminder toggle and
   // the learner's overall email setting — never overriding the in-app path.
   assert.match(followUps, /notify_agent_reminders\s*!==\s*false/, "reminder-email toggle is honoured");

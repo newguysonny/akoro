@@ -5,7 +5,7 @@
  * teaching guide; a Library search in Agent Chat yields links that open the
  * record. The uploaded record is deleted afterwards.
  */
-import { materialsFrom } from "../../adaptive-learning/chat-materials.js";
+import { materialsFrom } from "../../adaptive-learning/chat/chat-materials.js";
 import { textPdf } from "./reader.js";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
