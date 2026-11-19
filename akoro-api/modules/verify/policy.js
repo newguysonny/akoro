@@ -13,6 +13,7 @@
 import db from "../../db.js";
 import { BlockedError } from "./assertions.js";
 import { safeCompare } from "../../lib/safeCompare.js";
+import { isTester } from "../../lib/tester.js";
 
 export const RISKS = ["read", "dry", "write"];
 export const TARGET = ["production", "local", "sandbox"].includes(process.env.VERIFY_TARGET) ? process.env.VERIFY_TARGET : "production";
@@ -38,7 +39,7 @@ export function guard(req, res, next) {
 }
 
 /** A seeded test learner: username tester01–tester99 AND a @demo.akoro.app email. */
-export const isTester = (u) => /^tester\d{2}$/i.test(String(u?.username || "")) && /@demo\.akoro\.app$/i.test(String(u?.email || ""));
+export { isTester };
 
 export class PolicyError extends Error {
   constructor(message) { super(message); this.name = "PolicyError"; }

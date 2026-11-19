@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { isIanaTimeZone, localiseInstant, resolveLearnerTimeZone } from "./learner-time-context.js";
+import { isIanaTimeZone, localiseInstant, resolveLearnerTimeZone } from "./learnerTime.js";
 
 test("learner time context prefers a valid saved IANA account timezone", () => {
   assert.equal(isIanaTimeZone("Africa/Lagos"), true);

@@ -6,7 +6,7 @@
  * a human time request into an account-local instant—not to expose a profile.
  */
 import db from "../../../db.js";
-import { localiseInstant, resolveLearnerTimeZone } from "./learner-time-context.js";
+import { localiseInstant, resolveLearnerTimeZone } from "../../../lib/learnerTime.js";
 
 const PROFILE_FIELDS = "full_name, username, city, country, language, school_name, year_group, study_level, subjects, created_at";
 const PROFILE_FIELDS_BASE = "full_name, username, country, language, school_name, year_group, study_level, subjects, created_at";

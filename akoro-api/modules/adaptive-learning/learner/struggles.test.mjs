@@ -5,7 +5,7 @@ import test from "node:test";
 process.env.SUPABASE_URL ||= "http://localhost:1";
 process.env.SUPABASE_SERVICE_KEY ||= "test";
 const { refusalFor, struggleEffects, recordStruggle } = await import("./struggles.js");
-const { STRUGGLE_TYPES, DETECTED_BY } = await import("./struggleTypes.js");
+const { STRUGGLE_TYPES, DETECTED_BY } = await import("../../../lib/struggleTypes.js");
 const read = (f) => readFile(new URL(f, import.meta.url), "utf8");
 
 test("every struggle type says who may detect it; health_energy only from the learner", () => {

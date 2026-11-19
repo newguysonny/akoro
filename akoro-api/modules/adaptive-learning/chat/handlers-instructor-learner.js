@@ -13,7 +13,7 @@ import { stickyAreasFor, durableAgentChatContextEnabled } from "./runtime-state.
 import { agentNetworkEnabled } from "./tool-catalogue-rest.js";
 import { getLearnerProfileContext } from "../learner/learner-profile-context.js";
 import { validateLearnerTaskInput } from "../learner/learner-task-validation.js";
-import { localiseInstant } from "../learner/learner-time-context.js";
+import { localiseInstant } from "../../../lib/learnerTime.js";
 import { scheduleAutonomyReviewForTask } from "../learner/learner-autonomy.js";
 
 /**

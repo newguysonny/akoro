@@ -41,7 +41,7 @@ import { runPharmdUpload }    from "./uploader.js";
 import { safeCompare } from "../../lib/safeCompare.js";
 import { openai, OPENAI_MODEL } from "../../lib/aiModel.js";
 import { buildAskMessages, extractCitations, cleanModelOutput } from "../records/askLib.js";
-import { pharmdContentKey } from "./contentKey.js";
+import { pharmdContentKey } from "../../lib/contentKey.js";
 
 const edu = () => db.schema("edu");
 

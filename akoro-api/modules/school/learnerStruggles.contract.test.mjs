@@ -17,7 +17,7 @@ import express from "express";
 const { default: db } = await import("../../db.js");
 const { installFakeDb } = await import("../../lib/testing/fakeDb.mjs");
 const S = await import("./learnerStruggles.js");
-const { STRUGGLE_TYPES, SENSITIVE_TYPES, STRUGGLE_CATEGORIES } = await import("../adaptive-learning/learner/struggleTypes.js");
+const { STRUGGLE_TYPES, SENSITIVE_TYPES, STRUGGLE_CATEGORIES } = await import("../../lib/struggleTypes.js");
 
 const NOW = Date.parse("2026-11-01T12:00:00Z");
 const ago = (days) => new Date(NOW - days * 86_400_000).toISOString();

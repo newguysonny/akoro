@@ -15,7 +15,7 @@
     "db:deploy": "node scripts/apply-migrations.mjs --group=all",
     "records:backfill-text": "node scripts/backfill-record-text.mjs",
     "test:emails": "node --test modules/auth/emails.render.test.mjs",
-    "test:task-scheduling": "node --test modules/adaptive-learning/learner/learner-task-validation.test.mjs modules/adaptive-learning/chat/chat-follow-ups.test.mjs modules/adaptive-learning/learner/learner-time-context.test.mjs",
+    "test:task-scheduling": "node --test modules/adaptive-learning/learner/learner-task-validation.test.mjs modules/adaptive-learning/chat/chat-follow-ups.test.mjs lib/learnerTime.test.mjs",
     "test:agent-context": "node --test modules/agent-tools/conversation-context-validation.test.mjs modules/agent-tool-requests/validation.test.mjs modules/agent-tool-requests/routes.contract.test.mjs",
     "test:agent-chat": "node --test lib/aiModel.responses.contract.test.mjs modules/adaptive-learning/chat/think-loop.contract.test.mjs modules/adaptive-learning/chat/agent-chat-route.contract.test.mjs modules/adaptive-learning/chat/chat-trace.contract.test.mjs modules/adaptive-learning/intent/agent-chat-intent.test.mjs modules/adaptive-learning/intent/agent-tool-request-intent.test.mjs modules/adaptive-learning/realtime/websocket-identity.contract.test.mjs",
     "test:adaptive-teaching": "node --test modules/adaptive-learning/learner/teaching-evidence.test.mjs modules/adaptive-learning/teaching-workflow/runner.test.mjs modules/adaptive-learning/grounding/document-grounding.contract.test.mjs",

@@ -11,7 +11,7 @@
  *
  * The db client loads lazily so importers stay cheap and testable.
  */
-import { PHARMD_PREFIX, parsePharmdKey, pharmdContentKey } from "../pharmd/contentKey.js";
+import { PHARMD_PREFIX, parsePharmdKey, pharmdContentKey } from "../../lib/contentKey.js";
 
 const dbLazy = async () => (await import("../../db.js")).default;
 const edu = async () => (await dbLazy()).schema("edu");

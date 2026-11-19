@@ -21,7 +21,7 @@
  * + concept: a repeat adds its evidence and an attempt instead of a duplicate.
  */
 import db from "../../../db.js";
-import { struggleType, DETECTED_BY, STRUGGLE_TYPES_VERSION, HEALTH_EXPIRY_DAYS } from "./struggleTypes.js";
+import { struggleType, DETECTED_BY, STRUGGLE_TYPES_VERSION, HEALTH_EXPIRY_DAYS } from "../../../lib/struggleTypes.js";
 import { strategyLabel } from "../strategies/library.js";
 import { strategyThatWorked } from "../strategies/outcomes.js";
 

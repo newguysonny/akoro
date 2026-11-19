@@ -12,7 +12,7 @@ import { HarnessRejection } from "./harness.js";
 import { afterLearnerAction, resumeHeldWake, sayNothingToCheck, studyPrepEnabled, getHarness, runStudyPrepPlanningStep, startStudyPrepSession, teachingForTopic, teachingHandoff, wakeStudyPrep } from "./wiring.js";
 import { randomUUID } from "node:crypto";
 import db from "../../../db.js";
-import { isTester } from "../../verify/policy.js";
+import { isTester } from "../../../lib/tester.js";
 import { supabaseStore } from "./store.js";
 import { publicEvent } from "./events.js";
 import { pauseCopy } from "./narration.js";

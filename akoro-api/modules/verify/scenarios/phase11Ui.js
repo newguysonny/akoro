@@ -9,7 +9,7 @@
  *     edu.learning_struggles: every open non-sensitive recorded struggle of a
  *     linked learner is on the view; sensitive ones are only counted.
  */
-import { SENSITIVE_TYPES } from "../../adaptive-learning/learner/struggleTypes.js";
+import { SENSITIVE_TYPES } from "../../../lib/struggleTypes.js";
 
 const MISSING = /does not exist|schema cache|column/i;
 

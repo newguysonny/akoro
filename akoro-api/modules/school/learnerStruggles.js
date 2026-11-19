@@ -26,7 +26,7 @@
  */
 import { Router } from "express";
 import db from "../../db.js";
-import { STRUGGLE_CATEGORIES, STRUGGLE_TYPES_VERSION, struggleType, HEALTH_EXPIRY_DAYS } from "../adaptive-learning/learner/struggleTypes.js";
+import { STRUGGLE_CATEGORIES, STRUGGLE_TYPES_VERSION, struggleType, HEALTH_EXPIRY_DAYS } from "../../lib/struggleTypes.js";
 
 export const SUPPORT_FLAG = Object.freeze({ minOpen: 2, windowDays: 14 });
 export const SCHOOL_ROLES = Object.freeze(["school", "school_admin", "admin"]);
