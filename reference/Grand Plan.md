@@ -4013,6 +4013,18 @@ flag-by-flag rollout; old paths removed only after a release with flags on.
   binding absent and old unit drift). Step 2 remains: `chat/` (21 files) and
   `exam-prep/` (7) moved, ~97 loose top-level files and the module-entry /
   README rules still to go.
+- **Status (2026-11-19): step 2 file moves ✅ complete; import graph still
+  ratcheted.** `modules/adaptive-learning/` now holds only `chat.js`, `index.js`
+  and `README.md`; everything else lives in an owned area: `chat/`, `learner/`,
+  `teaching/`, `assessment/`, `exam-prep/`, `study-prep/`, `practice/`,
+  `proctoring/`, `decay-review/`, `grounding/`, `social/`, `intent/`,
+  `execution/`, `realtime/`, plus the pre-existing `tools/`, `strategies/`,
+  `agents/`, `marketplace/`, `training/`, `syllabus-import/`,
+  `teaching-workflow/`, `teaching-session/` (five batches, every move
+  import-rewritten API-wide, path-only, with its tests). Missing module READMEs
+  48 → 47 after `adaptive-learning/README.md`. Not yet met, still baselined:
+  576 cross-module internal imports and the 29-module cycle — those are the
+  remaining step-2 exit criteria and a separate, much larger refactor.
 - **Status (2026-11-18): step 1 (guardrails) ✅ built.** `akoro-api/scripts/
   structure-scan.mjs` + `modules/structure.contract.test.mjs`, ratcheted against
   `modules/structure-baseline.json` (regenerate with `npm run structure:baseline`,
