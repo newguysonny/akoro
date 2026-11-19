@@ -215,7 +215,7 @@ test("the rows: self-tooling builds and change cards, proactive proposals, V4 ru
   assert.equal(proposalBasis({}).rule, null, "no kind, no rule: never delivered");
   assert.equal(proposalMeta({ id: "p", kind: "goal", title: "T" }).rule, "proactive:goal");
   assert.match(read("../../autonomy/deliver.js"), /const refused = basisRefusal\(proposalBasis\(p\), \{ action: "proactive delivery" \}\);/);
-  const { mergeInbox } = await import("../../agent-proposals/inboxCore.js");
+  const { mergeInbox } = await import("../../agent-proposals/index.js");
   const [item] = mergeInbox({ proposals: [{ id: "p", kind: "task", title: "Revise", created_at: "t" }] });
   assert.deepEqual([item.basis, item.rule], ["inferred", "proactive:task"]);
 });

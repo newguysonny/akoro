@@ -5,7 +5,7 @@
  */
 import {
   TOOLS, ToolError, cleanToolInput, generateToolResult, saveToolOutput, toolByKey, toolPayload,
-} from "../modules/teaching/tools.js";
+} from "../modules/teaching/index.js";
 
 export {
   TOOLS, ToolError, cleanToolInput, generateToolResult, saveToolOutput, toolByKey, toolPayload,

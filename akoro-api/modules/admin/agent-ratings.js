@@ -9,8 +9,8 @@
 import { Router } from "express";
 import db from "../../db.js";
 import { authenticateToken, requireRole } from "../auth/index.js";
-import { labelKeyFor, rateBySurface, worstFirst } from "../agent-ratings/ratings.js";
-import { scrubText } from "../agent-contract/anonymise.js";
+import { labelKeyFor, rateBySurface, worstFirst } from "../agent-ratings/index.js";
+import { scrubText } from "../agent-contract/index.js";
 
 const router = Router();
 const adminOnly = [authenticateToken, requireRole(["admin"])];

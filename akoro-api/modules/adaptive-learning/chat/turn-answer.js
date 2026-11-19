@@ -15,8 +15,8 @@ import { requestClaimCorrection } from "./requestClaims.js";
 import { turnCorrections } from "../../../lib/turnCheck.js";
 import { nextLedger, renderDraftPlan } from "../../../lib/taskLedger.js";
 import { renderIntent } from "../intent/intentStep.js";
-import { createEpisodeRecorder } from "../../agent-contract/episode.js";
-import { recordsRealTraffic, saveEpisode } from "../../agent-contract/store.js";
+import { createEpisodeRecorder } from "../../agent-contract/index.js";
+import { recordsRealTraffic, saveEpisode } from "../../agent-contract/index.js";
 import { labelKeyFor } from "../../agent-ratings/ratings.js";
 import { noteChatTurn } from "../../agent-memory/quietLearning.js";
 import {

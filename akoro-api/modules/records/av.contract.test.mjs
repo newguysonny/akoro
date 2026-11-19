@@ -103,7 +103,7 @@ test("the ffmpeg calls carry the §5 optimizations", () => {
   assert.match(libSrc, /gt\(scene,\$\{threshold\}\)/, "frames sample at SCENE CHANGES");
   assert.doesNotMatch(libSrc, /fps=1\/\d+/, "never a fixed sampling interval");
   assert.match(libSrc, /FFMPEG_PATH/, "the worker.js ffmpeg convention is reused");
-  assert.match(libSrc, /from "\.\.\/voice\/deepgram\.js"/, "the existing Deepgram client is reused");
+  assert.match(libSrc, /from "\.\.\/voice\/index\.js"/, "the existing Deepgram client is reused");
   assert.match(libSrc, /transcribeFileDeepgram/, "nova-2 file transcription with diarization");
   assert.match(libSrc, /parsePageOnRunpod/, "slide captions default to OUR OWN parse worker");
   assert.match(libSrc, /recursive: true, force: true/, "the temp dir is removed at the end");

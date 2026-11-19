@@ -27,7 +27,7 @@ import { Router }                         from "express";
 import { body, query, validationResult }  from "express-validator";
 import db                                 from "../../db.js";
 import { authenticateToken, requireRole, invalidateCachedUser } from "../auth/index.js";
-import { notify }                         from "../notifications/events.js";
+import { notify }                         from "../notifications/index.js";
 import { usageSnapshot }                  from "../../lib/usageMeter.js";
 
 const router = Router();

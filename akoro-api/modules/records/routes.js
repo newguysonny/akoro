@@ -45,7 +45,7 @@
  *   app.use("/api/records", standardLimit, recordsModule);
  */
 
-import { speakBuffer } from "../voice/tts.js";
+import { speakBuffer } from "../voice/index.js";
 import { Router }           from "express";
 import db                   from "../../db.js";
 import { authenticateToken } from "../auth/index.js";

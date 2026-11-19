@@ -4,7 +4,7 @@
  * last 7 days), else the latest chat; never while the learner is mid-chat;
  * once a day; and a decision in Suggestions shows on the chat message.
  */
-import { runQuietPass } from "../../agent-memory/quietLearning.js";
+import { runQuietPass } from "../../agent-memory/index.js";
 import { runAutonomyCycleForUser } from "../../autonomy/index.js";
 import { deliverProactive } from "../../autonomy/index.js";
 import { CHAT } from "./quietLearning.js";

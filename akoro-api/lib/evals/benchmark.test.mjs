@@ -46,7 +46,7 @@ process.env.AI_MODELS = JSON.stringify([{ id: "bm-fake", provider: "openai_compa
 
 const { benchmarkScenarios, BENCHMARK_TEMPLATES } = await import("./benchmark/scenarios.js");
 const { benchmarkSuite, scoreRun } = await import("./benchmark.js");
-const chat = await import("../../modules/adaptive-learning/chat.js");
+const chat = await import("../../modules/adaptive-learning/index.js");
 
 const scenarios = benchmarkScenarios();
 const catalogue = new Map(chat.getLearnerChatTools().map((t) => [t.name, t.input_schema || {}]));

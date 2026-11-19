@@ -14,7 +14,7 @@
  * message, but the episode store alone can't find the message.
  */
 import { createHmac } from "node:crypto";
-import { scrubText, SENSITIVE } from "../agent-contract/anonymise.js";
+import { scrubText, SENSITIVE } from "../agent-contract/index.js";
 
 export const SURFACES = Object.freeze(["agent_chat", "workflow_summary"]);
 export const RATINGS = Object.freeze(["up", "down"]);

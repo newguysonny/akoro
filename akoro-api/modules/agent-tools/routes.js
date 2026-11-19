@@ -27,7 +27,7 @@ import conceptStateRouter from "./concept-state-routes.js";
 import learningInsightsRouter from "./learning-insights-routes.js";
 import soulStateRouter from "./soul-state-routes.js";
 import teachingWorkflowRouter from "./teaching-workflow-routes.js";
-import { normaliseToolRequest } from "../agent-tool-requests/validation.js";
+import { normaliseToolRequest } from "../agent-tool-requests/index.js";
 
 const router = Router();
 const MAX_IDEMPOTENCY_KEY = 180;

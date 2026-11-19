@@ -56,7 +56,7 @@ export const practiceChargedOnce = {
     const [acct] = await ctx.db.rows("coin_accounts", { owner_id: me.id }, { columns: "id, balance", limit: 1 });
     if (!acct) ctx.expect.blocked(`${p.learner} has no coin account`);
     const t0 = new Date(Date.now() - 1000).toISOString();
-    const { getPracticeHarness } = await import("../../adaptive-learning/study-prep/wiring.js");
+    const { getPracticeHarness } = await import("../../adaptive-learning/index.js");
     let practice;
     try {
       practice = await getPracticeHarness().startTopicPractice({ sessionId: id, learnerId: me.id, topicId: topic.id, mode: "diagnostic" });
@@ -151,7 +151,7 @@ async function startAgentCheckFor(ctx, p) {
   const [acct] = await ctx.db.rows("coin_accounts", { owner_id: me.id }, { columns: "id, balance", limit: 1 });
   if (!acct) ctx.expect.blocked(`${p.learner} has no coin account`);
   const t0 = new Date(Date.now() - 1000).toISOString();
-  const { getAgentCheckHarness } = await import("../../adaptive-learning/study-prep/wiring.js");
+  const { getAgentCheckHarness } = await import("../../adaptive-learning/index.js");
   const harness = getAgentCheckHarness({ questions: 3, secondsPerQuestion: 10 });
   let started;
   try {
@@ -263,7 +263,7 @@ export const agentCheckStop = {
   params: { learner: { default: "@tester17" }, subject: { default: "Biology" }, classLevel: { default: "SS1" } },
   async run(ctx, p) {
     const { me, topic, acct, t0, battleId } = await startAgentCheckFor(ctx, p);
-    const { runningWork, stopAgentCheck } = await import("../../adaptive-learning/study-prep/wiring.js");
+    const { runningWork, stopAgentCheck } = await import("../../adaptive-learning/index.js");
     const work = await runningWork(me.id);
     const listed = work.agentChecks.find((c) => c.battleId === battleId);
     ctx.expect.ok("running work lists the check", !!listed, JSON.stringify(work.agentChecks));
@@ -344,7 +344,7 @@ export const workflowMirror = {
   async run(ctx, p) {
     const me = await ctx.as(p.learner);
     await ctx.db.deleteOwned("edu.study_prep_sessions", { ownerColumn: "learner_id", ownerId: me.id, filters: { goal: { like: "[verify:%" } } });
-    const { getWorkflowHarness } = await import("../../adaptive-learning/study-prep/wiring.js");
+    const { getWorkflowHarness } = await import("../../adaptive-learning/index.js");
     const harness = getWorkflowHarness();
     const active = await ctx.http({ as: p.learner, path: "/api/adaptive/study-prep/sessions" });
     if (active.body?.session?.id) await harness.cancelSession({ sessionId: active.body.session.id, learnerId: me.id }).catch(() => {});
@@ -407,7 +407,7 @@ export const agentWakes = {
     const me = await ctx.as(p.learner);
     const base = "/api/adaptive/study-prep/sessions";
     await ctx.db.deleteOwned("edu.study_prep_sessions", { ownerColumn: "learner_id", ownerId: me.id, filters: { goal: { like: "[verify:%" } } });
-    const { getHarness, autoStartDueChecks } = await import("../../adaptive-learning/study-prep/wiring.js");
+    const { getHarness, autoStartDueChecks } = await import("../../adaptive-learning/index.js");
     const harness = getHarness();
     const active = await ctx.http({ as: p.learner, path: base });
     if (active.body?.session?.id) await harness.cancelSession({ sessionId: active.body.session.id, learnerId: me.id }).catch(() => {});
@@ -508,7 +508,7 @@ export const replaceAndCancel = {
   async run(ctx, p) {
     const me = await ctx.as(p.learner);
     await ctx.db.deleteOwned("edu.study_prep_sessions", { ownerColumn: "learner_id", ownerId: me.id, filters: { goal: { like: "[verify:%" } } });
-    const { getHarness } = await import("../../adaptive-learning/study-prep/wiring.js");
+    const { getHarness } = await import("../../adaptive-learning/index.js");
     const harness = getHarness();
     const active = await ctx.http({ as: p.learner, path: "/api/adaptive/study-prep/sessions" });
     if (active.body?.session?.id) await harness.cancelSession({ sessionId: active.body.session.id, learnerId: me.id }).catch(() => {});
@@ -554,7 +554,7 @@ export const teachingHandoff = {
   params: { learner: { default: "@tester16" }, subject: { default: "Basic Science" }, classLevel: { default: "JSS3" } },
   async run(ctx, p) {
     const me = await ctx.as(p.learner);
-    const { getWorkflowHarness, teachingHandoff: handoffOf } = await import("../../adaptive-learning/study-prep/wiring.js");
+    const { getWorkflowHarness, teachingHandoff: handoffOf } = await import("../../adaptive-learning/index.js");
     const harness = getWorkflowHarness();
     const handoff = handoffOf();
     const active = await ctx.http({ as: p.learner, path: "/api/adaptive/study-prep/sessions" });

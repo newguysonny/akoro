@@ -4,7 +4,7 @@
  * watermark, only with the learner's consent; the learner can forget it.
  * The gate runs the pass itself (force: the 30-minute settle wait skipped).
  */
-import { runQuietPass } from "../../agent-memory/quietLearning.js";
+import { runQuietPass } from "../../agent-memory/index.js";
 
 export const CHAT = (m) => [
   ["user", `${m} Hi! I'm in SS2 and I'm writing WAEC in May. I want an A in Chemistry.`],

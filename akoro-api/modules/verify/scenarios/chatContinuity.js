@@ -42,7 +42,7 @@ export const dailyFollowUp = {
     const chatId = made.body?.session?.id;
     if (!chatId) ctx.expect.blocked(`couldn't create the chat (${made.status})`);
     ctx.cleanup(() => ctx.db.deleteOwned("chat_sessions", { ownerColumn: "user_id", ownerId: me.id, filters: { id: chatId } }));
-    const { scheduleChatFollowUp, deliverChatFollowUp, cancelChatFollowUp } = await import("../../adaptive-learning/chat/chat-follow-ups.js");
+    const { scheduleChatFollowUp, deliverChatFollowUp, cancelChatFollowUp } = await import("../../adaptive-learning/index.js");
     const first = await scheduleChatFollowUp({ userId: me.id, targetSessionId: chatId, defaultTimezone: "Africa/Lagos",
       input: { message: `${ctx.marker} Time to check the subjects you haven't studied.`, inMinutes: 2, repeat: "daily", repeatDays: 3 } });
     ctx.cleanup(() => ctx.db.deleteOwned("edu.scheduled_chat_follow_ups", { ownerColumn: "user_id", ownerId: me.id, filters: { chat_session_id: chatId } }));

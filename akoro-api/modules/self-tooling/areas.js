@@ -19,7 +19,7 @@
  * its area in its spec (viewAreaOf falls back to it), and a spec without
  * one derives "other" rather than breaking.
  */
-import { TOOL_EXAMPLES } from "../agent-capabilities/examples.js";
+import { TOOL_EXAMPLES } from "../agent-capabilities/index.js";
 import { CAPABILITIES } from "./capabilities.js";
 import { DATA_VIEWS } from "./views.js";
 

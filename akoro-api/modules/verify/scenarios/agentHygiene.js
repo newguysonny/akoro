@@ -46,9 +46,9 @@ export const loopGuardTimeLimits = {
     ctx.expect.ok("…within its limit, not a stalled step", ms < 3_000, `${ms} ms`);
     ctx.expect.eq("…and the step goes on to its terminal action", out.ended, "terminal");
 
-    const chat = await import("../../adaptive-learning/chat.js");
-    const { chatToolTimeLimit, runWithinLimit } = await import("../../adaptive-learning/chat/toolLimits.js");
-    const { shouldRetry } = await import("../../adaptive-learning/chat/toolRecovery.js");
+    const chat = await import("../../adaptive-learning/index.js");
+    const { chatToolTimeLimit, runWithinLimit } = await import("../../adaptive-learning/index.js");
+    const { shouldRetry } = await import("../../adaptive-learning/index.js");
     const missing = chat.getLearnerChatTools().filter((t) => !(chatToolTimeLimit(t.name, { sideEffecting: chat.isSideEffecting(t.name, {}) }) > 0)).map((t) => t.name);
     ctx.expect.eq("every Agent Chat tool has a time limit", missing, []);
     const stuck = await runWithinLimit(() => new Promise(() => {}), "get_running_work", { limitMs: 200 });
@@ -70,7 +70,7 @@ export const actionBasis = {
       if (!probe.ok) ctx.expect.blocked(`${t} has no basis columns yet (migration 2026-agent-action-basis.sql): ${probe.error}`);
     }
     const me = await ctx.as(p.learner);
-    const chat = await import("../../adaptive-learning/chat.js");
+    const chat = await import("../../adaptive-learning/index.js");
     const { runDry } = await import("../../../lib/dryRunContext.js");
     const task = { title: `Gate basis check ${Date.now()}` };
     const refused = await runDry(() => chat.executeChatTool("create_task", task, me.id, { role: "student", channel: "verify", basis: "inferred" }));

@@ -21,7 +21,7 @@
  */
 import db from "../../db.js";
 import { BUILTIN_DATA_VIEWS } from "./views.js";
-import { AREAS } from "../agent-capabilities/examples.js";
+import { AREAS } from "../agent-capabilities/index.js";
 
 export const VIEW_SCHEMAS = ["public", "edu", "content"];
 export const VIEW_FIELD_TYPES = ["string", "number", "integer", "timestamp", "date", "boolean"];

@@ -137,9 +137,9 @@ export const pickReachesWorkflows = {
     } });
     // noForce: a sandbox's AI_FORCE_MODEL would hide which model the pick chose; the stand-ins see the choice itself.
     const providers = { openai: stub("openai"), anthropic: stub("anthropic"), openai_compatible: stub("openai_compatible"), noForce: true };
-    const { makeLlmAgent } = await import("../../adaptive-learning/study-prep/llm-agent.js");
-    const { modelDecide } = await import("../../adaptive-learning/teaching-session/controller.js");
-    const { guideTeach } = await import("../../adaptive-learning/teaching-session/guideTeacher.js");
+    const { makeLlmAgent } = await import("../../adaptive-learning/index.js");
+    const { modelDecide } = await import("../../adaptive-learning/index.js");
+    const { guideTeach } = await import("../../adaptive-learning/index.js");
     const { openai } = await import("../../../lib/aiModel.js");
     await runWithProviders(providers, async () => {
       // The Study Prep agent asks the app's own pick source (no learnerId → unbilled; pick by workflow).

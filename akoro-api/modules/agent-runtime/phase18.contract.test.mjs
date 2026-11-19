@@ -13,7 +13,7 @@ import { bindRegistry } from "./tools.js";
 import { canonicalArgs, createLoopGuard, repeatReminder, LOOP_GUARD } from "./loopGuard.js";
 import { TOOL_TIME_LIMITS_MS, ToolTimeout, timeLimitFor, withToolTimeLimit } from "./toolTime.js";
 import { NO_RULE_CODE, RULES, actionBasis, basisColumns, basisOfRow, basisRefusal, currentActionBasis, withActionBasis } from "./actionBasis.js";
-import { classifyError } from "../agent-contract/contract.js";
+import { classifyError } from "../agent-contract/index.js";
 
 const script = (steps) => { let i = 0; return { async next() { const s = steps[Math.min(i++, steps.length - 1)]; return typeof s === "function" ? s() : s; } }; };
 const recorder = () => { const log = []; return { log, record: async (e) => { log.push(e); } }; };

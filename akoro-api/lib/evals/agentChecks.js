@@ -16,9 +16,9 @@ import { fileURLToPath } from "node:url";
 import { openai } from "../aiModel.js";
 import { actionClaimCorrection, ledgerLeftCorrection } from "../turnCheck.js";
 import { applyPlanUpdate } from "../taskLedger.js";
-import { shouldRetry, recoveryHint } from "../../modules/adaptive-learning/chat/toolRecovery.js";
-import { fitDialogue } from "../../modules/adaptive-learning/grounding/contextBudget.js";
-import { runIntentStep } from "../../modules/adaptive-learning/intent/intentStep.js";
+import { shouldRetry, recoveryHint } from "../../modules/adaptive-learning/index.js";
+import { fitDialogue } from "../../modules/adaptive-learning/index.js";
+import { runIntentStep } from "../../modules/adaptive-learning/index.js";
 
 const load = (f) => JSON.parse(readFileSync(fileURLToPath(new URL(`./data/${f}`, import.meta.url)), "utf8"));
 const CHECKS = load("agent-checks.json");

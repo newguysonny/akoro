@@ -21,7 +21,7 @@ import { authenticateToken, requireRole } from "../auth/index.js";
 import { businessConfig }                 from "../../config/index.js";
 import { cartHandlers }                   from "./cart.js";
 import { recordPaymentItems, logPaymentEvent } from "../../lib/paymentAudit.js";
-import { notify }                           from "../notifications/events.js";
+import { notify }                           from "../notifications/index.js";
 import { paystackSignatureValid } from "../../lib/safeCompare.js";
 import { requireCourseManager }             from "./courseAccess.js";
 import { urlFor } from "../../lib/urls.js";

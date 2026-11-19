@@ -95,7 +95,7 @@ export const readToolsRun = {
   description: "Every read-only learner tool runs for the learner without an error.",
   params: { learner: { default: "@tester01" } },
   async run(ctx, p) {
-    const { getLearnerChatTools } = await import("../../adaptive-learning/chat.js");
+    const { getLearnerChatTools } = await import("../../adaptive-learning/index.js");
     const enabled = new Set(getLearnerChatTools().map((t) => t.name));
     let ran = 0;
     for (const [tool, input] of READ_TOOLS) {

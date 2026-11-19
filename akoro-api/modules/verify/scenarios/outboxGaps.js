@@ -61,7 +61,7 @@ export const proposalBattleOnce = {
       for (const b of bs || []) { await db.from("battle_participants").delete().eq("battle_id", b.id); await db.from("battles").delete().eq("id", b.id); }
     });
 
-    const { approveProposal, madeCheckBattle } = await import("../../agent-proposals/inbox.js");
+    const { approveProposal, madeCheckBattle } = await import("../../agent-proposals/index.js");
     const r = await approveProposal(me.id, prop.id).catch((e) => ({ error: e.message }));
     ctx.note(`approve: ${JSON.stringify(r).slice(0, 240)}`);
     const [journal] = await ctx.db.rows("edu.outbox", { idem_key: key }, { columns: "id, status, result, channel" });

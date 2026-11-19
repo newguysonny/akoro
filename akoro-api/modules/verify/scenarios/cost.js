@@ -28,7 +28,7 @@ export const memoryPrefilter = {
   name: "cost.memory_prefilter", area: "cost", risk: "read",
   description: "Recalled learner memory is deduped (whitespace-insensitive) and capped by count and characters before it enters the prompt — same distinct memory, fewer tokens.",
   async run(ctx) {
-    const { preFilterMemories } = await import("../../adaptive-learning/chat/chat-memory.js");
+    const { preFilterMemories } = await import("../../adaptive-learning/index.js");
     const { memories, stats } = preFilterMemories([
       { kind: "note", content: "Likes fractions" },
       { kind: "note", content: "  Likes   fractions " },
@@ -122,7 +122,7 @@ export const teachingScaffold = {
   name: "cost.teaching_scaffold", area: "cost", risk: "read",
   description: "Teaching-resource drafts emit content only; kind/tone/layout are filled in code (the fixed document structure is not model output).",
   async run(ctx) {
-    const { assembleResourceDoc, COMPACT_TEMPLATE_RULE } = await import("../../teaching/contentScaffold.js");
+    const { assembleResourceDoc, COMPACT_TEMPLATE_RULE } = await import("../../teaching/index.js");
     const out = assembleResourceDoc({ entries: [{ title: "x", sections: [
       { label: "Common Misconception", body: "..." },
       { label: "Fix Strategies", items: ["a", "b"] },

@@ -16,7 +16,7 @@ import "dotenv/config";
 const arg = (name) => process.argv.find((a) => a.startsWith(`--${name}=`))?.split("=")[1];
 const flag = (name) => process.argv.includes(`--${name}`);
 
-const { backfillLearningEvidence, LIVE_RECORDING_SINCE } = await import("../modules/adaptive-learning/learner/learning-backfill.js");
+const { backfillLearningEvidence, LIVE_RECORDING_SINCE } = await import("../modules/adaptive-learning/index.js");
 const before = arg("before") === "none" ? null : (arg("before") || LIVE_RECORDING_SINCE);
 const stats = await backfillLearningEvidence({
   learnerId: arg("learner") || null,

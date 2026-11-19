@@ -62,8 +62,8 @@ import agentNetworkModule         from "./modules/agent-network/routes.js";
 import profilesModule             from "./modules/profiles/routes.js";
 import adaptiveModule, {
   setupAdaptiveWebSocket }        from "./modules/adaptive-learning/index.js";
-import { startChatFollowUpWorker } from "./modules/adaptive-learning/chat/chat-follow-ups.js";
-import { startLearnerAutonomyWorker, recoverLearnerAutonomySchedules } from "./modules/adaptive-learning/learner/learner-autonomy.js";
+import { startChatFollowUpWorker } from "./modules/adaptive-learning/index.js";
+import { startLearnerAutonomyWorker, recoverLearnerAutonomySchedules } from "./modules/adaptive-learning/index.js";
 import battleModule               from "./modules/battle/routes.js";
 import tasksModule                from "./modules/tasks/routes.js";
 import selfStudyModule            from "./modules/self-study/routes.js";
@@ -73,7 +73,7 @@ import courseBuilderModule       from "./modules/course-builder/routes.js";
 import hfMirrorModule            from "./modules/hfmirror/routes.js";
 import { parseConsoleModule }     from "./modules/records/index.js";
 import agentConsoleModule        from "./modules/agentConsole/routes.js";
-import verifyModule              from "./modules/verify/routes.js";
+import verifyModule              from "./modules/verify/index.js";
 import selfToolingModule         from "./modules/self-tooling/routes.js";
 import { startViewRegistry }     from "./modules/self-tooling/index.js";
 import { startRoutineScheduler }  from "./modules/self-study/index.js";
@@ -81,28 +81,28 @@ import communitiesModule, { COMMUNITIES_QUERY_TIMEOUT_MS } from "./modules/commu
 import { setupDiscussionSocket } from "./modules/communities/discussionSocket.js";
 import instructorModule           from "./modules/instructor/index.js";
 import instructorToolsModule      from "./modules/instructor/tools.js";
-import teachingToolsModule        from "./modules/teaching/tools.js";
-import teachingWorkflowsModule    from "./modules/adaptive-learning/teaching-session/workflowRoutesWiring.js";
+import teachingToolsModule        from "./modules/teaching/index.js";
+import { teachingWorkflowsModule } from "./modules/adaptive-learning/index.js";
 import pastQuestionsModule        from "./modules/past-questions/routes.js";
 import curriculumModule           from "./modules/curriculum/routes.js";
 import schoolModule               from "./modules/school/index.js";
 import { studentFeedRouter,
          battleFeedRouter }       from "./modules/courses/student-feed.js";
 import voiceModule               from "./modules/voice/routes.js";
-import { setupVoiceStreaming }   from "./modules/voice/index.js";
+import { setupVoiceStreaming }   from "./modules/voice/streaming.js";
 import contentModule             from "./modules/content/routes.js";
 import paystackWebhookRouter     from "./modules/webhooks/paystack.js";
 import adminModule              from "./modules/admin/index.js";
 import contactModule            from "./modules/contact/routes.js";
 import pilotApplicationsModule from "./modules/pilot-applications/routes.js";
 import ticksRouter                     from "./modules/admin/ticks.js";
-import billingGatewayModule    from "./modules/billing/gateway.js";
+import billingGatewayModule    from "./modules/billing/index.js";
 import "./modules/billing/jobs.js"; // billing cron jobs (trial-expiry / invoice-generation / payment-retry)
-import learnerGoalsModule       from "./modules/learner-goals/routes.js";
-import agentProposalsModule      from "./modules/agent-proposals/routes.js";
+import learnerGoalsModule       from "./modules/learner-goals/index.js";
+import agentProposalsModule      from "./modules/agent-proposals/index.js";
 import agentLearnerModule      from "./modules/autonomy/learnerRoutes.js";
 import { workflowsModule }        from "./modules/workflows/index.js";
-import materialsModule           from "./modules/materials/routes.js";
+import materialsModule           from "./modules/materials/index.js";
 import blogsModule               from "./modules/blogs/routes.js";
 import { recordsModule }          from "./modules/records/index.js";
 import { recordsExtractionEnabled, runpodEndpointHealth } from "./modules/records/index.js";
@@ -774,7 +774,7 @@ if (process.env.REDIS_URL && !skipJob("battle worker")) {
 
   // Study Prep (2026-10-19): an Agent Check starts by itself a minute after its topic (or the teach-back), inside the approved coins.
   if (!skipJob("study prep auto-start")) {
-    import("./modules/adaptive-learning/study-prep/wiring.js")
+    import("./modules/adaptive-learning/index.js")
       .then((m) => { m.startStudyPrepAutoStart(); console.log("[study-prep] auto-start sweep started at boot"); })
       .catch((e) => console.error("[study-prep] auto-start failed to start:", e.message));
   }
@@ -839,7 +839,7 @@ if (process.env.REDIS_URL && !skipJob("battle worker")) {
 // search quietly wrong, and nothing used to report either.
 // Recently deleted (§7.17): chat uploads the learner undid are deleted for good after 30 days.
 if (!skipJob("materials purge")) {
-  import("./modules/materials/purge.js")
+  import("./modules/materials/index.js")
     .then((m) => m.startMaterialsPurge())
     .catch((e) => console.error("[materials-purge] failed to start:", e.message));
 }
@@ -903,7 +903,7 @@ if (process.env.REDIS_URL && !skipJob("deferred jobs")) {
 // Phase 22: execution-log upkeep — the stale-run sweep (crash visibility) and
 // the hourly failure digest. DB-only (no Redis), so it runs regardless.
 if (!skipJob("execution log")) {
-  import("./modules/adaptive-learning/execution/executionLog.js")
+  import("./modules/adaptive-learning/index.js")
     .then((m) => { m.startExecutionLogMaintenance(); console.log("[execution-log] maintenance started (sweep + digest)"); })
     .catch((e) => console.warn("[execution-log] maintenance failed to start:", e.message));
 }

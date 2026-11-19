@@ -21,7 +21,7 @@ import { authenticateToken }              from "../auth/index.js";
 import { businessConfig }                 from "../../config/index.js";
 import { verifyTransaction }              from "../../lib/paystackService.js";
 import { recordPaymentItems }             from "../../lib/paymentAudit.js";
-import { notify }                          from "../notifications/events.js";
+import { notify }                          from "../notifications/index.js";
 import { redeemVoucher, VoucherError, voucherRedeemConfigured } from "../../lib/voucherRedeem.js";
 import { creditTopup, debitCoins, refundCoins, hasCoins } from "../../lib/coins.js";
 import { nairaToCoins }                    from "../../lib/aiPricing.js";

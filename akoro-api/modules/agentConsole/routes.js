@@ -51,7 +51,7 @@ const API_BASE = process.env.INTERNAL_API_URL || `http://127.0.0.1:${process.env
 const MODELS = ["gpt-4o-mini", "gpt-4.1-mini", "gpt-4o", "gpt-4.1"];
 
 let chatMod = null;
-const chat = async () => (chatMod ||= await import("../adaptive-learning/chat.js"));
+const chat = async () => (chatMod ||= await import("../adaptive-learning/index.js"));
 
 const guard = (req, res, next) => {
   const want = process.env.AGENT_CONSOLE_KEY;
@@ -653,16 +653,16 @@ router.get("/runs/:id", guard, (req, res) => {
 
 /* Phase 22: the DURABLE execution trace (edu.agent_runs / agent_run_steps). */
 router.get("/execution/runs", guard, asyncHandler(async (req, res) => {
-  const { listRuns } = await import("../adaptive-learning/execution/executionLog.js");
+  const { listRuns } = await import("../adaptive-learning/index.js");
   res.json({ success: true, data: await listRuns({ limit: req.query.limit }) });
 }));
 router.get("/execution/runs/:id", guard, asyncHandler(async (req, res) => {
-  const { getAgentRun } = await import("../adaptive-learning/execution/executionLog.js");
+  const { getAgentRun } = await import("../adaptive-learning/index.js");
   const run = await getAgentRun(req.params.id);
   return run ? res.json({ success: true, data: run }) : bad(res, "No such run.", 404);
 }));
 router.get("/execution/digests", guard, asyncHandler(async (req, res) => {
-  const { listFailureDigests } = await import("../adaptive-learning/execution/failureDigest.js");
+  const { listFailureDigests } = await import("../adaptive-learning/index.js");
   res.json({ success: true, data: await listFailureDigests({ limit: req.query.limit }) });
 }));
 

@@ -13,17 +13,17 @@
 // latency. Each run is recorded as a synthetic episode (agent-contract), kept
 // when AGENT_EPISODES allows (synthetic by default).
 import { benchmarkScenarios } from "./benchmark/scenarios.js";
-import { createEpisodeRecorder } from "../../modules/agent-contract/episode.js";
-import { saveEpisode } from "../../modules/agent-contract/store.js";
+import { createEpisodeRecorder } from "../../modules/agent-contract/index.js";
+import { saveEpisode } from "../../modules/agent-contract/index.js";
 import { turnCorrections } from "../turnCheck.js";
-import { runIntentStep, renderIntent } from "../../modules/adaptive-learning/intent/intentStep.js";
+import { runIntentStep, renderIntent } from "../../modules/adaptive-learning/index.js";
 import { renderDraftPlan } from "../taskLedger.js";
 import { openai } from "../aiModel.js";
 import { canonicalArgs } from "../../modules/agent-runtime/index.js";
 
 const SCENARIOS = benchmarkScenarios();
 let chatModule = null;
-const chat = async () => (chatModule ||= await import("../../modules/adaptive-learning/chat.js"));
+const chat = async () => (chatModule ||= await import("../../modules/adaptive-learning/index.js"));
 
 const matches = (want, got) => {
   if (typeof want === "string" && /^\/.*\/[a-z]*$/.test(want)) {

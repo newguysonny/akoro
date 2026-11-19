@@ -97,7 +97,7 @@ export const inlineFull = {
   description: "A whole Study Prep session without Teaching: plan, a missed diagnostic, an inline strategy, the teach-back, a passed retest, the next topic passed, completed — a second submit of the same practice is refused.",
   params: { learner: { default: "@tester46" } },
   async run(ctx, p) {
-    const { getPracticeHarness } = await import("../../adaptive-learning/study-prep/wiring.js");
+    const { getPracticeHarness } = await import("../../adaptive-learning/index.js");
     const harness = getPracticeHarness();
     const { me, session, s, topics } = await freshSession(ctx, p, harness);
     if (topics.length < 2) ctx.expect.blocked(`no ${CLASS} ${SUBJECT} syllabus with two topics to plan from`);
@@ -156,8 +156,8 @@ export const planRejection = {
   description: "A plan that breaks a hard rule (prerequisites, not in the syllabus, a duplicate, more than 12 topics) is a recorded rejection that changes nothing; the valid plan then reaches the card, and turning it down costs nothing.",
   params: { learner: { default: "@tester49" } },
   async run(ctx, p) {
-    const { getPracticeHarness } = await import("../../adaptive-learning/study-prep/wiring.js");
-    const { prerequisiteEdges } = await import("../../adaptive-learning/study-prep/syllabus-resolver.js");
+    const { getPracticeHarness } = await import("../../adaptive-learning/index.js");
+    const { prerequisiteEdges } = await import("../../adaptive-learning/index.js");
     const harness = getPracticeHarness();
     const { session, s, topics } = await freshSession(ctx, p, harness);
     if (topics.length < 2) ctx.expect.blocked(`no ${CLASS} ${SUBJECT} syllabus with two topics to plan from`);
@@ -194,8 +194,8 @@ export const budgetCeiling = {
   description: "With the coins the learner approved already spent, the agent's next check is refused (over_estimate) and nothing is charged; 'Approve more' lets it go on.",
   params: { learner: { default: "@tester48" } },
   async run(ctx, p) {
-    const { getPracticeHarness } = await import("../../adaptive-learning/study-prep/wiring.js");
-    const { supabaseStore } = await import("../../adaptive-learning/study-prep/store.js");
+    const { getPracticeHarness } = await import("../../adaptive-learning/index.js");
+    const { supabaseStore } = await import("../../adaptive-learning/index.js");
     const harness = getPracticeHarness();
     const { me, session, s, topics } = await freshSession(ctx, p, harness);
     if (!topics.length) ctx.expect.blocked(`no ${CLASS} ${SUBJECT} syllabus to plan from`);
@@ -239,8 +239,8 @@ export const capOut = {
   description: "A topic missed to its attempt cap is capped out and takes no more practice; it is deferred once and retried once with attempts reset, and a second deferral is refused.",
   params: { learner: { default: "@tester47" } },
   async run(ctx, p) {
-    const { getPracticeHarness } = await import("../../adaptive-learning/study-prep/wiring.js");
-    const { examPrepPolicyFor } = await import("../../adaptive-learning/exam-prep/exam-prep-service.js");
+    const { getPracticeHarness } = await import("../../adaptive-learning/index.js");
+    const { examPrepPolicyFor } = await import("../../adaptive-learning/index.js");
     const harness = getPracticeHarness();
     const { me, session, s, topics } = await freshSession(ctx, p, harness);
     if (topics.length < 2) ctx.expect.blocked(`no ${CLASS} ${SUBJECT} syllabus with two topics to plan from`);
@@ -291,7 +291,7 @@ export const topicStates = {
   description: "A missed topic goes intervention_required → awaiting_teaching (request_teaching makes the teaching session) → retest_ready (its end, through the handoff) → retest → understood, each state on the topic row.",
   params: { learner: { default: "@tester50" } },
   async run(ctx, p) {
-    const { getPracticeHarness, teachingHandoff } = await import("../../adaptive-learning/study-prep/wiring.js");
+    const { getPracticeHarness, teachingHandoff } = await import("../../adaptive-learning/index.js");
     const harness = getPracticeHarness({ teaching: true });
     const { me, session, s, topics } = await freshSession(ctx, p, harness);
     if (!topics.length) ctx.expect.blocked(`no ${CLASS} ${SUBJECT} syllabus to plan from`);
@@ -372,8 +372,8 @@ export const submitAtomic = {
   description: "Two submits of the same practice at once score once (edu.study_prep_submit_attempt): one wins, the other is refused; attempt, run and topic agree; a repeat call reports the recorded score and changes nothing.",
   params: { learner: { default: "@tester08" } },
   async run(ctx, p) {
-    const { getPracticeHarness } = await import("../../adaptive-learning/study-prep/wiring.js");
-    const { submitStudyPrepAttempt } = await import("../../adaptive-learning/exam-prep/exam-prep-service.js");
+    const { getPracticeHarness } = await import("../../adaptive-learning/index.js");
+    const { submitStudyPrepAttempt } = await import("../../adaptive-learning/index.js");
     const harness = getPracticeHarness();
     const { me, session, s, topics } = await freshSession(ctx, p, harness);
     if (!topics.length) ctx.expect.blocked(`no ${CLASS} ${SUBJECT} syllabus to plan from`);

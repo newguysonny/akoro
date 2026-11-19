@@ -9,7 +9,7 @@
  *                             session's tutor; with no notes the prompt is
  *                             unchanged; proctored practice never reads them.
  */
-import { runQuietPass } from "../../agent-memory/quietLearning.js";
+import { runQuietPass } from "../../agent-memory/index.js";
 
 export const searchChatsFinds = {
   name: "memory.search_chats", area: "agent-chat", risk: "write",
@@ -106,8 +106,8 @@ export const teachingMemoryNotes = {
     if (!active.some((x) => /football/i.test(x.content))) ctx.expect.blocked(`the quiet pass kept no football note (${pass.status}) — nothing to carry`);
 
     // A fresh teaching session: the notes are loaded and reach both voices.
-    const { prepareTeachingSession } = await import("../../adaptive-learning/teaching-session/start.js");
-    const { guideTeachPrompt } = await import("../../adaptive-learning/teaching-session/guideTeacher.js");
+    const { prepareTeachingSession } = await import("../../adaptive-learning/index.js");
+    const { guideTeachPrompt } = await import("../../adaptive-learning/index.js");
     const prepared = await prepareTeachingSession({ studentId: me.id, topic: p.topic, subject: p.subject, mode: "fresh" });
     const notes = prepared.learnerNotes || [];
     ctx.note(`notes: ${JSON.stringify(notes)}`);

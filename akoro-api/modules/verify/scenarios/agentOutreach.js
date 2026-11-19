@@ -130,7 +130,7 @@ export const topicStartFriend = {
     const c = await masteredByB(ctx, b, a);
     if (!c) throw new BlockedError("No approved concept free to seed mastery on.");
     const t = topic(c.title);
-    const { outreachOnTopicStart } = await import("../../adaptive-learning/study-prep/wiring.js");
+    const { outreachOnTopicStart } = await import("../../adaptive-learning/index.js");
     // force: past Offline / quiet hours (the run may fall in the tester's night), never the permission rules.
     const fired = await outreachOnTopicStart({ learnerId: a.id, topic: t, conceptId: c.id, force: true });
     ctx.note(`topic start: ${JSON.stringify(fired)?.slice(0, 240)}`);
@@ -155,7 +155,7 @@ export const strangerCard = {
     const t = topic("Osmosis");
     const r = await expectCard(ctx, { a, o, topic: t, purpose: "study_question" });
     ctx.expect.eq("…because they're a stranger", r.reason, "stranger");
-    const { approveProposal } = await import("../../agent-proposals/inbox.js");
+    const { approveProposal } = await import("../../agent-proposals/index.js");
     const ok = await approveProposal(a.id, r.proposalId);
     ctx.note(`Allow: ${JSON.stringify(ok).slice(0, 240)}`);
     const [m] = await sentRows(ctx, a, t);
@@ -170,7 +170,7 @@ export const friendRequestCard = {
     const { a, o, topic } = await setup(ctx, { friends: false });
     const t = topic("Algebra");
     const r = await expectCard(ctx, { a, o, topic: t, purpose: "friend_request" });
-    const { dismissProposal } = await import("../../agent-proposals/inbox.js");
+    const { dismissProposal } = await import("../../agent-proposals/index.js");
     await dismissProposal(a.id, r.proposalId, "rejected").catch((e) => ctx.note(`dismiss: ${e.message}`));
     const card = await cardOf(ctx, r.proposalId);
     ctx.expect.ok("Reject closes the card", card?.status && card.status !== "proposed", card?.status);
@@ -202,7 +202,7 @@ export const offlineThenAnswers = {
   async run(ctx) {
     const { a, b, o, topic } = await setup(ctx, { friends: true });
     const { processInbox } = await import("../../agent-network/index.js");
-    const { protegeDeps } = await import("../../adaptive-learning/chat.js");
+    const { protegeDeps } = await import("../../adaptive-learning/index.js");
     await setAutonomy(ctx, B, false);
     const t = topic("Electrolysis");
     const r = await o.reachOut({ learnerId: a.id, trigger: "manual", topic: t, target: B, force: true });
@@ -275,7 +275,7 @@ export const roundTrip = {
   async run(ctx) {
     const { a, b, o, topic } = await setup(ctx, { friends: true });
     const { processInbox } = await import("../../agent-network/index.js");
-    const { protegeDeps } = await import("../../adaptive-learning/chat.js");
+    const { protegeDeps } = await import("../../adaptive-learning/index.js");
     const { getSettings, saveSettings } = await import("../../agent-network/index.js");
     const was = (await getSettings(b.id)).auto_reply || "study";
     ctx.cleanup(() => saveSettings(b.id, { auto_reply: was }));

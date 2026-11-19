@@ -11,7 +11,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { isAnswerOnlyRead, toolParamNames } from "./pipeline.js";
-import { chatToolChange } from "../adaptive-learning/chat/chat-trace.js";
+import { chatToolChange } from "../adaptive-learning/index.js";
 
 const pipeline = readFileSync(new URL("./pipeline.js", import.meta.url), "utf8");
 const chat = readFileSync(new URL("../adaptive-learning/chat.js", import.meta.url), "utf8");

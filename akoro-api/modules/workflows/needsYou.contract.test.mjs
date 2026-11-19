@@ -12,11 +12,11 @@ process.env.SUPABASE_URL ||= "http://127.0.0.1:9";
 process.env.SUPABASE_SERVICE_KEY ||= "test";
 
 // Every workflow type the app registers (each module registers itself on import).
-await import("../adaptive-learning/study-prep/workflow.js");
-await import("../adaptive-learning/teaching-session/workflow.js");
-await import("../adaptive-learning/decay-review/workflow.js");
-await import("../adaptive-learning/practice/workflow.js");
-await import("../materials/ingestCore.js");
+await import("../adaptive-learning/index.js");
+await import("../adaptive-learning/index.js");
+await import("../adaptive-learning/index.js");
+await import("../adaptive-learning/index.js");
+await import("../materials/index.js");
 
 const { registeredTypes, workflowDefinition } = await import("./registry.js");
 const { isTerminalStatus, statusFor, WORKFLOW_TYPES } = await import("./definition.js");

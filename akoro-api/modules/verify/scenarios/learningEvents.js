@@ -27,7 +27,7 @@ export const recorderMisconception = {
     if (error) ctx.expect.blocked(`couldn't add the test concept: ${error.message}`);
     ctx.cleanup(() => db.schema("edu").from("concept_catalog").delete().eq("id", concept.id));   // cascades its evidence + state
 
-    const { recordTeachingEvidence } = await import("../../adaptive-learning/teaching-workflow/tools.js");
+    const { recordTeachingEvidence } = await import("../../adaptive-learning/index.js");
     const orchestrator = { sessionMeta: { studentId: me.id, topic: title, subject: "Biology" }, dbSessionId: randomUUID() };
     const turn = (attempts, present, repaired) => ({ topic: title, mustKnowIndex: 0, mustKnowParts: [], currentSubtopic: null,
       evidenceUpdate: { observation: { misconceptionPresent: present }, current: { attempts }, misconceptionRepaired: repaired } });
@@ -83,7 +83,7 @@ export const struggleBreakthrough = {
     const probe = await db.schema("edu").from("learning_struggles").select("id").limit(1);
     if (probe.error) ctx.expect.blocked(`edu.learning_struggles not there yet (run 2026-learning-struggles.sql): ${probe.error.message}`);
 
-    const { recordTeachingEvidence } = await import("../../adaptive-learning/teaching-workflow/tools.js");
+    const { recordTeachingEvidence } = await import("../../adaptive-learning/index.js");
     const orchestrator = { sessionMeta: { studentId: me.id, topic: title, subject: "Biology" }, dbSessionId: randomUUID() };
     const turn = (attempts, present, repaired) => ({ topic: title, mustKnowIndex: 0, mustKnowParts: [], currentSubtopic: null,
       evidenceUpdate: { observation: { misconceptionPresent: present }, current: { attempts }, misconceptionRepaired: repaired } });
@@ -148,8 +148,8 @@ export const strategyOutcome = {
       const probe = await E().from(table).select("id").limit(1);
       if (probe.error) ctx.expect.blocked(`edu.${table} not there yet: ${probe.error.message}`);
     }
-    const { recordLearningEvent } = await import("../../adaptive-learning/learner/learning-events.js");
-    const { recordStrategyOutcome } = await import("../../adaptive-learning/strategies/outcomes.js");
+    const { recordLearningEvent } = await import("../../adaptive-learning/index.js");
+    const { recordStrategyOutcome } = await import("../../adaptive-learning/index.js");
     const base = { learnerId: me.id, conceptId: concept.id, source: "teaching", sessionRef };
 
     const found = await recordLearningEvent({ ...base, kind: "misconception_detected", turnRef: "t1:misconception_detected" });
@@ -211,7 +211,7 @@ export const backfillIdempotent = {
     const probe = await E().from("learning_struggles").select("id").limit(1);
     if (probe.error) ctx.expect.blocked(`edu.learning_struggles not there yet: ${probe.error.message}`);
 
-    const { backfillLearningEvidence } = await import("../../adaptive-learning/learner/learning-backfill.js");
+    const { backfillLearningEvidence } = await import("../../adaptive-learning/index.js");
     const counts = async () => ({
       evidence: await ctx.db.rows("edu.learner_concept_evidence", { learner_id: me.id, concept_id: concept.id }, { columns: "observation_kind, provenance, source_session_id" }),
       struggles: await ctx.db.rows("edu.learning_struggles", { learner_id: me.id, concept_id: concept.id }, { columns: "id, attempts_before, status" }),

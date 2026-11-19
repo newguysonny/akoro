@@ -19,7 +19,7 @@
  * decision is recorded with its basis (actionBasis.js) when the registry has one.
  */
 
-import { classifyError } from "../agent-contract/contract.js";
+import { classifyError } from "../agent-contract/index.js";
 import { createLoopGuard } from "./loopGuard.js";
 
 export class DecisionTimeout extends Error {

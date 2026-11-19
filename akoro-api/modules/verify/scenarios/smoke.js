@@ -14,7 +14,7 @@ export const toolsCatalogue = {
   name: "smoke.tools_catalogue", area: "smoke", risk: "read",
   description: "The learner tool catalogue loads and contains the core tools.",
   async run(ctx) {
-    const { getLearnerChatTools } = await import("../../adaptive-learning/chat.js");
+    const { getLearnerChatTools } = await import("../../adaptive-learning/index.js");
     const names = getLearnerChatTools().map((t) => t.name);
     ctx.expect.gte("tool count", names.length, 40);
     for (const t of ["get_learner_context", "create_task", "schedule_chat_follow_up", "list_chats", "read_chat", "post_to_chat", "search_agents"]) {

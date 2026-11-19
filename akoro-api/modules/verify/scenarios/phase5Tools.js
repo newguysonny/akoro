@@ -36,7 +36,7 @@ export const syllabusFromDocuments = {
     if (iErr) ctx.expect.blocked(`couldn't add the test upload: ${iErr.message}`);
     ctx.cleanup(() => edu(db).from("material_ingests").delete().eq("id", ing.id));
 
-    const { getHarness } = await import("../../adaptive-learning/study-prep/wiring.js");
+    const { getHarness } = await import("../../adaptive-learning/index.js");
     const harness = getHarness();
     const active = await edu(db).from("study_prep_sessions").select("id").eq("learner_id", me.id).not("status", "in", "(completed,cancelled)").limit(5);
     for (const s of active.data || []) await harness.cancelSession({ sessionId: s.id, learnerId: me.id }).catch(() => null);
@@ -162,7 +162,7 @@ export const agentCheckTools = {
   name: "studyprep.agent_check_tools", area: "study-prep", risk: "read",
   description: "The Study Prep agent is offered practice.run_agent_check and agent.get_knowledge_coverage (old names stay callable aliases), and the recall, question and assessor model roles stay locked whatever the learner picks.",
   async run(ctx) {
-    const { buildRegistry, llmFacingTools, TOOL_ALIASES } = await import("../../adaptive-learning/tools/registry.js");
+    const { buildRegistry, llmFacingTools, TOOL_ALIASES } = await import("../../adaptive-learning/index.js");
     const names = llmFacingTools().map((t) => t.name);
     for (const n of ["practice.run_agent_check", "agent.get_knowledge_coverage", "materials.list", "materials.search", "syllabus.from_documents", "learner.request_materials"]) {
       ctx.expect.ok(`${n} is offered`, names.includes(n));

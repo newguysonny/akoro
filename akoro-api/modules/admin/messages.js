@@ -23,7 +23,7 @@ import { Router } from "express";
 import db from "../../db.js";
 import { authenticateToken, requireRole } from "../auth/index.js";
 import { validateMessage } from "../../lib/messageModel.js";
-import { queueMessage } from "../billing/delivery.js";
+import { queueMessage } from "../billing/index.js";
 
 const router    = Router();
 const adminOnly = [authenticateToken, requireRole(["admin"])];

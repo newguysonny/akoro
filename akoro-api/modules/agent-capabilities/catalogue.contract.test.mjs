@@ -15,7 +15,7 @@ process.env.JWT_AUDIENCE ||= "https://akoro.app";
 process.env.GOOGLE_CLIENT_ID ||= "stub-google-id";
 process.env.GOOGLE_CLIENT_SECRET ||= "stub-google-secret";
 
-const chat = await import("../adaptive-learning/chat.js");
+const chat = await import("../adaptive-learning/index.js");
 const { builtInRows, SHARED_TOOLS } = await import("./catalogue.js");
 const { AREAS, TOOL_EXAMPLES } = await import("./examples.js");
 const { AGENT_FEATURES } = await import("./features.js");

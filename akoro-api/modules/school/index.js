@@ -1,15 +1,11 @@
-import { Router } from "express";
-import mainRoutes from "./routes.js";
-import conciergeRoutes from "./aiConcierge.js";
-import socialOAuthRoutes from "./socialOAuth.js";
-import websiteAiSyncRoutes from "./websiteAiSync.js";
-
-// All mount under /api/school. Concierge first so its routes (guest-chat,
-// ai/concierge) are matched before any catch-alls in the main router.
-const router = Router();
-router.use(conciergeRoutes);
-router.use(socialOAuthRoutes);
-router.use(websiteAiSyncRoutes);
-router.use(mainRoutes);
-
-export default router;
+/**
+ * school — the only cross-module entry point. `default` is the /api/school
+ * router; the named exports are the template/document helpers other modules
+ * use. Nothing here starts a server or a background job.
+ */
+export { default } from "./router.js";
+export { assembleMultiPageFromZip, ensureResponsiveViewport } from "./templateZip.js";
+export { DEFAULT_TEMPLATES, getDefaultTemplate } from "./defaultTemplates/index.js";
+export { ensureBucket, uploadPublicFile } from "./templateStorage.js";
+export { renderDocument } from "./documentRenderer.js";
+export { DEFAULT_DOC_TEMPLATES, getDefaultDoc } from "./defaultDocs/index.js";

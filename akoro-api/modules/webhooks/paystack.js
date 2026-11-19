@@ -27,7 +27,7 @@
 import { Router } from "express";
 import crypto from "crypto";
 import { fulfillPaymentsCharge } from "../courses/payments.js";
-import { fulfillMarketplaceEvent } from "../adaptive-learning/marketplace/routes.js";
+import { fulfillMarketplaceEvent } from "../adaptive-learning/index.js";
 import { fulfillTransferEvent } from "../courses/payouts.js";
 import { fulfillCoinTopup } from "../wallet/routes.js";
 import { fulfillVoucherWalletTopup } from "../vouchers/index.js";

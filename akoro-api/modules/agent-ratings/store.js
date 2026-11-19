@@ -4,7 +4,7 @@
  * in their own chat, or an event of their own workflow run.
  */
 import db from "../../db.js";
-import { recordsRealTraffic } from "../agent-contract/store.js";
+import { recordsRealTraffic } from "../agent-contract/index.js";
 import { humanLabel, labelKeyFor } from "./ratings.js";
 
 const ratings = () => db.schema("edu").from("agent_message_ratings");

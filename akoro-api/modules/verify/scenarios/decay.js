@@ -15,7 +15,7 @@ export const conceptCurve = {
     const concepts = await ctx.db.rows("edu.agent_knowledge", { agent_id: agent.id, topic: p.topic }, { columns: "id, subtopic, confidence", limit: 50 });
     if (concepts.filter((c) => c.subtopic).length < 2) ctx.expect.blocked(`${p.learner} has no concept rows for ${p.topic} (2026-seed-sandbox-concepts.sql, sandbox only)`);
 
-    const { decayEngine } = await import("../../adaptive-learning/agents/student/decayEngine.js");
+    const { decayEngine } = await import("../../adaptive-learning/index.js");
     // The nightly pass, twice: the second run must change nothing.
     await decayEngine.applyDecay(agent.id);
     const snap = async () => Object.fromEntries((await ctx.db.rows("edu.agent_knowledge", { agent_id: agent.id }, { columns: "id, confidence", limit: 500 })).map((r) => [r.id, Number(r.confidence)]));

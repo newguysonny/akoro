@@ -37,7 +37,7 @@ import { createWriteStream } from "node:fs";
 import { pipeline } from "node:stream/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { hasDeepgram, transcribeFileDeepgram } from "../voice/deepgram.js";
+import { hasDeepgram, transcribeFileDeepgram } from "../voice/index.js";
 import { mediaWorkerEnabled, remoteExtractAudio, downloadTo } from "./mediaClient.js";
 import { indexByContentKey } from "./searchLib.js";
 import { parsePageOnRunpod, recordsExtractionEnabled, claimContentJob, finishContentJob, getContentJob } from "./extractLib.js";

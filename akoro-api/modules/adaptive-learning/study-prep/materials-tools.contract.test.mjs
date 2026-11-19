@@ -13,7 +13,7 @@ const { createHarness } = await import("./harness.js");
 const { classifyGoal, syllabusOrderFor, goalTypeHint } = await import("./goal-type.js");
 const { DOCUMENTS_OUTLINE_LABEL, documentsLabel, generateGate } = await import("./materials-ops.js");
 const { TOOL_DEFINITIONS, TOOL_ARGS, TOOL_ALIASES, buildRegistry, llmFacingTools, toolByName } = await import("../tools/registry.js");
-const { searchMaterials } = await import("../../materials/studySource.js");
+const { searchMaterials } = await import("../../materials/index.js");
 
 const FOLDER = "11111111-2222-4333-8444-555555555555";
 

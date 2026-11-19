@@ -48,7 +48,7 @@ export const eventStream = {
   async run(ctx, p) {
     const me = await ctx.as(p.learner);
     await ctx.as(p.other);
-    const { getWorkflowHarness } = await import("../../adaptive-learning/study-prep/wiring.js");
+    const { getWorkflowHarness } = await import("../../adaptive-learning/index.js");
     const harness = getWorkflowHarness();
     const active = await ctx.http({ as: p.learner, path: "/api/adaptive/study-prep/sessions" });
     if (active.body?.session?.id) await harness.cancelSession({ sessionId: active.body.session.id, learnerId: me.id }).catch(() => {});

@@ -29,7 +29,7 @@ import db from "../../db.js";
 import { authenticateToken, requireRole } from "../auth/index.js";
 import { paystackGet } from "../../lib/paystackBreaker.js";
 import { computeOverview, todayStr } from "../../lib/billingModel.js";
-import { fulfillSubscriptionEvent } from "../billing/gateway.js";
+import { fulfillSubscriptionEvent } from "../billing/index.js";
 
 const router    = Router();
 const adminOnly = [authenticateToken, requireRole(["admin"])];

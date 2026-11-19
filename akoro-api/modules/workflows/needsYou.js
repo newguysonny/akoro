@@ -27,7 +27,7 @@
  */
 import { ATTENTION, NEEDS_YOU, attentionOf, describeWorkflow } from "./dashboard.js";
 import { isTerminalStatus } from "./definition.js";
-import { mergeInbox } from "../agent-proposals/inboxCore.js";
+import { mergeInbox } from "../agent-proposals/index.js";
 import { appLink } from "../../lib/urls.js";
 
 export const AUDIENCES = Object.freeze(["learner", "instructor"]);

@@ -35,7 +35,7 @@ export function outboxChannels() {
   channels = new Map([
     ["push", {
       async send(p, { progress }) {
-        const { deliverPush, isPushEnabled } = await import("../modules/notifications/webpush.js");
+        const { deliverPush, isPushEnabled } = await import("../modules/notifications/index.js");
         if (!isPushEnabled()) return { drop: "push is not configured on this server" };
         const done = progress?.done || [];
         const r = await deliverPush(p.userId, { title: p.title, body: p.body, link: p.link, type: p.type, tag: p.tag }, { skipIds: done });

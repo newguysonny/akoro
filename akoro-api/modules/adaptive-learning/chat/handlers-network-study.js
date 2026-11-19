@@ -25,8 +25,8 @@ import {
   requestBuddy, respondBuddy, listBuddies, buddyCheckin, endBuddy, buddyBrief,
   joinDaily, skipDaily, dailyRanking, dailyStatus, createCircle, searchCircles, joinCircle, leaveCircle, weeklyLeague,
 } from "../../agent-network/index.js";
-import { resolveMaterialsFolder } from "../../materials/studySource.js";
-import { recurringTopics } from "../../materials/structureCore.js";
+import { resolveMaterialsFolder } from "../../materials/index.js";
+import { recurringTopics } from "../../materials/index.js";
 import { createLearnerToolRequest } from "../../agent-tool-requests/service.js";
 import {
   getAgentPreferenceSummary,
@@ -312,10 +312,10 @@ export function createHandlers(deps) {
         scope: input?.scope === "page" ? "page" : "document", pageNumber: input?.pageNumber ?? null,
         conversationId, fromChatFile: !!input?.from_chat_file, source: input?.source || null });
     },
-    async read_upload(input, ctx) { const { readUploadTool } = await import("../../materials/uploadTools.js"); return readUploadTool({ userId: ctx.studentId, ingestId: String(input?.ingest_id || "") }); },
-    async retry_extraction(input, ctx) { const { retryExtractionTool } = await import("../../materials/uploadTools.js"); return retryExtractionTool({ userId: ctx.studentId, ingestId: String(input?.ingest_id || "") }); },
-    async list_folders(input, ctx) { const { listFoldersTool } = await import("../../materials/uploadTools.js"); return listFoldersTool({ userId: ctx.studentId }); },
-    async file_upload(input, ctx) { const { fileUploadTool } = await import("../../materials/uploadTools.js"); return fileUploadTool({ userId: ctx.studentId, ingestId: String(input?.ingest_id || ""), title: input?.title || null, subject: input?.subject || null, kind: input?.kind || null, folderId: input?.folder_id || null, topics: input?.topics || [] }); },
+    async read_upload(input, ctx) { const { readUploadTool } = await import("../../materials/index.js"); return readUploadTool({ userId: ctx.studentId, ingestId: String(input?.ingest_id || "") }); },
+    async retry_extraction(input, ctx) { const { retryExtractionTool } = await import("../../materials/index.js"); return retryExtractionTool({ userId: ctx.studentId, ingestId: String(input?.ingest_id || "") }); },
+    async list_folders(input, ctx) { const { listFoldersTool } = await import("../../materials/index.js"); return listFoldersTool({ userId: ctx.studentId }); },
+    async file_upload(input, ctx) { const { fileUploadTool } = await import("../../materials/index.js"); return fileUploadTool({ userId: ctx.studentId, ingestId: String(input?.ingest_id || ""), title: input?.title || null, subject: input?.subject || null, kind: input?.kind || null, folderId: input?.folder_id || null, topics: input?.topics || [] }); },
     async analyse_past_papers(input, { studentId, conversationId = null, role = "student", channel = "ai_chat" }) {
       // The learner's own parsed past papers only (D53).
       try {

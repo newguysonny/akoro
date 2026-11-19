@@ -38,7 +38,7 @@ console.log('\n· A step names what it builds on, by position');
 // buildsOn arrives from the model as the PREVIOUS STEP'S TITLE, which drifts by
 // a word and then matches nothing. It is normalised to an index on the way in,
 // because an index is what the UI can actually follow.
-const { NaNaEsumai } = await import('../../modules/adaptive-learning/agents/nana-esumai/guide.js');
+const { NaNaEsumai } = await import('../../modules/adaptive-learning/index.js');
 const guide = new NaNaEsumai();
 check('the guide exposes a ladder builder', typeof guide?.generateSubtopics === 'function',
   guide ? 'generateSubtopics' : 'guide unavailable');
@@ -58,7 +58,7 @@ check('the map runs parallel to the titles', built.map.length === built.subtopic
 // The invariants are checked against FIXTURES, not against whatever the model
 // returned. The stand-in produces no steps, so asserting on its output passes
 // by having nothing to disagree with — the emptiest kind of green.
-const { normaliseLadder } = await import('../../modules/adaptive-learning/agents/nana-esumai/guide.js');
+const { normaliseLadder } = await import('../../modules/adaptive-learning/index.js');
 
 const water = normaliseLadder([
   { title: 'What water is',            kind: 'foundation', buildsOn: null,            whyNow: 'Name the substance.' },
@@ -105,7 +105,7 @@ check('a malformed response yields an empty ladder rather than an exception',
   Array.isArray(built.subtopics), 'no throw');
 
 console.log('\n· The header carries the map to the learner');
-const orch = await import('../../modules/adaptive-learning/agents/student/orchestrator.js');
+const orch = await import('../../modules/adaptive-learning/index.js');
 check('the orchestrator module loads', !!orch, 'ok');
 // Checked as source rather than by running a session: building one needs a live
 // model, and what matters is that the block carries the field at all — without

@@ -17,7 +17,7 @@ import { Router }                         from "express";
 import { body, query, validationResult }  from "express-validator";
 import db                                 from "../../db.js";
 import { authenticateToken, requireRole } from "../auth/index.js";
-import { notify }                         from "../notifications/events.js";
+import { notify }                         from "../notifications/index.js";
 
 const asyncHandler = (fn) => (req, res, next) =>
   Promise.resolve(fn(req, res, next)).catch(next);

@@ -30,7 +30,7 @@ installAgentDeps();
 
 const API_BASE = process.env.INTERNAL_API_URL || `http://127.0.0.1:${process.env.PORT || 3000}`;
 let chatMod = null;
-const chat = async () => (chatMod ||= await import("../adaptive-learning/chat.js"));
+const chat = async () => (chatMod ||= await import("../adaptive-learning/index.js"));
 
 const table = (name) => {
   const [schema, t] = name.includes(".") ? name.split(".") : ["public", name];

@@ -13,7 +13,7 @@
 import db from "../../../db.js";
 import {
   folderMaterials, folderText, materialTopics, resolveMaterialsFolder, searchMaterials,
-} from "../../materials/studySource.js";
+} from "../../materials/index.js";
 import { documentsOutlineFor, draftOutlineFromText, saveDocumentsOutline } from "./syllabus-generator.js";
 
 export const MATERIALS_REQUEST_TITLE = "Upload your syllabus or past questions for your study plan";
@@ -61,7 +61,7 @@ export async function outlineFromDocuments({ learnerId, folderId, subject, class
  * in). An identical open ask is not added twice.
  */
 export async function requestMaterials({ learnerId, reason }) {
-  const { openTitles, normalizeTitle } = await import("../../agent-proposals/inbox.js");
+  const { openTitles, normalizeTitle } = await import("../../agent-proposals/index.js");
   if ((await openTitles(learnerId)).has(normalizeTitle(MATERIALS_REQUEST_TITLE))) return { suggestionId: null, duplicate: true };
   const { data: agentRow } = await db.from("user_agents").select("id").eq("user_id", learnerId).maybeSingle();
   const { data, error } = await db.from("agent_suggestions").insert({
@@ -108,7 +108,7 @@ export async function attachUploadsToStudyPrep({ learnerId, subject = null, reco
   const ids = [...new Set((recordIds || []).map(String))].filter(Boolean);
   if (!learnerId || !ids.length) return null;
   try {
-    const { canonicalSubject } = await import("../../materials/folderMatch.js");
+    const { canonicalSubject } = await import("../../materials/index.js");
     const { data: sessions } = await db.schema("edu").from("study_prep_sessions")
       .select("id, subject, status, material_record_ids").eq("learner_id", learnerId)
       .in("status", OPEN_SESSION_STATES).order("updated_at", { ascending: false }).limit(10);

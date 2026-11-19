@@ -27,7 +27,7 @@ const R = await import("./ratings.js");
 const { labelEpisode } = await import("./store.js");
 const { default: ratingsRouter } = await import("./routes.js");
 const { loadLearnerAgentConversationContext } = await import("../agent-tools/index.js");
-const { safeHistory } = await import("../adaptive-learning/chat.js");
+const { safeHistory } = await import("../adaptive-learning/index.js");
 const { assembleChatDoctrine } = await import("../agent-context/index.js");
 
 const read = (p) => readFileSync(new URL(p, import.meta.url), "utf8");

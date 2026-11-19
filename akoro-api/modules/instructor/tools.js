@@ -15,7 +15,7 @@
  *   GET  /api/instructor/tools/verify/:reference — verify Paystack + grant access
  */
 
-import { upgradeSaved } from "../teaching/tools.js";
+import { upgradeSaved } from "../teaching/index.js";
 import { Router } from "express";
 import db from "../../db.js";
 import { authenticateToken, requireRole } from "../auth/index.js";

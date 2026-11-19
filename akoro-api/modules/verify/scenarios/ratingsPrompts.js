@@ -19,11 +19,11 @@ export const ratingSavedNotInPrompt = {
   params: { learner: { default: "@tester07" } },
   async run(ctx, p) {
     const me = await ctx.as(p.learner);
-    const { labelKeyFor } = await import("../../agent-ratings/ratings.js");
-    const { saveEpisode, recordsRealTraffic } = await import("../../agent-contract/store.js");
-    const { createEpisodeRecorder } = await import("../../agent-contract/episode.js");
+    const { labelKeyFor } = await import("../../agent-ratings/index.js");
+    const { saveEpisode, recordsRealTraffic } = await import("../../agent-contract/index.js");
+    const { createEpisodeRecorder } = await import("../../agent-contract/index.js");
     const { loadLearnerAgentConversationContext } = await import("../../agent-tools/index.js");
-    const { safeHistory } = await import("../../adaptive-learning/chat.js");
+    const { safeHistory } = await import("../../adaptive-learning/index.js");
     const { assembleChatDoctrine } = await import("../../agent-context/index.js");
 
     const made = await ctx.http({ as: p.learner, method: "POST", path: "/api/adaptive/chat/sessions", body: { title: `${ctx.marker} rating` } });

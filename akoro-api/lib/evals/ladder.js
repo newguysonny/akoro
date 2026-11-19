@@ -20,7 +20,7 @@
 
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { NaNaEsumai } from "../../modules/adaptive-learning/agents/nana-esumai/guide.js";
+import { NaNaEsumai } from "../../modules/adaptive-learning/index.js";
 
 const DATA = JSON.parse(readFileSync(fileURLToPath(new URL("./data/ladder.json", import.meta.url)), "utf8"));
 

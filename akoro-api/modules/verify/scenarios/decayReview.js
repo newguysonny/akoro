@@ -13,7 +13,7 @@ export const decayReviewFlow = {
   params: { learner: { default: "@tester19" } },
   async run(ctx, p) {
     const me = await ctx.as(p.learner);
-    const { getOrCreateStudentAgent } = await import("../../adaptive-learning/agents/student/knowledge.js");
+    const { getOrCreateStudentAgent } = await import("../../adaptive-learning/index.js");
     const agent = await getOrCreateStudentAgent(me.id);
     const known = await ctx.db.rows("edu.agent_knowledge", { agent_id: agent.id }, { columns: "topic, subject", limit: 20 });
     const pick = known.find((k) => k.topic) || null;
@@ -68,7 +68,7 @@ export const decayReviewFlow = {
     if (v?.state === "intervention") {
       ctx.expect.ok("a failed retest asks for re-teaching", v.teaching?.needed === true, v.teaching);
       // The re-teaching session's end (what end_session does for a tied session).
-      const { decayReview } = await import("../../adaptive-learning/decay-review/wiring.js");
+      const { decayReview } = await import("../../adaptive-learning/index.js");
       v = await decayReview().teachingDone({ workflowId: wfId, learnerId: me.id });
       ctx.expect.eq("re-teaching done → the last retest", v?.state, "retest");
       ctx.expect.eq("…the second and last", v?.retests, 2);

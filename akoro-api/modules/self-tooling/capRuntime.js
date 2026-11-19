@@ -116,7 +116,7 @@ const setTaskPriority = async (learnerId, ref, { args } = {}) => {
 
 /** Through the goals service (PATCH /api/learner-goals/:id), so its checks apply. */
 const goalStatus = (status) => async (learnerId, ref) => {
-  const { updateGoal } = await import("../learner-goals/service.js");
+  const { updateGoal } = await import("../learner-goals/index.js");
   const r = await updateGoal(learnerId, ref, { status });
   return r?.goal ? { ok: true } : { ok: false, error: r?.notFound ? "not found" : String(r?.error || "couldn't update the goal").slice(0, 120) };
 };

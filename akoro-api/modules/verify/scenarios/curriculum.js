@@ -8,7 +8,7 @@ export const syllabusCoverage = {
   description: "A subject + class (default JSS1 Basic Science) resolves to real syllabus topics, with approved concepts behind them.",
   params: { subject: { default: "Basic Science" }, classLevel: { default: "JSS1" }, exam: { default: "WAEC" } },
   async run(ctx, p) {
-    const { resolveTopics } = await import("../../adaptive-learning/study-prep/syllabus-resolver.js");
+    const { resolveTopics } = await import("../../adaptive-learning/index.js");
     let topics = [];
     try { topics = await resolveTopics({ subject: p.subject, classLevel: p.classLevel, exam: p.exam }); }
     catch (e) { ctx.expect.blocked(`syllabus lookup failed: ${e.message}`); }

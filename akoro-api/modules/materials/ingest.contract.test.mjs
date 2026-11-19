@@ -4,7 +4,7 @@ import test from "node:test";
 import { canTransition } from "../workflows/index.js";
 import { workflowDefinition } from "../workflows/index.js";
 import { folderItemFor, folderNameFor, guessKind, ingestToApi, ingestWorkflow, shapeClassification } from "./ingestCore.js";
-import { uploadChip, uploadsFrom } from "../adaptive-learning/chat/chatSuggestions.js";
+import { uploadChip, uploadsFrom } from "../adaptive-learning/index.js";
 
 const routes = await readFile(new URL("./routes.js", import.meta.url), "utf8");
 const filingDb = await readFile(new URL("./filingDb.js", import.meta.url), "utf8");

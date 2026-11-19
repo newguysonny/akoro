@@ -7,7 +7,7 @@
  * The grants are the test learner's own and are revoked at the end.
  */
 const needCreate = async (ctx) => {
-  const { getLearnerChatTools } = await import("../../adaptive-learning/chat.js");
+  const { getLearnerChatTools } = await import("../../adaptive-learning/index.js");
   if (!getLearnerChatTools().some((t) => t.name === "create_tool")) ctx.expect.blocked("self-tooling is off on this server");
 };
 

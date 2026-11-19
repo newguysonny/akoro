@@ -1,4 +1,4 @@
-/** Voice: transcription (Deepgram/OpenAI), TTS, and the realtime voice stream. */
+/** Voice: transcription (Deepgram/OpenAI) and TTS. `streaming.js` (the realtime voice stream) is wired directly by `routes.js`. */
 
 export { hasDeepgram, transcribeBufferDeepgram, transcribeFileDeepgram } from "./deepgram.js";
 export {
@@ -8,7 +8,6 @@ export {
   readDeepgramMessage,
 } from "./deepgramLive.js";
 export { createRealtimeTranscriber } from "./openaiRealtime.js";
-export { setupVoiceStreaming } from "./streaming.js";
 export {
   AURA_VOICE,
   DEEPGRAM_TTS_MAX_CHARS,

@@ -89,7 +89,7 @@ await sql.query(
 check('the same subtopic under a different topic is a separate row', true, 'accepted');
 
 console.log('\n· Reinforcing keeps what was already known');
-const { mergeKnowledge, coverage } = await import('../../modules/adaptive-learning/agents/student/mergeKnowledge.js');
+const { mergeKnowledge, coverage } = await import('../../modules/adaptive-learning/index.js');
 
 const monday  = 'Plants take in carbon dioxide through stomata and give out oxygen. It needs sunlight.';
 const tuesday = 'The chloroplast is the part of the cell where photosynthesis happens.';

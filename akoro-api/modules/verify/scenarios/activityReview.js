@@ -136,7 +136,7 @@ export const activityReviewPlay = {
     // The first learner "submits and teaches": their agent gets a note on the topic (as a teaching
     // session writes one). The second taught it nothing. Agents answer only from their learner's notes.
     const [taught, untaught] = learners;
-    const ks = await import("../../adaptive-learning/agents/student/knowledge.js");
+    const ks = await import("../../adaptive-learning/index.js");
     const { data: had } = await db.schema("edu").from("student_knowledge").select("id")
       .eq("student_id", taught.id).eq("topic", "Photosynthesis").eq("subtopic", "").maybeSingle();
     if (!had) {

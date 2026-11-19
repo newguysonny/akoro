@@ -31,7 +31,7 @@ import express from "express";
 import db from "../../../db.js";
 import { authenticateToken, requireRole } from "../../auth/index.js";
 import { addPurchasedAgent } from "../../learner-state/index.js";
-import { notify } from "../../notifications/events.js";
+import { notify } from "../../notifications/index.js";
 import { v4 as uuid } from "uuid";
 import {
   initializeTransaction,

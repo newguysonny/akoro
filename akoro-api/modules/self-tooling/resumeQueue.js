@@ -74,7 +74,7 @@ export function armSweep() {
   registerTick("self-tool-suggestions", toolIdeas);
   // Nightly (21:30 Africa/Lagos): suggest_help sweeps the day's chats; a hit
   // lands as a NEW CHAT (the priority channel), never in the list.
-  const helpSweep = async () => (await import("../agent-proposals/suggestHelpSweep.js")).sweepSuggestHelpChats();
+  const helpSweep = async () => (await import("../agent-proposals/index.js")).sweepSuggestHelpChats();
   registerTick("suggest-help-sweep", helpSweep);
   if (cronSource() !== "cloudflare") {
     cron.schedule("*/15 * * * *", () => { sweepResumes().catch((e) => console.warn("[self-tool-resumes] sweep failed:", e.message)); });

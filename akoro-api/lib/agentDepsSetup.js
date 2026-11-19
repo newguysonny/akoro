@@ -17,24 +17,24 @@ import {
   protegeDeps, tutorSystemPrompt, executeChatTool, scheduleDecisionContinuation,
   selfToolDeps, runAgentToolLoop, getLearnerChatTools, SIDE_EFFECT_TOOLS,
   CHAT_TOOLS, INSTRUCTOR_TOOLS, openAiInstructorTools,
-} from "../modules/adaptive-learning/chat.js";
-import { loadTaughtKnowledge, renderTaughtContext } from "../modules/adaptive-learning/social/protege.js";
+} from "../modules/adaptive-learning/index.js";
+import { loadTaughtKnowledge, renderTaughtContext } from "../modules/adaptive-learning/index.js";
 import { helpsOthers, conceptIdFor } from "./peerConsult.js";
-import { setLearnerAutonomy, cancelAutonomyReviewForTask, scheduleAutonomyReviewForTask } from "../modules/adaptive-learning/learner/learner-autonomy.js";
-import { resolveTopics } from "../modules/adaptive-learning/study-prep/syllabus-resolver.js";
-import { collectMaterials, materialsFrom } from "../modules/adaptive-learning/chat/chat-materials.js";
-import { readChat } from "../modules/adaptive-learning/chat/chat-history-tools.js";
-import { TEACHING_TURN_WORKFLOW } from "../modules/adaptive-learning/teaching-workflow/runner.js";
-import { prepareTeachingSession, TEACHING_MODES } from "../modules/adaptive-learning/teaching-session/start.js";
+import { setLearnerAutonomy, cancelAutonomyReviewForTask, scheduleAutonomyReviewForTask } from "../modules/adaptive-learning/index.js";
+import { resolveTopics } from "../modules/adaptive-learning/index.js";
+import { collectMaterials, materialsFrom } from "../modules/adaptive-learning/index.js";
+import { readChat } from "../modules/adaptive-learning/index.js";
+import { TEACHING_TURN_WORKFLOW } from "../modules/adaptive-learning/index.js";
+import { prepareTeachingSession, TEACHING_MODES } from "../modules/adaptive-learning/index.js";
 import {
   createSessionRecord, ensureSessionRecord, appendSessionBlocks, completeSessionRecord,
-} from "../modules/adaptive-learning/teaching-session/lifecycle.js";
-import { carryForward } from "../modules/adaptive-learning/teaching-session/context.js";
-import { resultToTypedBlocks } from "../modules/adaptive-learning/teaching-session/blocks.js";
-import { recordLearningEvent, refreshConceptRetention } from "../modules/adaptive-learning/learner/learning-events.js";
-import { attachUploadsToStudyPrep } from "../modules/adaptive-learning/study-prep/materials-source.js";
-import { NaNaEsumai } from "../modules/adaptive-learning/agents/nana-esumai/guide.js";
-import { createExpect, repeatVerdict } from "../modules/verify/assertions.js";
+} from "../modules/adaptive-learning/index.js";
+import { carryForward } from "../modules/adaptive-learning/index.js";
+import { resultToTypedBlocks } from "../modules/adaptive-learning/index.js";
+import { recordLearningEvent, refreshConceptRetention } from "../modules/adaptive-learning/index.js";
+import { attachUploadsToStudyPrep } from "../modules/adaptive-learning/index.js";
+import { NaNaEsumai } from "../modules/adaptive-learning/index.js";
+import { createExpect, repeatVerdict } from "../modules/verify/index.js";
 
 export function installAgentDeps() {
   setAgentDeps({

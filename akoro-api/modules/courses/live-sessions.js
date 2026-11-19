@@ -39,7 +39,7 @@ import { Router }                          from "express";
 import { body, param, query, validationResult } from "express-validator";
 import db                                  from "../../db.js";
 import { authenticateToken, requireRole }  from "../auth/index.js";
-import { notify }                          from "../notifications/events.js";
+import { notify }                          from "../notifications/index.js";
 import { createMeeting, endMeeting }       from "./meeting-integration.js";
 
 // ─── § HELPERS ────────────────────────────────────────────────────────────────

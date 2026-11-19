@@ -9,7 +9,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { VIEW_AREA, capabilityArea, deriveToolArea } from "./areas.js";
 import { DATA_VIEWS, BUILTIN_DATA_VIEWS, describeView } from "./views.js";
-import { AREAS } from "../agent-capabilities/examples.js";
+import { AREAS } from "../agent-capabilities/index.js";
 
 test("every built-in Data View has exactly one curated area, and every area used exists", () => {
   // Built-ins only: a database-registered view carries its own area in its

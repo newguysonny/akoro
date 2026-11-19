@@ -38,7 +38,7 @@ import {
   applySubscriptionAction, applyInvoiceAction, invoiceTimeline, todayStr, isDateStr,
 } from "../../lib/billingModel.js";
 import config from "../../config/index.js";
-import { getBillingSettings } from "../billing/delivery.js";
+import { getBillingSettings } from "../billing/index.js";
 
 const router    = Router();
 const adminOnly = [authenticateToken, requireRole(["admin"])];

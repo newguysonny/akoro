@@ -91,7 +91,7 @@ export const teachingOutcomes = {
   async run(ctx, p) {
     const me = await ctx.as(p.learner);
     const other = await ctx.as(p.other);
-    const { getWorkflowHarness, teachingHandoff: handoffOf } = await import("../../adaptive-learning/study-prep/wiring.js");
+    const { getWorkflowHarness, teachingHandoff: handoffOf } = await import("../../adaptive-learning/index.js");
     const harness = getWorkflowHarness();
     const handoff = handoffOf();
     const active = await ctx.http({ as: p.learner, path: "/api/adaptive/study-prep/sessions" });

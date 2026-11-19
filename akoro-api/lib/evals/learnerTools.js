@@ -28,7 +28,7 @@ const CASES = DATA.cases;
 
 // chat.js is large; load it on the first case, not when the registry loads.
 let chatModule = null;
-const chat = async () => (chatModule ||= await import("../../modules/adaptive-learning/chat.js"));
+const chat = async () => (chatModule ||= await import("../../modules/adaptive-learning/index.js"));
 
 const SYSTEM =
   "You are a learner's personal study agent on Akoro (a learning app for Nigerian secondary-school students). " +

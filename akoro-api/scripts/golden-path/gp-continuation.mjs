@@ -93,7 +93,7 @@ check('and a resume position of the start', empty.json?.resumeAt?.subtopicIdx ==
   `idx=${empty.json?.resumeAt?.subtopicIdx}`);
 
 console.log('\n· The orchestrator starts where it is told');
-const { StudentSessionOrchestrator } = await import('../../modules/adaptive-learning/agents/student/orchestrator.js')
+const { StudentSessionOrchestrator } = await import('../../modules/adaptive-learning/index.js')
   .then(m => ({ StudentSessionOrchestrator: m.default ?? m.StudentSessionOrchestrator }));
 check('the orchestrator class loads', typeof StudentSessionOrchestrator === 'function',
   typeof StudentSessionOrchestrator);

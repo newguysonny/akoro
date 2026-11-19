@@ -25,7 +25,7 @@ export const schemaLookupSafe = {
   description: "schema_lookup returns only registry views/fields, never tables or secrets, and flags forbidden goals.",
   params: { learner: { default: "@tester01" } },
   async run(ctx, p) {
-    const { getLearnerChatTools } = await import("../../adaptive-learning/chat.js");
+    const { getLearnerChatTools } = await import("../../adaptive-learning/index.js");
     if (!getLearnerChatTools().some((t) => t.name === "schema_lookup")) ctx.expect.blocked("self-tooling is off — set AKORO_SELF_TOOLING_ENABLED=true (test learners get it automatically)");
     const goals = [
       ["Which of my weak topics are in subjects where my past-question accuracy is low?", { expectViews: ["my_weak_topics", "my_past_questions"] }],
@@ -65,7 +65,7 @@ export const agentUsesSchemaLookup = {
   description: "Asked something no existing tool answers (session hours per month), the agent checks schema_lookup instead of guessing.",
   params: { learner: { default: "@tester01" } },
   async run(ctx, p) {
-    const { getLearnerChatTools } = await import("../../adaptive-learning/chat.js");
+    const { getLearnerChatTools } = await import("../../adaptive-learning/index.js");
     if (!getLearnerChatTools().some((t) => t.name === "schema_lookup")) ctx.expect.blocked("self-tooling is off on this server");
     const turn = await ctx.agent.chat({ as: p.learner, model: p.model,
       // No existing tool answers this (sessions have no duration tool) — it needs a new one.
@@ -81,7 +81,7 @@ export const agentUsesSchemaLookup = {
 
 // ── Phase S2: create_tool ────────────────────────────────────────────────
 const needCreate = async (ctx) => {
-  const { getLearnerChatTools } = await import("../../adaptive-learning/chat.js");
+  const { getLearnerChatTools } = await import("../../adaptive-learning/index.js");
   if (!getLearnerChatTools().some((t) => t.name === "create_tool")) ctx.expect.blocked("self-tooling is off on this server");
 };
 
@@ -305,7 +305,7 @@ export const promotionCheck = {
     const { capabilityStatus } = await import("../../self-tooling/index.js");
     const { CAPABILITIES } = await import("../../self-tooling/index.js");
     const { LIMITS } = await import("../../self-tooling/index.js");
-    const { selfToolDeps } = await import("../../adaptive-learning/chat.js");
+    const { selfToolDeps } = await import("../../adaptive-learning/index.js");
     const { runDry } = await import("../../../lib/dryRunContext.js");
 
     const audience = t.audience || "learner";
@@ -378,7 +378,7 @@ export const promotePlatform = {
 
     const { promoteTool, setToolStatus } = await import("../../self-tooling/index.js");
     const { startRun } = await import("../runner.js");
-    const { selfToolDeps } = await import("../../adaptive-learning/chat.js");
+    const { selfToolDeps } = await import("../../adaptive-learning/index.js");
     const gateAdmin = { id: null, label: "verification gate" };
     let promoted = null, err = null;
     try {
@@ -571,7 +571,7 @@ export const instructorToolMatchesDb = {
     if (me.role !== "instructor") ctx.expect.blocked(`${p.instructor} isn't an instructor (seed 2026-seed-instructor-testers.sql)`);
     const truth = await activityTruth(ctx, me.id);
     if (!truth.length) ctx.expect.blocked("the instructor tester has no activities — seed missing");
-    const { executeChatTool } = await import("../../adaptive-learning/chat.js");
+    const { executeChatTool } = await import("../../adaptive-learning/index.js");
     const { runDry } = await import("../../../lib/dryRunContext.js");
     const r = await runDry(() => executeChatTool("create_tool", {
       goal: "Average grade and number of graded students for each of my activities", name: "activity_grade_summary", label: "Grades by activity",
@@ -959,7 +959,7 @@ export const componentRequestDelivered = {
     if (!req) return;
 
     // 2. An admin marks it implemented with a note → the learner is notified.
-    const { reviewToolRequest } = await import("../../agent-tool-requests/service.js");
+    const { reviewToolRequest } = await import("../../agent-tool-requests/index.js");
     const delivered = await reviewToolRequest({
       requestId: req.id, status: "implemented",
       adminNote: "Active recall is now available as a Learning Session component.",
@@ -1055,7 +1055,7 @@ export const bugReportDelivered = {
     const req = rows[0];
     if (!req) return;
 
-    const { reviewToolRequest } = await import("../../agent-tool-requests/service.js");
+    const { reviewToolRequest } = await import("../../agent-tool-requests/index.js");
     const fixed = await reviewToolRequest({ requestId: req.id, status: "implemented", adminNote: "Fixed: the total now counts documents.", admin: { id: null, label: "verification gate" } });
     ctx.expect.eq("marked implemented", fixed?.request?.status, "implemented");
     ctx.expect.ok("the learner was notified", fixed?.notified === true, fixed);
@@ -1097,7 +1097,7 @@ export const requestStatusLifecycle = {
     ctx.cleanup(() => ctx.db.deleteOwned("notifications", { ownerColumn: "user_id", ownerId: me.id, filters: { related_id: req.id } }));
     ctx.expect.eq("filed as a tool request, waiting", [req.kind, req.status], ["tool", "new"]);
 
-    const { reviewToolRequest } = await import("../../agent-tool-requests/service.js");
+    const { reviewToolRequest } = await import("../../agent-tool-requests/index.js");
     const words = {
       under_review: /under[ _]?review|in review|reviewing/i,
       planned: /plan/i,

@@ -32,7 +32,7 @@ import { sendPasswordResetEmail } from "../auth/index.js";
 import { authenticateToken, requireRole } from "../auth/index.js";
 import { validatePilotSchoolInput, buildPilotPatch, todayStr } from "../../lib/pilotModel.js";
 import { fillTemplate } from "../../lib/messageModel.js";
-import { queueMessage, getBillingSettings } from "../billing/delivery.js";
+import { queueMessage, getBillingSettings } from "../billing/index.js";
 import { urlFor } from "../../lib/urls.js";
 
 const router    = Router();

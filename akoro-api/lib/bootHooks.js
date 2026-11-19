@@ -8,11 +8,11 @@ import { postChallengeRequest }  from "../modules/agent-network/index.js";
 import { setAgentNetworkHooks }  from "./agentNetworkHooks.js";
 import { registerBattleJobHandler } from "./battleJobHandlers.js";
 import { runActivityReview }     from "../modules/self-study/index.js";
-import { runTeachingTool }       from "../modules/teaching/tools.js";
+import { runTeachingTool }       from "../modules/teaching/index.js";
 import { setTeachingToolRunner } from "./teachingTools.js";
 import { installAgentDeps }      from "./agentDepsSetup.js";
-import * as studyPrepWiring      from "../modules/adaptive-learning/study-prep/wiring.js";
-import * as decayReviewWiring    from "../modules/adaptive-learning/decay-review/wiring.js";
+import * as studyPrepWiring      from "../modules/adaptive-learning/index.js";
+import * as decayReviewWiring    from "../modules/adaptive-learning/index.js";
 import { setWorkflowWiring }     from "./workflowWiring.js";
 
 // Phase 19 S8b: importing the wiring modules here runs their registration side

@@ -12,7 +12,7 @@ import { reportAgentActivity, clearAgentActivity } from "../../lib/agentActivity
 import { notifyUser } from "../notify.js";
 import { untrusted, UNTRUSTED_SYSTEM_RULE } from "../../lib/untrusted.js";
 import { resolveLearnerTimeZone } from "../../lib/learnerTime.js";
-import { isSensitive } from "../agent-memory/quietLearningCore.js";
+import { isSensitive } from "../agent-memory/index.js";
 import { deliverProactive } from "./deliver.js";
 import { autonomyCadence, minCycleMs, weeklyRunsCap } from "./cadence.js";
 import { quietOf, afterQuiet } from "./quietHours.js";

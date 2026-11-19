@@ -102,7 +102,7 @@ const runLadderPrewarm = () => {
     }));
 };
 registerTick("ladder-prewarm", runLadderPrewarm);
-if (process.env.LADDER_PREWARM !== "off" && cronSource() !== "cloudflare") {
+if (!process.env.NODE_TEST_CONTEXT && process.env.LADDER_PREWARM !== "off" && cronSource() !== "cloudflare") {
   const schedule = process.env.LADDER_PREWARM_CRON || "20 2 * * *";
   if (cron.validate(schedule)) {
     cron.schedule(schedule, () => { runLadderPrewarm(); });

@@ -6,7 +6,9 @@ transcription, Deepgram/OpenAI text-to-speech, and the websocket voice stream.
 ## Entry
 
 `index.js` is the only cross-module entry point. `routes.js` is the module's
-default export.
+default export. `streaming.js` (the realtime voice stream) is wired directly by
+`routes.js` and is not re-exported: importing it constructs an OpenAI client at
+module load.
 
 ## Extend
 

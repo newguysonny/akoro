@@ -12,7 +12,7 @@
  */
 import db from "../db.js";
 import { sendNotificationEmail } from "./auth/emails.js";
-import { isPushEnabled, sendPushToUser } from "./notifications/webpush.js";
+import { isPushEnabled, sendPushToUser } from "./notifications/index.js";
 import { randomUUID } from "node:crypto";
 import { outboxSend } from "../lib/outbox.js";
 import { idemKey } from "../lib/outboxCore.js";

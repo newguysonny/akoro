@@ -722,7 +722,7 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
     if (input?.__agreed !== true) return finish("rejected", { status: "offer_request", reason: "no change like this exists yet",
       note: "NOTHING IS SENT. This change can't be made yet — no tool you have or can build does it. In your own words: say you can't do that right now, and offer to ask the Akoro team to add it. Call create_tool again with the same goal once they say yes — that sends the request. Don't suggest workarounds unless they ask." });
     if (dry) return finish("dry", { status: "requested", dryRun: true, note: "DRY RUN — live, this would send the request to the Akoro team." });
-    const { createLearnerToolRequest } = await import("../agent-tool-requests/service.js");
+    const { createLearnerToolRequest } = await import("../agent-tool-requests/index.js");
     let r;
     try {
       r = await createLearnerToolRequest({ learnerId, body: { category: "other", title: `Change: ${goal}`.slice(0, 120),

@@ -12,7 +12,7 @@ import { openai } from "../../../lib/aiModel.js";
 import { appLink } from "../../../lib/urls.js";
 import { teachRequest, loadTaughtKnowledge, buildGuideMessages, shapeGuideAnswer } from "../social/protege.js";
 import { getSyllabusGrounding } from "../teaching/syllabus.js";
-import { akoroMaterialFor } from "../../materials/akoroMaterial.js";
+import { akoroMaterialFor } from "../../materials/index.js";
 import { searchBlogPosts, readBlogPost } from "../../../lib/blogResearch.js";
 import { listMyBlogs, createBlogPost, updateBlogPost } from "../../blogs/service.js";
 import { scheduleChatFollowUp, listChatFollowUps, cancelChatFollowUp } from "./chat-follow-ups.js";
@@ -228,7 +228,7 @@ export function createHandlers(deps) {
         // A suggest_help filing is a special suggestion: it lands as a NEW
         // CHAT at the top of their chats (priority), never in the Suggestions
         // list — see modules/agent-proposals/suggestHelp.js (dedupe lives there).
-        const { openSuggestHelpChat } = await import("../../agent-proposals/suggestHelp.js");
+        const { openSuggestHelpChat } = await import("../../agent-proposals/index.js");
         const out = await openSuggestHelpChat(studentId, { kind, title, rationale });
         if (out.duplicate) return { saved: false, duplicate: true, title, note: "This idea is already open for them — mention it instead of filing it again." };
         if (!out.delivered) return { error: out.error || "Could not open the chat" };

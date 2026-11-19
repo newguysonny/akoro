@@ -12,15 +12,13 @@
 
 import { createClient } from "@supabase/supabase-js";
 
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  // Same secret — the app's standard name is SUPABASE_SERVICE_KEY (see
-  // .env.example / student-state.js); SUPABASE_SERVICE_ROLE_KEY is an alias
-  // the original agent code used. Without the fallback a deployment that only
-  // sets the standard name crashes the whole API at boot ("supabaseKey is
-  // required") — every chat surface dies.
-  process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.SUPABASE_SERVICE_KEY
-);
+// Lazy: a barrel re-export must not build the client (or throw) in a test env.
+let _supabase = null;
+const supabase = new Proxy({}, { get(_, p) {
+  if (!_supabase) _supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.SUPABASE_SERVICE_KEY);
+  const v = _supabase[p];
+  return typeof v === "function" ? v.bind(_supabase) : v;
+} });
 
 import { openai } from "../../../../lib/aiModel.js";
 import { mergeKnowledge } from "./mergeKnowledge.js";

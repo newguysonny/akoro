@@ -7,8 +7,8 @@ import { Router } from "express";
 import multer from "multer";
 import db from "../../db.js";
 import { authenticateToken, requireRole } from "../auth/index.js";
-import { assembleMultiPageFromZip, ensureResponsiveViewport } from "../school/templateZip.js";
-import { DEFAULT_TEMPLATES, getDefaultTemplate } from "../school/defaultTemplates/index.js";
+import { assembleMultiPageFromZip, ensureResponsiveViewport } from "../school/index.js";
+import { DEFAULT_TEMPLATES, getDefaultTemplate } from "../school/index.js";
 
 const router = Router();
 const adminOnly = [authenticateToken, requireRole(["admin"])];

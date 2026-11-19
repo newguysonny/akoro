@@ -14,7 +14,7 @@ import { STUDY_PREP_COST } from "./education-engine.js";
 import { supabaseStore as store } from "./store.js";
 import { prerequisiteEdges, resolveTopics, resolveSyllabusChain, topicsForSource } from "./syllabus-resolver.js";
 import { generateOutline, generatedTopics } from "./syllabus-generator.js";
-import { materialQuestions } from "../../materials/studySource.js";
+import { materialQuestions } from "../../materials/index.js";
 import { documentTopics, studyPrepMaterials } from "./materials-source.js";
 import { goalTypeHint } from "./goal-type.js";
 import * as readToolsModule from "./read-tools.js";

@@ -15,11 +15,11 @@ import {
   DECISION_ONLY_STATUSES,
   boundedText,
   normaliseToolRequestUpdate,
-} from "../agent-tool-requests/validation.js";
+} from "../agent-tool-requests/index.js";
 import { CAPABILITIES } from "../self-tooling/index.js";
 import { decideRequest, revokeGrant } from "../self-tooling/index.js";
 import { enqueueResume } from "../self-tooling/index.js";
-import { reviewToolRequest } from "../agent-tool-requests/service.js";
+import { reviewToolRequest } from "../agent-tool-requests/index.js";
 
 const router = Router();
 const adminOnly = [authenticateToken, requireRole(["admin"])];

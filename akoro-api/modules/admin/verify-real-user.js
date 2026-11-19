@@ -12,9 +12,9 @@
  */
 import { Router } from "express";
 import { authenticateToken, requireRole } from "../auth/index.js";
-import { startRealUserRun, listRealUserRuns, realUserScenarios } from "../verify/realUser.js";
-import { realUserWritesEnabled, resolveAccount, TARGET } from "../verify/policy.js";
-import { getRun } from "../verify/runner.js";
+import { startRealUserRun, listRealUserRuns, realUserScenarios } from "../verify/index.js";
+import { realUserWritesEnabled, resolveAccount, TARGET } from "../verify/index.js";
+import { getRun } from "../verify/index.js";
 import db from "../../db.js";
 
 const router = Router();

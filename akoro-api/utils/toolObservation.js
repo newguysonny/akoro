@@ -22,7 +22,7 @@
  * (`{success, result, error}`), with request/action correlation added so a
  * confirmation can be traced to exactly one execution.
  */
-import { classifyError } from "../modules/agent-contract/contract.js";
+import { classifyError } from "../modules/agent-contract/index.js";
 import { randomBytes } from "node:crypto";
 
 const MAX_ERROR_CHARS = 500;

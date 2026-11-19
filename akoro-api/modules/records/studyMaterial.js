@@ -261,7 +261,7 @@ export async function startPodcast({ userId, target, scope = "document", pageNum
 }
 
 async function podcastDeps() {
-  const [{ speakBuffer }, { putRecordObject }] = await Promise.all([import("../voice/tts.js"), import("./storage.js")]);
+  const [{ speakBuffer }, { putRecordObject }] = await Promise.all([import("../voice/index.js"), import("./storage.js")]);
   return { speakBuffer, putRecordObject };
 }
 

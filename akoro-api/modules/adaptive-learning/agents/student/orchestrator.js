@@ -28,13 +28,13 @@ import { STUDENT_PHASES, ACTION_FOR_DIALOGUE_MOVE } from "../../teaching-session
 import { openingIdeas } from "../../teaching-session/guideIdeas.js";
 import { createClient } from "@supabase/supabase-js";
 
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  // SUPABASE_SERVICE_ROLE_KEY is an alias for the app's standard
-  // SUPABASE_SERVICE_KEY (same service-role secret) — fall back so a
-  // deployment setting only the standard name still boots.
-  process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.SUPABASE_SERVICE_KEY
-);
+// Lazy: a barrel re-export must not build the client (or throw) in a test env.
+let _supabase = null;
+const supabase = new Proxy({}, { get(_, p) {
+  if (!_supabase) _supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.SUPABASE_SERVICE_KEY);
+  const v = _supabase[p];
+  return typeof v === "function" ? v.bind(_supabase) : v;
+} });
 
 // The phase labels and dialogue-move action map now live in the pure
 // teaching-session state machine. Re-exported here so existing importers

@@ -31,11 +31,11 @@ delete process.env.AI_FORCE_MODEL;
 const { openai, runWithProviders, refusalOf } = await import("./aiModel.js");
 const { makeAnthropicAdapter } = await import("./providers/anthropic.js");
 const { usdCost } = await import("./aiPricing.js");
-const { makeLlmAgent: studyPrepAgent } = await import("../modules/adaptive-learning/study-prep/llm-agent.js");
+const { makeLlmAgent: studyPrepAgent } = await import("../modules/adaptive-learning/index.js");
 const { makeLlmAgent } = await import("../modules/agent-runtime/index.js");
 const { runAgentLoop } = await import("../modules/agent-runtime/index.js");
-const { modelDecide, executeAgentTeachingTurn } = await import("../modules/adaptive-learning/teaching-session/controller.js");
-const { guideTeach } = await import("../modules/adaptive-learning/teaching-session/guideTeacher.js");
+const { modelDecide, executeAgentTeachingTurn } = await import("../modules/adaptive-learning/index.js");
+const { guideTeach } = await import("../modules/adaptive-learning/index.js");
 
 const SONNET = { __learnerChoice: "claude-sonnet", __allowedModels: ["claude-sonnet", "deepseek"] };
 const usage = { prompt_tokens: 1000, completion_tokens: 200 };

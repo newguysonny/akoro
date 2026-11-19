@@ -5,7 +5,7 @@
  * Auth uses our JWT middleware (not separate auth).
  */
 
-import { acceptChatSuggestion, dismissChatSuggestion } from "../agent-proposals/inbox.js";
+import { acceptChatSuggestion, dismissChatSuggestion } from "../agent-proposals/index.js";
 import { Router }                         from "express";
 import db                                 from "../../db.js";
 import { TaskDB, TaskFileDB, TaskRunDB, TaskOutputDB, TaskScheduleDB, DynamicToolDB } from "./lib/db.js";

@@ -11,7 +11,7 @@ const { default: db } = await import("../../db.js");
 const { installFakeDb } = await import("../../lib/testing/fakeDb.mjs");
 const { makeSupabaseWorkflowStore } = await import("./store.js");
 const { createWorkflowEngine } = await import("./engine.js");
-const { studyPrepWorkflow } = await import("../adaptive-learning/study-prep/workflow.js");
+const { studyPrepWorkflow } = await import("../adaptive-learning/index.js");
 
 const L = "11111111-1111-4111-8111-111111111111";
 const setup = (t) => {

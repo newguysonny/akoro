@@ -14,7 +14,7 @@ import { getStartupBalance, debitWithdrawal, refundWithdrawal, startupTransactio
 import { createTransferRecipient, initiateTransfer } from "./lib/paystack.js";
 import { enqueueWebhook, generateWebhookSecret } from "./lib/webhooks.js";
 import { drainWebhookQueue } from "./webhookWorker.js";
-import { ensureBucket, uploadPublicFile } from "../school/templateStorage.js";
+import { ensureBucket, uploadPublicFile } from "../school/index.js";
 
 const router = Router();
 router.use(authenticateToken);

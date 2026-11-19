@@ -9,8 +9,8 @@ import { NODE_HEADLINES, TEMPLATES, narrate } from "./narrator.js";
 import { streamWorkflowEvents } from "./stream.js";
 import { createWorkflowEngine } from "./engine.js";
 import { memoryWorkflowStore } from "./store.js";
-import { workflowEventFor, studyPrepWorkflow, makeWorkflowMirror } from "../adaptive-learning/study-prep/workflow.js";
-import { DECISION_NODES } from "../adaptive-learning/study-prep/state-machine.js";
+import { workflowEventFor, studyPrepWorkflow, makeWorkflowMirror } from "../adaptive-learning/index.js";
+import { DECISION_NODES } from "../adaptive-learning/index.js";
 
 test("narrator: every event type has a template, and every one narrates to a headline", () => {
   const missing = EVENT_TYPES.filter((t) => typeof TEMPLATES[t] !== "function");
@@ -129,7 +129,7 @@ test("Agent Chat: every live event carries the envelope; names and fields unchan
 });
 
 test("a planning read says what it found, in learner-safe words", async () => {
-  const { studyPrepResultLine } = await import("../adaptive-learning/study-prep/workflow.js");
+  const { studyPrepResultLine } = await import("../adaptive-learning/index.js");
   assert.equal(studyPrepResultLine("learner.get_state", { ok: true, result: { topics: { Cells: 0.21, Habitats: 0.34, Water: 0.9, Air: 0.5 } } }), "Weakest: Cells 21%, Habitats 34%, Air 50%");
   assert.equal(studyPrepResultLine("syllabus.resolve", { ok: true, result: { found: false, topics: [] } }), "No syllabus found for this class");
   assert.equal(studyPrepResultLine("syllabus.resolve", { ok: true, result: { found: true, topics: Array(12).fill({}) } }), "12+ topics found");
@@ -141,7 +141,7 @@ test("a planning read says what it found, in learner-safe words", async () => {
 });
 
 test("planning in the background: the plan-ready message is written from the plan", async () => {
-  const { planReadyMessage } = await import("../adaptive-learning/study-prep/planReady.js");
+  const { planReadyMessage } = await import("../adaptive-learning/index.js");
   assert.equal(planReadyMessage({ status: "awaiting_confirmation", subject: "Basic Science", plan: [{ label: "Cells" }, { label: "Habitats" }], estimate: { totalCoins: 12 }, syllabusSource: "generated" }),
     "Your Basic Science plan is ready: 2 topics, starting with **Cells**. It costs 12 coins in total, charged one topic at a time — nothing is charged until you approve it on the card. It's built on an AI-drafted outline of the national curriculum, not your school's official syllabus.");
   assert.match(planReadyMessage({ status: "paused", subject: "Maths" }), /got stuck while planning your Maths/);

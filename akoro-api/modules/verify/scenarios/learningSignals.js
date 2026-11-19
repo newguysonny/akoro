@@ -49,8 +49,8 @@ export const strategyRecommend = {
       await E().from("learning_struggles").delete().eq("learner_id", me.id).eq("concept_id", concept.id);
       await E().from("concept_catalog").delete().eq("id", concept.id);
     });
-    const { recordStrategyOutcome } = await import("../../adaptive-learning/strategies/outcomes.js");
-    const { recommendStrategies, checkStrategyLimit } = await import("../../adaptive-learning/strategies/recommend.js");
+    const { recordStrategyOutcome } = await import("../../adaptive-learning/index.js");
+    const { recommendStrategies, checkStrategyLimit } = await import("../../adaptive-learning/index.js");
     const base = { learnerId: me.id, conceptId: concept.id, struggleType: "interference" };
     // interleave failed on this concept in Study Prep; contrast_pairs worked for this learner in Teaching.
     const failed = await recordStrategyOutcome({ ...base, strategyId: "interleave", outcome: "did_not_work", workflow: "study_prep", sessionRef: refs[0], turnRef: "gate1" });
@@ -134,7 +134,7 @@ export const questionTimings = {
       await E().from("concept_catalog").delete().eq("id", concept.id);
     });
     const { recordQuestionSignals, checkQuestionSignals, proctoredQuestionSignals } = await import("../../../lib/questionSignals.js");
-    const { readQuestionSignals } = await import("../../adaptive-learning/learner/learner-model.js");
+    const { readQuestionSignals } = await import("../../adaptive-learning/index.js");
     const check = checkQuestionSignals({
       battle: { topic: title },
       questions: [

@@ -163,4 +163,57 @@ export const setupAdaptiveWebSocket = (io) => {
   }
 };
 
+// ─── Public API for other modules ─────────────────────────────────────────────
+// Other modules import this entry, never a file below it.
+export { NaNaEsumai, normaliseLadder } from "./agents/nana-esumai/guide.js";
+export { decayEngine } from "./agents/student/decayEngine.js";
+export { getOrCreateStudentAgent, saveStudentKnowledge } from "./agents/student/knowledge.js";
+export { coverage, mergeKnowledge } from "./agents/student/mergeKnowledge.js";
+export { StudentSessionOrchestrator } from "./agents/student/orchestrator.js";
+export { CHAT_TOOLS, INSTRUCTOR_TOOLS, SIDE_EFFECT_TOOLS, assembleChatDoctrine, executeChatTool, getLearnerChatTools, isSideEffecting, openAiInstructorTools, protegeDeps, runAgentToolLoop, safeHistory, scheduleDecisionContinuation, selfToolDeps, shouldPlanFirst, tutorSystemPrompt } from "./chat.js";
+export { cancelChatFollowUp, deliverChatFollowUp, scheduleChatFollowUp, startChatFollowUpWorker } from "./chat/chat-follow-ups.js";
+export { readChat } from "./chat/chat-history-tools.js";
+export { collectMaterials, materialsFrom } from "./chat/chat-materials.js";
+export { preFilterMemories } from "./chat/chat-memory.js";
+export { chatToolChange } from "./chat/chat-trace.js";
+export { uploadChip, uploadsFrom } from "./chat/chatSuggestions.js";
+export { chatToolTimeLimit, runWithinLimit } from "./chat/toolLimits.js";
+export { recoveryHint, shouldRetry } from "./chat/toolRecovery.js";
+export { decayReview } from "./decay-review/wiring.js";
+export { examPrepPolicyFor, submitStudyPrepAttempt } from "./exam-prep/exam-prep-service.js";
+export { getAgentRun, listRuns, startExecutionLogMaintenance } from "./execution/executionLog.js";
+export { listFailureDigests } from "./execution/failureDigest.js";
+export { fitDialogue } from "./grounding/contextBudget.js";
+export { renderIntent, runIntentStep } from "./intent/intentStep.js";
+export { cancelAutonomyReviewForTask, recoverLearnerAutonomySchedules, scheduleAutonomyReviewForTask, setLearnerAutonomy, startLearnerAutonomyWorker } from "./learner/learner-autonomy.js";
+export { centralMisconceptionFlags, readQuestionSignals, recommendForLearner } from "./learner/learner-model.js";
+export { LIVE_RECORDING_SINCE, backfillLearningEvidence } from "./learner/learning-backfill.js";
+export { recordLearningEvent, refreshConceptRetention } from "./learner/learning-events.js";
+export { applyCentralMisconceptions, createTeachingEvidenceState } from "./learner/teaching-evidence.js";
+export { fulfillMarketplaceEvent } from "./marketplace/routes.js";
+export { loadTaughtKnowledge, renderTaughtContext } from "./social/protege.js";
+export { recordStrategyOutcome } from "./strategies/outcomes.js";
+export { checkStrategyLimit, recommendStrategies } from "./strategies/recommend.js";
+export { createHarness } from "./study-prep/harness.js";
+export { makeLlmAgent } from "./study-prep/llm-agent.js";
+export { attachUploadsToStudyPrep } from "./study-prep/materials-source.js";
+export { planReadyMessage } from "./study-prep/planReady.js";
+export { DECISION_NODES } from "./study-prep/state-machine.js";
+export { supabaseStore } from "./study-prep/store.js";
+export { prerequisiteEdges, resolveTopics } from "./study-prep/syllabus-resolver.js";
+export { autoStartDueChecks, backfillStudyPrepWorkflows, completeAgentCheckBattle, ensureStudyPrepWorkflow, getAgentCheckHarness, getHarness, getPracticeHarness, getWorkflowHarness, outreachOnTopicStart, reportCheckQuestion, runningWork, startStudyPrepAutoStart, stopAgentCheck, teachingHandoff } from "./study-prep/wiring.js";
+export { makeWorkflowMirror, studyPrepResultLine, studyPrepWorkflow, workflowEventFor } from "./study-prep/workflow.js";
+export { get, run, startBatch } from "./syllabus-import/service.js";
+export { resultToTypedBlocks } from "./teaching-session/blocks.js";
+export { carryForward } from "./teaching-session/context.js";
+export { executeAgentTeachingTurn, modelDecide } from "./teaching-session/controller.js";
+export { guideTeach, guideTeachPrompt } from "./teaching-session/guideTeacher.js";
+export { appendSessionBlocks, completeSessionRecord, createSessionRecord, ensureSessionRecord } from "./teaching-session/lifecycle.js";
+export { TEACHING_MODES, prepareTeachingSession } from "./teaching-session/start.js";
+export { default as teachingWorkflowsModule } from "./teaching-session/workflowRoutesWiring.js";
+export { TEACHING_TURN_WORKFLOW } from "./teaching-workflow/runner.js";
+export { recordTeachingEvidence } from "./teaching-workflow/tools.js";
+export { ingestSubject } from "./teaching/syllabus.js";
+export { TOOL_ALIASES, buildRegistry, llmFacingTools } from "./tools/registry.js";
+
 export default router;

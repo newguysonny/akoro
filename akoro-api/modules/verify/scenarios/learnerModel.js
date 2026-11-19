@@ -32,9 +32,9 @@ export const learnerModelNextAction = {
       await db.schema("edu").from("concept_catalog").delete().eq("id", concept.id);
     });
 
-    const { recommendForLearner, centralMisconceptionFlags } = await import("../../adaptive-learning/learner/learner-model.js");
-    const { recordTeachingEvidence } = await import("../../adaptive-learning/teaching-workflow/tools.js");
-    const { createTeachingEvidenceState, applyCentralMisconceptions } = await import("../../adaptive-learning/learner/teaching-evidence.js");
+    const { recommendForLearner, centralMisconceptionFlags } = await import("../../adaptive-learning/index.js");
+    const { recordTeachingEvidence } = await import("../../adaptive-learning/index.js");
+    const { createTeachingEvidenceState, applyCentralMisconceptions } = await import("../../adaptive-learning/index.js");
     const studentState = await import("../../learner-state/index.js");
     ctx.expect.ok("decideNextAction is gone from student-state (one decision path)", typeof studentState.decideNextAction === "undefined");
 

@@ -17,7 +17,7 @@
 import { Router } from "express";
 
 import { authenticateToken, requireRole } from "../auth/index.js";
-import { agentFeaturesCatalogue, agentToolsCatalogue } from "../agent-capabilities/catalogue.js";
+import { agentFeaturesCatalogue, agentToolsCatalogue } from "../agent-capabilities/index.js";
 import { listTools, getTool, setToolStatus, promoteTool, similarTools, analytics, auditRows } from "../self-tooling/index.js";
 
 const router = Router();
@@ -54,7 +54,7 @@ router.post("/agent-tools/:id/status", adminOnly, asyncHandler(async (req, res) 
 
 router.post("/agent-tools/:id/promote", adminOnly, asyncHandler(async (req, res) => {
   if (!UUID.test(req.params.id)) return badId(res);
-  const [{ startRun }, { selfToolDeps }] = await Promise.all([import("../verify/runner.js"), import("../adaptive-learning/chat.js")]);
+  const [{ startRun }, { selfToolDeps }] = await Promise.all([import("../verify/index.js"), import("../adaptive-learning/index.js")]);
   const out = await promoteTool({
     id: req.params.id, name: req.body?.name, label: req.body?.label, goal: req.body?.goal,
     replaces: Array.isArray(req.body?.replaces) ? req.body.replaces.filter((x) => UUID.test(String(x))) : [],

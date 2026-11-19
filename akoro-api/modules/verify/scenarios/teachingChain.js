@@ -144,7 +144,7 @@ export const teachingChain = {
   params: { learner: { default: "@tester45" }, subject: { default: "Basic Science" }, classLevel: { default: "JSS3" }, maxTurns: { default: 14 } },
   async run(ctx, p) {
     const me = await ctx.as(p.learner);
-    const { getWorkflowHarness, teachingHandoff: handoffOf } = await import("../../adaptive-learning/study-prep/wiring.js");
+    const { getWorkflowHarness, teachingHandoff: handoffOf } = await import("../../adaptive-learning/index.js");
     const harness = getWorkflowHarness();
     const handoff = handoffOf();
     const active = await ctx.http({ as: p.learner, path: "/api/adaptive/study-prep/sessions" });

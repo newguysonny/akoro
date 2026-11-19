@@ -27,7 +27,7 @@ import { authenticateToken, requireRole } from "../auth/index.js";
 import { businessConfig }                 from "../../config/index.js";
 import { verifyTransaction }              from "../../lib/paystackService.js";
 import { performRefund }                  from "./payments.js";
-import { notify }                         from "../notifications/events.js";
+import { notify }                         from "../notifications/index.js";
 import { paystackSignatureValid } from "../../lib/safeCompare.js";
 
 const asyncHandler = (fn) => (req, res, next) =>

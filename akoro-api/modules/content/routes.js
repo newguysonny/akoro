@@ -38,7 +38,7 @@ import { body, validationResult }         from "express-validator";
 import multerLib                          from "multer";
 import { contentDb }                      from "../../db.js";
 import { authenticateToken, requireRole } from "../auth/index.js";
-import { ensureBucket, uploadPublicFile } from "../school/templateStorage.js";
+import { ensureBucket, uploadPublicFile } from "../school/index.js";
 
 const router = Router();
 const upload = multerLib({ storage: multerLib.memoryStorage(), limits: { fileSize: 8 * 1024 * 1024 } });

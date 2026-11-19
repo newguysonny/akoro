@@ -14,7 +14,7 @@ async function pair(ctx) {
   const from = await ctx.as(SENDER), to = await ctx.as(RECIPIENT);
   const { messageAgent } = await import("../../agent-network/index.js");
   const { processInbox } = await import("../../agent-network/index.js");
-  const { protegeDeps } = await import("../../adaptive-learning/chat.js");
+  const { protegeDeps } = await import("../../adaptive-learning/index.js");
   const send = (kind, text) => messageAgent(from.id, { to: to.id, kind, question: `${ctx.marker} ${text}` }, { deps: protegeDeps });
   // Every row this run makes is removed afterwards (both sides).
   ctx.cleanup(() => ctx.db.deleteOwned("edu.agent_messages", { ownerColumn: "from_user", ownerId: from.id, filters: { body: { like: `${ctx.marker}%` } } }));
@@ -49,7 +49,7 @@ export const friendRequestCard = {
     ctx.expect.ok("posted in the recipient's chat with Be friends", card?.user_id === to.id && card?.meta?.proposal?.yes === "Be friends", card?.meta);
     ctx.expect.ok("…saying who wants to be friends", /wants to be friends/.test(card?.text || ""), card?.text);
 
-    const { approveProposal } = await import("../../agent-proposals/inbox.js");
+    const { approveProposal } = await import("../../agent-proposals/index.js");
     const r = await approveProposal(to.id, a.proposalId);
     ctx.note(`approve: ${JSON.stringify(r).slice(0, 200)}`);
     const [x, y] = [from.id, to.id].sort();
@@ -132,7 +132,7 @@ export const offlineWaits = {
   async run(ctx) {
     const { to, send } = await pair(ctx);
     const { processInbox } = await import("../../agent-network/index.js");
-    const { protegeDeps } = await import("../../adaptive-learning/chat.js");
+    const { protegeDeps } = await import("../../adaptive-learning/index.js");
     const before = await ctx.http({ as: RECIPIENT, path: "/api/adaptive/chat/autonomy" });
     const was = { enabled: !!before.body?.enabled, level: before.body?.level ?? 1 };
     ctx.cleanup(() => ctx.http({ as: RECIPIENT, method: "PATCH", path: "/api/adaptive/chat/autonomy", body: was }));

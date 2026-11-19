@@ -356,7 +356,7 @@ export async function prepareTurn(req, res) {
       try {
         const { data } = await db.schema("edu").from("material_ingests").select("names, state, structure")
           .eq("user_id", req.user.id).eq("chat_session_id", conversationId).neq("state", "undone").order("created_at", { ascending: true }).limit(10);
-        const { chatFilesBrief } = await import("../../materials/ingestCore.js");
+        const { chatFilesBrief } = await import("../../materials/index.js");
         return chatFilesBrief(data || []);
       } catch { return ""; }
     })() : Promise.resolve("");

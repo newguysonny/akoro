@@ -15,7 +15,7 @@ export const syllabusImportExample = {
   async run(ctx, p) {
     const file = new URL(`../../../data/syllabus/sources/${String(p.file).replace(/[^a-z0-9._-]/gi, "")}`, import.meta.url);
     const buffer = fs.readFileSync(file);
-    const { run } = await import("../../adaptive-learning/syllabus-import/service.js");
+    const { run } = await import("../../adaptive-learning/index.js");
     const t0 = Date.now();
     const row = await run({ buffer, fileName: p.file, exam: p.exam, name: p.name });
     ctx.note(`import ${row?.id} → ${row?.status} in ${Math.round((Date.now() - t0) / 1000)}s`);
@@ -85,7 +85,7 @@ export const syllabusImportBatch = {
   async run(ctx, p) {
     const names = String(p.files).split(",").map((f) => f.trim().replace(/[^a-z0-9._-]/gi, "")).filter(Boolean);
     const files = names.map((n) => ({ originalname: n, buffer: fs.readFileSync(new URL(`../../../data/syllabus/sources/${n}`, import.meta.url)) }));
-    const { startBatch, get } = await import("../../adaptive-learning/syllabus-import/service.js");
+    const { startBatch, get } = await import("../../adaptive-learning/index.js");
     const { queued } = await startBatch({ files, exam: p.exam });
     ctx.expect.eq("every file is queued", queued.length, files.length);
     ctx.note(`queued: ${queued.map((q) => `${q.file} → ${q.name}${q.code ? ` (${q.code})` : ""}`).join(" · ")}`);
@@ -114,7 +114,7 @@ export const syllabusImportSplit = {
   async run(ctx, p) {
     const name = String(p.file).replace(/[^a-z0-9._-]/gi, "");
     const buffer = fs.readFileSync(new URL(`../../../data/syllabus/sources/${name}`, import.meta.url));
-    const { startBatch } = await import("../../adaptive-learning/syllabus-import/service.js");
+    const { startBatch } = await import("../../adaptive-learning/index.js");
     const since = new Date(Date.now() - 1000).toISOString();
     await startBatch({ files: [{ originalname: name, buffer }], exam: p.exam });
     const until = Date.now() + 600_000;
@@ -147,7 +147,7 @@ export const curriculumImportExample = {
   async run(ctx, p) {
     const name = String(p.file).replace(/[^a-z0-9._-]/gi, "");
     const buffer = fs.readFileSync(new URL(`../../../data/syllabus/sources/${name}`, import.meta.url));
-    const { run } = await import("../../adaptive-learning/syllabus-import/service.js");
+    const { run } = await import("../../adaptive-learning/index.js");
     const t0 = Date.now();
     const row = await run({ buffer, fileName: name.replace(/^nerdc-/, ""), exam: "NERDC" });
     ctx.note(`import ${row?.id} → ${row?.status} in ${Math.round((Date.now() - t0) / 1000)}s · ${row?.name}`);
