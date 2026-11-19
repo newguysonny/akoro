@@ -5,7 +5,7 @@ import test from "node:test";
 import { mergeInbox, parseRef, reasonOf, normalizeTitle } from "./inboxCore.js";
 const src = await readFile(new URL("./inbox.js", import.meta.url), "utf8");
 const cycle = await readFile(new URL("../autonomy/cycle.js", import.meta.url), "utf8");
-const chat = await readFile(new URL("../adaptive-learning/chat.js", import.meta.url), "utf8");
+const social = await readFile(new URL("../adaptive-learning/chat/handlers-social.js", import.meta.url), "utf8");
 
 test("one list over both sources, newest first, each idea once", () => {
   const items = mergeInbox({
@@ -45,6 +45,6 @@ test("each source skips what the other already offers; the planner notifies thro
   assert.match(cycle, /\.\.\.chatOpen\.map\(\(s\) => normalizeTitle\(s\.title\)\)/);
   assert.match(cycle, /await notifyUser\(\{\s*userId, type: "agent_proposals"/);
   assert.doesNotMatch(cycle, /db\.from\("notifications"\)\.insert/, "no bare insert that skips push and the socket");
-  const help = chat.slice(chat.indexOf('case "suggest_help"'), chat.indexOf('case "schedule_chat_follow_up"'));
+  const help = social.slice(social.indexOf("async suggest_help"), social.indexOf("async schedule_chat_follow_up"));
   assert.match(help, /\(await openTitles\(studentId\)\)\.has\(normalizeTitle\(title\)\)/);
 });

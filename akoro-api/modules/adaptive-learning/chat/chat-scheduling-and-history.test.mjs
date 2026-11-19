@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 import { validateFollowUpInput } from "./chat-follow-up-validation.js";
 import { validateLearnerTaskInput } from "../learner-task-validation.js";
 
-const chat = readFileSync(new URL("../chat.js", import.meta.url), "utf8");
+const social = readFileSync(new URL("./handlers-social.js", import.meta.url), "utf8");
 const toolRuntime = readFileSync(new URL("./tool-runtime.js", import.meta.url), "utf8");
 const toolCatalogue = readFileSync(new URL("./tool-catalogue-core.js", import.meta.url), "utf8");
 const followUps = readFileSync(new URL("./chat-follow-ups.js", import.meta.url), "utf8");
@@ -33,8 +33,8 @@ test("a task can be due 'in 30 minutes'", () => {
 
 test("schedule_chat_follow_up can deliver into THIS chat or a chosen one; message-me requests don't become tasks", () => {
   assert.match(toolCatalogue, /where: \{ type: "string", enum: \["here", "chat", "new"\]/);
-  assert.match(chat, /if \(where === "here"\) \{[\s\S]{0,200}targetSessionId = conversationId;/);
-  assert.match(chat, /targetSessionId = await ownedChatId\(studentId, input\.chatId\);/);
+  assert.match(social, /if \(where === "here"\) \{[\s\S]{0,200}targetSessionId = conversationId;/);
+  assert.match(social, /targetSessionId = await ownedChatId\(studentId, input\.chatId\);/);
   assert.match(toolCatalogue, /use schedule_chat_follow_up instead — a task does not send anything/);
   assert.match(toolCatalogue, /required: \["message"\],/);
   assert.match(followUps, /const chatSessionId = targetSessionId \|\| randomUUID\(\);/);
@@ -43,7 +43,7 @@ test("schedule_chat_follow_up can deliver into THIS chat or a chosen one; messag
 test("chat-history tools exist, are scoped to the learner, and only post_to_chat writes", () => {
   for (const name of ["list_chats", "read_chat", "post_to_chat"]) {
     assert.match(toolCatalogue, new RegExp(`name: "${name}",`));
-    assert.match(chat, new RegExp(`case "${name}": \\{`));
+    assert.match(social, new RegExp(`async ${name}\\(input`));
   }
   assert.match(toolRuntime, /export const SIDE_EFFECT_TOOLS = \[[^\]]*"post_to_chat"/);
   assert.doesNotMatch(toolRuntime.match(/export const SIDE_EFFECT_TOOLS = \[[^\]]*\]/)[0], /"list_chats"|"read_chat"/);

@@ -7,7 +7,7 @@ process.env.SUPABASE_SERVICE_KEY ||= "test-service-key";
 process.env.OPENAI_API_KEY ||= "test-openai-key";
 const { lagosDay, weekStart, dailyStart, upcomingDay, dailyKey, DAILY_START_HOUR, DAILY_SEATS } = await import("./activities.js");
 const src = await readFile(new URL("./activities.js", import.meta.url), "utf8");
-const chat = await readFile(new URL("../adaptive-learning/chat.js", import.meta.url), "utf8");
+const network = await readFile(new URL("../adaptive-learning/chat/handlers-network-study.js", import.meta.url), "utf8");
 const toolCatalogue = await readFile(new URL("../adaptive-learning/chat/tool-catalogue-core.js", import.meta.url), "utf8");
 
 test("Lagos day and week boundaries", () => {
@@ -22,7 +22,7 @@ test("circles start once; leagues honour opt-out; buddy check-ins carry no marks
   assert.match(src, /never marks or messages/);    // a buddy check-in carries goal progress and XP only
   for (const name of ["study_buddy", "daily_challenge", "revision_circle", "get_weekly_league"]) {
     assert.match(toolCatalogue, new RegExp(`name: "${name}",`));
-    assert.match(chat, new RegExp(`case "${name}": \\{`));
+    assert.match(network, new RegExp(`async ${name}\\(input`));
   }
 });
 

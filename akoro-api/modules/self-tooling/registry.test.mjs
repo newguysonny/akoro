@@ -7,6 +7,7 @@ import { DATA_VIEWS, describeView, viewColumns } from "./views.js";
 import { CAPABILITIES, FORBIDDEN, forbiddenFor, learnerGrantable, ownChangeAsked, agreesToBuild } from "./capabilities.js";
 import { decideAccess } from "./access.js";
 
+const mergedSrc = readFileSync(new URL("../adaptive-learning/chat/handlers-merged.js", import.meta.url), "utf8");
 const chatSrc = readFileSync(new URL("../adaptive-learning/chat.js", import.meta.url), "utf8");
 const toolCatalogue = readFileSync(new URL("../adaptive-learning/chat/tool-catalogue-core.js", import.meta.url), "utf8")
   + readFileSync(new URL("../adaptive-learning/chat/tool-catalogue-rest.js", import.meta.url), "utf8");
@@ -76,7 +77,7 @@ test("wiring: on by default (a switch can turn it off), gated in the catalogue a
   assert.match(chatSrc, /self_tooling: selfToolingEnabled\(\) && selfTooling,/);
   assert.match(chatSrc, /const on = \(role === "student" \|\| role === "instructor"\) && await selfToolingAllowedFor\(req\.user\.id\);/);
   assert.match(chatSrc, /selfTooling: selfToolOn,/);
-  assert.match(chatSrc, /case "schema_lookup": \{\n\s+if \(!SELF_TOOLING_ROLES\.has\(role\)\)[^\n]*\n\s+if \(!\(await selfToolingAllowedFor\(studentId\)\)\)/);
+  assert.match(mergedSrc, /async schema_lookup\(input[\s\S]*?SELF_TOOLING_ROLES\.has\(role\)[\s\S]*?selfToolingAllowedFor\(studentId\)/);
   const sql = readFileSync(new URL("../../migrations/2026-self-tooling-grants.sql", import.meta.url), "utf8");
   assert.match(sql, /revoked_at\s+timestamptz/);
   assert.doesNotMatch(sql, /user_id/, "grants are for everyone (decision S10)");

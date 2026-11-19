@@ -79,11 +79,13 @@ test("wiring: pipeline carries the chats guard, runners and My-tools presentatio
 
 test("wiring: chat.js assembles and dispatches the merged chats tool", () => {
   const src = read("../adaptive-learning/chat.js");
+  const merged = read("../adaptive-learning/chat/handlers-merged.js");
+  const handlers = read("../adaptive-learning/chat/handlers-instructor-learner.js");
   assert.match(src, /allTools = await applyChatsMerge\(allTools, req\.user\.id, selfToolOn\)/);
-  assert.match(src, /wantArea === "chats" && role !== "instructor"\) adds = await applyChatsMerge/);
-  assert.match(src, /case "my_chats": \{/);
-  assert.match(src, /const out = await listChats\(studentId, \{ search: input\?\.query, limit: input\?\.limit, currentChatId: conversationId \}\)/);
-  assert.match(src, /const out = await searchChats\(studentId, \{ query: input\?\.query, limit: input\?\.limit, currentChatId: conversationId \}\)/);
+  assert.match(handlers, /wantArea === "chats" && role !== "instructor"\) adds = await applyChatsMerge/);
+  assert.match(merged, /async my_chats\(input/);
+  assert.match(merged, /const out = await listChats\(studentId, \{ search: input\?\.query, limit: input\?\.limit, currentChatId: conversationId \}\)/);
+  assert.match(merged, /const out = await searchChats\(studentId, \{ query: input\?\.query, limit: input\?\.limit, currentChatId: conversationId \}\)/);
   assert.match(src, /name === "my_chats" \? "chats" : undefined/);
 });
 

@@ -21,7 +21,7 @@ test("the questions cover the topic, narrowed to the parts that were taught", ()
 });
 
 test("a guide review is an Agent Check the learner asked for: marked, limited, no opponent", async () => {
-  const [src, check, routes, chat] = await Promise.all([read("./guideReview.js"), read("./agentCheck.js"), read("./routes.js"), read("../adaptive-learning/chat.js")]);
+  const [src, check, routes, network] = await Promise.all([read("./guideReview.js"), read("./agentCheck.js"), read("./routes.js"), read("../adaptive-learning/chat/handlers-network-study.js")]);
   assert.match(src, /createCheckBattle\(\{/);
   assert.match(src, /review_host: "guide", requested_by: learnerId, teaching_session_id/);
   assert.match(src, /if \(!data \|\| data\.student_id !== learnerId\) throw fail\("That teaching session isn't yours\."/);
@@ -30,5 +30,5 @@ test("a guide review is an Agent Check the learner asked for: marked, limited, n
   assert.match(check, /\.\.\.extra,/);                         // the check carries who asked
   assert.match(routes, /router\.post\("\/guide-reviews", authenticateToken/);
   assert.match(toolCatalogue, /name: "request_guide_review"/);
-  assert.match(chat, /case "request_guide_review": \{\s*if \(role === "instructor"\)/);
+  assert.match(network, /async request_guide_review\(input[\s\S]*?if \(role === "instructor"\)/);
 });

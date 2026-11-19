@@ -8,6 +8,7 @@ process.env.OPENAI_API_KEY ||= "test-openai-key";
 const { screenMessage, buildPeerAnswerMessages, shapeAnswer, MESSAGE_LIMITS, AGENT_CONSULT_FEATURE } = await import("./messaging.js");
 const src = await readFile(new URL("./messaging.js", import.meta.url), "utf8");
 const chat = await readFile(new URL("../adaptive-learning/chat.js", import.meta.url), "utf8");
+const network = await readFile(new URL("../adaptive-learning/chat/handlers-network-study.js", import.meta.url), "utf8");
 const toolCatalogue = await readFile(new URL("../adaptive-learning/chat/tool-catalogue-core.js", import.meta.url), "utf8");
 
 test("screening: length bounds; no emails, phones or links cross between learners", () => {
@@ -36,10 +37,10 @@ test("the asker pays; limits per day and per recipient; privacy and blocks apply
   assert.equal(AGENT_CONSULT_FEATURE, "agent_consult");
   assert.match(src, /PER_RECIPIENT_PER_DAY/);
   assert.match(src, /canMessage\(/);
-  assert.match(chat, /const live = await consultOnlineAgents\(studentId, question/);
+  assert.match(network, /const live = await consultOnlineAgents\(studentId, question/);
   for (const name of ["message_agent", "check_agent_inbox", "reply_to_agent"]) {
     assert.match(toolCatalogue, new RegExp(`name: "${name}",`));
-    assert.match(chat, new RegExp(`case "${name}": \\{`));
+    assert.match(network, new RegExp(`async ${name}\\(input`));
   }
   assert.match(chat, /protegeCtx \+ inboxCtx \+/);
 });

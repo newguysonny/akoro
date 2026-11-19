@@ -1,7 +1,8 @@
 // The Agent Chat tool runtime: catalogues, side-effect policy, the read
 // helpers, merged-domain plumbing and the dispatcher. Handler bodies live in
-// handlers-instructor-learner.js (built into the registry below) and, for the
-// tools still being extracted, in the fallback registered by chat.js.
+// handlers-instructor-learner.js, handlers-social.js, handlers-network-study.js
+// and handlers-merged.js. The learner-built-tools branch and the unknown-tool
+// result stay here, after every registered group, so the default is LAST.
 //
 // chat.js re-exports this module's public names, so every existing importer
 // keeps using chat.js as the entry point.
@@ -28,6 +29,9 @@ import { createActivityDraft, listActivityDrafts, getActivityDraft, discardActiv
 import { listGoals, createGoal, updateGoal } from "../../learner-goals/service.js";
 import { searchRecordChunks } from "../../records/searchLib.js";
 import { createHandlers } from "./handlers-instructor-learner.js";
+import { createHandlers as createSocialHandlers } from "./handlers-social.js";
+import { createHandlers as createNetworkStudyHandlers } from "./handlers-network-study.js";
+import { createHandlers as createMergedHandlers } from "./handlers-merged.js";
 // The module functions chat.js (and the rest of the dispatcher below) still
 // call are re-exported here so this file is the ONE importer of each target:
 // splitting them across chat.js and this new file would add cross-module
@@ -411,23 +415,14 @@ export async function executeChatTool(name, input, studentId, options = {}) {
   return withActionBasis(b, () => runChatTool(name, input, callContext(studentId, options)));
 }
 
-// A fallback handler for the tool cases that have not moved out of chat.js
-// yet: it returns CHAT_TOOL_NOT_HANDLED for a name it does not own, and the
-// dispatcher then runs the learner-built-tools branch (the old `default`).
-export const CHAT_TOOL_NOT_HANDLED = Symbol("chat-tool-not-handled");
-let fallbackHandler = null;
-export function registerChatToolFallback(fn) { fallbackHandler = fn; }
-
 function callContext(studentId, options = {}) {
   const ctx = {
     studentId,
     conversationId: options.conversationId ?? null,
-    role: options.role ?? "student",
-    channel: options.channel ?? "ai_chat",
+    role: options.role ?? "student", channel: options.channel ?? "ai_chat",
   };
   ctx.executeChatTool = executeChatTool;
-  // Bound recursion: the handler gets the same per-call scope (and bypasses
-  // basis exactly as the original direct runChatTool call did).
+  // Bound recursion: same per-call scope, bypassing basis as the direct call did.
   ctx.runChatTool = (name, input) => runChatTool(name, input, ctx);
   return ctx;
 }
@@ -435,16 +430,26 @@ function callContext(studentId, options = {}) {
 let handlerMap = null;
 function chatToolHandlers() {
   if (!handlerMap) {
-    handlerMap = createHandlers({
-      createToolDraft, TeachingToolError,
-      createActivityDraft, listActivityDrafts, getActivityDraft, discardActivityDraft, reviseDraftPayload, instructorClassrooms,
-      activityOutcomeSummary, listRecentActivities,
-      listRoutines, createRoutine, updateRoutine, deleteRoutine,
-      openAiChatTools, openAiInstructorTools, applyMergedDomain, applyChatsMerge, applyLibraryMerge,
-      MERGED_DOMAINS, learnerToolDefsWithAreas,
-      resolveLearnerSchoolContext, getMyLearningSessionsTool,
-      clarify, asToolError,
-    });
+    // Registered groups first (their tool names are disjoint, so order cannot
+    // change a result); the learner-built tools branch and the unknown-tool
+    // result follow in runChatTool, so the default stays LAST in dispatch order.
+    handlerMap = {
+      ...createHandlers({
+        createToolDraft, TeachingToolError, createActivityDraft, listActivityDrafts, getActivityDraft, discardActivityDraft, reviseDraftPayload, instructorClassrooms,
+        activityOutcomeSummary, listRecentActivities, listRoutines, createRoutine, updateRoutine, deleteRoutine,
+        openAiChatTools, openAiInstructorTools, applyMergedDomain, applyChatsMerge, applyLibraryMerge,
+        MERGED_DOMAINS, learnerToolDefsWithAreas, resolveLearnerSchoolContext, getMyLearningSessionsTool,
+        clarify, asToolError,
+      }),
+      ...createSocialHandlers({ clarify, listMyGoalsTool, listMyTools, createGoal, updateGoal }),
+      ...createNetworkStudyHandlers({ clarify, asToolError, getWeakTopicsTool, getPastQuestionPracticeTool, searchMyLibraryTool, listTasksTool }),
+      ...createMergedHandlers({
+        clarify, asToolError, executeChatTool, runLearnerTool, selfToolDeps, selfToolingAllowedFor, SELF_TOOLING_ROLES, toolAudience, isDryRun, createTool, saveComputation,
+        MERGED_DOMAINS, dispatchMerged, mergedChatsEnabled, CHATS_BASE_ACTIONS, CHATS_MERGED_ACTIONS, runChatsViewAction,
+        mergedLibraryEnabled, LIBRARY_BASE_ACTIONS, LIBRARY_MERGED_ACTIONS, runLibraryViewAction,
+        getWeakTopicsTool, getPastQuestionPracticeTool, getMyLearningSessionsTool, listMyGoalsTool, listTasksTool, searchMyLibraryTool,
+      }),
+    };
   }
   return handlerMap;
 }
@@ -459,10 +464,6 @@ export async function runChatTool(name, input, ctx) {
   }
   const handler = chatToolHandlers()[name];
   if (handler) return handler(input, ctx);
-  if (fallbackHandler) {
-    const out = await fallbackHandler(name, input, ctx);
-    if (out !== CHAT_TOOL_NOT_HANDLED) return out;
-  }
   // A tool the learner's agent built (self-tooling) — read-only, re-checked every call.
   if (SELF_TOOLING_ROLES.has(role) && (await selfToolingAllowedFor(studentId))) {
     const out = await runLearnerTool(name, input, studentId, {

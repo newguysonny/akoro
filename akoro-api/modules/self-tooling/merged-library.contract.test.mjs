@@ -56,11 +56,13 @@ test("the kill switch defaults on and honours AKORO_MERGED_LIBRARY=false", () =>
 });
 
 test("wiring: chat.js dispatches the merged tool and swaps the defs; pipeline serves view actions", () => {
-  const chat = read("../adaptive-learning/chat.js");
-  assert.match(chat, /case "library_documents": \{/);
+  const chat = read("../adaptive-learning/chat/handlers-merged.js");
+  const chatMain = read("../adaptive-learning/chat.js");
+  const network = read("../adaptive-learning/chat/handlers-network-study.js");
+  assert.match(chat, /async library_documents\(input/);
   assert.match(runtime, /async function searchMyLibraryTool\(studentId, input\)/);
-  assert.match(chat, /case "search_my_library":\s+return searchMyLibraryTool\(studentId, input\);/);
-  assert.match(chat, /applyLibraryMerge\(allTools, req\.user\.id, selfToolOn\)/);
+  assert.match(network, /async search_my_library\(input, ctx\) \{ return searchMyLibraryTool\(ctx\.studentId, input\); \}/);
+  assert.match(chatMain, /applyLibraryMerge\(allTools, req\.user\.id, selfToolOn\)/);
   assert.match(chat, /runLibraryViewAction\(action, input, studentId\)/);
   const pipe = read("./pipeline.js");
   assert.match(pipe, /export async function runLibraryViewAction\(action, input, learnerId\)/);

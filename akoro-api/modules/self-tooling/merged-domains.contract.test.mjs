@@ -11,6 +11,8 @@ import { presentMergedToolRow } from "./pipeline.js";
 const read = (rel) => readFileSync(new URL(rel, import.meta.url), "utf8");
 const runtime = read("../adaptive-learning/chat/tool-runtime.js");
 const handlers = read("../adaptive-learning/chat/handlers-instructor-learner.js");
+const merged = read("../adaptive-learning/chat/handlers-merged.js");
+const network = read("../adaptive-learning/chat/handlers-network-study.js");
 
 test("tasks config: merged set, order and sides", () => {
   const c = MERGED_DOMAINS.my_tasks;
@@ -118,8 +120,8 @@ test("wiring: chat.js assembles and dispatches merged domains generically", () =
   const src = read("../adaptive-learning/chat.js");
   assert.match(runtime, /async function applyMergedDomain/);
   assert.match(runtime, /async function dispatchMerged/);
-  assert.match(src, /case "my_tasks": \{/);
-  assert.match(src, /case "list_tasks":\s*\n\s*return listTasksTool\(studentId\);/);
+  assert.match(merged, /async my_tasks\(input/);
+  assert.match(network, /async list_tasks\(input, ctx\) \{ return listTasksTool\(ctx\.studentId\); \}/);
   assert.match(src, /applyMergedDomain\(allTools, req\.user\.id, MERGED_DOMAINS\.my_tasks, \["list_tasks"\], selfToolOn\)/);
   // the learning-history force must be remapped to the merged sessions tool
   assert.match(src, /forcedTool = "my_study_sessions";/);
@@ -178,11 +180,11 @@ test("wiring: chat.js assembles, dispatches and area-loads the instructor merges
   assert.match(src, /applyMergedDomain\(allTools, req\.user\.id, MERGED_DOMAINS\.my_activity_results, \["check_activity_outcomes"\], selfToolOn\)/);
   assert.match(src, /applyMergedDomain\(allTools, req\.user\.id, MERGED_DOMAINS\.my_activity_drafts, \["list_activity_drafts", "get_activity_draft"\], selfToolOn\)/);
   // executor cases, instructor-guarded, dispatching through the engine
-  assert.match(src, /case "my_classes": \{/);
-  assert.match(src, /role === "instructor" && MERGED_DOMAINS\.my_classes\.enabled\(\)/);
-  assert.match(src, /case "my_activity_drafts": \{/);
-  assert.match(src, /executeChatTool\("get_activity_draft", \{ draftId: String\(input\?\.query \|\| ""\) \}/);
-  assert.match(src, /executeChatTool\("check_activity_outcomes"/);
+  assert.match(merged, /async my_classes\(input/);
+  assert.match(merged, /role === "instructor" && MERGED_DOMAINS\.my_classes\.enabled\(\)/);
+  assert.match(merged, /async my_activity_drafts\(input/);
+  assert.match(merged, /executeChatTool\("get_activity_draft", \{ draftId: String\(input\?\.query \|\| ""\) \}/);
+  assert.match(merged, /executeChatTool\("check_activity_outcomes"/);
   // the area loader assembles the instructor merges for the activities area
   assert.match(handlers, /openAiInstructorTools\(\)\.filter\(\(t\) => toolArea\(t\.function\.name\) === wantArea\)/);
   // runtime selection runs for instructor turns too

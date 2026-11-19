@@ -13,7 +13,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 const read = (p) => readFileSync(new URL(p, import.meta.url), "utf8");
-const chat = read("../adaptive-learning/chat.js");
+const social = read("../adaptive-learning/chat/handlers-social.js");
 const toolCatalogue = read("../adaptive-learning/chat/tool-catalogue-core.js");
 const trace = read("../adaptive-learning/chat/chat-trace.js");
 const resumeQueue = read("../self-tooling/resumeQueue.js");
@@ -35,7 +35,7 @@ test("the in-turn tool describes the new-chat filing with concrete triggers", ()
 });
 
 test("the in-turn handler delivers a new chat, not a list row", () => {
-  const block = chat.slice(chat.indexOf('case "suggest_help"'), chat.indexOf('case "schedule_chat_follow_up"'));
+  const block = social.slice(social.indexOf("async suggest_help"), social.indexOf("async schedule_chat_follow_up"));
   assert.match(block, /openSuggestHelpChat\(studentId/);
   assert.match(block, /delivered: "new_chat"/);
   assert.doesNotMatch(block, /agent_suggestions"\)\.insert/);

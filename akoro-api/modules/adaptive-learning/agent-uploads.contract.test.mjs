@@ -12,6 +12,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 const chat = readFileSync(new URL("./chat.js", import.meta.url), "utf8");
+const network = readFileSync(new URL("./chat/handlers-network-study.js", import.meta.url), "utf8");
 const toolCatalogue = readFileSync(new URL("./chat/tool-catalogue-rest.js", import.meta.url), "utf8");
 const tools = readFileSync(new URL("../materials/uploadTools.js", import.meta.url), "utf8");
 const examples = readFileSync(new URL("../agent-capabilities/examples.js", import.meta.url), "utf8");
@@ -20,7 +21,7 @@ const selection = readFileSync(new URL("./toolSelection.js", import.meta.url), "
 test("the four upload tools are defined and executed", () => {
   for (const name of ["read_upload", "retry_extraction", "list_folders", "file_upload"]) {
     assert.match(toolCatalogue, new RegExp(`name: "${name}"`), `${name} is defined`);
-    assert.match(chat, new RegExp(`case "${name}"`), `${name} is executed`);
+    assert.match(network, new RegExp(`async ${name}\\(input`), `${name} is executed`);
   }
   assert.match(tools, /export async function readUploadTool/);
   assert.match(tools, /export async function retryExtractionTool/);
