@@ -12,6 +12,7 @@ import { readFileSync } from "node:fs";
 import { CORE_TOOL_NAMES, areasForMessage, filterDefsByAreas, toolArea } from "./toolSelection.js";
 
 const chat = readFileSync(new URL("./chat.js", import.meta.url), "utf8");
+const handlers = readFileSync(new URL("./chat/handlers-instructor-learner.js", import.meta.url), "utf8");
 const runtimeState = readFileSync(new URL("./chat/runtime-state.js", import.meta.url), "utf8");
 const pipeline = readFileSync(new URL("../self-tooling/pipeline.js", import.meta.url), "utf8");
 const manifest = readFileSync(new URL("../../migrations/manifest.json", import.meta.url), "utf8");
@@ -45,7 +46,7 @@ test("chat wiring: sticky areas, the forced tool's area, the loader, the merge, 
   assert.match(chat, /requiredTool: forcedTool/);
   assert.match(chat, /tools: turnTools/);
   assert.match(chat, /__addTools/);
-  assert.match(chat, /stickyAreasFor\(conversationId\)\.add\(wantArea\)/);
+  assert.match(handlers, /stickyAreasFor\(conversationId\)\.add\(wantArea\)/);
   assert.match(chat, /AKORO_TOOL_AREA_SELECTION|areaSelectionEnabled\(\)/);
 });
 

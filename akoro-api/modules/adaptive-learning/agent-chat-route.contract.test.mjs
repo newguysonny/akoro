@@ -4,6 +4,8 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const source = await readFile(new URL("./chat.js", import.meta.url), "utf8");
+const handlers = await readFile(new URL("./chat/handlers-instructor-learner.js", import.meta.url), "utf8");
+const toolRuntime = await readFile(new URL("./chat/tool-runtime.js", import.meta.url), "utf8");
 const toolCatalogueCore = await readFile(new URL("./chat/tool-catalogue-core.js", import.meta.url), "utf8");
 const toolCatalogueRest = await readFile(new URL("./chat/tool-catalogue-rest.js", import.meta.url), "utf8");
 const toolCatalogue = `${toolCatalogueCore}\n${toolCatalogueRest}`;
@@ -133,7 +135,7 @@ test("school/class/teacher directory tools are privacy-bounded and forced for id
   // iteration 0 — exactly like the capabilities force.
   for (const tool of ["get_my_school", "list_school_subjects", "list_my_teachers", "find_teacher"]) {
     assert.match(toolCatalogue, new RegExp(`name: "${tool}"`), `${tool} missing from the learner catalogue`);
-    assert.match(source, new RegExp(`case "${tool}":`), `${tool} missing from executeChatTool`);
+    assert.match(handlers, new RegExp(`\\b${tool}\\(input, ctx\\)`), `${tool} missing from executeChatTool`);
   }
   assert.match(source, /requiredLearnerDataTool\(userMessage\)/,
     "the identity-question force is not wired into the /agent route");
@@ -143,11 +145,11 @@ test("school/class/teacher directory tools are privacy-bounded and forced for id
   // Public identity only: every column the directory block selects must stay
   // in the public-directory allowlist — contact details and internal school
   // records are never selected.
-  const directory = source.slice(
-    source.indexOf('case "get_my_school"'),
-    source.indexOf('case "create_task"'),
+  const directory = handlers.slice(
+    handlers.indexOf("async get_my_school(input, ctx)"),
+    handlers.indexOf("async create_task(input, ctx)"),
   );
-  assert.ok(directory.includes('case "find_teacher"'), "directory slice did not capture all four tools");
+  assert.ok(directory.includes("async find_teacher(input, ctx)"), "directory slice did not capture all four tools");
   const selects = directory.match(/\.select\("([^"]*)"\)/g) ?? [];
   assert.ok(selects.length >= 6, "directory tool selects not found");
   for (const sel of selects) {
@@ -155,9 +157,9 @@ test("school/class/teacher directory tools are privacy-bounded and forced for id
   }
   // The school profile query is exactly the published-identity allowlist —
   // it lives in the shared resolver, not in a case body.
-  const resolver = source.slice(
-    source.indexOf("async function resolveLearnerSchoolContext"),
-    source.indexOf("export async function executeChatTool"),
+  const resolver = toolRuntime.slice(
+    toolRuntime.indexOf("async function resolveLearnerSchoolContext"),
+    toolRuntime.indexOf("export async function executeChatTool"),
   );
   assert.ok(resolver.length > 200, "the learner school-context resolver was not found");
   assert.match(resolver, /name, description, website, logo_url, address, is_active/);
@@ -202,7 +204,7 @@ test("learning-session history is its own tool — never answered with the schoo
   // are different questions with different tools, and both descriptions own
   // the distinction so the model can never conflate them.
   assert.match(toolCatalogue, /name: "get_my_learning_sessions"/, "missing from the learner catalogue");
-  assert.match(source, /case "get_my_learning_sessions":/, "missing from executeChatTool");
+  assert.match(handlers, /async get_my_learning_sessions\(input, ctx\)/, "missing from executeChatTool");
   const catalogueDef = toolCatalogue.slice(
     toolCatalogue.indexOf('name: "list_school_subjects"'),
     toolCatalogue.indexOf('name: "list_my_teachers"'),
@@ -215,9 +217,9 @@ test("learning-session history is its own tool — never answered with the schoo
   assert.match(historyDef, /NOT the school's subject catalogue/);
   // The history case reads only the learner's own learning records — bounded
   // and free of any contact details.
-  const historyCase = source.slice(
-    source.indexOf('case "get_my_learning_sessions"'),
-    source.indexOf('case "create_task"'),
+  const historyCase = toolRuntime.slice(
+    toolRuntime.indexOf("export async function getMyLearningSessionsTool"),
+    toolRuntime.indexOf("export async function getPastQuestionPracticeTool"),
   );
   for (const table of ["student_agents", "agent_knowledge", "adaptive_sessions", "session_knowledge_delta"]) {
     assert.match(historyCase, new RegExp(table), `the history case must read ${table}`);

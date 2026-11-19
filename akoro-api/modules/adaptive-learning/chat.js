@@ -22,8 +22,6 @@ import { buildSuggestionMessages, notTaughtFrom, guideChip, uploadsFrom, uploadC
 import { resolveAskTargetFor } from "../records/access.js";
 import { materialsFrom, collectMaterials } from "./chat/chat-materials.js";
 import { renderRelevantMemory } from "./chat/chat-memory.js";
-import { CHAT_TOOLS_CORE } from "./chat/tool-catalogue-core.js";
-import { CHAT_TOOLS_REST, buildInstructorTools, peerConsultEnabled, blogResearchEnabled, agentNetworkEnabled } from "./chat/tool-catalogue-rest.js";
 import {
   learnerInsightsEnabled, learnerSoulStateEnabled, conceptTrackerEnabled,
   examPrepConfidenceEnabled, studyPrepEnabled, durableAgentChatContextEnabled,
@@ -37,7 +35,6 @@ import { looksLikeStepNarration, containsDeferral, admitsNonCompletion, looksTru
 import { resolveMaterialsFolder } from "../materials/studySource.js";
 import { akoroMaterialFor } from "../materials/akoroMaterial.js";
 import { gatherPassages, extractCitations } from "../records/askLib.js";
-import { searchRecordChunks } from "../records/searchLib.js";
 import { getExtraction } from "../records/extractLib.js";
 import { loadTaughtKnowledge, renderTaughtContext, buildGuideMessages, shapeGuideAnswer, teachRequest } from "./protege.js";
 import { loadDoctrine } from "../agent-context/context-manager.js";
@@ -75,21 +72,10 @@ import {
   joinDaily, skipDaily, dailyRanking, dailyStatus, createCircle, searchCircles, joinCircle, leaveCircle, weeklyLeague,
 } from "../agent-network/activities.js";
 import { searchBlogPosts, readBlogPost } from "./blogResearch.js";
-import { listGoals, createGoal, updateGoal } from "../learner-goals/service.js";
 import { listMyBlogs, createBlogPost, updateBlogPost } from "../blogs/service.js";
 import { newToolRequestId, toolObservation } from "../../utils/toolObservation.js";
 
 import { getOrchestrator } from "./agents/registry.js";
-import {
-  createActivityDraft, listActivityDrafts, getActivityDraft, discardActivityDraft, reviseDraftPayload,
-  instructorClassrooms,
-} from "../self-study/drafts.js";
-import { TOOLS as TEACHING_TOOLS, ToolError as TeachingToolError } from "../teaching/tools.js";
-import { createToolDraft } from "../teaching/toolDrafts.js";
-import { activityOutcomeSummary, listRecentActivities } from "../self-study/outcomes.js";
-import {
-  listRoutines, createRoutine, updateRoutine, deleteRoutine,
-} from "../self-study/routines.js";
 import { getSyllabusGrounding } from "./syllabus.js";
 import { getPastQuestionGrounding } from "../past-questions/routes.js";
 import { getCurriculumGrounding } from "../curriculum/routes.js";
@@ -123,7 +109,6 @@ import { startRun, recordStep, finishRun, stepRow } from "./executionLog.js";
 import { failed as toolFailed, shouldRetry, recoveryHint } from "./toolRecovery.js";
 import { runWithinLimit } from "./toolLimits.js";
 import { createLoopGuard } from "../agent-runtime/loopGuard.js";
-import { actionBasis, basisRefusal, currentActionBasis, withActionBasis } from "../agent-runtime/actionBasis.js";
 import { fitDialogue, summariseEarlier } from "./contextBudget.js";
 import { runIntentStep, renderIntent } from "./intentStep.js";
 // Phase 17: a live turn is recorded per AGENT_EPISODES — opted-in learners, or everyone who hasn't opted out (agent-contract/store.js).
@@ -140,13 +125,8 @@ import { getLearnerProfileContext } from "./learner-profile-context.js";
 import { validateLearnerTaskInput } from "./learner-task-validation.js";
 import { listChats, readChat, postToChat, ownedChatId, searchChats } from "./chat/chat-history-tools.js";
 import { schemaLookup } from "../self-tooling/registry.js";
-import { createTool, runLearnerTool, learnerToolDefs, learnerToolDefsWithAreas, forcedSelfTool, saveComputation, getLibraryToolState, runLibraryViewAction, getChatsToolState, runChatsViewAction, getMergedToolState, runMergedViewAction } from "../self-tooling/pipeline.js";
-import { mergedLibraryEnabled, mergedLibraryDef, libraryDeltaActions, LIBRARY_BASE_ACTIONS, LIBRARY_MERGED_ACTIONS } from "../self-tooling/mergedLibrary.js";
-import { mergedChatsEnabled, mergedChatsDef, chatsDeltaActions, CHATS_BASE_ACTIONS, CHATS_MERGED_ACTIONS } from "../self-tooling/mergedChats.js";
-import { MERGED_DOMAINS, MERGED_DOMAIN_LIST } from "../self-tooling/mergedDomains.js";
 import { AREAS, areaSelectionEnabled, areasForMessage, filterDefsByAreas, namedLearnerTool, toolArea } from "./toolSelection.js";
 import { agreesToBuild } from "../self-tooling/capabilities.js";
-import { selfToolingEnabled, selfToolingAllowedFor } from "../self-tooling/access.js";
 import { createLearnerToolRequest } from "../agent-tool-requests/service.js";
 import {
   getAgentPreferenceSummary,
@@ -168,6 +148,36 @@ import {
   persistLearnerAgentUserTurnMessage,
   retrieveLearnerAgentMemory,
 } from "../agent-tools/conversation-context-routes.js";
+
+import {
+  INSTRUCTOR_TOOLS, openAiInstructorTools, openAiChatTools,
+  isSideEffecting, PARALLEL_CALL_BARRIERS, PARALLEL_READ_BATCH,
+  DECIDED_CONFIRM_STATUSES, PARALLEL_READS_NOTE, STEP_NARRATION_NOTE, asToolError,
+  selfToolDeps, toolAudience, SELF_TOOLING_ROLES,
+  getMyLearningSessionsTool, getPastQuestionPracticeTool, getWeakTopicsTool,
+  listMyGoalsTool, listTasksTool, searchMyLibraryTool,
+  executeChatTool, registerChatToolFallback, CHAT_TOOL_NOT_HANDLED,
+  applyMergedDomain, dispatchMerged, applyChatsMerge, applyLibraryMerge,
+  inspectResult, lastAgentText, latestUserText, unsaidActivityFields, clarify, shouldPlanFirst,
+  actionBasis, basisRefusal,
+  createTool, runLearnerTool, learnerToolDefs, learnerToolDefsWithAreas, forcedSelfTool, saveComputation,
+  runLibraryViewAction, runChatsViewAction,
+  mergedLibraryEnabled, LIBRARY_BASE_ACTIONS, LIBRARY_MERGED_ACTIONS,
+  mergedChatsEnabled, CHATS_BASE_ACTIONS, CHATS_MERGED_ACTIONS,
+  MERGED_DOMAINS, MERGED_DOMAIN_LIST,
+  selfToolingAllowedFor,
+  listActivityDrafts,
+  createGoal, updateGoal,
+  searchRecordChunks,
+  agentNetworkEnabled,
+} from "./chat/tool-runtime.js";
+export {
+  CHAT_TOOLS, getLearnerChatTools, INSTRUCTOR_TOOLS, openAiInstructorTools,
+  SIDE_EFFECT_TOOLS, isSideEffectingAction, isSideEffecting,
+  PARALLEL_CALL_BARRIERS, PARALLEL_READ_BATCH, DECIDED_CONFIRM_STATUSES,
+  PARALLEL_READS_NOTE, STEP_NARRATION_NOTE, selfToolDeps, chatToolBasis,
+  executeChatTool, clarify, shouldPlanFirst,
+} from "./chat/tool-runtime.js";
 
 const router     = express.Router();
 // Agent console (modules/agentConsole): a turn sent with the console's key in
@@ -297,910 +307,13 @@ async function reconstructHistoryBlocks(sessionId, topic, subject, agentName, ag
   }
 }
 
-// ─── Unified Agent Chat tools ────────────────────────────────────────────────
-// These execute against the student's real data when the agent needs them.
-
-// A recurring battle (battle/series.js): days of the week + a time, until an end date and time.
-// REPEAT_SCHEMA lives in chat/tool-catalogue-core.js with the first half of the tools.
-
-export const CHAT_TOOLS = [...CHAT_TOOLS_CORE, ...CHAT_TOOLS_REST];
-
-/** Hide feature-gated tools from the model catalogue until the matching Akoro slice is enabled. */
-export function getLearnerChatTools({ allowToolRequest = true, selfTooling = true } = {}) {
-  const enabled = {
-    // Off by default; the chat route also checks the learner allow-list
-    // (selfTooling) so the tool is never offered to anyone not on it.
-    self_tooling: selfToolingEnabled() && selfTooling,
-    blog_research: blogResearchEnabled,
-    peer_consult: peerConsultEnabled,
-    agent_network: agentNetworkEnabled,
-    concept_tracker: conceptTrackerEnabled,
-    learning_insights: learnerInsightsEnabled,
-    exam_prep_confidence: examPrepConfidenceEnabled,
-    study_prep: studyPrepEnabled,
-    durable_agent_chat_context: durableAgentChatContextEnabled,
-  };
-  return CHAT_TOOLS.filter((tool) => (!tool.featureGate || enabled[tool.featureGate] === true)
-    && (tool.name !== "submit_tool_request" || allowToolRequest));
-}
-
-/**
- * Instructor chat tools — activity creation with human-in-the-loop.
- * The agent PREPARES a draft; assigning is a human action on the preview
- * (POST /api/self-study/drafts/:id/assign), never a tool. All six workbench
- * types are draftable; battles assign through their battle form.
- */
-/* Every field any teaching tool accepts, taken from the tools' own definitions so
-   the model is told about all of them (the vocabulary count, a lesson plan's duration…) and the two can't drift.
-   Voices stay at their defaults. */
-const TEACHING_FIELD_PROPS = (() => {
-  const props = {};
-  for (const t of TEACHING_TOOLS) {
-    for (const f of t.fields) {
-      if (f.name === "voiceA" || f.name === "voiceB") continue;
-      const p = (props[f.name] ||= { label: f.label, options: f.options, tools: [], required: [] });
-      p.tools.push(t.key);
-      if (f.required) p.required.push(t.key);
-    }
-  }
-  return Object.fromEntries(Object.entries(props).map(([name, p]) => [name, {
-    type: "string",
-    description: `${name === "topic" ? "The topic" : p.label}${p.options ? ` (one of: ${p.options.join(" | ")})` : ""} — used by ${p.tools.join(", ")}${p.required.length ? `; REQUIRED for ${p.required.join(", ")}` : ""}.`,
-  }]));
-})();
-
-export const INSTRUCTOR_TOOLS = buildInstructorTools(TEACHING_TOOLS, TEACHING_FIELD_PROPS);
-
-export function openAiInstructorTools() {
-  // Kill-switch: AKORO_ACTIVITY_DRAFTS_ENABLED=false removes the draft tools
-  // everywhere at once (chat loop and gateway catalogue) without a deploy.
-  if (String(process.env.AKORO_ACTIVITY_DRAFTS_ENABLED || "").toLowerCase() === "false") return [];
-  return INSTRUCTOR_TOOLS.map((tool) => ({
-    type: "function",
-    function: { name: tool.name, description: tool.description, parameters: tool.input_schema },
-  }));
-}
-
-/* ── Learner school context (P2b directory tools) ─────────────────────────
-   The learner's school identity comes from two places: their school-management
-   enrolment (mgmt.students — the school's own roster) or their classrooms
-   (classrooms.school_id — standalone teachers have none). Read-only and
-   public-directory bounded: this answers "which school / which subjects /
-   who teaches me", never staff contact details or internal school records. */
-async function resolveLearnerSchoolContext(studentId) {
-  const ctx = { schoolId: null, school: null, classId: null, className: null, sectionName: null, classrooms: [] };
-  const { data: roster } = await db.schema("mgmt").from("students")
-    .select("school_id, class_id, section_id").eq("user_id", studentId)
-    // The school they're at NOW — not a past school (alumni / inactive).
-    .eq("status", "active")
-    .not("school_id", "is", null).limit(1).maybeSingle();
-  if (roster?.school_id) {
-    ctx.schoolId = roster.school_id;
-    ctx.classId = roster.class_id || null;
-    if (ctx.classId) {
-      const { data: classRow } = await db.schema("mgmt").from("classes")
-        .select("name").eq("id", ctx.classId).limit(1).maybeSingle();
-      ctx.className = classRow?.name || null;
-    }
-    if (roster.section_id) {
-      const { data: sectionRow } = await db.schema("mgmt").from("sections")
-        .select("name").eq("id", roster.section_id).limit(1).maybeSingle();
-      ctx.sectionName = sectionRow?.name || null;
-    }
-  }
-  const { data: memberships } = await db.from("classroom_students")
-    .select("classrooms(id, name, school_id, teacher_id)")
-    .eq("user_id", studentId).eq("status", "active").limit(25);
-  ctx.classrooms = (memberships ?? []).map((m) => m.classrooms).filter(Boolean);
-  if (!ctx.schoolId) ctx.schoolId = ctx.classrooms.map((c) => c.school_id).find(Boolean) || null;
-  if (ctx.schoolId) {
-    // Public directory fields only — the school's published identity.
-    const { data: school } = await db.from("school_profiles")
-      .select("name, description, website, logo_url, address, is_active")
-      .eq("id", ctx.schoolId).limit(1).maybeSingle();
-    if (school) ctx.school = {
-      name: school.name,
-      description: school.description || null,
-      website: school.website || null,
-      logoUrl: school.logo_url || null,
-      address: school.address || null,
-      active: Boolean(school.is_active),
-    };
-  }
-  return ctx;
-}
-
-/**
- * Tools that change something (create, send, challenge, publish…). Used to
- * flag the scratchpad, and by the agent console's DRY mode, which answers
- * these with what they WOULD do instead of doing it (lib/dryRunContext.js).
- */
-export const SIDE_EFFECT_TOOLS = ["set_agent_auto_reply", "create_task", "suggest_help", "schedule_chat_follow_up", "post_to_chat", "send_email_to_me", "create_tool", "save_computation", "cancel_scheduled_chat_follow_up", "submit_tool_request", "submit_bug_report", "prepare_activity", "revise_activity_draft",
-          "create_goal", "update_goal_progress", "save_blog_draft", "publish_blog", "update_agent_network_settings", "block_agent", "log_past_question_practice",
-          "challenge_agent", "class_battle", "post_challenge_request", "accept_challenge_request", "cancel_challenge_request", "rematch_battle", "request_guide_review", "message_agent", "reply_to_agent", "start_study_prep_session", "cancel_study_prep_session",
-          "consult_peer_agents", "discard_activity_draft", "schedule_activity_routine", "cancel_activity_routine", "run_teaching_tool"];
-/** The multi-action tools change things only on their writing actions. */
-export const isSideEffectingAction = (tool, input) =>
-  ["study_buddy", "daily_challenge", "revision_circle"].includes(tool) && !["list", "status", "ranking", "search", undefined, null, ""].includes(input?.action);
-export const isSideEffecting = (tool, input) => SIDE_EFFECT_TOOLS.includes(tool) || isSideEffectingAction(tool, input);
-
-/** Parallel read batches in the chat loop (2026-11-17): a decision's
- *  independent READ calls may run together, but these must always run one at
- *  a time, in the order the model gave them — each either changes something,
- *  depends on an earlier call's result, or changes what the rest of the turn
- *  can do. Side-effecting calls (isSideEffecting above) and tools the learner
- *  built themselves (not in the built-in catalogue) are likewise never
- *  batched. Kill switch: AKORO_PARALLEL_READS=false restores one-at-a-time
- *  execution everywhere, prompt steer included. */
-export const PARALLEL_CALL_BARRIERS = new Set([
-  UPDATE_PLAN_TOOL.name, // the plan ledger applies against earlier steps, in order
-  "await_decision", // waits on the learner's tap, then applies the frozen proposal (a change)
-  "create_tool", // its result can add a tool for the rest of the turn (__newTool)
-  "get_agent_capabilities", // its result can load an area's tools (__addTools)
-  "make_study_material", // the source cascade is a dependent chain; the taught source writes a record
-  "read_upload", "retry_extraction", "file_upload", // the upload pipeline is one stateful sequence
-  ...TALK_AFTER_TOOLS, // the owed narration line belongs between steps, in order
-]);
-/** Widest batch the loop runs at once — the reads share the database pool with every other turn. */
-export const PARALLEL_READ_BATCH = 4;
-// Confirmation statuses that mean the learner has decided: such a card is
-// never (re)written into the chat as a message artifact — its outcome is
-// the agent's narration only (Matt, 2026-11-17).
-export const DECIDED_CONFIRM_STATUSES = ["approved", "consumed", "rejected", "expired"];
-const BUILTIN_TOOL_NAMES = new Set([...CHAT_TOOLS, ...INSTRUCTOR_TOOLS].map((t) => t.name));
-/** The batching steer: appended to the system prompt per turn (never part of
- *  the golden-pinned static doctrine) and dropped when the kill switch is
- *  off, so the prompt never promises what the loop won't do. */
-export const PARALLEL_READS_NOTE = "\n\n## Gathering what you need\nWhen your answer needs several independent lookups (progress, goals, tasks, sessions, weak topics, the Library), ask for them all in ONE reply — put every independent read in the same response instead of one per turn. They run together, and you answer sooner with fewer steps. Call one at a time only when a later call needs an earlier call's result, or when a call changes something: changes always go one by one, in order.";
-export const STEP_NARRATION_NOTE = "\n\n## Narrating your work\nKeep the learner informed while you work, in your own words. With every reply that calls tools, include one short sentence saying what you are doing and why — as you start the step, not after the whole job is done. When a step's results come back and you go on to another step, first say in one short sentence what that step found or changed. If a step fails, say that in one short sentence too, with what you are doing about it — never let a step pass in silence. These lines appear between your steps in the chat, so keep each to a single plain sentence, specific to what is actually happening (name the thing you are checking, drafting or changing). Do not narrate a step you are not taking, do not repeat a line you already said, and keep your final answer as the summary of the outcome — it does not need to repeat the step lines. The sentence must ride in the SAME reply as the tool call it describes: a reply with no tool call ends your turn, so never send the sentence on its own. The same goes for deferrals and admissions: do not end a reply by promising to check or run something next, or by reporting that the work was not done and asking to be asked again — if this turn's work can be done, do it in this turn.";
-
-/** A read helper that throws reaches the model as {error} naming what failed,
- *  not the loop's generic "could not be completed". */
-const asToolError = (what) => (e) => ({ error: `Couldn't load ${what} just now${e?.message ? ` (${String(e.message).slice(0, 120)})` : ""}.` });
-
-/** What create_tool needs from the chat: built-in names (never shadowed) and a runner for capabilities. */
-/** `role`: "student" (learner tools) or "instructor" (instructor tools, S7) — capabilities run as that role. */
-export function selfToolDeps(userId, role = "student") {
-  return {
-    builtIn: new Set([...CHAT_TOOLS, ...INSTRUCTOR_TOOLS].map((t) => t.name)),
-    callCapability: (tool, args) => executeChatTool(tool, args, userId, { role, channel: "self_tooling" }),
-  };
-}
-/** Which tools a role's agent builds (S7): instructors build instructor tools; everyone else learner tools. */
-const toolAudience = (role) => (role === "instructor" ? "instructor" : "learner");
-const SELF_TOOLING_ROLES = new Set(["student", "instructor"]);
-
-/**
- * Asked or inferred (Phase 18 item 6, agent-runtime/actionBasis.js). Every
- * caller of a chat tool acts for a person who asked: a chat message, an
- * Approve / Confirm tap, an admin's check, the agent console — so the default
- * is explicit. Work the agent started itself passes { basis: "inferred", rule };
- * a call made inside other work (a learner's own tool running a capability)
- * inherits that work's basis. An inferred change with no rule is refused.
- */
-export function chatToolBasis({ basis = null, rule = null } = {}) {
-  const given = basis == null ? null : typeof basis === "string" ? { basis, rule } : { ...basis, ...(rule ? { rule } : {}) };
-  return actionBasis(given) || currentActionBasis() || { basis: "explicit", rule: null };
-}
-
-/** The library content search (the platform `search` action of the merged
- *  library tool, and the legacy search_my_library tool): the learner's own
- *  records only — chunk search plus a name match, reader-link shaped. */
-async function getMyLearningSessionsTool(studentId) {
-      try {
-        // The learner's own learning agent (one per learner, edu.student_agents).
-        const { data: agentRow } = await db.schema("edu").from("student_agents")
-          .select("id, name, level, total_sessions, total_turns, knowledge_score, subjects_learned")
-          .eq("student_id", studentId).limit(1).maybeSingle();
-        if (!agentRow?.id) return {
-          agent: null, subjects: [], recentSessions: [], recentLearning: [],
-          note: "This learner has no learning agent yet — it grows when they teach it in a learning session. Say exactly that; never invent subjects or topics.",
-        };
-        // What the learner has actually taught their agent, grouped by subject.
-        const { data: knowledge, error: kErr } = await db.schema("edu").from("agent_knowledge")
-          .select("subject, topic, confidence").eq("agent_id", agentRow.id).limit(400);
-        if (kErr) return { error: "Could not load your learning history: " + kErr.message };
-        const rowsBySubject = new Map();
-        for (const row of knowledge ?? []) {
-          const subject = row.subject || "General";
-          if (!rowsBySubject.has(subject)) rowsBySubject.set(subject, []);
-          rowsBySubject.get(subject).push(row);
-        }
-        const subjects = [];
-        for (const [subject, rows] of [...rowsBySubject.entries()].slice(0, 10)) {
-          const avg = rows.length ? rows.reduce((s, r) => s + (Number(r.confidence) || 0), 0) / rows.length : 0;
-          const mastery = await subjectMastery(agentRow.id, subject).catch(() => null);
-          const topics = [...new Map(rows.map((r) => [(r.topic || "").toLowerCase().trim(), r])).values()]
-            .slice(0, 6)
-            .map((r) => ({ topic: r.topic, confidence: Math.round((Number(r.confidence) || 0) * 100) + "%" }));
-          subjects.push({
-            subject, level: mastery?.level ?? null,
-            knowledgeItems: rows.length, avgConfidence: Math.round(avg * 100) + "%",
-            topics,
-          });
-        }
-        // The learning sessions themselves (the protégé teaching sessions).
-        const { data: sessions, error: sErr } = await db.schema("edu").from("adaptive_sessions")
-          .select("subject, topic, status, current_phase, started_at, completed_at")
-          // Never-started sessions have no started_at — nulls last, or they
-          // fill every "recent" slot ahead of the real ones.
-          .eq("student_id", studentId).order("started_at", { ascending: false, nullsFirst: false }).limit(8);
-        if (sErr) return { error: "Could not load your learning sessions: " + sErr.message };
-        // What the most recent sessions actually achieved.
-        const { data: deltas } = await db.schema("edu").from("session_knowledge_delta")
-          .select("subject, topic, concepts_learned, xp_earned, started_at")
-          .eq("agent_id", agentRow.id).order("started_at", { ascending: false }).limit(5);
-        return {
-          agent: {
-            name: agentRow.name || "My Learning Agent",
-            level: agentRow.level ?? 1,
-            totalSessions: agentRow.total_sessions ?? 0,
-            totalTurns: agentRow.total_turns ?? 0,
-            knowledgeScore: Number(agentRow.knowledge_score) || 0,
-            subjectsLearned: agentRow.subjects_learned ?? [],
-          },
-          subjects,
-          recentSessions: (sessions ?? []).map((s) => ({
-            subject: s.subject, topic: s.topic, status: s.status,
-            phase: s.current_phase, startedAt: s.started_at, completedAt: s.completed_at,
-          })),
-          recentLearning: (deltas ?? []).map((d) => ({
-            subject: d.subject, topic: d.topic,
-            conceptsLearned: Array.isArray(d.concepts_learned) ? d.concepts_learned.length : 0,
-            xpEarned: Number(d.xp_earned) || 0, at: d.started_at,
-          })),
-          note: "This is what the learner has actually learnt by teaching their agent — the school's subject CATALOGUE is a different question (list_school_subjects).",
-        };
-      } catch (error) { return { error: error.message || "Could not load your learning sessions right now" }; }
-}
-async function getPastQuestionPracticeTool(studentId, input) {
-      try {
-        let q = db.schema("edu").from("past_question_attempts")
-          .select("exam, subject, year, attempted, correct, created_at").eq("user_id", studentId)
-          .order("created_at", { ascending: false }).limit(1000);
-        if (input?.subject) q = q.ilike("subject", String(input.subject).trim());
-        if (input?.exam) q = q.ilike("exam", String(input.exam).trim());
-        const days = Number(input?.days);
-        if (Number.isFinite(days) && days > 0) q = q.gte("created_at", new Date(Date.now() - days * 86_400_000).toISOString());
-        const { data, error } = await q;
-        if (error) return { error: "Couldn't load your past-question practice just now." };
-        const groups = new Map();
-        for (const r0 of data ?? []) {
-          const k = `${r0.exam}|${r0.subject || "—"}`;
-          const g = groups.get(k) || { exam: r0.exam, subject: r0.subject || null, attempted: 0, correct: 0, years: new Set(), lastPractised: r0.created_at };
-          g.attempted += Number(r0.attempted) || 0; g.correct += Number(r0.correct) || 0;
-          if (r0.year) g.years.add(r0.year);
-          if (r0.created_at > g.lastPractised) g.lastPractised = r0.created_at;
-          groups.set(k, g);
-        }
-        const bySubject = [...groups.values()].map((g) => ({
-          exam: g.exam, subject: g.subject, attempted: g.attempted, correct: g.correct,
-          accuracy: g.attempted ? `${Math.round((g.correct / g.attempted) * 100)}%` : null,
-          years: [...g.years].sort(), lastPractised: g.lastPractised,
-        })).sort((a, b) => b.attempted - a.attempted);
-        const attempted = bySubject.reduce((n, g) => n + g.attempted, 0);
-        const correct = bySubject.reduce((n, g) => n + g.correct, 0);
-        return bySubject.length
-          ? { bySubject, totals: { attempted, correct, accuracy: attempted ? `${Math.round((correct / attempted) * 100)}%` : null, sessions: (data ?? []).length } }
-          : { bySubject: [], totals: { attempted: 0, correct: 0 }, message: "No past-question practice recorded yet." };
-      } catch (error) { return asToolError("your past-question practice")(error); }
-}
-async function getWeakTopicsTool(studentId, input) {
-      const { data: agentRow } = await db.schema("edu").from("student_agents")
-        .select("id").eq("student_id", studentId).single();
-      if (!agentRow) return { weak_topics: [], message: "No knowledge profile yet — start a session!" };
-      // What the learner has taught their agent (agent_knowledge — the same
-      // store as the knowledge map and learning sessions), weakest first. It
-      // read the learner's saved notes instead, where confidence defaults to
-      // 60%, so "my weak topics" came back empty next to a map showing some.
-      let q = db.schema("edu").from("agent_knowledge")
-        .select("topic, subject, confidence")
-        .eq("agent_id", agentRow.id).order("confidence", { ascending: true }).limit(60);
-      if (input.subject) q = q.ilike("subject", String(input.subject).trim());
-      const { data, error } = await q;
-      if (error) return { error: "Couldn't load your topics just now." };
-      const seen = new Set();
-      const weak = (data ?? []).filter((t) => (Number(t.confidence) || 0) < 0.6)
-        .filter((t) => { const k = `${t.subject}|${String(t.topic || "").toLowerCase().trim()}`; if (seen.has(k)) return false; seen.add(k); return true; })
-        .slice(0, 8)
-        .map((t) => ({ topic: t.topic, subject: t.subject, confidence: Math.round((Number(t.confidence) || 0) * 100) + "%" }));
-      return weak.length ? { weak_topics: weak } : { weak_topics: [], message: (data ?? []).length ? "Nothing weak right now — every topic you've taught is above 60%." : "Nothing taught yet in that subject." };
-}
-async function listMyGoalsTool(studentId) {
-  try {
-    const { goals, error } = await listGoals(studentId);
-    if (error) return { error };
-    return {
-      count: (goals ?? []).length,
-      goals: (goals ?? []).map((g) => ({
-        goalId: g.id, title: g.title, status: g.status, category: g.category,
-        metric: g.metric, exam: g.exam, targetDate: g.target_date,
-        progressNote: g.progress_note, updatedAt: g.updated_at,
-      })),
-    };
-  } catch (error) {
-    return { error: error.message || "Could not load the goals" };
-  }
-}
-async function listTasksTool(studentId) {
-  const { data, error } = await db.from("tasks")
-    .select("id, title, priority, status, payload, due_at, created_at")
-    .eq("creator_id", studentId).eq("status", "pending")
-    .order("created_at", { ascending: false }).limit(50);
-  if (error) return { error: "Couldn't load your tasks just now." };
-  // Sorted by priority (as described), then soonest due — over all pending
-  // tasks, not just the 10 newest.
-  const rank = { urgent: 0, high: 1, medium: 2, low: 3 };
-  const tasks = (data ?? []).sort((a, b) => (rank[a.priority] ?? 2) - (rank[b.priority] ?? 2)
-    || String(a.due_at || "9999").localeCompare(String(b.due_at || "9999"))).slice(0, 10);
-  return { tasks, count: data?.length ?? 0 };
-}
-async function searchMyLibraryTool(studentId, input) {      // The learner's own records only (searchRecordChunks is user-scoped), plus a name match.
-      const q = String(input?.query || "").trim().slice(0, 200);
-      if (q.length < 3) return { records: [], note: "Give a topic or document name to look for." };
-      try {
-        const [hits, named] = await Promise.all([
-          searchRecordChunks({ userId: studentId, q, limit: 12 }).catch(() => []),
-          db.schema("edu").from("records").select("id, name").eq("user_id", studentId).is("deleted_at", null).ilike("name", `%${q.replace(/[%_]/g, "")}%`).limit(5)
-            .then((r) => r.data || []).catch(() => []),
-        ]);
-        const byId = new Map();
-        for (const n of named) byId.set(n.id, { recordId: n.id, name: n.name, snippet: null });
-        // A passage for a document also found by name fills it in (it used to be dropped as a
-        // duplicate, so "what do my Cell notes say about…" came back with no passage at all).
-        for (const h of hits) {
-          if (!h.recordId) continue;
-          const known = byId.get(h.recordId);
-          if (!known) byId.set(h.recordId, { recordId: h.recordId, name: h.name, snippet: h.snippet || null, page: h.pageNumber ?? null });
-          else if (!known.snippet && h.snippet) Object.assign(known, { snippet: h.snippet, page: h.pageNumber ?? null });
-        }
-        // Found by name only: look inside it for the question (works without embeddings too — lexical).
-        const words = q.replace(/[^\p{L}\p{N}\s]/gu, " ").split(/\s+/).filter((w) => w.length > 3).slice(0, 8).join(" ");
-        await Promise.all([...byId.values()].filter((r) => !r.snippet && words).slice(0, 2).map(async (r) => {
-          const inside = await searchRecordChunks({ userId: studentId, q: words, limit: 2, recordId: r.recordId }).catch(() => []);
-          if (inside[0]?.snippet) Object.assign(r, { snippet: inside[0].snippet, page: inside[0].pageNumber ?? null });
-        }));
-        const tool = ["quiz", "flashcards", "summary", "notes", "podcast"].includes(input?.tool) ? input.tool : null;
-        const records = [...byId.values()].slice(0, 5).map((r) => (tool ? { ...r, tool } : r));
-        return records.length
-          ? { records, ...(!tool && records.every((r) => !r.snippet) ? { note: "None of their passages matched the question — say that, and offer to open the document in the reader (it reads all of it). Never say you can't read or see inside their documents." } : {}),
-            ...(tool ? { note: `Each link opens the document in the reader on its ${tool} tool, which builds it from the whole document — point them there in one line; don't write the ${tool} in chat, don't comment on the document's title or contents, and don't say what you can or can't see inside it (the reader reads all of it).` } : {}) }
-          : { records: [], note: "Nothing in their Library matches — say so; don't invent a document." };
-      } catch (error) { return { error: "Their Library is unavailable right now" }; }
-}
-
-export async function executeChatTool(name, input, studentId, options = {}) {
-  const b = chatToolBasis(options);
-  const refused = isSideEffecting(name, input) ? basisRefusal(b, { action: name }) : null;
-  if (refused) return { success: false, code: refused.code, error: refused.message };
-  // The writers below (the self-tooling audit, change cards) read it from the scope.
-  return withActionBasis(b, () => runChatTool(name, input, studentId, options));
-}
-
-async function runChatTool(name, input, studentId, { conversationId = null, role = "student", channel = "ai_chat" } = {}) {
-  // Agent console, DRY mode: anything that would change data is answered with
-  // what it would have done — read-only tools still run for real.
-  // create_tool handles dry mode itself: it builds and verifies, but doesn't save.
-  if (isDryRun() && isSideEffecting(name, input) && name !== "create_tool") {
-    return { dryRun: true, wouldDo: name, input, note: "DRY RUN — nothing was changed. Tell the learner exactly what you would have done." };
-  }
+// The tool cases not yet extracted from this module. The dispatcher in
+// chat/tool-runtime.js calls this as its fallback; it returns
+// CHAT_TOOL_NOT_HANDLED for a name it does not own, so the runtime runs
+// the learner-built-tools branch.
+async function runChatToolRest(name, input, ctx) {
+  const { studentId, conversationId = null, role = "student", channel = "ai_chat" } = ctx;
   switch (name) {
-    // ── Instructor: activity creation, human-in-the-loop ──────────────────
-    // These prepare drafts only. Assigning is the instructor's tap on the
-    // preview (POST /api/self-study/drafts/:id/assign) — no tool reaches it.
-    case "run_teaching_tool": {
-      if (role !== "instructor") return { error: "Teaching tools are only available to instructor accounts" };
-      const { tool, ...body } = input || {};
-      try {
-        // A draft first: the instructor previews it, asks for changes (each becomes the next
-        // version) and saves it to the Library when they are happy — see teaching/toolDrafts.js.
-        const { draft, tool: def } = await createToolDraft({ instructor: { id: studentId, role }, key: tool, body, sessionId: conversationId, channel });
-        return {
-          prepared: true, draftId: draft.id, title: draft.title, type: "teaching_tool", tool: def.key, name: def.name,
-          audience: "Saved to your Library when you approve it", version: 1,
-          previewHint: "Awaiting the instructor's preview — it is NOT in the Library yet. Never say it is saved or share a link.",
-          questionsNote: "Version 1 is being written now — it appears on the Preview card in a minute. Reply with one short line saying what you are making; don't write the resource out or invent its content.",
-        };
-      } catch (e) {
-        if (e?.status === "clarify") {
-          return clarify("details", e.message, { prepared: false, error: "details_required",
-            message: "Ask the instructor the question in `question`, then call run_teaching_tool again with their answer." });
-        }
-        if (e instanceof TeachingToolError) {
-          return { prepared: false, error: e.message, code: e.code,
-            guidance: e.code === "INSUFFICIENT_COINS" ? "Tell the instructor they need to top up coins."
-              : "Tell the instructor exactly what is missing and ask for it." };
-        }
-        console.error("[run_teaching_tool] failed:", e.message);
-        return { prepared: false, error: e.message || "Could not start that just now", guidance: "Say it did not work and offer to try again." };
-      }
-    }
-    case "prepare_activity": {
-      if (role !== "instructor") return { error: "Activity preparation is only available to instructor accounts" };
-      try {
-        const { draft, audienceLabel } = await createActivityDraft({
-          instructor: { id: studentId, role }, input, sessionId: conversationId, channel,
-        });
-        const result = {
-          prepared: true, draftId: draft.id, title: draft.title, type: draft.type,
-          audience: audienceLabel, status: draft.status,
-          previewHint: "Awaiting the instructor's preview — do not claim it was assigned.",
-        };
-        if (Array.isArray(draft.payload?.versions) && draft.payload.versions.length) {
-          result.version = 1;
-          result.questionsNote = "Version 1 of the questions is being written now — it appears on the Preview card in a minute. Reply with one short line; don't list or invent the questions.";
-        }
-        if (draft.payload?.plan_status === "pending") result.planNote = "The full study plan is being generated right now — it lands in the preview moments after this reply; the objectives stay editable there.";
-        if (draft.payload?.due_notice) result.dueNote = draft.payload.due_notice;
-        return result;
-      } catch (error) {
-        if (error.status === "clarify") {
-          // The message carries a SPECIFIC question (missing audience,
-          // subject, topic, or an ambiguous class) — relay it verbatim and
-          // wait for the instructor's answer, never retry blind.
-          return clarify("details", error.message,
-            { prepared: false, error: "details_required",
-              message: "Ask the instructor the question in `question`, then call prepare_activity again with their answer." });
-        }
-        console.error("[prepare_activity] failed:", error.status || "", error.message);
-        return { prepared: false, error: error.message || "Could not prepare the draft",
-          guidance: "Tell the instructor exactly what the error says and ask for that missing detail. Never call it a technical problem and never retry unchanged." };
-      }
-    }
-    case "list_activity_drafts": {
-      if (role !== "instructor") return { error: "Activity drafts are only available to instructor accounts" };
-      try {
-        const drafts = await listActivityDrafts({ id: studentId, role });
-        return { drafts: drafts.map((d) => ({ draftId: d.id, title: d.title, type: d.type, preparedAt: d.created_at })) };
-      } catch (error) { return { error: error.message || "Could not list drafts" }; }
-    }
-    case "discard_activity_draft": {
-      if (role !== "instructor") return { error: "Activity drafts are only available to instructor accounts" };
-      try {
-        const draft = await discardActivityDraft({ id: studentId, role }, String(input?.draftId || ""));
-        return { discarded: true, draftId: draft.id, title: draft.title };
-      } catch (error) { return { discarded: false, error: error.message || "Could not discard the draft" }; }
-    }
-    case "list_my_classrooms": {
-      if (role !== "instructor") return { error: "Class lists are only available to instructor accounts" };
-      try {
-        // Ownership is teacher_id (bench + seeds) or created_by. On an env
-        // where the created_by column has not migrated in yet, the combined
-        // filter would ERROR — fall back to teacher_id rather than reporting
-        // an empty list (that fallback bug is exactly what once told an
-        // instructor with six seeded classes they had none).
-        let owned, ownedErr;
-        ({ data: owned, error: ownedErr } = await db.from("classrooms")
-          .select("id, name, description, student_limit, classroom_students(status, users ( full_name, username ))")
-          .or(`teacher_id.eq.${studentId},created_by.eq.${studentId}`).order("created_at", { ascending: true }).limit(25));
-        if (ownedErr) {
-          ({ data: owned, error: ownedErr } = await db.from("classrooms")
-            .select("id, name, description, student_limit, classroom_students(status, users ( full_name, username ))")
-            .eq("teacher_id", studentId).order("created_at", { ascending: true }).limit(25));
-        }
-        if (ownedErr) return { error: "Could not read your classes: " + ownedErr.message };
-        const shape = (c) => {
-          const active = (c.classroom_students ?? []).filter((r) => r.status === "active");
-          return {
-            id: c.id, name: c.name,
-            description: c.description || null,
-            studentLimit: c.student_limit ?? null,
-            learners: active.length,
-            students: active.slice(0, 40).map((r) => ({ fullName: r.users?.full_name || null, username: r.users?.username || null })),
-          };
-        };
-        if ((owned ?? []).length) return { classrooms: owned.map(shape) };
-        // School admins may not own classrooms directly — try the school scope.
-        const { data: school } = await db.from("school_profiles")
-          .select("id").eq("admin_user_id", studentId).limit(1).maybeSingle();
-        if (school?.id) {
-          const { data: scoped, error: scopedErr } = await db.from("classrooms")
-            .select("id, name, description, student_limit, classroom_students(status, users ( full_name, username ))")
-            .eq("school_id", school.id).order("created_at", { ascending: true }).limit(25);
-          if (scopedErr) return { error: "Could not read your school's classes: " + scopedErr.message };
-          return { classrooms: (scoped ?? []).map(shape) };
-        }
-        return { classrooms: [] };
-      } catch (error) { return { error: error.message || "Could not list the classes" }; }
-    }
-    case "get_my_profile": {
-      if (role !== "instructor") return { error: "Your profile is only available to instructor accounts" };
-      try {
-        const { data: me, error: meErr } = await db.from("users")
-          .select("full_name, email, username, role").eq("id", studentId).maybeSingle();
-        if (meErr) return { error: "Could not load your profile: " + meErr.message };
-        let classes = null;
-        try {
-          const rooms = await instructorClassrooms(studentId);
-          classes = rooms.length;
-        } catch { /* the count is cosmetic — never fail the profile on it */ }
-        const { data: schoolRow } = await db.from("school_teachers")
-          .select("school_profiles ( name )").eq("teacher_id", studentId).limit(1).maybeSingle();
-        return {
-          profile: {
-            fullName: me?.full_name || null, email: me?.email || null,
-            username: me?.username || null, role: me?.role || null,
-            school: schoolRow?.school_profiles?.name || null,
-            classes,
-          },
-        };
-      } catch (error) { return { error: error.message || "Could not load your profile" }; }
-    }
-    case "check_activity_outcomes": {
-      if (role !== "instructor") return { error: "Activity outcomes are only available to instructor accounts" };
-      try {
-        if (input?.assignmentId) {
-          const summary = await activityOutcomeSummary({ id: studentId, role }, String(input.assignmentId));
-          if (!summary) return { error: "Activity not found among your activities" };
-          return summary;
-        }
-        const recent = await listRecentActivities({ id: studentId, role }, 5);
-        return { pickOne: true, recent: recent.map((a) => ({ assignmentId: a.id, title: a.title, type: a.type, createdAt: a.created_at })),
-          hint: "Ask the instructor which one to look at, then call again with its assignmentId." };
-      } catch (error) { return { error: error.message || "Could not read the outcomes" }; }
-    }
-    case "schedule_activity_routine": {
-      if (role !== "instructor") return { error: "Routines are only available to instructor accounts" };
-      try {
-        const routine = await createRoutine({ id: studentId, role }, input);
-        return { scheduled: true, routineId: routine.id, title: routine.title, day: input?.day, hourUtc: routine.hour,
-          note: "Each occurrence prepares a DRAFT for review - never an automatic assignment." };
-      } catch (error) {
-        if (error.message === "audience_required") {
-          return clarify("audience", "Who is this weekly activity for - the whole class, or specific learners?",
-            { scheduled: false, error: "audience_required",
-              message: "Ask the instructor who each occurrence is for, then schedule with their answer." });
-        }
-        return { scheduled: false, error: error.message || "Could not schedule the routine" };
-      }
-    }
-    case "list_activity_routines": {
-      if (role !== "instructor") return { error: "Routines are only available to instructor accounts" };
-      try {
-        const routines = await listRoutines({ id: studentId, role });
-        return { routines: routines.map((r) => ({ routineId: r.id, title: r.title, day: r.day_of_week, hourUtc: r.hour, status: r.status, briefType: r.brief?.type })) };
-      } catch (error) { return { error: error.message || "Could not list routines" }; }
-    }
-    case "cancel_activity_routine": {
-      if (role !== "instructor") return { error: "Routines are only available to instructor accounts" };
-      try {
-        const out = await deleteRoutine({ id: studentId, role }, String(input?.routineId || ""));
-        return { cancelled: true, routineId: out.id };
-      } catch (error) { return { cancelled: false, error: error.message || "Could not cancel the routine" }; }
-    }
-    case "get_activity_draft": {
-      if (role !== "instructor") return { error: "Activity drafts are only available to instructor accounts" };
-      try {
-        const draft = await getActivityDraft({ id: studentId, role }, String(input?.draftId || ""));
-        return {
-          draftId: draft.id, status: draft.status, title: draft.title, type: draft.type,
-          subject: draft.subject, topic: draft.topic,
-          instructions: draft.payload?.instructions ?? null,
-          difficulty: draft.payload?.difficulty ?? null,
-          subtopics: draft.payload?.subtopics ?? null,
-          objectives: draft.payload?.objectives ?? null,
-          stages: draft.payload?.details?.stages ?? null,
-          scheduledHint: draft.payload?.details?.scheduled_hint ?? null,
-          // An assignment's question versions: what each is, and the newest's questions.
-          versions: Array.isArray(draft.payload?.versions) ? draft.payload.versions.map((v) => ({
-            version: v.n, status: v.status, note: v.note ?? null, edited: !!v.edited, summary: v.summary?.line ?? null,
-          })) : null,
-          latestQuestions: (() => {
-            const v = [...(draft.payload?.versions || [])].reverse().find((x) => x.status === "ready");
-            return v ? (v.paper?.questions || []).map((q, i) => `Q${i + 1} [${q.type || (q.options ? "MCQ" : "open")}${q.figure ? ", diagram" : ""}] ${String(q.q).slice(0, 140)}`) : null;
-          })(),
-          audience: draft.audience ?? null,
-          ...(draft.type === "teaching_tool" ? {
-            tool: draft.payload?.tool ?? null,
-            latestResult: (() => {
-              const v = [...(draft.payload?.versions || [])].reverse().find((x) => x.status === "ready");
-              return v?.result ? v.result.entries.map((e) => e.title).filter(Boolean).slice(0, 12) : null;
-            })(),
-          } : {}),
-        };
-      } catch (error) { return { error: error.message || "Could not read the draft" }; }
-    }
-    case "revise_activity_draft": {
-      if (role !== "instructor") return { error: "Activity drafts are only available to instructor accounts" };
-      try {
-        const { draft, applied, version } = await reviseDraftPayload({ id: studentId, role }, String(input?.draftId || ""), input);
-        return {
-          revised: true, draftId: draft.id, title: draft.title, type: draft.type,
-          audience: draft.audience?.label ?? null, applied,
-          ...(version ? { version, questionsNote: `Version ${version} is being written now from the instructor's follow-up — it appears as a new tab in the preview. Reply with one short line.` } : {}),
-          changeNote: String(input?.changeNote || "").slice(0, 200) || null,
-          previewHint: "The updated draft is awaiting the instructor's preview again — still not assigned.",
-        };
-      } catch (error) { return { revised: false, error: error.message || "Could not revise the draft" }; }
-    }
-    case "get_agent_capabilities": {
-      // Area loading (runtime selection): with { area }, load that area's
-      // tools into this conversation and hand their defs back (__addTools)
-      // so this same turn can use them.
-      const wantArea = String(input?.area || "").trim().toLowerCase();
-      if (wantArea) {
-        if (!AREAS[wantArea]) return { error: `Unknown area "${wantArea}". Areas: ${Object.keys(AREAS).join(", ")}.` };
-        stickyAreasFor(conversationId).add(wantArea);
-        const builtIns = openAiChatTools().filter((t) => toolArea(t.function.name) === wantArea);
-        const { defs: ownDefs, areas: ownAreas } = await learnerToolDefsWithAreas(studentId, role === "instructor" ? "instructor" : "learner").catch(() => ({ defs: [], areas: new Map() }));
-        let adds = [...builtIns, ...ownDefs.filter((d) => ownAreas.get(d.function.name) === wantArea)];
-        if (role === "instructor") {
-          // Instructor catalogue: their built-ins in the area (the learner
-          // builtIns above are not theirs), plus their own tools, with the
-          // merged instructor domains assembled when activities load.
-          adds = [...openAiInstructorTools().filter((t) => toolArea(t.function.name) === wantArea),
-            ...ownDefs.filter((d) => ownAreas.get(d.function.name) === wantArea)];
-          if (wantArea === "activities") {
-            adds = await applyMergedDomain(adds, studentId, MERGED_DOMAINS.my_classes, ["list_my_classrooms"], true);
-            adds = await applyMergedDomain(adds, studentId, MERGED_DOMAINS.my_class_students, [], true);
-            adds = await applyMergedDomain(adds, studentId, MERGED_DOMAINS.my_activities, [], true);
-            adds = await applyMergedDomain(adds, studentId, MERGED_DOMAINS.my_activity_results, ["check_activity_outcomes"], true);
-            adds = await applyMergedDomain(adds, studentId, MERGED_DOMAINS.my_activity_drafts, ["list_activity_drafts", "get_activity_draft"], true);
-          }
-        }
-        else if (wantArea === "files" && role !== "instructor") adds = await applyLibraryMerge(adds, studentId, true);
-        else if (wantArea === "chats" && role !== "instructor") adds = await applyChatsMerge(adds, studentId, true);
-        else if (wantArea === "plans" && role !== "instructor") { adds = await applyMergedDomain(adds, studentId, MERGED_DOMAINS.my_tasks, ["list_tasks"], true); adds = await applyMergedDomain(adds, studentId, MERGED_DOMAINS.my_goals, ["list_my_goals"], true); }
-        else if (wantArea === "teaching" && role !== "instructor") { adds = await applyMergedDomain(adds, studentId, MERGED_DOMAINS.my_study_notes, ["search_my_study_knowledge"], true); adds = await applyMergedDomain(adds, studentId, MERGED_DOMAINS.my_study_sessions, ["get_my_learning_sessions"], true); }
-        else if (wantArea === "progress" && role !== "instructor") { adds = await applyMergedDomain(adds, studentId, MERGED_DOMAINS.my_past_questions, ["get_past_question_practice"], true); adds = await applyMergedDomain(adds, studentId, MERGED_DOMAINS.my_weak_topics, ["get_weak_topics"], true); }
-        return { loaded: wantArea, areaLabel: AREAS[wantArea], tools: adds.map((d) => d.function.name),
-          note: `The ${AREAS[wantArea]} tools are loaded for this conversation now — continue the learner's request with them.`,
-          __addTools: adds };
-      }
-      // Default-on keys consult the kill-switch semantics, not strict equality,
-      // so the card must never deny an ability the runtime has.
-      const enabled = (key) => ["AKORO_EXAM_PREP_CONFIDENCE_ENABLED", "AKORO_ADAPTIVE_WORKFLOWS_ENABLED", "AKORO_STUDY_PREP_ENABLED"].includes(key)
-        ? String(process.env[key] ?? "true").toLowerCase() !== "false"
-        : String(process.env[key] || "").toLowerCase() === "true";
-      return {
-        areas: Object.entries(AREAS).map(([id, label]) => ({ id, label })),
-        sections: [
-          { title: "Study support", items: ["Explain and quiz you on what you have taught it — it is your protégé", "Tell you honestly what you haven\u2019t taught it yet, point you to sources and ask you to teach it", "Ask NaNa, its teaching guide, when you insist on something it wasn\u2019t taught (and say so)", "Help draft and improve study notes, essays, and revision plans", "Show safe study profile, learning overview, knowledge-map, saved-study-knowledge, guide-preference, and Online/Offline status when asked",
-            // same default-on semantics as the tool's featureGate
-            ...(String(process.env.AKORO_AGENT_PEER_CONSULT_ENABLED ?? "true").toLowerCase() !== "false"
-              ? ["Ask other learners\u2019 study agents for fresh ideas when you\u2019re stuck \u2014 only your question travels, never your data"] : [])] },
-          { title: "School", items: ["Show your school and class, its subjects, and your teachers — and find a teacher by name or subject"] },
-          ...(agentNetworkEnabled ? [{ title: "Battles and other agents", items: [
-            "Find your battles and the daily battle, and show your XP and rank",
-            "Search for other learners' agents (online now, by subject, school, exam…) and their challenge requests",
-            "Challenge agents, post or accept a challenge request, rematch — only when you ask",
-            "Message or consult other agents, check your agent's inbox, and reply — only when you ask",
-            "Study buddies, the daily battle, revision circles and the weekly league",
-          ] }] : []),
-          { title: "Organisation", items: ["Create learner-owned study tasks when explicitly asked", "Schedule a future chat message when explicitly asked", "Show due tasks and recorded learning progress", "Save, update and track study goals when explicitly asked", "Show the suggestions from its background reviews waiting in the inbox", "Draft, save and publish the learner\u2019s blog posts when explicitly asked"] },
-          { title: "Learning tools", items: [
-            ...(enabled("AKORO_STUDY_PREP_ENABLED") ? ["Plan a study-prep session for a test or exam — a plan card you approve before anything starts"] : []),
-            "Show your past and recent learning sessions",
-            ...(enabled("AKORO_EXAM_PREP_CONFIDENCE_ENABLED") ? ["Show generated exam-style practice and workflow status; these are not historical past papers"] : []),
-            ...(enabled("AKORO_CONCEPT_TRACKER_ENABLED") ? ["Show approved-concept progress, resume points, and clearable confusion notes"] : []),
-            ...(enabled("AKORO_LEARNER_INSIGHTS_ENABLED") ? ["Explain a bounded, expiry-aware learning-insights summary"] : []),
-            // Consult the REAL gate (default-on), not a strict env-equality
-            // check — the card must never deny an ability the runtime has.
-            ...(durableAgentChatContextEnabled ? ["Remember across chats — this conversation and the learner\u2019s saved study context are available to you (they can clear it any time)"] : []),
-          ] },
-          { title: "Limits", items: ["Asks a clarifying question when a tool needs a detail you did not give — it never guesses values", "Read supported files attached to this chat", "Generated questions are not historical past papers", "Can submit an admin feature request only after you explicitly ask", "Research from Akoro\u2019s own blog (search_blog_posts / read_blog_post) \u2014 do not browse the live web, access private account secrets, or take unrequested actions"] },
-        ].filter((section) => section.items.length),
-      };
-    }
-    case "get_learner_context":
-      return getLearnerProfileContext(studentId).catch(asToolError("your profile"));
-    case "check_progress": {
-      const { data: enrollments } = await db.from("enrollments")
-        .select("course_id, progress, courses!inner(title, subject, slug)")
-        .eq("user_id", studentId).eq("status", "active");
-      // The OVERALL row — the table has one per scope (global/course/classroom).
-      const { data: xpRow } = await db.from("xp_leaderboard")
-        .select("total_xp, rank").eq("user_id", studentId).eq("scope", "global").limit(1);
-      return {
-        courses:  (enrollments ?? []).map(e => ({ title: e.courses?.title, subject: e.courses?.subject, progress: e.progress ?? 0, slug: e.courses?.slug || null })),
-        total_xp: xpRow?.[0]?.total_xp ?? 0,
-        rank:     xpRow?.[0]?.rank ?? "—",
-      };
-    }
-    case "get_progress_overview": {
-      // The progress bundle in ONE call (2026-11-17): the four reads a
-      // "how am I doing?" answer needs, run together server-side. Each part
-      // keeps the shape its own tool returns; a part that fails carries its
-      // error in place so the rest still answer.
-      const part = async (tool) => {
-        try { return await runChatTool(tool, {}, studentId, { conversationId, role, channel }); }
-        catch { return { error: "Couldn't load this part just now." }; }
-      };
-      const [progress, overview, ranking, knowledgeMap] = await Promise.all([
-        part("check_progress"), part("get_learning_overview"), part("get_ranking"), part("get_knowledge_map"),
-      ]);
-      return { progress, overview, ranking, knowledgeMap };
-    }
-    case "get_my_school": {
-      try {
-        const ctx = await resolveLearnerSchoolContext(studentId);
-        // No school anywhere: the honest answer is "none is linked" — the
-        // agent says exactly that instead of inventing a school.
-        return {
-          school: ctx.school,
-          className: ctx.className,
-          sectionName: ctx.sectionName,
-          classrooms: ctx.classrooms.map((c) => c.name),
-        };
-      } catch (error) { return { error: error.message || "Could not load your school right now" }; }
-    }
-    case "list_school_subjects": {
-      try {
-        const ctx = await resolveLearnerSchoolContext(studentId);
-        if (!ctx.schoolId) {
-          // No school link: the only honest subject signal is what the
-          // learner's own classroom teachers declare.
-          const subjects = [];
-          const teacherIds = [...new Set(ctx.classrooms.map((c) => c.teacher_id).filter(Boolean))];
-          if (teacherIds.length) {
-            const { data: profiles } = await db.schema("edu").from("teacher_profiles")
-              .select("teacher_id, teacher_name, subject").in("teacher_id", teacherIds);
-            const byTeacher = new Map((profiles ?? []).map((p) => [p.teacher_id, p]));
-            for (const room of ctx.classrooms) {
-              const profile = room.teacher_id ? byTeacher.get(room.teacher_id) : null;
-              if (profile?.subject) subjects.push({ name: profile.subject, teacher: profile.teacher_name || null, class: room.name });
-            }
-          }
-          return { subjects, source: "classroom teachers",
-            note: "No school is linked to this learner, so this list comes from their classroom teachers only — say that when you use it." };
-        }
-        const { data: schoolSubjects, error: subjErr } = await db.schema("mgmt").from("subjects")
-          .select("id, name, code, subject_type").eq("school_id", ctx.schoolId).order("name").limit(60);
-        if (subjErr) return { error: "Could not load the school's subjects: " + subjErr.message };
-        let classSubjects = null;
-        if (ctx.classId) {
-          const { data: assigned, error: assignedErr } = await db.schema("mgmt").from("class_subjects")
-            .select("subject_id, teacher_id, is_elective").eq("class_id", ctx.classId).limit(60);
-          if (!assignedErr && (assigned ?? []).length) {
-            const subjById = new Map((schoolSubjects ?? []).map((s) => [s.id, s]));
-            const teacherIds = [...new Set(assigned.map((r) => r.teacher_id).filter(Boolean))];
-            // An empty .in() is not a valid PostgREST filter — guard it.
-            const teacherRows = teacherIds.length
-              ? (await db.from("users").select("id, full_name").in("id", teacherIds)).data
-              : [];
-            const nameById = new Map((teacherRows ?? []).map((u) => [u.id, u.full_name]));
-            classSubjects = assigned
-              .map((r) => ({
-                subject: subjById.get(r.subject_id)?.name || null,
-                elective: Boolean(r.is_elective),
-                teacher: r.teacher_id ? (nameById.get(r.teacher_id) || null) : null,
-              }))
-              .filter((s) => s.subject);
-          }
-        }
-        return {
-          school: ctx.school?.name || null,
-          class: ctx.className ? (ctx.sectionName ? `${ctx.className} ${ctx.sectionName}` : ctx.className) : null,
-          subjects: (schoolSubjects ?? []).map((s) => ({ name: s.name, code: s.code || null, type: s.subject_type || "core" })),
-          classSubjects,
-          note: classSubjects ? "subjects = the whole school; classSubjects = the learner's own class." : null,
-        };
-      } catch (error) { return { error: error.message || "Could not load the school's subjects right now" }; }
-    }
-    case "list_my_teachers": {
-      try {
-        const ctx = await resolveLearnerSchoolContext(studentId);
-        const teachers = [];
-        const seen = new Set();
-        const push = (fullName, subject, teaches) => {
-          if (!fullName) return;
-          const key = `${fullName}|${subject || ""}`;
-          if (seen.has(key)) return;
-          seen.add(key);
-          teachers.push({ fullName, subject: subject || null, teaches: teaches || null });
-        };
-        const classroomTeacherIds = [...new Set(ctx.classrooms.map((c) => c.teacher_id).filter(Boolean))];
-        if (classroomTeacherIds.length) {
-          const { data: rows } = await db.from("users").select("id, full_name").in("id", classroomTeacherIds);
-          const { data: profiles } = await db.schema("edu").from("teacher_profiles")
-            .select("teacher_id, teacher_name, subject").in("teacher_id", classroomTeacherIds);
-          const profileBy = new Map((profiles ?? []).map((p) => [p.teacher_id, p]));
-          const nameBy = new Map((rows ?? []).map((u) => [u.id, u.full_name]));
-          for (const room of ctx.classrooms) {
-            const profile = room.teacher_id ? profileBy.get(room.teacher_id) : null;
-            push(nameBy.get(room.teacher_id) || profile?.teacher_name || null, profile?.subject || null, room.name);
-          }
-        }
-        if (ctx.classId && ctx.schoolId) {
-          const { data: assigned } = await db.schema("mgmt").from("class_subjects")
-            .select("subject_id, teacher_id").eq("class_id", ctx.classId).limit(60);
-          const rows = (assigned ?? []).filter((r) => r.teacher_id);
-          if (rows.length) {
-            const { data: subjRows } = await db.schema("mgmt").from("subjects")
-              .select("id, name").eq("school_id", ctx.schoolId).limit(100);
-            const subjBy = new Map((subjRows ?? []).map((s) => [s.id, s.name]));
-            const { data: users } = await db.from("users")
-              .select("id, full_name").in("id", [...new Set(rows.map((r) => r.teacher_id))]);
-            const nameBy = new Map((users ?? []).map((u) => [u.id, u.full_name]));
-            const classLabel = ctx.className ? (ctx.sectionName ? `${ctx.className} ${ctx.sectionName}` : ctx.className) : null;
-            for (const r of rows) push(nameBy.get(r.teacher_id), subjBy.get(r.subject_id) || null, classLabel);
-          }
-        }
-        return { teachers };
-      } catch (error) { return { error: error.message || "Could not load your teachers right now" }; }
-    }
-    case "find_teacher": {
-      try {
-        const name = String(input?.name || "").trim().replace(/[%_\\]/g, " ");
-        if (name.length < 2) {
-          return clarify("name", "Which teacher would you like me to find? Tell me their name — for example 'Mrs Adeyemi'.", { action: "find_teacher" });
-        }
-        const ctx = await resolveLearnerSchoolContext(studentId);
-        // Scope: the learner's school staff plus their own classroom teachers.
-        const ids = new Set(ctx.classrooms.map((c) => c.teacher_id).filter(Boolean));
-        if (ctx.schoolId) {
-          const { data: staff } = await db.from("school_teachers")
-            .select("teacher_id").eq("school_id", ctx.schoolId).limit(200);
-          for (const r of staff ?? []) if (r.teacher_id) ids.add(r.teacher_id);
-        }
-        if (!ids.size) return { matches: [], searchedFor: name,
-          note: "No teachers are linked to this learner's school or classrooms yet." };
-        const { data: users, error: usersErr } = await db.from("users")
-          .select("id, full_name").eq("role", "instructor")
-          .in("id", [...ids]).ilike("full_name", `%${name}%`).limit(5);
-        if (usersErr) return { error: "Could not search for that teacher: " + usersErr.message };
-        const matches = [];
-        for (const u of users ?? []) {
-          const { data: profile } = await db.schema("edu").from("teacher_profiles")
-            .select("teacher_name, subject").eq("teacher_id", u.id).limit(1).maybeSingle();
-          const { data: rooms } = await db.from("classrooms")
-            .select("name").eq("teacher_id", u.id).limit(10);
-          matches.push({
-            fullName: u.full_name || profile?.teacher_name || null,
-            subject: profile?.subject || null,
-            classes: (rooms ?? []).map((r) => r.name),
-            school: ctx.school?.name || null,
-          });
-        }
-        return { matches: matches.filter((m) => m.fullName), searchedFor: name };
-      } catch (error) { return { error: error.message || "Could not look up that teacher right now" }; }
-    }
-    case "get_my_learning_sessions":
-      return getMyLearningSessionsTool(studentId);
-    case "create_task": {
-      if (!input?.title || !String(input.title).trim()) {
-        return clarify("title", "What should the task be called?", { action: "create_task" });
-      }
-      try {
-        const context = await getLearnerProfileContext(studentId);
-        const taskInput = validateLearnerTaskInput(input, { defaultTimezone: context.timeZone });
-        if (taskInput.recurrenceEverySeconds && !taskInput.dueAt) {
-          return clarify("dueAt", "A repeating task needs a due time to anchor it — when should the first one be due (a date/time, or 'in 2 hours')?", { action: "create_task" });
-        }
-        const { data: agentRow } = await db.from("user_agents").select("id").eq("user_id", studentId).maybeSingle();
-        // tasks.agent_id is required — a learner who hasn't made their agent yet
-        // got a raw database error here.
-        if (!agentRow?.id) return { error: "Create your agent first (Agent tab) — tasks are kept by your agent." };
-        const { data: task, error } = await db.from("tasks").insert({
-          creator_id: studentId, agent_id: agentRow?.id,
-          title: taskInput.title, description: taskInput.description, priority: taskInput.priority,
-          status: "pending", task_type: "general",
-          payload: {
-            due: taskInput.due,
-            course: taskInput.course,
-            ...(taskInput.recurrenceEverySeconds ? { recurrence: { everySeconds: taskInput.recurrenceEverySeconds } } : {}),
-          },
-          due_at: taskInput.dueAt,
-          timezone: taskInput.timezone,
-        }).select().single();
-        if (error) return { error: error.message };
-        // This is intentionally best-effort: creating a learner-requested task
-        // never depends on Redis, and the worker re-checks the persisted opt-in.
-        try { await scheduleAutonomyReviewForTask(task); }
-        catch (autonomyError) { console.warn("[chat/create-task] autonomy schedule skipped:", autonomyError.message); }
-        global.io?.to(`user:${studentId}`).emit("task:created", task);
-        return {
-          created: true, taskId: task.id, title: task.title, description: task.description,
-          priority: task.priority, dueAt: task.due_at ?? null, timezone: task.timezone,
-          dueLocal: task.due_at ? localiseInstant(task.due_at, taskInput.timezone) : null,
-          repeatsEveryDays: taskInput.recurrenceEveryDays || null,
-          repeatsEverySeconds: taskInput.recurrenceEverySeconds || null,
-          autonomyEligible: Boolean(task.due_at && !task.is_recurring),
-        };
-      } catch (error) {
-        return { error: error.message || "Could not create the task" };
-      }
-    }
     case "consult_peer_agents": {
       const question = String(input?.question || "").trim();
       if (question.length < PEER_QUESTION_MIN || question.length > PEER_QUESTION_MAX) {
@@ -1464,7 +577,7 @@ async function runChatTool(name, input, studentId, { conversationId = null, role
         }
         // runTool must be one of THIS learner's own tools (it runs as them, read-only, at each send).
         if (input.runTool) {
-          const { listMyTools } = await import("../self-tooling/pipeline.js");
+          const { listMyTools } = await import("./chat/tool-runtime.js");
           const mine = await listMyTools(studentId).catch(() => []);
           if (!mine.some((t) => t.name === input.runTool && t.status === "active")) {
             return { error: `"${input.runTool}" isn't one of the learner's active tools — build it first with create_tool, or schedule the reminder without runTool.` };
@@ -2510,19 +1623,11 @@ async function runChatTool(name, input, studentId, { conversationId = null, role
       }
       return { error: `Unknown tool: ${name}` };
     }
-    default: {
-      // A tool the learner's agent built (self-tooling) — read-only, re-checked every call.
-      if (SELF_TOOLING_ROLES.has(role) && (await selfToolingAllowedFor(studentId))) {
-        const out = await runLearnerTool(name, input, studentId, {
-          callCapability: (tool, args) => executeChatTool(tool, args, studentId, { role, channel: "self_tooling" }),
-          conversationId, dry: isDryRun(), audience: toolAudience(role),
-        });
-        if (out) return out;
-      }
-      return { error: `Unknown tool: ${name}` };
-    }
+    default:
+      return CHAT_TOOL_NOT_HANDLED;
   }
 }
+registerChatToolFallback(runChatToolRest);
 // =============================================================
 // FORMAT HELPERS
 // =============================================================
@@ -3716,127 +2821,6 @@ async function saveMessageTrace({ messageId, userId, trace, meta = null }) {
 export const CHAT_TOOL_LOOP_MAX_ITERATIONS = 8;
 const STOPPED_REPLY = "(Stopped before finishing.)";
 
-/** The library merge at def-assembly time: drop the legacy search_my_library
- *  def and the learner's own library_documents def, and put ONE merged def in
- *  their place — base + platform actions, plus the learner's visible delta
- *  actions, minus any merged-set action they switched off. No-op when the
- *  kill switch is off. */
-async function applyMergedDomain(defs, learnerId, cfg, builtinNames, withDelta = true) {
-  if (!cfg.enabled()) return defs;
-  const st = withDelta ? await getMergedToolState(learnerId, cfg.name).catch(() => null) : null;
-  const delta = st && st.status === "active" ? cfg.deltaActions(st) : [];
-  const kept = (defs || []).filter((d) => ![...builtinNames, cfg.name].includes(d?.function?.name));
-  kept.push(cfg.def({ delta }));
-  return kept;
-}
-async function dispatchMerged(cfg, input, { studentId, platform, runDelta }) {
-  const action = String(input?.action || cfg.actionOrder[0]);
-  if (platform && platform[action]) return platform[action]();
-  if (cfg.baseActions.includes(action)) return runMergedViewAction(cfg.name, action, input, studentId);
-  const out = await runDelta();
-  if (out) return out;
-  return { error: `Unknown action "${action}" for this tool. Available: ${cfg.mergedActions.join(", ")}.` };
-}
-async function applyChatsMerge(defs, learnerId, withDelta = true) {
-  if (!mergedChatsEnabled()) return defs;
-  const st = withDelta ? await getChatsToolState(learnerId).catch(() => null) : null;
-  const delta = st && st.status === "active" ? chatsDeltaActions(st) : [];
-  const kept = (defs || []).filter((d) => !["list_chats", "search_chats", "my_chats"].includes(d?.function?.name));
-  kept.push(mergedChatsDef({ delta }));
-  return kept;
-}
-async function applyLibraryMerge(defs, learnerId, withDelta = true) {
-  if (!mergedLibraryEnabled()) return defs;
-  const st = withDelta ? await getLibraryToolState(learnerId).catch(() => null) : null;
-  const delta = st && st.status === "active" ? libraryDeltaActions(st) : [];
-  const disabled = []; // base actions are platform-owned now (My tools shows delta only); stored base toggles no longer apply
-  const kept = (defs || []).filter((d) => !["search_my_library", "library_documents"].includes(d?.function?.name));
-  kept.push(mergedLibraryDef({ delta, disabled }));
-  return kept;
-}
-
-function openAiChatTools({ allowToolRequest = true, selfTooling = true } = {}) {
-  return getLearnerChatTools({ allowToolRequest, selfTooling }).map((tool) => ({
-    type: "function",
-    function: { name: tool.name, description: tool.description, parameters: tool.input_schema },
-  }));
-}
-
-// Every tool message the model sees is a structured observation
-// (utils/toolObservation.js): REASON → ACT → OBSERVE → LLM. The guide that
-// keeps confirmations grounded lives in policies/TOOL_OBSERVATIONS.md
-// (student) / policies/HITL_DRAFTS.md (instructor) — loaded by
-// assembleChatDoctrine.
-
-/**
- * clarify — the ONE no-guess shape every tool returns when a required input
- * was never stated by the user. The model must ask the question and wait,
- * not call the tool again with an invented value. Used across every tool
- * and workflow, both roles.
- */
-/** A tool result, size-capped, for an inspected (gate/console) request. */
-function inspectResult(value) {
-  try {
-    const text = JSON.stringify(value ?? null);
-    return text.length <= 4000 ? JSON.parse(text) : { truncated: true, preview: text.slice(0, 4000) };
-  } catch { return { unserializable: true }; }
-}
-
-/** Before an activity tool runs from the instructor's chat: what the teacher never said → a clarify result, else null. */
-/** The learner's latest message in this turn's transcript (text parts only). */
-/** The agent's last reply in the kept dialogue ("" if none). */
-function lastAgentText(messages = []) {
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const m = messages[i];
-    if (m?.role !== "assistant") continue;
-    return typeof m.content === "string" ? m.content : Array.isArray(m.content) ? m.content.filter((x) => x?.type === "text").map((x) => x.text).join(" ") : "";
-  }
-  return "";
-}
-
-function latestUserText(transcript = []) {
-  for (let i = transcript.length - 1; i >= 0; i--) {
-    const m = transcript[i];
-    if (m?.role !== "user") continue;
-    return typeof m.content === "string" ? m.content : Array.isArray(m.content) ? m.content.filter((x) => x?.type === "text").map((x) => x.text).join(" ") : "";
-  }
-  return "";
-}
-
-async function unsaidActivityFields(tool, input, transcript) {
-  const { unnamedFields, askFor, teacherTextOf, knownNames, currentRequest, TYPE_LABEL } = await import("./activityFields.js");
-  let fields = null, check;
-  if (tool === "prepare_activity") { fields = input; check = ["topic", "subject", "audience"]; }
-  else if (tool === "schedule_activity_routine" && input?.brief) { fields = input.brief; check = ["topic", "subject", "audience"]; }
-  else if (tool === "revise_activity_draft" && input?.audience) { fields = { audience: input.audience }; check = ["audience"]; }
-  if (!fields) return null;
-  // The activity asked for NOW, and only what was said since asking for it: a battle's
-  // topic and class don't silently become the new assignment's (unless they say "the same").
-  const req = tool === "prepare_activity" ? currentRequest(transcript) : { type: null, text: teacherTextOf(transcript), earlier: "" };
-  if (req.type && input?.type && req.type !== input.type && !(req.type === "self_study" && input.type === "project")) {
-    return { prepared: false, error: "wrong_type", asked: req.type,
-      message: `The instructor asked for a ${TYPE_LABEL[req.type] || req.type}, not a ${TYPE_LABEL[input.type] || input.type}. Call prepare_activity with type "${req.type}" (asking first for anything they haven't said for it). Don't re-send or mention the earlier draft.` };
-  }
-  const missing = unnamedFields(fields, req.text, { known: await knownNames(db, fields), check });
-  if (!missing.length) return null;
-  // Said for an earlier activity: ask whether it's the same, rather than reuse it silently.
-  const earlier = req.earlier ? unnamedFields(fields, req.earlier, { known: await knownNames(db, fields), check: missing.map((m) => m.field) }) : missing;
-  const fromBefore = missing.filter((m) => !earlier.some((e) => e.field === m.field));
-  const value = { topic: fields.topic, subject: fields.subject, audience: fields.audience?.classroom_name || (fields.audience?.whole_class ? "the whole class" : null) };
-  const asks = missing.map((m) => (fromBefore.includes(m) && value[m.field]
-    ? { ...m, question: `Same ${m.field === "audience" ? "class" : m.field} as before (${value[m.field]}), or a different one?` } : m));
-  return clarify(missing.map((m) => m.field).join(","), askFor(asks), {
-    prepared: false, error: "details_required", unsaid: missing.map((m) => m.field),
-    message: "The instructor didn't say this. Ask them the question in `question` (in your own short words) and wait for their answer — never fill it in yourself, even when it seems obvious. Then call the tool again with what they said.",
-  });
-}
-
-export function clarify(field, question, extra = {}) {
-  return { needsClarification: true, missing: field, question, ...extra };
-}
-
-/** Phase 22 Part E: plan first when the request takes several steps and the agent is to act now (not ask, not stop). */
-export const shouldPlanFirst = (intent) => !!(intent?.multiStep && intent.next === "proceed" && ["action", "change"].includes(intent.kind));
 
 // Exported (below) for the benchmark (lib/evals/benchmark.js), which runs this same loop with stub tools.
 // `callTool` is the one seam: production executes the real tools; the benchmark passes stubs.

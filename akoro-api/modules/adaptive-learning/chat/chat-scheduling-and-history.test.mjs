@@ -6,6 +6,7 @@ import { validateFollowUpInput } from "./chat-follow-up-validation.js";
 import { validateLearnerTaskInput } from "../learner-task-validation.js";
 
 const chat = readFileSync(new URL("../chat.js", import.meta.url), "utf8");
+const toolRuntime = readFileSync(new URL("./tool-runtime.js", import.meta.url), "utf8");
 const toolCatalogue = readFileSync(new URL("./tool-catalogue-core.js", import.meta.url), "utf8");
 const followUps = readFileSync(new URL("./chat-follow-ups.js", import.meta.url), "utf8");
 const history = readFileSync(new URL("./chat-history-tools.js", import.meta.url), "utf8");
@@ -44,8 +45,8 @@ test("chat-history tools exist, are scoped to the learner, and only post_to_chat
     assert.match(toolCatalogue, new RegExp(`name: "${name}",`));
     assert.match(chat, new RegExp(`case "${name}": \\{`));
   }
-  assert.match(chat, /export const SIDE_EFFECT_TOOLS = \[[^\]]*"post_to_chat"/);
-  assert.doesNotMatch(chat.match(/export const SIDE_EFFECT_TOOLS = \[[^\]]*\]/)[0], /"list_chats"|"read_chat"/);
+  assert.match(toolRuntime, /export const SIDE_EFFECT_TOOLS = \[[^\]]*"post_to_chat"/);
+  assert.doesNotMatch(toolRuntime.match(/export const SIDE_EFFECT_TOOLS = \[[^\]]*\]/)[0], /"list_chats"|"read_chat"/);
   // every lookup is by id AND user_id
   assert.match(history, /\.eq\("id", chatId\.trim\(\)\)\.eq\("user_id", userId\)/);
   assert.match(history, /\.eq\("session_id", id\)\.eq\("user_id", userId\)/);

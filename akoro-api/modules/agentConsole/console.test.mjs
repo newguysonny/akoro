@@ -6,6 +6,7 @@ import test from "node:test";
 
 const src = await readFile(new URL("./routes.js", import.meta.url), "utf8");
 const chat = await readFile(new URL("../adaptive-learning/chat.js", import.meta.url), "utf8");
+const toolRuntime = await readFile(new URL("../adaptive-learning/chat/tool-runtime.js", import.meta.url), "utf8");
 const app = await readFile(new URL("../../app.js", import.meta.url), "utf8");
 const { runDry, isDryRun } = await import("../../lib/dryRunContext.js");
 
@@ -17,7 +18,7 @@ test("every route is behind the console key, and the console is mounted", () => 
 
 test("dry is the default; only an explicit 'live' changes data", () => {
   assert.equal((src.match(/req\.body\?\.mode === "live" \? "live" : "dry"/g) || []).length, 2);
-  assert.match(chat, /if \(isDryRun\(\) && isSideEffecting\(name, input\) && name !== "create_tool"\) \{\s*return \{ dryRun: true/);
+  assert.match(toolRuntime, /if \(isDryRun\(\) && isSideEffecting\(name, input\) && name !== "create_tool"\) \{\s*return \{ dryRun: true/);
   assert.match(chat, /const dry = safeCompare\(req\.get\("x-agent-console-dry"\), key\);/);
   assert.match(chat, /if \(dry\) \{ const inner = go; go = \(\) => runDry\(inner\); \}/);
 });

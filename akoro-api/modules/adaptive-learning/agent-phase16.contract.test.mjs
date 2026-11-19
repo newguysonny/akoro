@@ -106,9 +106,10 @@ test("recovery: the documented alternative, else say it plainly", () => {
 
 test("recovery: every fallback is a real read tool of the chat", () => {
   const chat = readFileSync(new URL("./chat.js", import.meta.url), "utf8");
+  const toolRuntime = readFileSync(new URL("./chat/tool-runtime.js", import.meta.url), "utf8");
   const toolCatalogue = readFileSync(new URL("./chat/tool-catalogue-core.js", import.meta.url), "utf8")
     + readFileSync(new URL("./chat/tool-catalogue-rest.js", import.meta.url), "utf8");
-  const side = chat.slice(chat.indexOf("export const SIDE_EFFECT_TOOLS"), chat.indexOf("export const isSideEffectingAction"));
+  const side = toolRuntime.slice(toolRuntime.indexOf("export const SIDE_EFFECT_TOOLS"), toolRuntime.indexOf("export const isSideEffectingAction"));
   for (const [from, to] of Object.entries(TOOL_FALLBACKS)) {
     assert.match(toolCatalogue, new RegExp(`name: "${to}"`), `${to} exists`);
     assert.match(toolCatalogue, new RegExp(`name: "${from}"`), `${from} exists`);

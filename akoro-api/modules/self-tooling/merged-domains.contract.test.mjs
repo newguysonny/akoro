@@ -9,6 +9,8 @@ import { MERGED_DOMAINS, MERGED_DOMAIN_LIST } from "./mergedDomains.js";
 import { presentMergedToolRow } from "./pipeline.js";
 
 const read = (rel) => readFileSync(new URL(rel, import.meta.url), "utf8");
+const runtime = read("../adaptive-learning/chat/tool-runtime.js");
+const handlers = read("../adaptive-learning/chat/handlers-instructor-learner.js");
 
 test("tasks config: merged set, order and sides", () => {
   const c = MERGED_DOMAINS.my_tasks;
@@ -114,8 +116,8 @@ test("wiring: pipeline guard loop, generic runners, registry", () => {
 
 test("wiring: chat.js assembles and dispatches merged domains generically", () => {
   const src = read("../adaptive-learning/chat.js");
-  assert.match(src, /async function applyMergedDomain/);
-  assert.match(src, /async function dispatchMerged/);
+  assert.match(runtime, /async function applyMergedDomain/);
+  assert.match(runtime, /async function dispatchMerged/);
   assert.match(src, /case "my_tasks": \{/);
   assert.match(src, /case "list_tasks":\s*\n\s*return listTasksTool\(studentId\);/);
   assert.match(src, /applyMergedDomain\(allTools, req\.user\.id, MERGED_DOMAINS\.my_tasks, \["list_tasks"\], selfToolOn\)/);
@@ -182,7 +184,7 @@ test("wiring: chat.js assembles, dispatches and area-loads the instructor merges
   assert.match(src, /executeChatTool\("get_activity_draft", \{ draftId: String\(input\?\.query \|\| ""\) \}/);
   assert.match(src, /executeChatTool\("check_activity_outcomes"/);
   // the area loader assembles the instructor merges for the activities area
-  assert.match(src, /openAiInstructorTools\(\)\.filter\(\(t\) => toolArea\(t\.function\.name\) === wantArea\)/);
+  assert.match(handlers, /openAiInstructorTools\(\)\.filter\(\(t\) => toolArea\(t\.function\.name\) === wantArea\)/);
   // runtime selection runs for instructor turns too
   assert.match(src, /else if \(role === "instructor"\) \{/);
   assert.match(src, /learnerToolDefsWithAreas\(req\.user\.id, "instructor"\)/);

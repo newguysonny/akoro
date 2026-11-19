@@ -7,6 +7,7 @@ import {
 } from "./mergedLibrary.js";
 
 const read = (rel) => readFileSync(new URL(rel, import.meta.url), "utf8");
+const runtime = read("../adaptive-learning/chat/tool-runtime.js");
 
 test("the merged def offers base + platform actions, in the runtime shape", () => {
   const def = mergedLibraryDef();
@@ -57,7 +58,7 @@ test("the kill switch defaults on and honours AKORO_MERGED_LIBRARY=false", () =>
 test("wiring: chat.js dispatches the merged tool and swaps the defs; pipeline serves view actions", () => {
   const chat = read("../adaptive-learning/chat.js");
   assert.match(chat, /case "library_documents": \{/);
-  assert.match(chat, /async function searchMyLibraryTool\(studentId, input\)/);
+  assert.match(runtime, /async function searchMyLibraryTool\(studentId, input\)/);
   assert.match(chat, /case "search_my_library":\s+return searchMyLibraryTool\(studentId, input\);/);
   assert.match(chat, /applyLibraryMerge\(allTools, req\.user\.id, selfToolOn\)/);
   assert.match(chat, /runLibraryViewAction\(action, input, studentId\)/);
