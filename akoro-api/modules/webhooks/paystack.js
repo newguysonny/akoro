@@ -32,7 +32,7 @@ import { fulfillTransferEvent } from "../courses/payouts.js";
 import { fulfillCoinTopup } from "../wallet/routes.js";
 import { fulfillVoucherWalletTopup } from "../vouchers/index.js";
 import { fulfillVoucherTransferEvent } from "../vouchers/transferEvents.js";
-import { logPaymentEvent } from "../lib/paymentAudit.js";
+import { logPaymentEvent } from "../../lib/paymentAudit.js";
 import { paystackSignatureValid } from "../../lib/safeCompare.js";
 
 const router = Router();
