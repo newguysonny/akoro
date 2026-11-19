@@ -1,5 +1,5 @@
 /**
- * adaptive-learning/chat/taskLedger.js — Agent Chat's task ledger (Grand Plan
+ * lib/taskLedger.js — Agent Chat's task ledger (Grand Plan
  * Phase 16, step 1). Pure; no db.
  *
  * The agent writes what it is trying to do — a goal and up to 8 steps — with

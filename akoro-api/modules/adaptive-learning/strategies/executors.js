@@ -276,7 +276,7 @@ export function defaultExecutorDeps({ learnerId, store, now = () => new Date().t
       const { data } = await q.order("detected_at", { ascending: false }).limit(1);
       return data?.[0]?.struggle_type || null;
     },
-    consultBreakthroughs: async (args) => (await import("../social/peerConsult.js")).consultBreakthroughs(args),
+    consultBreakthroughs: async (args) => (await import("../../../lib/peerConsult.js")).consultBreakthroughs(args),
     checkLimit: async (args) => (await import("./recommend.js")).checkStrategyLimit(args),
     recommend: async (args) => (await import("./recommend.js")).recommendStrategies(args),
     recordOutcome: async (args) => (await import("./outcomes.js")).recordStrategyOutcome(args),

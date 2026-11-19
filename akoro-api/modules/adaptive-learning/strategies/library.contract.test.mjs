@@ -129,7 +129,7 @@ test("no other strategy list is left: no module spells out three or more library
   const ids = new Set([...STRATEGY_IDS, ...Object.keys(LEGACY_ALIASES), "socratic", "chunking"]);
   const offenders = [];
   for (const file of files) {
-    if (file.endsWith(path.join("strategies", "library.js"))) continue;
+    if (file.endsWith(path.join("strategies", "library.js")) || file.endsWith(path.join("lib", "strategyLibrary.js"))) continue;
     const src = await readFile(file, "utf8");
     for (const arr of src.match(/\[[^[\]]*\]/g) || []) {
       const found = new Set([...arr.matchAll(/["'`]([a-z_]+)["'`]/g)].map((m) => m[1]).filter((w) => ids.has(w)));

@@ -9,7 +9,7 @@ import {
   selfToolDeps, runAgentToolLoop, getLearnerChatTools, SIDE_EFFECT_TOOLS,
 } from "../modules/adaptive-learning/chat.js";
 import { loadTaughtKnowledge, renderTaughtContext } from "../modules/adaptive-learning/social/protege.js";
-import { helpsOthers, conceptIdFor } from "../modules/adaptive-learning/social/peerConsult.js";
+import { helpsOthers, conceptIdFor } from "./peerConsult.js";
 import { setLearnerAutonomy, cancelAutonomyReviewForTask, scheduleAutonomyReviewForTask } from "../modules/adaptive-learning/learner/learner-autonomy.js";
 import { resolveTopics } from "../modules/adaptive-learning/study-prep/syllabus-resolver.js";
 import { collectMaterials, materialsFrom } from "../modules/adaptive-learning/chat/chat-materials.js";

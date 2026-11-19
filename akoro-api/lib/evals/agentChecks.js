@@ -14,8 +14,8 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { openai } from "../aiModel.js";
-import { actionClaimCorrection, ledgerLeftCorrection } from "../../modules/adaptive-learning/chat/turnCheck.js";
-import { applyPlanUpdate } from "../../modules/adaptive-learning/chat/taskLedger.js";
+import { actionClaimCorrection, ledgerLeftCorrection } from "../turnCheck.js";
+import { applyPlanUpdate } from "../taskLedger.js";
 import { shouldRetry, recoveryHint } from "../../modules/adaptive-learning/chat/toolRecovery.js";
 import { fitDialogue } from "../../modules/adaptive-learning/grounding/contextBudget.js";
 import { runIntentStep } from "../../modules/adaptive-learning/intent/intentStep.js";

@@ -9,7 +9,7 @@ process.env.SUPABASE_URL ||= "http://localhost:1";
 process.env.SUPABASE_SERVICE_KEY ||= "test";
 const { default: db } = await import("../../../db.js");
 const { installFakeDb } = await import("../../../lib/testing/fakeDb.mjs");
-const qs = await import("./question-signals.js");
+const qs = await import("../../../lib/questionSignals.js");
 const { readQuestionSignals } = await import("../learner/learner-model.js");
 const { makePracticeRun } = await import("../practice/service.js");
 

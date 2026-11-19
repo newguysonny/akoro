@@ -43,7 +43,7 @@ import { indexRecord } from "../records/searchLib.js";
 import { removeRecordFile } from "../records/lib/storage.js";
 import { cleanStructure, structureChips, structureMessage, structureMessages, structureSchema, STRUCTURE_LIMITS } from "./structureCore.js";
 import { folderItemForCandidate, searchTopics, shapeCandidates, SIMILAR_LIMITS } from "./similarCore.js";
-import { searchBlogPosts } from "../adaptive-learning/grounding/blogResearch.js";
+import { searchBlogPosts } from "../../lib/blogResearch.js";
 import { assertTransition, TransitionError } from "../workflows/definition.js";
 import {
   INGEST_LIMITS, RESTORE_DAYS, ingestWorkflow, folderItemFor, ingestToApi,

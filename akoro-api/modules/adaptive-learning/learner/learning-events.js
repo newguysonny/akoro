@@ -26,6 +26,9 @@
  *     a successful write and cannot fail it either.
  */
 import db from "../../../db.js";
+import { resolveConceptId } from "../../../lib/conceptResolution.js";
+
+export { resolveConceptId };
 
 export const LEARNING_SOURCES = Object.freeze(["teaching", "agent_recall", "learner_recall", "proctored", "study_prep", "chat", "backfill", "python_agent"]);
 export const LEARNING_KINDS = Object.freeze([
@@ -62,24 +65,6 @@ export function claimShape({ kind, source, quality = null, claim }) {
   if (validity == null || confidence == null) return null;
   const base = evidenceShape({ kind, source, quality, checked: claim.status !== "not_checked" });
   return { response_quality: quality == null ? base.response_quality : clamp01(quality), claim_validity: validity, model_confidence: confidence, claim_status: claim.status };
-}
-
-/** An approved catalogue concept for subject + topic (topic_key, then title). Never invented. */
-export async function resolveConceptId({ subject, topic }) {
-  const label = clip(topic, 160);
-  if (!label) return null;
-  const slug = label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
-  // Two plain filters, not an or() string: a label with a comma broke or() syntax.
-  const approved = () => {
-    let q = db.schema("edu").from("concept_catalog").select("id").eq("status", "approved");
-    if (clip(subject, 80)) q = q.ilike("subject", `%${clip(subject, 80)}%`);
-    return q;
-  };
-  try {
-    let { data, error } = await approved().ilike("topic_key", `%${slug}%`).limit(1);
-    if (!error && !data?.length) ({ data, error } = await approved().ilike("title", `%${label}%`).limit(1));
-    return !error && data?.length ? data[0].id : null;
-  } catch { return null; }
 }
 
 const listeners = new Set();

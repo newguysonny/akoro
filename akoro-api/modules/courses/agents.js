@@ -79,7 +79,7 @@ const handlers = {
     }
 
     // §7.13.1a: "Let my agent help other learners" (on until the learner turns it off).
-    try { agent = { ...agent, help_others_opt_in: await (await import("../adaptive-learning/social/peerConsult.js")).readHelpOthersOptIn(req.user.id) }; } catch { /* the setting reads as on */ }
+    try { agent = { ...agent, help_others_opt_in: await (await import("../../lib/peerConsult.js")).readHelpOthersOptIn(req.user.id) }; } catch { /* the setting reads as on */ }
 
     // Also pull the active teacher agent's orchestration config
     // to return render_style + tts_voice if they've purchased one
@@ -193,7 +193,7 @@ const handlers = {
     // §7.13.1a "Let my agent help other learners": saved with the agent, and it
     // marks the learner's non-sensitive struggle records shareable as stories (or not).
     if (typeof req.body.help_others_opt_in === "boolean") {
-      const { setHelpOthersOptIn } = await import("../adaptive-learning/social/peerConsult.js");
+      const { setHelpOthersOptIn } = await import("../../lib/peerConsult.js");
       const saved = await setHelpOthersOptIn(req.user.id, req.body.help_others_opt_in);
       return res200(res, { ...data, help_others_opt_in: saved.helpOthersOptIn });
     }

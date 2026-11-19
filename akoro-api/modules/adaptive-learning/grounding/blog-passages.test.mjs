@@ -6,7 +6,7 @@ import test from "node:test";
 process.env.SUPABASE_URL ||= "http://localhost:1";
 process.env.SUPABASE_SERVICE_KEY ||= "test";
 
-const { blogPassages, rankPassages, searchBlogPassages, BLOG_PASSAGE_MAX_CHARS } = await import("./blogResearch.js");
+const { blogPassages, rankPassages, searchBlogPassages, BLOG_PASSAGE_MAX_CHARS } = await import("../../../lib/blogResearch.js");
 
 const BODY = [
   { type: "p", text: "Why revision matters before an exam." },

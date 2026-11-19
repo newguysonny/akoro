@@ -59,7 +59,7 @@ const checkValidation = (req, res) => {
 
 const adminOnly = [authenticateToken, requireRole(["admin"])];
 // §7.14: a saved post's passages are re-indexed for the agent's blog search (after the response; never fails the save).
-const reindexBlogPost = (postId) => { import("../adaptive-learning/grounding/blogResearch.js").then((m) => m.indexBlogPost({ postId })).catch(() => {}); };
+const reindexBlogPost = (postId) => { import("../../lib/blogResearch.js").then((m) => m.indexBlogPost({ postId })).catch(() => {}); };
 
 // ════════════════════════════════════════════════════════════════════════════
 //  BLOG — public

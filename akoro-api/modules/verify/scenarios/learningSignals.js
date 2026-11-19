@@ -133,7 +133,7 @@ export const questionTimings = {
       await E().from("learning_question_signals").delete().eq("learner_id", me.id).in("session_ref", refs);
       await E().from("concept_catalog").delete().eq("id", concept.id);
     });
-    const { recordQuestionSignals, checkQuestionSignals, proctoredQuestionSignals } = await import("../../adaptive-learning/assessment/question-signals.js");
+    const { recordQuestionSignals, checkQuestionSignals, proctoredQuestionSignals } = await import("../../../lib/questionSignals.js");
     const { readQuestionSignals } = await import("../../adaptive-learning/learner/learner-model.js");
     const check = checkQuestionSignals({
       battle: { topic: title },

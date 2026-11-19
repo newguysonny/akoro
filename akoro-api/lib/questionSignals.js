@@ -1,5 +1,5 @@
 /**
- * adaptive-learning/question-signals.js — Phase 4a, §7.15.1: the per-question
+ * lib/questionSignals.js — Phase 4a, §7.15.1: the per-question
  * signals struggle detection needs — question tags, time to answer, and
  * confusion pairs — recorded once per question from Agent Checks and the
  * proctored assessment, into ONE table (edu.learning_question_signals,
@@ -26,7 +26,7 @@
  * Idempotent per learner + session + question; never throws. Read nowhere yet
  * except learner-model.js readQuestionSignals.
  */
-import db from "../../../db.js";
+import db from "../db.js";
 
 export const QUESTION_SKILLS = Object.freeze(["recall", "apply", "transfer"]);
 export const QUESTION_FORMATS = Object.freeze(["mcq", "short", "diagram", "word_problem", "calculation"]);
@@ -118,7 +118,7 @@ export async function recordQuestionSignals({ learnerId, source, sessionRef, sub
   if (!clip(sessionRef, 180)) return { recorded: 0, reason: "no_reference" };
   try {
     let concept = conceptId;
-    if (!concept && topic) concept = await (await import("../learner/learning-events.js")).resolveConceptId({ subject, topic });
+    if (!concept && topic) concept = await (await import("./conceptResolution.js")).resolveConceptId({ subject, topic });
     const rows = (questions || []).slice(0, 60).map((q) => questionSignalRow({ learnerId, source, sessionRef, subject, topic, conceptId: concept }, q)).filter(Boolean);
     if (!rows.length) return { recorded: 0, reason: "no_questions" };
     const { error } = await db.schema("edu").from("learning_question_signals")

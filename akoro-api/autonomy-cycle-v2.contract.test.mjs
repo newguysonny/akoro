@@ -28,7 +28,7 @@ const communities = read("modules/communities/routes.js");
 const selfStudy = read("modules/self-study/routes.js");
 const battleWorker = read("modules/battle/worker.js");
 const chatJs = read("modules/adaptive-learning/chat.js");
-const peerConsult = read("modules/adaptive-learning/social/peerConsult.js");
+const peerConsult = read("lib/peerConsult.js");
 
 test("event triggers · four real write sites emit, never block, never guess", () => {
   // the seam: debounce in-process, one Redis enqueue, failures swallowed

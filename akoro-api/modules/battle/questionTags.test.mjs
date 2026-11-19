@@ -6,7 +6,7 @@ process.env.SUPABASE_URL ||= "http://localhost:1";
 process.env.SUPABASE_SERVICE_KEY ||= "test";
 process.env.OPENAI_API_KEY ||= "test";
 const { normalise } = await import("./questionSource.js");
-const { checkQuestionSignals, deriveQuestionTags } = await import("../adaptive-learning/assessment/question-signals.js");
+const { checkQuestionSignals, deriveQuestionTags } = await import("../../lib/questionSignals.js");
 
 const raw = { stem: "Which part of a leaf lets water vapour out?", options: [{ label: "A", text: "Stomata" }, { label: "B", text: "Xylem" }], answer: "A" };
 

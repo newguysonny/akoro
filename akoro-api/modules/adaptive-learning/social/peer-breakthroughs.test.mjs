@@ -8,7 +8,7 @@ process.env.SUPABASE_URL ||= "http://localhost:1";
 process.env.SUPABASE_SERVICE_KEY ||= "test";
 process.env.OPENAI_API_KEY ||= "test";
 
-const { breakthroughsFrom, PATTERN_MIN_LEARNERS, MAX_STORIES } = await import("./peerConsult.js");
+const { breakthroughsFrom, PATTERN_MIN_LEARNERS, MAX_STORIES } = await import("../../../lib/peerConsult.js");
 
 const row = (learner, extra = {}) => ({
   learner_id: learner, struggle_type: "interference", concept_id: "c1", class_level: "JSS1",
@@ -48,7 +48,7 @@ test("a sensitive type never produces stories; expired records don't count", () 
 });
 
 test("help others is ON by default: a learner who never chose helps; a recorded choice stands", async () => {
-  const { helpsOthers } = await import("./peerConsult.js");
+  const { helpsOthers } = await import("../../../lib/peerConsult.js");
   assert.equal(helpsOthers({}), true, "never chose → on");
   assert.equal(helpsOthers({ help_others_opt_in: false }), true, "the column default alone is not a choice");
   assert.equal(helpsOthers({ help_others_opt_in: false, help_others_chosen_at: "2026-11-07T10:00:00Z" }), false, "turned off → off");

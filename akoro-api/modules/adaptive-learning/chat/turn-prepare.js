@@ -33,7 +33,7 @@ import {
 } from "../../../lib/conversationContextStore.js";
 import { fitDialogue, summariseEarlier } from "../grounding/contextBudget.js";
 import { runIntentStep } from "../intent/intentStep.js";
-import { renderLedger, summaryMarkOf } from "./taskLedger.js";
+import { renderLedger, summaryMarkOf } from "../../../lib/taskLedger.js";
 import { requiresAgentCapabilitiesTool, requiresActivityPreparation, isDraftFollowUp, isToolDraftFollowUp, requiredLearnerDataTool, requiredStudyPrepTool } from "../intent/agent-chat-intent.js";
 import { createChatTrace } from "./chat-trace.js";
 import { inboxBrief, buddyBrief } from "./handlers-network-study.js";

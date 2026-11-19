@@ -81,7 +81,7 @@ export const blogPassageSearch = {
     const { contentDb } = await import("../../../db.js");
     const { data: posts, error } = await contentDb.from("blog_posts").select("slug, title, body").eq("status", "published").order("published_at", { ascending: false }).limit(20);
     if (error) ctx.expect.blocked(`blog unavailable: ${error.message}`);
-    const { blogPassages, searchBlogPassages, searchBlogPosts } = await import("../../adaptive-learning/grounding/blogResearch.js");
+    const { blogPassages, searchBlogPassages, searchBlogPosts } = await import("../../../lib/blogResearch.js");
     // A word from a post's body that its title does not contain.
     let pick = null;
     for (const post of posts || []) {
@@ -138,7 +138,7 @@ export const peerBreakthroughHelp = {
     const ins = await edu(db).from("learning_struggles").insert(rows);
     if (ins.error) ctx.expect.blocked(`couldn't seed breakthroughs: ${ins.error.message}`);
 
-    const { consultBreakthroughs, setHelpOthersOptIn } = await import("../../adaptive-learning/social/peerConsult.js");
+    const { consultBreakthroughs, setHelpOthersOptIn } = await import("../../../lib/peerConsult.js");
     for (const h of helpers) await setHelpOthersOptIn(h.id, true);
     const out = await consultBreakthroughs({ userId: asker.id, struggleType: "interference", conceptId: concept.id });
     ctx.note(`consult: ${JSON.stringify(out).slice(0, 400)}`);

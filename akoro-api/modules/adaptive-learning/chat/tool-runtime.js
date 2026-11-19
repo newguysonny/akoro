@@ -13,7 +13,7 @@ import { CHAT_TOOLS_CORE } from "./tool-catalogue-core.js";
 import { CHAT_TOOLS_REST, buildInstructorTools, peerConsultEnabled, blogResearchEnabled, agentNetworkEnabled } from "./tool-catalogue-rest.js";
 import { learnerInsightsEnabled, conceptTrackerEnabled, examPrepConfidenceEnabled, studyPrepEnabled, durableAgentChatContextEnabled } from "./runtime-state.js";
 import { TALK_AFTER_TOOLS } from "./chat-trace.js";
-import { UPDATE_PLAN_TOOL } from "./taskLedger.js";
+import { UPDATE_PLAN_TOOL } from "../../../lib/taskLedger.js";
 import { subjectMastery } from "../agents/student/knowledge.js";
 import { TOOLS as TEACHING_TOOLS, ToolError as TeachingToolError } from "../../teaching/tools.js";
 import { createToolDraft } from "../../self-study/toolDrafts.js";

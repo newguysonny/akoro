@@ -17,7 +17,7 @@ import { flattenBlogBody, sanitizeBlogQuery, blogBlockToLines, BLOG_BODY_MAX_CHA
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const read = (...p) => readFileSync(path.join(ROOT, ...p), "utf8");
 const chatJs = read("modules/adaptive-learning/chat.js");
-const research = read("modules/adaptive-learning/grounding/blogResearch.js");
+const research = read("lib/blogResearch.js");
 
 test("blog body · blocks flatten to model-readable text, tags stripped, capped", () => {
   const body = [

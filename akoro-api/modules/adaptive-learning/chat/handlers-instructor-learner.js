@@ -11,7 +11,7 @@ import db from "../../../db.js";
 import { AREAS, toolArea } from "./toolSelection.js";
 import { stickyAreasFor, durableAgentChatContextEnabled } from "./runtime-state.js";
 import { agentNetworkEnabled } from "./tool-catalogue-rest.js";
-import { getLearnerProfileContext } from "../learner/learner-profile-context.js";
+import { getLearnerProfileContext } from "../../../lib/learnerProfileContext.js";
 import { validateLearnerTaskInput } from "../learner/learner-task-validation.js";
 import { localiseInstant } from "../../../lib/learnerTime.js";
 import { scheduleAutonomyReviewForTask } from "../learner/learner-autonomy.js";

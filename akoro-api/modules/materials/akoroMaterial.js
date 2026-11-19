@@ -4,7 +4,7 @@
  * to read about it before teaching the protégé. → [{ kind, title, sub, href }]
  */
 import db from "../../db.js";
-import { searchBlogPosts } from "../adaptive-learning/grounding/blogResearch.js";
+import { searchBlogPosts } from "../../lib/blogResearch.js";
 import { shapeCandidates } from "./similarCore.js";
 
 export async function akoroMaterialFor(topic, { limit = 3 } = {}) {

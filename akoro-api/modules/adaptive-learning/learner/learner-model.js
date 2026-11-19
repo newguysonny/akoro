@@ -86,7 +86,7 @@ export async function recommendForLearner({ learnerId, conceptId, cognitive = nu
  * byFormat, confusions, rows } — empty on failure.
  */
 export async function readQuestionSignals({ learnerId, subject = null, topic = null, conceptId = null, limit = 200 } = {}) {
-  const { summariseQuestionSignals } = await import("../assessment/question-signals.js");
+  const { summariseQuestionSignals } = await import("../../../lib/questionSignals.js");
   if (!learnerId) return { ...summariseQuestionSignals([]), rows: [] };
   try {
     let q = E().from("learning_question_signals")

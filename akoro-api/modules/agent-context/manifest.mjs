@@ -23,7 +23,7 @@
  * pins this list EXACTLY so additions are conscious. Must be empty by P7.
  */
 
-import { GUIDE_FILES } from "../adaptive-learning/strategies/library.js";
+import { GUIDE_FILES } from "../../lib/strategyLibrary.js";
 
 export const MANIFEST_VERSION = 1;
 
