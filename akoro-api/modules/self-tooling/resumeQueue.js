@@ -12,6 +12,7 @@ import { workerJob } from "../../lib/workerLog.js";
 import cron from "node-cron";
 import { registerTick, cronSource } from "../../lib/cronTicks.js";
 import { resumeRequest, waitingResumes, expireRequests } from "./escalation.js";
+import { agentDeps } from "../../lib/agentDeps.js";
 
 let worker;
 
@@ -34,9 +35,9 @@ export async function enqueueResume(requestId) {
   return { mode: "inline" };
 }
 
-/** Rebuild with the chat's deps (lazy: chat.js imports self-tooling). */
+/** Rebuild with the chat's deps (boot-installed — see lib/agentDeps.js). */
 async function runResume(requestId) {
-  const [{ createTool }, { selfToolDeps }] = await Promise.all([import("./pipeline.js"), import("../adaptive-learning/chat.js")]);
+  const [{ createTool }, { selfToolDeps }] = await Promise.all([import("./pipeline.js"), Promise.resolve(agentDeps())]);
   return resumeRequest(requestId, {
     createTool: (args) => createTool({ ...args, ...selfToolDeps(args.learnerId, args.audience === "instructor" ? "instructor" : "student") }),
   });

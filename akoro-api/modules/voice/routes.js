@@ -16,12 +16,11 @@ import multer            from "multer";
 import { authenticateToken } from "../auth/routes.js";
 import { transcribeBufferDeepgram, hasDeepgram, grantAgentToken } from "./deepgram.js";
 import { speakBuffer } from "./tts.js";
-import { tutorSystemPrompt, protegeDeps } from "../adaptive-learning/chat.js";
-import { loadTaughtKnowledge, renderTaughtContext } from "../adaptive-learning/social/protege.js";
 import { loadDoctrine } from "../agent-context/context-manager.js";
 import { coinsAvailable, debitCoins, InsufficientCoins } from "../../lib/coins.js";
 import { getAiBillTo } from "../../lib/aiContext.js";
 import { estimateAudioMinutes, coinsForSttMinutes, coinsForTtsChars } from "../../lib/aiPricing.js";
+import { agentDeps } from "../../lib/agentDeps.js";
 
 const router  = Router();
 const openai  = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -166,6 +165,7 @@ router.post("/reply", authenticateToken, upload.single("audio"), async (req, res
  * for "teach me" and the teaching guide it points to the chat.
  */
 async function protegeVoiceRules(studentId) {
+  const { protegeDeps, loadTaughtKnowledge, renderTaughtContext } = agentDeps();
   const taught = await loadTaughtKnowledge({ studentId, query: "", deps: protegeDeps })
     .catch(() => ({ chunks: [], topics: [], taughtAnything: false }));
   return "\n\n" + (await loadDoctrine("policies/PROTEGE.md")) + renderTaughtContext(taught) +
@@ -201,7 +201,7 @@ router.post("/agent-token", authenticateToken, async (req, res) => {
       // P1 (Context Layer Adoption): the chat persona loads from the
       // akoro-agent/ workspace (tutorSystemPrompt is async now); the speech
       // channel rules live in channels/SPEECH.md.
-      prompt: (await tutorSystemPrompt({ agentName: "Akoro", role }))
+      prompt: (await agentDeps().tutorSystemPrompt({ agentName: "Akoro", role }))
         + " " + (await loadDoctrine("channels/SPEECH.md"))
         + (role === "student" ? await protegeVoiceRules(req.user.id) : ""),
     });

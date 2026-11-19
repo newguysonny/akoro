@@ -10,6 +10,12 @@ import { registerBattleJobHandler } from "./battleJobHandlers.js";
 import { runActivityReview }     from "../modules/self-study/activityReview.js";
 import { runTeachingTool }       from "../modules/teaching/tools.js";
 import { setTeachingToolRunner } from "./teachingTools.js";
+import { installAgentDeps }      from "./agentDepsSetup.js";
+
+// Phase 19 S7: lower modules read these from lib/agentDeps.js instead of
+// importing adaptive-learning lazily. app.js imports this file at boot, before
+// any route is mounted or worker starts.
+installAgentDeps();
 
 setAgentNetworkHooks({ dailyRanking, postChallengeRequest });
 registerBattleJobHandler("activity-review", runActivityReview);

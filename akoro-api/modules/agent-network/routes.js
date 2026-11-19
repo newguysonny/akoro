@@ -38,7 +38,7 @@ import {
   requestBuddy, respondBuddy, listBuddies, buddyCheckin, endBuddy,
   joinDaily, skipDaily, dailyRanking, dailyStatus, createCircle, searchCircles, joinCircle, leaveCircle, weeklyLeague,
 } from "./activities.js";
-import { protegeDeps } from "../adaptive-learning/chat.js";
+import { agentDeps } from "../../lib/agentDeps.js";
 
 const router = Router();
 const asyncHandler = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
@@ -74,7 +74,7 @@ router.post("/challenge-requests", wrap(async (req) => ({ request: await postCha
 router.post("/challenge-requests/:id/accept", wrap((req) => acceptChallengeRequest(req.user.id, req.params.id)));
 router.delete("/challenge-requests/:id", wrap((req) => cancelChallengeRequest(req.user.id, req.params.id)));
 router.post("/battles/:id/rematch", wrap((req) => rematch(req.user.id, req.params.id)));
-router.post("/messages", wrap((req) => messageAgent(req.user.id, req.body || {}, { deps: protegeDeps })));
+router.post("/messages", wrap((req) => messageAgent(req.user.id, req.body || {}, { deps: agentDeps().protegeDeps })));
 router.get("/inbox/count", wrap((req) => inboxCount(req.user.id)));
 router.get("/inbox", wrap((req) => inbox(req.user.id, { markRead: req.query.peek !== "1" })));
 router.post("/messages/:id/reply", wrap((req) => replyToAgent(req.user.id, req.params.id, req.body?.reply)));

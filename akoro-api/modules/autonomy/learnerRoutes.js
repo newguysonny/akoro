@@ -14,9 +14,9 @@
 import { Router } from "express";
 import db from "../../db.js";
 import { authenticateToken } from "../auth/routes.js";
-import { setLearnerAutonomy } from "../adaptive-learning/learner/learner-autonomy.js";
 import { budgetState } from "../../lib/budget.js";
 import { quietOf, validHHMM, validTimeZone } from "./quietHours.js";
+import { agentDeps } from "../../lib/agentDeps.js";
 
 const router = Router();
 // Auth per route: this router is mounted at /api/agent, beside other modules' routes.
@@ -65,7 +65,7 @@ router.patch("/settings", authenticateToken, asyncHandler(async (req, res) => {
   }
   if ("agentOnline" in b) {
     if (typeof b.agentOnline !== "boolean") return bad("agentOnline must be a boolean");
-    await setLearnerAutonomy({ userId: req.user.id, enabled: b.agentOnline });
+    await agentDeps().setLearnerAutonomy({ userId: req.user.id, enabled: b.agentOnline });
   }
   if (Object.keys(patch).length) {
     const { data: row } = await edu().from("learner_agent_autonomy").select("user_id").eq("user_id", req.user.id).maybeSingle();
@@ -77,7 +77,7 @@ router.patch("/settings", authenticateToken, asyncHandler(async (req, res) => {
     // Check-ins off pauses the ones already scheduled; on again re-schedules them (setLearnerAutonomy does both).
     if ("checkins" in patch) {
       const { data: now } = await edu().from("learner_agent_autonomy").select("enabled").eq("user_id", req.user.id).maybeSingle();
-      if (now?.enabled) await setLearnerAutonomy({ userId: req.user.id, enabled: true }).catch(() => {});
+      if (now?.enabled) await agentDeps().setLearnerAutonomy({ userId: req.user.id, enabled: true }).catch(() => {});
       if (!patch.checkins) await edu().from("learner_autonomy_task_reviews").update({ status: "paused", updated_at: new Date().toISOString() }).eq("user_id", req.user.id).eq("status", "scheduled");
     }
   }

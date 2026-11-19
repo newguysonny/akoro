@@ -29,6 +29,7 @@ import { getSettings } from "./network.js";
 import { inQuiet, quietOf } from "../autonomy/quietHours.js";
 import { chatFor } from "../autonomy/deliver.js";
 import { appLink } from "../../lib/urls.js";
+import { agentDeps } from "../../lib/agentDeps.js";
 
 const edu = () => db.schema("edu");
 const first = (full, username) => String(full || "").trim().split(/\s+/)[0] || username || "a learner";
@@ -114,7 +115,7 @@ export async function processInbox(userId, { deps = null, force = false, now = n
     db.from("user_agents").select("user_id, agent_name, agent_emoji").in("user_id", senders),
   ]);
   const U = new Map((users || []).map((u) => [u.id, u])), A = new Map((agents || []).map((a) => [a.user_id, a]));
-  if (!deps) deps = (await import("../adaptive-learning/chat.js")).protegeDeps;
+  if (!deps) deps = agentDeps().protegeDeps;
 
   const actions = [];
   for (const m of rows) {

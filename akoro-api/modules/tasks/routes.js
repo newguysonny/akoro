@@ -10,7 +10,6 @@ import { Router }                         from "express";
 import db                                 from "../../db.js";
 import { TaskDB, TaskFileDB, TaskRunDB, TaskOutputDB, TaskScheduleDB, DynamicToolDB } from "./lib/db.js";
 import { scheduleTask, cancelTask, triggerNow, getQueueHealth, taskQueue } from "./scheduler.js";
-import { cancelAutonomyReviewForTask, scheduleAutonomyReviewForTask } from "../adaptive-learning/learner/learner-autonomy.js";
 import { extractIntent }                  from "./lib/context.js";
 import { createPresignedUpload }          from "./lib/storage.js";
 import { extractTextFromUrl }             from "./lib/ocr.js";
@@ -18,6 +17,7 @@ import { ALL_TOOLS }                      from "./tools/index.js";
 import { OPENAI_MODEL }                   from "../../lib/aiModel.js";
 import { authenticateToken, requireRole } from "../auth/routes.js";
 import { emitAutonomyEvent } from "../autonomy/triggers.js";
+import { agentDeps } from "../../lib/agentDeps.js";
 
 const router = Router();
 
@@ -237,7 +237,7 @@ router.post("/", async (req, res) => {
       // Deliberately do not call scheduleTask(): that queue executes a task and
       // may spend coins. The autonomy service only queues a chat after checking
       // the learner's server-side opt-in at delivery time.
-      try { await scheduleAutonomyReviewForTask(task); }
+      try { await agentDeps().scheduleAutonomyReviewForTask(task); }
       catch (autonomyError) { console.warn("[tasks] autonomy schedule skipped:", autonomyError.message); }
       return res.status(201).json({ task: { ...task, bullJobId: null } });
     }
@@ -363,8 +363,8 @@ router.patch("/:taskId", async (req, res) => {
         // task pending and re-point (or cancel) the chat-only due review.
         updated = await TaskDB.updateStatus(updated.id, "pending", { bullJobId: null });
         try {
-          if (updated.due_at) await scheduleAutonomyReviewForTask(updated);
-          else await cancelAutonomyReviewForTask({ taskId: updated.id, userId: req.user.id });
+          if (updated.due_at) await agentDeps().scheduleAutonomyReviewForTask(updated);
+          else await agentDeps().cancelAutonomyReviewForTask({ taskId: updated.id, userId: req.user.id });
         } catch (autonomyError) {
           console.warn("[tasks] autonomy update skipped:", autonomyError.message);
         }
@@ -538,7 +538,7 @@ async function spawnNextRecurrence(task, everySeconds) {
     due_at: due.toISOString(), timezone: task.timezone, course_id: task.course_id ?? null,
   }).select().single();
   if (error) throw new Error(error.message);
-  try { await scheduleAutonomyReviewForTask(next); }
+  try { await agentDeps().scheduleAutonomyReviewForTask(next); }
   catch (e) { console.warn("[tasks] recurrence autonomy schedule skipped:", e.message); }
   global.io?.to(`user:${task.creator_id}`).emit("task:created", next);
   return next;
@@ -558,7 +558,7 @@ router.patch("/:taskId/toggle", async (req, res) => {
 
     const updated = await TaskDB.updateStatus(req.params.taskId, newStatus, extra);
     if (newStatus === "done" && isLearnerTask(req)) {
-      try { await cancelAutonomyReviewForTask({ taskId: updated.id, userId: req.user.id }); }
+      try { await agentDeps().cancelAutonomyReviewForTask({ taskId: updated.id, userId: req.user.id }); }
       catch (autonomyError) { console.warn("[tasks] autonomy cancellation skipped:", autonomyError.message); }
       // Event trigger: a finished task is fresh signal for the planner.
       emitAutonomyEvent(req.user.id, "task_done").catch(() => {});

@@ -14,14 +14,14 @@
  *    change (the synchronous outcome message already told the learner).
  */
 import { createHash } from "node:crypto";
+import { agentDeps } from "../../lib/agentDeps.js";
 
 export async function runDecisionFollowUp({ userId, conversationId = null, outcomeText, confirmationId }) {
   if (!userId || !confirmationId) return null;
   try {
-    const [{ runAgentToolLoop, getLearnerChatTools, SIDE_EFFECT_TOOLS }, { postIntoChat }, { readChat }] = await Promise.all([
-      import("../adaptive-learning/chat.js"),
+    const [{ runAgentToolLoop, getLearnerChatTools, SIDE_EFFECT_TOOLS, readChat }, { postIntoChat }] = await Promise.all([
+      Promise.resolve(agentDeps()),
       import("./escalation.js"),
-      import("../adaptive-learning/chat/chat-history-tools.js"),
     ]);
 
     // Read-only tool set: no create/delete/send tools reach the model here.

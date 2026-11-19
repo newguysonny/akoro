@@ -20,7 +20,7 @@
 import db from "../../db.js";
 import { OPENAI_MODEL, openai } from "../../lib/aiModel.js";
 import { notifyUser } from "../notify.js";
-import { loadTaughtKnowledge } from "../adaptive-learning/social/protege.js";
+import { agentDeps } from "../../lib/agentDeps.js";
 import { canMessage, presenceOf } from "./filters.js";
 import { relationsOf, blockedWith, getSettings, onlineIds } from "./network.js";
 import { appLink } from "../../lib/urls.js";
@@ -91,7 +91,7 @@ export async function answerNow({ asker, target, question, subject, topic, deps 
     db.from("user_agents").select("agent_name, agent_emoji").eq("user_id", target.id).maybeSingle(),
     db.from("user_agents").select("agent_name").eq("user_id", asker).maybeSingle(),
   ]);
-  const taught = await loadTaughtKnowledge({ studentId: target.id, query: [subject, topic, question].filter(Boolean).join(" "), deps }).catch(() => ({ chunks: [] }));
+  const taught = await agentDeps().loadTaughtKnowledge({ studentId: target.id, query: [subject, topic, question].filter(Boolean).join(" "), deps }).catch(() => ({ chunks: [] }));
   const res = await openai.chat.completions.create({
     model: OPENAI_MODEL, temperature: 0.5, max_tokens: 260,
     response_format: { type: "json_object" },

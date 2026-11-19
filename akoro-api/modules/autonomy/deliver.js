@@ -18,10 +18,10 @@ import db from "../../db.js";
 import { notifyUser } from "../notify.js";
 import { inQuiet, quietOf } from "./quietHours.js";
 import { READY } from "./readyKinds.js";
-import { collectMaterials, materialsFrom } from "../adaptive-learning/chat/chat-materials.js";
 import { RULES, actionBasis, basisRefusal } from "../agent-runtime/actionBasis.js";
 import { modesFor } from "./kindModes.js";
 import { appLink } from "../../lib/urls.js";
+import { agentDeps } from "../../lib/agentDeps.js";
 
 const edu = () => db.schema("edu");
 export const DELIVERY = Object.freeze({
@@ -188,10 +188,10 @@ export function reportFor(p, result = {}) {
       return { text: `Done — I'll check in with you${result.scheduledAt ? ` on ${new Date(result.scheduledAt).toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: result.timeZone || "Africa/Lagos" })}` : ""}.` };
     case "quiz_from_records":
       return { text: `Here's your quiz — it opens on your **${pl.recordName}**, and the reader writes the questions from the whole document.`,
-        meta: { materials: collectMaterials([materialsFrom("search_my_library", { records: [{ recordId: pl.recordId, name: pl.recordName, tool: "quiz" }] })]) } };
+        meta: { materials: agentDeps().collectMaterials([agentDeps().materialsFrom("search_my_library", { records: [{ recordId: pl.recordId, name: pl.recordName, tool: "quiz" }] })]) } };
     case "teach_weak_topic":
       return { text: `Tap **Teach me** and walk me through **${pl.topic}** — even roughly. I'll quiz you on it after.`,
-        meta: { materials: collectMaterials([materialsFrom("get_weak_topics", { weak_topics: [{ topic: pl.topic, subject: pl.subject }] })]) } };
+        meta: { materials: agentDeps().collectMaterials([agentDeps().materialsFrom("get_weak_topics", { weak_topics: [{ topic: pl.topic, subject: pl.subject }] })]) } };
     case "study_plan":
       return result.sessionId ? { text: "Here's your plan from the syllabus — check it, and tap Approve when it looks right. Nothing is charged before that.", meta: { studyPrepSessionId: result.sessionId } } : null;
     case "revision_battle":

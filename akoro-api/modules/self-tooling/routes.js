@@ -21,6 +21,7 @@ import db from "../../db.js";
 import { BUILTIN_DATA_VIEWS, DATA_VIEWS, dbViewNameSet } from "./views.js";
 import { validateViewShape, validateViewForActivation, normalizeViewSpec } from "./viewSpecs.js";
 import { refreshDbViews, viewRegistryStatus } from "./viewRegistry.js";
+import { agentDeps } from "../../lib/agentDeps.js";
 
 const router = express.Router();
 const asyncHandler = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
@@ -76,7 +77,7 @@ router.post("/confirmations/:id/reject", authenticateToken, confirmationRoute(as
 router.post("/confirmations/:id/confirm", authenticateToken, confirmationRoute(async (req) => {
   const decided = await decideConfirmation({ id: req.params.id, userId: req.user.id, decision: "approved" });
   if (decided?.sessionId) {
-    const { scheduleDecisionContinuation } = await import("../adaptive-learning/chat.js");
+    const { scheduleDecisionContinuation } = agentDeps();
     scheduleDecisionContinuation({ userId: req.user.id, user: req.user, sessionId: decided.sessionId });
   }
   return decided;

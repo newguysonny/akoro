@@ -8,7 +8,6 @@ import { Worker }   from "bullmq";
 import Redis        from "ioredis";
 import { TaskDB, TaskRunDB, AgentDB, TaskScheduleDB } from "./lib/db.js";
 import db from "../../db.js";
-import { scheduleAutonomyReviewForTask } from "../adaptive-learning/learner/learner-autonomy.js";
 import { buildContext }               from "./lib/context.js";
 import { deliver, deliverError, deliverProgress } from "./lib/deliver.js";
 import { getToolsForTask }                        from "./tools/index.js";
@@ -25,6 +24,7 @@ import { runAgentLoop } from "./lib/agentLoop.js";
 import { reportAgentActivity, agentToolActivity, clearAgentActivity } from "../../lib/agentActivity.js";
 import { workerJob }                        from "../../lib/workerLog.js";
 import { guardWorker } from "../../lib/redisQuotaGuard.js";
+import { agentDeps } from "../../lib/agentDeps.js";
 
 const MODEL = OPENAI_MODEL;
 
@@ -54,7 +54,7 @@ async function runOneTask(job) {
     // A legacy generic task job can reach this worker after the new policy is
     // deployed. Hand it to the narrow chat-only scheduler instead of dropping
     // the learner's due-task nudge along with the unsafe execution.
-    try { await scheduleAutonomyReviewForTask(pendingTask); }
+    try { await agentDeps().scheduleAutonomyReviewForTask(pendingTask); }
     catch (autonomyError) { console.warn("[tasks/worker] learner autonomy schedule skipped:", autonomyError.message); }
     console.log(`[tasks/worker] skipped learner task ${taskId}; autonomous execution is disabled`);
     return;

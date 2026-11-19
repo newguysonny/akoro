@@ -25,6 +25,7 @@ import { OUTREACH, KIND_FOR_PURPOSE, decideOutreach, outreachQuestion, outreachL
 import { isProtectedLearner } from "./autoReplyCore.js";
 import { blockedWith } from "./network.js";
 import { inQuiet, quietOf } from "../autonomy/quietHours.js";
+import { agentDeps } from "../../lib/agentDeps.js";
 
 const edu = () => db.schema("edu");
 const first = (full, username) => String(full || "").trim().split(/\s+/)[0] || username || "a learner";
@@ -59,7 +60,7 @@ async function describe(userId, { friends, blocked }) {
     db.from("user_agents").select("help_others_opt_in, help_others_chosen_at").eq("user_id", userId).maybeSingle(),
   ]);
   if (!u || u.deactivated_at || u.deleted_at) return null;
-  const { helpsOthers } = await import("../adaptive-learning/social/peerConsult.js");
+  const { helpsOthers } = agentDeps();
   const young = isProtectedLearner({ studyLevel: u.study_level, yearGroup: u.year_group });
   return { userId, name: first(u.full_name, u.username), username: u.username, isFriend: friends.has(userId), optedIn: helpsOthers(a, { young }), blocked: blocked.has(userId) };
 }
@@ -75,7 +76,7 @@ export async function findHelper({ learnerId, conceptId = null, subject = null, 
     return describe(data.id, { friends, blocked });
   }
   if (!conceptId && topic) {
-    const { conceptIdFor } = await import("../adaptive-learning/social/peerConsult.js");
+    const { conceptIdFor } = agentDeps();
     conceptId = await conceptIdFor(topic, subject).catch(() => null);
   }
   const exclude = new Set([learnerId, ...blocked]);
@@ -103,7 +104,7 @@ async function alreadyAsked(learnerId, topic, since) {
 
 async function send(learnerId, { helper, purpose, trigger, subject, topic, question, deps }) {
   const { messageAgent } = await import("./messaging.js");
-  if (!deps && purpose === "study_question") deps = (await import("../adaptive-learning/chat.js")).protegeDeps;
+  if (!deps && purpose === "study_question") deps = agentDeps().protegeDeps;
   return messageAgent(learnerId, { to: helper.userId, kind: KIND_FOR_PURPOSE[purpose], question, subject, topic, origin: "agent", trigger, purpose }, { deps });
 }
 

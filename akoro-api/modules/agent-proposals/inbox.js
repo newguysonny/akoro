@@ -17,7 +17,7 @@
  * Planner proposals keep their claim-first approve path (approveProposal).
  */
 import db from "../../db.js";
-import { executeChatTool } from "../adaptive-learning/chat.js";
+import { agentDeps } from "../../lib/agentDeps.js";
 import { createGoal } from "../learner-goals/service.js";
 import { markPostedDecision, reportFor, reportInChat } from "../autonomy/deliver.js";
 import { spreadDue } from "../autonomy/readyKinds.js";
@@ -167,12 +167,12 @@ export async function approveProposal(userId, id) {
     if (kind === "task" || kind === "practice") {
       // The chat's own create_task — validation, autonomy scheduling and the
       // task:created socket broadcast ride along.
-      const result = await executeChatTool("create_task", { priority: "medium", ...payload }, userId, { role: "student", channel: "proposal" });
+      const result = await agentDeps().executeChatTool("create_task", { priority: "medium", ...payload }, userId, { role: "student", channel: "proposal" });
       if (result?.needsClarification || result?.error) throw new Error(result.question || result.error || "The task could not be created.");
       ref = result?.taskId ?? null;
       detail = { taskId: ref, title: result?.title ?? claimed.title };
     } else if (kind === "session") {
-      const result = await executeChatTool("schedule_chat_follow_up", payload, userId, { role: "student", channel: "proposal" });
+      const result = await agentDeps().executeChatTool("schedule_chat_follow_up", payload, userId, { role: "student", channel: "proposal" });
       if (result?.needsClarification || result?.error) throw new Error(result.question || result.error || "The check-in could not be scheduled.");
       ref = result?.followUpId ?? result?.id ?? null;
       detail = { followUpId: ref, scheduledAt: result?.scheduledAt ?? payload?.scheduledAt ?? null };
@@ -185,7 +185,7 @@ export async function approveProposal(userId, id) {
     } else if (kind === "goal_nudge") {
       // A first step toward a goal: the same create_task as chat.
       const { goalId, ...task } = payload;
-      const result = await executeChatTool("create_task", { priority: "medium", ...task }, userId, { role: "student", channel: "proposal" });
+      const result = await agentDeps().executeChatTool("create_task", { priority: "medium", ...task }, userId, { role: "student", channel: "proposal" });
       if (result?.needsClarification || result?.error) throw new Error(result.question || result.error || "The task could not be created.");
       ref = result?.taskId ?? null;
       detail = { taskId: ref, title: result?.title ?? payload.title, goalId: goalId || null };
@@ -199,7 +199,7 @@ export async function approveProposal(userId, id) {
       detail = { teach: { topic: payload.topic, subject: payload.subject || null } };
     } else if (kind === "study_plan") {
       // Study Prep's own plan card and coin gate still apply (rule 7): this only starts the plan.
-      const result = await executeChatTool("start_study_prep_session", { goal: String(payload.goal || claimed.title).slice(0, 300), ...(payload.subject ? { subject: payload.subject } : {}), ...(payload.examBoard ? { examBoard: payload.examBoard } : {}) }, userId, { role: "student", channel: "proposal" });
+      const result = await agentDeps().executeChatTool("start_study_prep_session", { goal: String(payload.goal || claimed.title).slice(0, 300), ...(payload.subject ? { subject: payload.subject } : {}), ...(payload.examBoard ? { examBoard: payload.examBoard } : {}) }, userId, { role: "student", channel: "proposal" });
       if (result?.enabled === false || result?.error || !result?.sessionId) throw new Error(result?.error || result?.message || "The study plan could not be started.");
       ref = result.sessionId;
       detail = { sessionId: result.sessionId, status: result.status || null };
@@ -233,13 +233,13 @@ export async function approveProposal(userId, id) {
       // A DRAFT through the instructor's own prepare_activity — assigning stays their tap.
       let topic = payload.topic;
       if (kind === "next_activity") {
-        const { resolveTopics } = await import("../adaptive-learning/study-prep/syllabus-resolver.js");
+        const { resolveTopics } = agentDeps();
         const { nextTopicAfter } = await import("../autonomy/instructorCore.js");
         const syllabus = await resolveTopics({ subject: payload.subject }).catch(() => []);
         topic = nextTopicAfter(payload.topic, syllabus);
       } else topic = `Revision: ${String(payload.topic).slice(0, 100)}`;
       const audience = payload.classroomId ? { classroom_id: payload.classroomId } : { user_ids: (payload.studentIds || []).slice(0, 60) };
-      const result = await executeChatTool("prepare_activity", { type: "self_study", subject: payload.subject || undefined, topic, audience }, userId, { role: "instructor", channel: "proposal" });
+      const result = await agentDeps().executeChatTool("prepare_activity", { type: "self_study", subject: payload.subject || undefined, topic, audience }, userId, { role: "instructor", channel: "proposal" });
       if (result?.needsClarification || result?.error || !result?.draftId) throw new Error(result?.question || result?.error || "The draft could not be prepared.");
       ref = result.draftId;
       detail = { draftId: result.draftId, title: result.title, draft: { id: result.draftId, title: result.title, type: result.type, audience: result.audience } };

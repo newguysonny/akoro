@@ -23,6 +23,10 @@ import { readLogs, logSeq } from "../../lib/logTap.js";
 import { createExpect, BlockedError } from "./assertions.js";
 import { resolveAccount, assertMayActAs, approvedFor, PolicyError } from "./policy.js";
 import { redact } from "./evidence.js";
+import { installAgentDeps } from "../../lib/agentDepsSetup.js";
+
+// Scenarios run without app.js: install the same boot dependencies the API does.
+installAgentDeps();
 
 const API_BASE = process.env.INTERNAL_API_URL || `http://127.0.0.1:${process.env.PORT || 3000}`;
 let chatMod = null;
