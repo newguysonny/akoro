@@ -94,8 +94,8 @@ export const createSpecMatchesDb = {
     const me = await ctx.as(p.learner);
     const before = await ctx.db.count("edu.agent_tools", { owner_id: me.id });
     const r = await ctx.agent.tool({ as: p.learner, tool: "create_tool", mode: "dry", input: {
-      goal: "Total past-question questions attempted and correct for each subject", name: "pq_totals_by_subject", label: "Past questions by subject",
-      hint: { views: ["my_past_questions"] } } });
+      goal: "Attempted and correct questions for each subject from my practice records", name: "pq_totals_by_subject", label: "Past questions by subject",
+      hint: { views: ["my_past_questions"], mode: "spec" } } });
     ctx.expect.eq("created", r?.status, "created");
     ctx.expect.eq("verified before use", r?.verified, true);
     const rows = r?.result?.rows || [];

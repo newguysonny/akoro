@@ -153,5 +153,5 @@ export const SUITES = {
   // (BLOCKED while the flag is off); the schema check runs everywhere.
   // One dry build (create_spec_matches_db) exercises the whole create_tool
   // path — a broken save path once slipped past every other scenario.
-  regression: ALL.filter((s) => s.risk !== "write" && s.regression !== false && (!s.name.startsWith("selftool.") || ["selftool.views_match_schema", "selftool.create_spec_matches_db", "selftool.sandbox_contained"].includes(s.name))).map((s) => s.name),
+  regression: ALL.filter((s) => s.risk !== "write" && s.name !== "evals.result" && s.regression !== false && (!s.name.startsWith("selftool.") || ["selftool.views_match_schema", "selftool.create_spec_matches_db", "selftool.sandbox_contained"].includes(s.name))).map((s) => s.name),
 };

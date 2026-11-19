@@ -161,9 +161,9 @@ export const teachingToolRuns = {
 /* ── Activity tools ─────────────────────────────────────────────────────── */
 
 const ACTIVITY_READS = [
-  { say: "What activity drafts do I have waiting?", tool: "list_activity_drafts" },
-  { say: "Which classes do I teach?", tool: "list_my_classrooms" },
-  { say: "How did my last assignment go?", tool: "check_activity_outcomes" },
+  { say: "What activity drafts do I have waiting?", tool: "list_activity_drafts", merged: "my_activity_drafts" },
+  { say: "Which classes do I teach?", tool: "list_my_classrooms", merged: "my_classes" },
+  { say: "How did my last assignment go?", tool: "check_activity_outcomes", merged: "my_activity_results" },
   { say: "What weekly routines do I have set up?", tool: "list_activity_routines" },
 ];
 
@@ -174,12 +174,14 @@ export const activityToolRouting = {
   async run(ctx, p) {
     await teacherOf(ctx, p.instructor);
     for (const c of ACTIVITY_READS) {
+      const names = [c.tool, c.merged].filter(Boolean);
       const turn = await ctx.agent.chat({ as: p.instructor, model: p.model, prompt: c.say });
       ctx.expect.eq(`${c.tool}: turn answered`, turn.status, 200);
-      ctx.expect.toolCalled(turn, c.tool);
+      const called = names.find((n) => lastCall(turn, n));
+      ctx.expect.ok(`called ${names.join(" or ")}`, !!called, toolsOf(turn));
       ctx.expect.toolNotCalled(turn, "prepare_activity");
-      const call = lastCall(turn, c.tool);
-      ctx.expect.ok(`${c.tool} ran without an error`, call && call.success !== false && !call.result?.error, call?.result);
+      const call = called ? lastCall(turn, called) : null;
+      ctx.expect.ok(`${called || c.tool} ran without an error`, call && call.success !== false && !call.result?.error, call?.result);
       ctx.expect.loopHealthy(turn);
     }
   },

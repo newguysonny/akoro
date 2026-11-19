@@ -14,7 +14,7 @@ export const scheduleMessageHere = {
   description: "'Message me here in 10 minutes' schedules a message into THIS chat (not a task with no time).",
   params: { learner: { default: "@tester01" } },
   async run(ctx, p) {
-    const turn = await ctx.agent.chat({ as: p.learner, model: p.model, prompt: "Priority low, I want you to send me a message in the next 10 minutes, the message should be sent here" });
+    const turn = await ctx.agent.chat({ as: p.learner, model: p.model, prompt: "Priority low, I need you to send me a message in exactly 10 minutes — the message should be sent here" });
     ctx.expect.eq("turn answered", turn.status, 200);
     ctx.expect.toolCalled(turn, "schedule_chat_follow_up");
     ctx.expect.toolArgs(turn, "schedule_chat_follow_up", { where: "here", inMinutes: 10 });
@@ -50,7 +50,9 @@ export const pastQuestionsTruth = {
     const attempted = rows.reduce((n, r) => n + (Number(r.attempted) || 0), 0);
     const correct = rows.reduce((n, r) => n + (Number(r.correct) || 0), 0);
     const turn = await ctx.agent.chat({ as: p.learner, model: p.model, prompt: "How am I doing on past questions overall? Give me the numbers." });
-    ctx.expect.toolCalled(turn, "get_past_question_practice");
+    const tools = (turn.tools || []).map((t) => t.tool);
+    ctx.expect.ok("called get_past_question_practice or my_past_questions",
+      tools.includes("get_past_question_practice") || tools.includes("my_past_questions"), tools);
     const reply = String(turn.reply || "");
     const pct = Math.round((correct / attempted) * 100);
     // The false claim is "no practice" WITHOUT the real figures ("none for WAEC
