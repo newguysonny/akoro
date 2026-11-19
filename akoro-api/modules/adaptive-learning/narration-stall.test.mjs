@@ -44,8 +44,8 @@ test("an unfinished plan in the turn's own ledger means work is owed", () => {
 });
 
 test("the loop wires the guard: one-shot, streamed turns only, kill switch, narration kept as activity", () => {
-  const src = readFileSync(new URL("./chat.js", import.meta.url), "utf8");
-  assert.match(src, /import \{ looksLikeStepNarration, containsDeferral, admitsNonCompletion, looksTruncated, planHasOpenSteps \} from "\.\/narration-stall\.js";/);
+  const src = readFileSync(new URL("./chat/agent-loop.js", import.meta.url), "utf8");
+  assert.match(src, /import \{ looksLikeStepNarration, containsDeferral, admitsNonCompletion, looksTruncated, planHasOpenSteps \} from "\.\.\/narration-stall\.js";/);
   assert.match(src, /narrationContinuationUsed = false/);
   assert.match(src, /process\.env\.AKORO_NARRATION_CONTINUATION !== "false"/);
   assert.match(src, /const owesWork = planHasOpenSteps\(ledgerNow\) \|\| \(executions\.length === 0 && \(looksLikeStepNarration\(content\) \|\| containsDeferral\(content\) \|\| admitsNonCompletion\(content\)\)\);/);

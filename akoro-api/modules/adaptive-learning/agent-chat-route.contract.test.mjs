@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const source = await readFile(new URL("./chat.js", import.meta.url), "utf8");
+const turnStore = await readFile(new URL("./chat/turn-store.js", import.meta.url), "utf8");
 const handlers = await readFile(new URL("./chat/handlers-instructor-learner.js", import.meta.url), "utf8");
 const toolRuntime = await readFile(new URL("./chat/tool-runtime.js", import.meta.url), "utf8");
 const toolCatalogueCore = await readFile(new URL("./chat/tool-catalogue-core.js", import.meta.url), "utf8");
@@ -238,12 +239,12 @@ test("draft cards survive a reload — tool previews ride the persisted message 
   const migration = await readFile(new URL("../../migrations/2026-chat-message-meta.sql", import.meta.url), "utf8");
   assert.match(migration, /ADD COLUMN IF NOT EXISTS meta jsonb/);
   // The server derives preview meta from the turn's tool executions …
-  assert.match(source, /function previewMetaFrom\(/);
+  assert.match(turnStore, /function previewMetaFrom\(/);
   assert.match(source, /prepare_activity|revise_activity_draft/);
   // … saves it beside the trace …
   assert.match(source, /\.\.\.\(previewMetaFrom\(prepared\.toolExecutions\) \|\| \{\}\)/);
   assert.match(source, /saveMessageTrace\(\{ messageId, userId: req\.user\.id, trace: traceBlocks, meta:/);
-  assert.match(source, /update\(\{ \.\.\.\(hasTrace \? \{ trace \} : \{\}\), \.\.\.\(meta \? \{ meta \} : \{\}\) \}\)/, "meta is saved even on a turn with no trace");
+  assert.match(turnStore, /update\(\{ \.\.\.\(hasTrace \? \{ trace \} : \{\}\), \.\.\.\(meta \? \{ meta \} : \{\}\) \}\)/, "meta is saved even on a turn with no trace");
   // … and serves it with a rolling-deploy fallback.
   assert.match(source, /loadMessages\("id, role, text, created_at, trace, meta"\)/);
   assert.match(source, /\/meta\/i\.test\(String\(error\.message \|\| ""\)\)/);

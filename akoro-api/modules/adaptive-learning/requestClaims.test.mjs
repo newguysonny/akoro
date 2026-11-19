@@ -40,7 +40,8 @@ test("asking for permission is consent to send the request", () => {
 
 test("wiring: the chat records each turn's admin request and corrects an unbacked claim; a closed duplicate re-opens", () => {
   const chat = readFileSync(new URL("./chat.js", import.meta.url), "utf8");
-  assert.match(chat, /adminRequest: adminRequestOf\(tool, toolResult\)/);
+  const loop = readFileSync(new URL("./chat/agent-loop.js", import.meta.url), "utf8");
+  assert.match(loop, /adminRequest: adminRequestOf\(tool, toolResult\)/);
   assert.match(chat, /const fix = requestClaimCorrection\(reply, prepared\.toolExecutions\)/);
   const svc = readFileSync(new URL("../agent-tool-requests/service.js", import.meta.url), "utf8");
   assert.match(svc, /if \(CLOSED_STATUSES\.has\(existing\.data\.status\)\)/);

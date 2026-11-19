@@ -5,6 +5,7 @@ import { modelCatalogue, modelAvailability, publicModel, publicModelList, resolv
 import { PLAN_TIER_MODELS } from "./modelTiers.js";
 
 const chat = await readFile(new URL("../modules/adaptive-learning/chat.js", import.meta.url), "utf8");
+const agentLoop = await readFile(new URL("../modules/adaptive-learning/chat/agent-loop.js", import.meta.url), "utf8");
 
 test("the final Go catalogue: seven public models, DeepSeek the default", () => {
   const list = modelCatalogue({});
@@ -60,8 +61,8 @@ test("the chat: the selected model drives every mode, with capability checks", (
   assert.match(chat, /const canThinkResponses = !!selectedEntry\?\.caps\?\.responses/);
   assert.match(chat, /mode === "think" && !canThinkResponses && !canThinkChat/, "an incapable model downgrades Thinking");
   assert.match(chat, /usedModel = isResearch \? \(chatModel \|\| RESEARCH_MODEL\)/, "Research uses the picked model");
-  assert.match(chat, /reasoning: \{ effort: THINK_ANSWER_EFFORT/, "Responses stays for capable models");
-  assert.match(chat, /model: model \|\| OPENAI_MODEL,/);
+  assert.match(agentLoop, /reasoning: \{ effort: THINK_ANSWER_EFFORT/, "Responses stays for capable models");
+  assert.match(agentLoop, /model: model \|\| OPENAI_MODEL,/);
   assert.match(chat, /models: publicModelList\(process\.env, \{ allowedModels: tier\?\.allowedModels \?\? null \}\),/);
   assert.match(chat, /picker: \{ \.\.\.pickerInfo\(\),/);
 });

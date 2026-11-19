@@ -10,7 +10,7 @@ const apiRoot = join(here, "..", "..");
 const read = (p) => readFileSync(join(apiRoot, p), "utf8");
 
 test("Phase 22: the tool loop opens a run, records a step per call, closes the run", () => {
-  const chat = read("modules/adaptive-learning/chat.js");
+  const chat = read("modules/adaptive-learning/chat/agent-loop.js");
   assert.match(chat, /const runId = await startRun\(/, "opens a run");
   assert.match(chat, /await recordStep\(runId, stepRow\(/, "records a step per tool call");
   assert.match(chat, /await finishRun\(runId, \{ status: "ok" \}\)/, "closes the run");
@@ -58,9 +58,10 @@ test("Phase 22: a failed step stores a real error class and message, never raw a
 
 test("Phase 22 #1: user message persisted at turn start; a crashed turn re-runs once, safely", () => {
   const chat = read("modules/adaptive-learning/chat.js");
+  const loop = read("modules/adaptive-learning/chat/agent-loop.js");
   assert.match(chat, /persistLearnerAgentUserTurnMessage\(/, "persists the user message at turn start");
-  assert.match(chat, /startRun\(\{ sessionId: conversationId, userId: studentId, model, turnId \}\)/, "run carries the turn id");
-  assert.match(chat, /sideEffecting: changes/, "steps mark side-effecting calls");
+  assert.match(loop, /startRun\(\{ sessionId: conversationId, userId: studentId, model, turnId \}\)/, "run carries the turn id");
+  assert.match(loop, /sideEffecting: changes/, "steps mark side-effecting calls");
   const log = read("modules/adaptive-learning/executionLog.js");
   assert.match(log, /canAutoRetry\(\{ run, steps \}\)/, "guarded by the pure check");
   assert.match(log, /reRunCrashedTurn\(/, "re-runs the same turn");

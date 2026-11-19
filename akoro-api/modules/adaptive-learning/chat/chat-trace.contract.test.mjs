@@ -6,8 +6,9 @@ import {
 } from "./chat-trace.js";
 
 const chatSource = await readFile(new URL("../chat.js", import.meta.url), "utf8");
+const agentLoop = await readFile(new URL("./agent-loop.js", import.meta.url), "utf8");
 const route = chatSource.slice(chatSource.indexOf('router.post("/agent"'));
-const loop = chatSource.slice(chatSource.indexOf("async function runAgentToolLoop"), chatSource.indexOf('router.post("/agent"'));
+const loop = agentLoop;
 
 test("every Agent Chat tool has learner-language display — no backend name ever reaches a row", () => {
   const toolNames = [...chatSource.matchAll(/^\s+name: "([a-z_]+)",$/gm)].map((match) => match[1]);
@@ -82,7 +83,7 @@ test("a failing send never breaks the turn", () => {
 });
 
 test("the tool loop streams every step and is bounded by code, not the model", () => {
-  assert.match(chatSource, /export const CHAT_TOOL_LOOP_MAX_ITERATIONS = 8;/);
+  assert.match(agentLoop, /export const CHAT_TOOL_LOOP_MAX_ITERATIONS = 8;/);
   assert.match(loop, /iteration < CHAT_TOOL_LOOP_MAX_ITERATIONS/);
   assert.match(loop, /trace\?\.thinkStart\(\)/);
   assert.match(loop, /closeThink\(decisionNarration\(calls\)\)/);
@@ -104,7 +105,7 @@ test("stop (■) ends the turn between steps and while the answer streams", () =
   assert.match(loop, /if \(isAborted\(\)\) return \{ messages: transcript, toolExecutions: executions, ledger: ledgerNow, aborted: true \}/);   // the task ledger rides every return (Phase 16)
   assert.match(route, /isAborted,\n\s+\}\);/);
   assert.match(route, /if \(!reply && !stopped\(\)\)/);
-  assert.match(chatSource, /if \(isAborted\(\)\) break;/);
+  assert.match(agentLoop, /if \(isAborted\(\)\) break;/);
   assert.match(route, /STOPPED_REPLY/);
 });
 
@@ -165,10 +166,10 @@ test("Think mode reasons at every decision, falls back per turn, and reuses a fi
   assert.match(loop, /await thinkDecision\(\{/);
   assert.match(loop, /onReasoning: \(text\) => \{ if \(thinkOpen\) trace\.thinkDelta\(thinkId, text\); \}/);
   assert.match(loop, /reasonDecisions = false;/);
-  assert.match(chatSource, /async function streamDecision[\s\S]*?model: OPENAI_MODEL,/);
+  assert.match(agentLoop, /async function streamDecision[\s\S]*?model: OPENAI_MODEL,/);
   assert.match(loop, /finalText \? \{ finalText, promoted: Boolean\(liveId\) \} : \{\}/);
   assert.match(route, /think: isThink,/);
-  assert.match(chatSource, /reasoning: \{ effort: THINK_DECISION_EFFORT, summary: "auto" \}/);
+  assert.match(agentLoop, /reasoning: \{ effort: THINK_DECISION_EFFORT, summary: "auto" \}/);
 });
 
 test("Think mode answers on the reasoning model even after tools ran", () => {
@@ -181,7 +182,7 @@ test("Think mode answers on the reasoning model even after tools ran", () => {
   assert.match(route, /thinkOnce\(\{ messages: finalMessages, model: THINK_MODEL, trace \}\)/);
   // The answer's reasoning is a saved trace row too, not a loose event.
   assert.doesNotMatch(chatSource, /send\("thinking"/);
-  assert.match(chatSource, /trace\.thinkDelta\(thinkId, text\)/);
+  assert.match(agentLoop, /trace\.thinkDelta\(thinkId, text\)/);
 });
 
 // ── Found items, read groups, change rows, developer view ───────────────────

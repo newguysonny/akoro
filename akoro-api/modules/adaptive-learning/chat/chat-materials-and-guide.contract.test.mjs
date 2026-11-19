@@ -7,6 +7,8 @@ import { guidePassagesBlock } from "../documentGrounding.js";
 import { memoryForPrompt, renderRelevantMemory } from "./chat-memory.js";
 
 const chat = await readFile(new URL("../chat.js", import.meta.url), "utf8");
+const turnStore = await readFile(new URL("./turn-store.js", import.meta.url), "utf8");
+const agentLoop = await readFile(new URL("./agent-loop.js", import.meta.url), "utf8");
 const toolCatalogue = await readFile(new URL("./tool-catalogue-rest.js", import.meta.url), "utf8");
 const ID = "0f8fad5b-d9cb-469f-a165-70867728950e";
 
@@ -22,8 +24,8 @@ test("materials: links only from tool results, only to the app's own pages", () 
   const many = collectMaterials([materialsFrom("search_blog_posts", { posts: Array.from({ length: 12 }, (_, i) => ({ title: `P${i}`, slug: `p${i % 10}` })) })]);
   assert.equal(many.length, 8, "deduped and capped");
   // Echoed per tool and saved with the reply, so a reopened chat keeps its links.
-  assert.match(chat, /collectMaterials\(\[materialsFrom\(tool, toolResult\)\]\)/);
-  assert.match(chat, /const materials = collectMaterials\(execs\.map/);
+  assert.match(agentLoop, /collectMaterials\(\[materialsFrom\(tool, toolResult\)\]\)/);
+  assert.match(turnStore, /const materials = collectMaterials\(execs\.map/);
 });
 
 test("not taught yet: one chip is always 'ask your teaching guide' (the only way to untaught knowledge)", () => {
@@ -77,10 +79,10 @@ test("study tools: the agent sends learners to the reader, the link opens it on 
 
 test("the chips under a reply survive a refresh (saved on its meta)", () => {
   // Saved by suggestionsFor — the same for POST /suggestions and the chips sent on the reply's stream.
-  assert.match(chat, /void saveReplyIdeas\(\{ userId: user\?\.id, conversationId: body\?\.conversationId, reply, ideas: suggestions \}\)/);
+  assert.match(turnStore, /void saveReplyIdeas\(\{ userId: user\?\.id, conversationId: body\?\.conversationId, reply, ideas: suggestions \}\)/);
   assert.match(chat, /send\("suggestions", \{ suggestions \}\)/, "the chips ride the reply's stream");
-  assert.match(chat, /\.eq\("role", "agent"\)\.order\("created_at", \{ ascending: false \}\)\.limit\(1\)/, "only the latest agent message");
-  assert.match(chat, /if \(!last \|\| norm\(last\.text\) !== norm\(reply\)\) return false;/, "only the reply they were made for");
+  assert.match(turnStore, /\.eq\("role", "agent"\)\.order\("created_at", \{ ascending: false \}\)\.limit\(1\)/, "only the latest agent message");
+  assert.match(turnStore, /if \(!last \|\| norm\(last\.text\) !== norm\(reply\)\) return false;/, "only the reply they were made for");
 });
 
 test("not taught yet: Akoro's own material on the topic, as links; never study material from general knowledge", async () => {

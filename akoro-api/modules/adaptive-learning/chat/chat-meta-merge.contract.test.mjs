@@ -5,22 +5,24 @@ const read = (p) => readFileSync(new URL(p, import.meta.url), "utf8");
 
 test("reply materials and ideas merge atomically instead of overwriting", () => {
   const chat = read("../chat.js");
+  const turnStore = read("turn-store.js");
   const sql = read("../../../migrations/2026-chat-message-meta-merge.sql");
   const manifest = JSON.parse(read("../../../migrations/manifest.json"));
   assert.match(sql, /create or replace function public\.merge_chat_message_meta/);
   assert.match(sql, /coalesce\(meta, '\{\}'::jsonb\) \|\| coalesce\(p_patch/, "jsonb || merge in one UPDATE");
   assert.ok(manifest.schema.includes("2026-chat-message-meta-merge.sql"));
-  assert.match(chat, /async function mergeChatMeta/, "one merge helper");
-  assert.match(chat, /db\.rpc\("merge_chat_message_meta"/, "uses the atomic function");
-  assert.match(chat, /if \(meta\) await mergeChatMeta\(messageId, meta\)/, "the turn merges materials");
-  assert.match(chat, /await mergeChatMeta\(last\.id, \{ ideas: ideas\.slice\(0, 3\) \}\)/, "suggestions merge ideas");
-  assert.doesNotMatch(chat, /update\(\{ \.\.\.\(hasTrace \? \{ trace \} : \{\}\), \.\.\.\(meta \? \{ meta \} : \{\}\) \}\)/, "no replacing write remains");
+  assert.match(turnStore, /async function mergeChatMeta/, "one merge helper");
+  assert.match(turnStore, /db\.rpc\("merge_chat_message_meta"/, "uses the atomic function");
+  assert.match(turnStore, /if \(meta\) await mergeChatMeta\(messageId, meta\)/, "the turn merges materials");
+  assert.match(turnStore, /await mergeChatMeta\(last\.id, \{ ideas: ideas\.slice\(0, 3\) \}\)/, "suggestions merge ideas");
+  assert.doesNotMatch(turnStore, /update\(\{ \.\.\.\(hasTrace \? \{ trace \} : \{\}\), \.\.\.\(meta \? \{ meta \} : \{\}\) \}\)/, "no replacing write remains");
 });
 
 test("the visible reply is saved before done, keyed by the turn", () => {
   const chat = read("../chat.js");
-  assert.match(chat, /async function appendFastChatTurn/, "a fast transcript writer exists");
-  assert.match(chat, /agent_session_id: sessionId, agent_turn_id: turnId/, "rows carry the turn key (idempotent with the durable save)");
+  const turnStore = read("turn-store.js");
+  assert.match(turnStore, /async function appendFastChatTurn/, "a fast transcript writer exists");
+  assert.match(turnStore, /agent_session_id: sessionId, agent_turn_id: turnId/, "rows carry the turn key (idempotent with the durable save)");
   const fast = chat.indexOf("fastSave\", appendFastChatTurn");
   const done = chat.indexOf('send("done"', fast);
   assert.ok(fast > 0 && fast < done, "the save runs before done");
