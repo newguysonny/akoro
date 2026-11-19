@@ -11,7 +11,7 @@
  *                  only for structured content).
  */
 import { Router } from "express";
-import { llmComplete, openai, OPENAI_MODEL } from "../../lib/aiModel.js";
+import { llmComplete, openai, OPENAI_MODEL } from "../../../lib/aiModel.js";
 
 const router = Router();
 

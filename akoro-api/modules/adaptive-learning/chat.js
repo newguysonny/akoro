@@ -30,7 +30,7 @@ import db from "../../db.js";
 import config from "../../config/index.js";
 import { decayRoutes } from "./decay-review/routes.js";
 import studentAgentRoutes from "./agents/student/routes.js";
-import { activeSessions } from "./websocket.js";
+import { activeSessions } from "./realtime/websocket.js";
 import {
   getLearnerAutonomy,
   setLearnerAutonomy,

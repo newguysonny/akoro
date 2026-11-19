@@ -27,19 +27,19 @@ import trainingRouter            from "./training/agentTraining.js";
 import { startLiveStream, receiveChunk, endLiveStream } from "./training/agentTraining.js";
 import marketplaceRouter         from "./marketplace/routes.js";
 import chatRouter                from "./chat.js";
-import drawRouter                from "./draw.js";
-import { syllabusRouter }        from "./syllabus.js";
-import teachingSessionRouter     from "./teachingSession.js";
+import drawRouter                from "./teaching/draw.js";
+import { syllabusRouter }        from "./teaching/syllabus.js";
+import teachingSessionRouter     from "./teaching/teachingSession.js";
 import examPrepConfidenceRouter  from "./exam-prep/exam-prep-confidence.js";
 import studyPrepRouter         from "./study-prep/routes.js";
 import decayReviewRouter       from "./decay-review/routes.js";
 import agentRatingsRouter      from "../agent-ratings/routes.js";
 // Side-effect import: schedules the off-peak lesson-ladder pre-warm so the
 // first learner on a scheme-of-work topic never waits for generation.
-import "./ladderPrewarm.js";
-import assessmentRouter          from "./assessmentRoutes.js";
-import { setupWebSocket }        from "./websocket.js";
-import { setupAssessmentGateway } from "./assessmentGateway.js";
+import "./teaching/ladderPrewarm.js";
+import assessmentRouter          from "./assessment/assessmentRoutes.js";
+import { setupWebSocket }        from "./realtime/websocket.js";
+import { setupAssessmentGateway } from "./assessment/assessmentGateway.js";
 import { decayEngine }           from "./agents/student/decayEngine.js";
 import { authenticateToken }     from "../auth/routes.js";
 

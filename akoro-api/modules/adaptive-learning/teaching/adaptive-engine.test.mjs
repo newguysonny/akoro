@@ -8,13 +8,13 @@ import {
   ACTION_FOR_DIALOGUE_MOVE, NEXT_ACTIONS, REVIEW_SPACING_MS,
   defaultTeachingAction, recommendNextAction, unitInterval,
 } from "./adaptive-engine.js";
-import { ACTION_FOR_DIALOGUE_MOVE as GATE_TABLE, applyTeachingProgress } from "./teaching-session/state-machine.js";
-import { toUnitScore, toPercentScore, masteryWriteBack } from "./study-prep/education-engine.js";
-import { applyCentralMisconceptions, applyTeachingObservation, createTeachingEvidenceState, DIALOGUE_MOVES } from "./learner/teaching-evidence.js";
+import { ACTION_FOR_DIALOGUE_MOVE as GATE_TABLE, applyTeachingProgress } from "../teaching-session/state-machine.js";
+import { toUnitScore, toPercentScore, masteryWriteBack } from "../study-prep/education-engine.js";
+import { applyCentralMisconceptions, applyTeachingObservation, createTeachingEvidenceState, DIALOGUE_MOVES } from "../learner/teaching-evidence.js";
 
 process.env.SUPABASE_URL ||= "http://localhost:1";
 process.env.SUPABASE_SERVICE_KEY ||= "test";
-const { misconceptionTitles } = await import("./learner/learner-model.js");
+const { misconceptionTitles } = await import("../learner/learner-model.js");
 
 const read = (f) => readFile(new URL(f, import.meta.url), "utf8");
 const NOW = Date.parse("2026-11-06T12:00:00Z");
@@ -135,8 +135,8 @@ test("misconception titles come from learner_concept_state rows (deduped, bounde
 
 test("wiring: one decision path; the session copies are retired or read from the centre", async () => {
   const [studentState, gate, controller, orchestrator, readTools, store, practice] = await Promise.all([
-    read("./learner/student-state.js"), read("./teaching-session/state-machine.js"), read("./teaching-session/controller.js"),
-    read("./agents/student/orchestrator.js"), read("./study-prep/read-tools.js"), read("./study-prep/store.js"), read("./practice/service.js"),
+    read("../learner/student-state.js"), read("../teaching-session/state-machine.js"), read("../teaching-session/controller.js"),
+    read("../agents/student/orchestrator.js"), read("../study-prep/read-tools.js"), read("../study-prep/store.js"), read("../practice/service.js"),
   ]);
   assert.doesNotMatch(studentState, /export function decideNextAction/, "decideNextAction is folded into the engine");
   assert.doesNotMatch(studentState, /mistakes:\s*_merge|strengths:\s*_merge/, "no per-agent mistakes/strengths arrays");

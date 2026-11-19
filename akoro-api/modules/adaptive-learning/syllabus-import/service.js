@@ -199,7 +199,7 @@ export async function publish(id, userId) {
     await T().update({ status: "published", published_by: userId || null, published_at: now(), updated_at: now() }).eq("id", id);
     return { ...result, kind: "curriculum" };
   }
-  const { ingestSubject } = await import("../syllabus.js");
+  const { ingestSubject } = await import("../teaching/syllabus.js");
   const result = await ingestSubject(toIngestDoc(row.doc, `${row.source_file || "syllabus PDF"} (imported ${row.created_at?.slice(0, 10) || ""})`));
   const { data: subject } = await db.schema("edu").from("syllabus_subjects").select("id").eq("exam", row.doc.exam).eq("name", row.doc.name).maybeSingle();
   await T().update({ status: "published", subject_id: subject?.id || null, published_by: userId || null, published_at: now(), updated_at: now() }).eq("id", id);

@@ -68,7 +68,7 @@ test("guide pairs refuse to run a teaching turn themselves", async () => {
 });
 
 test("websocket: the old starts are retired; start passes the chosen guide; switch keeps the session", () => {
-  const ws = readFileSync(new URL("../websocket.js", import.meta.url), "utf8");
+  const ws = readFileSync(new URL("../realtime/websocket.js", import.meta.url), "utf8");
   assert.match(ws, /for \(const retired of \["start_session", "start_student_session", "start_decay_session"\]\)/);
   assert.match(ws, /code: "retired_event"/);
   assert.doesNotMatch(ws, /socket\.on\("start_session", async/);

@@ -18,16 +18,16 @@
 
 import { Router }          from "express";
 import multer                from "multer";
-import { jsonbArray, jsonbObject } from "../../lib/jsonb.js";
-import db                    from "../../db.js";
-import { NaNaEsumai }        from "./agents/nana-esumai/guide.js";
-import { authenticateToken } from "../auth/routes.js";
+import { jsonbArray, jsonbObject } from "../../../lib/jsonb.js";
+import db                    from "../../../db.js";
+import { NaNaEsumai }        from "../agents/nana-esumai/guide.js";
+import { authenticateToken } from "../../auth/routes.js";
 import {
   MAX_REFERENCE_BYTES,
   isSupportedSessionReference,
   normalizeSessionReference,
   readSessionReference,
-} from "./sessionReference.js";
+} from "../sessionReference.js";
 
 const router = Router();
 const nana   = new NaNaEsumai();

@@ -13,7 +13,7 @@
  */
 import db from "../../../db.js";
 import { resolveConceptId } from "./learning-events.js";
-import { recommendNextAction } from "../adaptive-engine.js";
+import { recommendNextAction } from "../teaching/adaptive-engine.js";
 
 const E = () => db.schema("edu");
 const STATE_COLUMNS = "concept_id, mastery, retention, misconception_active, evidence_count, last_evidence_at, next_review_due";
@@ -86,7 +86,7 @@ export async function recommendForLearner({ learnerId, conceptId, cognitive = nu
  * byFormat, confusions, rows } — empty on failure.
  */
 export async function readQuestionSignals({ learnerId, subject = null, topic = null, conceptId = null, limit = 200 } = {}) {
-  const { summariseQuestionSignals } = await import("../question-signals.js");
+  const { summariseQuestionSignals } = await import("../assessment/question-signals.js");
   if (!learnerId) return { ...summariseQuestionSignals([]), rows: [] };
   try {
     let q = E().from("learning_question_signals")

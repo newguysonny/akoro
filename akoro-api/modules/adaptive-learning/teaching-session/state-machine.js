@@ -8,7 +8,7 @@
  * nor NaNa's generated recommendation can bypass it — that property is
  * preserved exactly; only the location changed.
  */
-import { ACTION_FOR_DIALOGUE_MOVE, recommendNextAction } from "../adaptive-engine.js";
+import { ACTION_FOR_DIALOGUE_MOVE, recommendNextAction } from "../teaching/adaptive-engine.js";
 
 /** Learner-facing phase labels (moved from agents/student/orchestrator.js). */
 export const STUDENT_PHASES = Object.freeze({

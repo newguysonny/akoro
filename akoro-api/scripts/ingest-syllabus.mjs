@@ -15,7 +15,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { ingestSubject } from "../modules/adaptive-learning/syllabus.js";
+import { ingestSubject } from "../modules/adaptive-learning/teaching/syllabus.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const file = process.argv[2] || path.join(__dirname, "..", "data", "syllabus", "wassce-physics.sample.json");

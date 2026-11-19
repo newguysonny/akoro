@@ -15,7 +15,7 @@
  * REJECTED ladder is discarded (and regenerated next time).
  */
 
-import db from "../../db.js";
+import db from "../../../db.js";
 import { getSyllabusGrounding } from "./syllabus.js";
 
 const key = (s) => String(s || "").toLowerCase().trim();

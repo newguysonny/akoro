@@ -110,7 +110,7 @@ console.log('\n· Position is written as the session runs');
 // It was set once at creation and never again, so the row always claimed
 // phase 1 / subtopic 0 no matter how far anyone got.
 const ws = await import('node:fs').then(fs =>
-  fs.readFileSync('modules/adaptive-learning/websocket.js', 'utf8'));
+  fs.readFileSync('modules/adaptive-learning/realtime/websocket.js', 'utf8'));
 // Matched on the append path's own expression rather than by proximity to the
 // function name — a comment growing between the two should not fail the check.
 check('every turn records the phase and subtopic reached',

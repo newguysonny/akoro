@@ -5,7 +5,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test, { beforeEach } from "node:test";
-import { resetSharedEmbeddings } from "../../lib/searchEmbedding.js";
+import { resetSharedEmbeddings } from "../../../lib/searchEmbedding.js";
 // These seams count embedding calls: no shared embedding carried from one test to the next.
 beforeEach(() => resetSharedEmbeddings());
 
@@ -17,9 +17,9 @@ process.env.OPENAI_API_KEY ||= "test";
 process.env.GOOGLE_CLIENT_ID ||= "test";
 process.env.GOOGLE_CLIENT_SECRET ||= "test";
 
-const { default: db } = await import("../../db.js");
-const { installFakeDb } = await import("../../lib/testing/fakeDb.mjs");
-const { openai } = await import("../../lib/aiModel.js");
+const { default: db } = await import("../../../db.js");
+const { installFakeDb } = await import("../../../lib/testing/fakeDb.mjs");
+const { openai } = await import("../../../lib/aiModel.js");
 // auth/routes.js starts a ref'd setInterval (DenyList.sweep) at import that
 // would keep this test process alive forever; unref intervals made while
 // importing so the file exits by itself.

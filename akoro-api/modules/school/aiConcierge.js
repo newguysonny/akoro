@@ -18,7 +18,7 @@ import db from "../../db.js";
 import { openai, OPENAI_MODEL, llmComplete } from "../../lib/aiModel.js";
 import { authenticateToken, requireRole } from "../auth/routes.js";
 import { resolveSchoolByHost, SITE_BASE_DOMAIN } from "./tenant.js";
-import { getSyllabusContext } from "../adaptive-learning/syllabus.js";
+import { getSyllabusContext } from "../adaptive-learning/teaching/syllabus.js";
 
 const router = Router();
 const TEACHER_ROLES = ["instructor", "teacher", "admin"];

@@ -11,9 +11,9 @@
  */
 
 import { Router } from "express";
-import db from "../../db.js";
-import { authenticateToken } from "../auth/routes.js";
-import { getSyllabusGrounding } from "./syllabus.js";
+import db from "../../../db.js";
+import { authenticateToken } from "../../auth/routes.js";
+import { getSyllabusGrounding } from "../teaching/syllabus.js";
 
 const router = Router();
 

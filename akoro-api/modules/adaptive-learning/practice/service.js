@@ -99,7 +99,7 @@ export async function practiceRun() {
     engine: createWorkflowEngine({ store: makeSupabaseWorkflowStore(db) }),
     evidence: (args) => supabaseStore.recordMasteryEvidence(args),
     signals: async ({ records, ...args }) => {
-      const { recordQuestionSignals, proctoredQuestionSignals } = await import("../question-signals.js");
+      const { recordQuestionSignals, proctoredQuestionSignals } = await import("../assessment/question-signals.js");
       return recordQuestionSignals({ ...args, questions: proctoredQuestionSignals(records) });
     },
   });

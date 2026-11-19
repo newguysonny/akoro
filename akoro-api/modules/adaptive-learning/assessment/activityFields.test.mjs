@@ -57,8 +57,8 @@ test("teacherTextOf: every user message, text parts of mixed content", () => {
 });
 
 test("the chat loop runs it before the activity tools", () => {
-  const src = readFileSync(new URL("./chat.js", import.meta.url), "utf8");
-  const toolRuntime = readFileSync(new URL("./chat/tool-runtime.js", import.meta.url), "utf8");
+  const src = readFileSync(new URL("../chat.js", import.meta.url), "utf8");
+  const toolRuntime = readFileSync(new URL("../chat/tool-runtime.js", import.meta.url), "utf8");
   assert.match(src, /const unsaid = role === "instructor" \? await unsaidActivityFields\(tool, input, transcript\)/);
   assert.match(src, /if \(unsaid\) toolResult = unsaid;/);
   assert.match(toolRuntime, /tool === "prepare_activity"\) \{ fields = input; check = \["topic", "subject", "audience"\]/);

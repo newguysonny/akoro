@@ -155,7 +155,7 @@ test("terminated and flagged runs record an outcome but write no evidence; an en
 
 test("the gateway uses the controller and the code verdict (no evaluateAnswer, no forced verdict)", async () => {
   const { readFile } = await import("node:fs/promises");
-  const src = await readFile(new URL("../assessmentGateway.js", import.meta.url), "utf8");
+  const src = await readFile(new URL("../assessment/assessmentGateway.js", import.meta.url), "utf8");
   assert.ok(src.includes("conductPracticeTurn(") && !src.includes("evaluateAnswer(") && !src.includes("forcedVerdict"));
   const proctor = await readFile(new URL("../agents/sargeant/proctor.js", import.meta.url), "utf8");
   assert.ok(proctor.includes("computeVerdict(") && proctor.includes('__role: "assessor"'));

@@ -17,7 +17,7 @@
 import { getOrchestrator } from "../agents/registry.js";
 import { getOrCreateStudentAgent } from "../agents/student/knowledge.js";
 import { decayEngine } from "../agents/student/decayEngine.js";
-import { resolveLadder } from "../lessonLadder.js";
+import { resolveLadder } from "../teaching/lessonLadder.js";
 import { NaNaEsumai } from "../agents/nana-esumai/guide.js";
 import { resolveSessionDocument } from "../documentGrounding.js";
 import { loadContinuationContext, loadDecayPriorLesson } from "./context.js";

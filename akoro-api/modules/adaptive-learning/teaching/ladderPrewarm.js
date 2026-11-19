@@ -17,11 +17,11 @@
  */
 
 import cron from "node-cron";
-import { registerTick, cronSource } from "../../lib/cronTicks.js";
-import db from "../../db.js";
+import { registerTick, cronSource } from "../../../lib/cronTicks.js";
+import db from "../../../db.js";
 import { resolveLadder } from "./lessonLadder.js";
-import { NaNaEsumai } from "./agents/nana-esumai/guide.js";
-import { workerTick } from "../../lib/workerLog.js";
+import { NaNaEsumai } from "../agents/nana-esumai/guide.js";
+import { workerTick } from "../../../lib/workerLog.js";
 
 const MAX_PER_RUN = Math.max(1, parseInt(process.env.LADDER_PREWARM_MAX ?? "40", 10));
 const key = (s) => String(s || "").toLowerCase().trim();

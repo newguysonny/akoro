@@ -11,7 +11,7 @@ import db from "../../../db.js";
 import { openai } from "../../../lib/aiModel.js";
 import { appLink } from "../../../lib/urls.js";
 import { teachRequest, loadTaughtKnowledge, buildGuideMessages, shapeGuideAnswer } from "../protege.js";
-import { getSyllabusGrounding } from "../syllabus.js";
+import { getSyllabusGrounding } from "../teaching/syllabus.js";
 import { akoroMaterialFor } from "../../materials/akoroMaterial.js";
 import { searchBlogPosts, readBlogPost } from "../blogResearch.js";
 import { listMyBlogs, createBlogPost, updateBlogPost } from "../../blogs/service.js";

@@ -563,7 +563,7 @@ export function latestUserText(transcript = []) {
 }
 
 export async function unsaidActivityFields(tool, input, transcript) {
-  const { unnamedFields, askFor, teacherTextOf, knownNames, currentRequest, TYPE_LABEL } = await import("../activityFields.js");
+  const { unnamedFields, askFor, teacherTextOf, knownNames, currentRequest, TYPE_LABEL } = await import("../assessment/activityFields.js");
   let fields = null, check;
   if (tool === "prepare_activity") { fields = input; check = ["topic", "subject", "audience"]; }
   else if (tool === "schedule_activity_routine" && input?.brief) { fields = input.brief; check = ["topic", "subject", "audience"]; }

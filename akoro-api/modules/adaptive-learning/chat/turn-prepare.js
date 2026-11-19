@@ -20,7 +20,7 @@ import {
 } from "./runtime-state.js";
 import { protegeDeps } from "./handlers-social.js";
 import { loadTaughtKnowledge, renderTaughtContext } from "../protege.js";
-import { getSyllabusGrounding } from "../syllabus.js";
+import { getSyllabusGrounding } from "../teaching/syllabus.js";
 import { getPastQuestionGrounding } from "../../past-questions/routes.js";
 import { getCurriculumGrounding } from "../../curriculum/routes.js";
 import {

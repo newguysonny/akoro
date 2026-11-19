@@ -3,13 +3,13 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const websocket = await readFile(new URL("./websocket.js", import.meta.url), "utf8");
-const teachingSessionContext = await readFile(new URL("./teaching-session/context.js", import.meta.url), "utf8");
-const decayEngine = await readFile(new URL("./agents/student/decayEngine.js", import.meta.url), "utf8");
-const orchestrator = await readFile(new URL("./agents/student/orchestrator.js", import.meta.url), "utf8");
-const decayChatRoutes = await readFile(new URL("./decay-review/routes.js", import.meta.url), "utf8");
+const teachingSessionContext = await readFile(new URL("../teaching-session/context.js", import.meta.url), "utf8");
+const decayEngine = await readFile(new URL("../agents/student/decayEngine.js", import.meta.url), "utf8");
+const orchestrator = await readFile(new URL("../agents/student/orchestrator.js", import.meta.url), "utf8");
+const decayChatRoutes = await readFile(new URL("../decay-review/routes.js", import.meta.url), "utf8");
 // Session preparation (continuation / decay loading) is shared by every
 // transport since D43 — the socket and the agent bridge both call it.
-const sessionStart = await readFile(new URL("./teaching-session/start.js", import.meta.url), "utf8");
+const sessionStart = await readFile(new URL("../teaching-session/start.js", import.meta.url), "utf8");
 
 test("adaptive socket events use token identity rather than browser-supplied learner ids", () => {
   for (const event of [

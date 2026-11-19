@@ -8,30 +8,30 @@
 //   • get_my_agents — returns user's full agent inventory
 // =============================================================
 
-import { getOrchestrator, listAgentPairs } from "./agents/registry.js";
+import { getOrchestrator, listAgentPairs } from "../agents/registry.js";
 import {
   clearStateCache,
   getStudentState,
   getAgentPreferences,
   userOwnsAgent,
-} from "./learner/student-state.js";
+} from "../learner/student-state.js";
 import {
   getOrCreateStudentAgent,
   getAgentKnowledgeBySubject,
   getTopicsBySubject,
-} from "./agents/student/knowledge.js";
-import { decayEngine } from "./agents/student/decayEngine.js";
-import { provenanceLabel } from "./lessonLadder.js";
-import { normalizeSessionReference } from "./sessionReference.js";
-import { groundTurn, citationsForReply } from "./documentGrounding.js";
-import { serialiseTeachingEvidence } from "./learner/teaching-evidence.js";
+} from "../agents/student/knowledge.js";
+import { decayEngine } from "../agents/student/decayEngine.js";
+import { provenanceLabel } from "../teaching/lessonLadder.js";
+import { normalizeSessionReference } from "../sessionReference.js";
+import { groundTurn, citationsForReply } from "../documentGrounding.js";
+import { serialiseTeachingEvidence } from "../learner/teaching-evidence.js";
 import {
   createSessionRecord, ensureSessionRecord, appendSessionBlocks, completeSessionRecord,
   readSessionBlocks,
-} from "./teaching-session/lifecycle.js";
-import { carryForward } from "./teaching-session/context.js";
-import { resultToTypedBlocks } from "./teaching-session/blocks.js";
-import { prepareTeachingSession } from "./teaching-session/start.js";
+} from "../teaching-session/lifecycle.js";
+import { carryForward } from "../teaching-session/context.js";
+import { resultToTypedBlocks } from "../teaching-session/blocks.js";
+import { prepareTeachingSession } from "../teaching-session/start.js";
 
 export const activeSessions = new Map();
 
@@ -293,7 +293,7 @@ export function setupWebSocket(io) {
         // session — by its row (the continuation's sessionId).
         const isId = (v) => typeof v === "string" && /^[0-9a-f-]{36}$/i.test(v);
         const handoff = isId(workflowId) || (mode === "continuation" && isId(prevSessionId))
-          ? await import("./study-prep/wiring.js").then((w) => w.teachingHandoff()).catch(() => null)
+          ? await import("../study-prep/wiring.js").then((w) => w.teachingHandoff()).catch(() => null)
           : null;
         const owner = socket.data?.user?.id || caller;
         const teaching = !handoff ? null
@@ -316,7 +316,7 @@ export function setupWebSocket(io) {
 
         // Phase 8: the re-teaching step of the learner's own Decay Review — its end starts the last retest.
         if (mode === "decay" && isId(decayReviewWorkflowId)) {
-          const review = await import("./decay-review/wiring.js").then((w) => w.decayReview().view({ workflowId: decayReviewWorkflowId, learnerId: owner })).catch(() => null);
+          const review = await import("../decay-review/wiring.js").then((w) => w.decayReview().view({ workflowId: decayReviewWorkflowId, learnerId: owner })).catch(() => null);
           if (review?.state === "intervention" && review.teaching?.needed) orchestrator.decayReviewWorkflowId = decayReviewWorkflowId;
         }
         activeSessions.set(id, orchestrator);
@@ -462,7 +462,7 @@ export function setupWebSocket(io) {
         await appendSessionBlocks(orchestrator, [{ type: "user", text: message }, ...blocks]);
         // Phase 6: a handed-over session tells Study Prep each part taught (its card and chat follow).
         if (orchestrator.teachingWorkflowId) {
-          import("./study-prep/wiring.js").then((w) => {
+          import("../study-prep/wiring.js").then((w) => {
             const h = w.teachingHandoff();
             h.recordTurn({ workflowId: orchestrator.teachingWorkflowId, decisions: result.decisions, fallback: result.fallback, reply: result.workflow?.reply || null, mode: result.teachingMode });
             return h.progress({ workflowId: orchestrator.teachingWorkflowId, result });
@@ -572,11 +572,11 @@ export function setupWebSocket(io) {
     socket.on("set_teaching_mode", async ({ mode } = {}) => {
       const orchestrator = activeSessions.get(socket.data?.sessionId);
       if (!orchestrator?.session) return socket.emit("error", { message: "No active session." });
-      const { normaliseMode } = await import("./teaching-session/policy.js");
+      const { normaliseMode } = await import("../teaching-session/policy.js");
       orchestrator.session.teachingMode = normaliseMode(mode);
       socket.emit("teaching_mode", { mode: orchestrator.session.teachingMode });
       if (orchestrator.teachingWorkflowId) {
-        import("./study-prep/wiring.js").then((w) => w.teachingHandoff().setMode({ workflowId: orchestrator.teachingWorkflowId, mode: orchestrator.session.teachingMode })).catch(() => null);
+        import("../study-prep/wiring.js").then((w) => w.teachingHandoff().setMode({ workflowId: orchestrator.teachingWorkflowId, mode: orchestrator.session.teachingMode })).catch(() => null);
       }
     });
 
@@ -589,7 +589,7 @@ export function setupWebSocket(io) {
       const me = socket.data?.user?.id;
       if (!me || typeof workflowId !== "string") return socket.emit("workflow_open_failed", { workflowId: workflowId || null, reason: "not_found" });
       try {
-        const w = await import("./study-prep/wiring.js");
+        const w = await import("../study-prep/wiring.js");
         const handoff = w.teachingHandoff();
         const view = (await handoff.listOpen(me)).find((t) => t.workflowId === workflowId) || null;
         if (!view) return socket.emit("workflow_open_failed", { workflowId, reason: "not_open" });
@@ -613,20 +613,20 @@ export function setupWebSocket(io) {
         await ensureSessionRecord(orchestrator);
         await completeSessionRecord(orchestrator);   // mark the session row complete
         // Phase 4a: how the session's strategy turned out (fire-and-forget, never fails the end).
-        void import("./teaching-workflow/tools.js").then(({ currentTeachingStrategy, recordTeachingStrategyOutcome, teachingSessionOutcome }) => {
+        void import("../teaching-workflow/tools.js").then(({ currentTeachingStrategy, recordTeachingStrategyOutcome, teachingSessionOutcome }) => {
           const outcome = teachingSessionOutcome({ endedBy, totalTurns: endResult?.totalTurns, teachingEvidence: orchestrator.teachingEvidence });
           const strategy = currentTeachingStrategy(orchestrator);
           return outcome && strategy ? recordTeachingStrategyOutcome(orchestrator, { strategy, outcome, turnRef: "session_end", details: { endedBy, ...(bounded ? { bounded } : {}) } }) : null;
         }).catch((e) => console.warn("[strategy outcome] session end:", e.message));
         // Phase 6: a handed-over session's outcome goes back to Study Prep (its retest unlocks).
         if (orchestrator.teachingWorkflowId) {
-          await import("./study-prep/wiring.js")
+          await import("../study-prep/wiring.js")
             .then((w) => w.teachingHandoff().finish({ workflowId: orchestrator.teachingWorkflowId, endResult, notesAdded: orchestrator.stats?.agentKnowledgeAdded || 0,
               endedBy, bounded, mode: orchestrator.session?.teachingMode || null, strategy: orchestrator.session?.strategy || null }))
             .catch((e) => console.warn("[teaching handoff] finish:", e.message));
         }
         if (orchestrator.decayReviewWorkflowId) {
-          await import("./decay-review/wiring.js")
+          await import("../decay-review/wiring.js")
             .then((w) => w.decayReview().teachingDone({ workflowId: orchestrator.decayReviewWorkflowId, learnerId: orchestrator.userId || orchestrator.studentId }))
             .catch((e) => console.warn("[decay review] teaching done:", e.message));
         }
@@ -786,7 +786,7 @@ export function setupWebSocket(io) {
     // ── get_agent_growth ──────────────────────────────────────
     socket.on("get_agent_growth", async ({ studentId }) => {
       try {
-        const { getAgentGrowthHistory } = await import("./agents/student/knowledge.js");
+        const { getAgentGrowthHistory } = await import("../agents/student/knowledge.js");
         const agent   = await getOrCreateStudentAgent(studentId);
         const history = await getAgentGrowthHistory(agent.id, 20);
         socket.emit("agent_growth_data", { agent, history });

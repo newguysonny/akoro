@@ -7,11 +7,11 @@ import test from "node:test";
 
 process.env.SUPABASE_URL ||= "http://localhost:1";
 process.env.SUPABASE_SERVICE_KEY ||= "test";
-const { default: db } = await import("../../db.js");
-const { installFakeDb } = await import("../../lib/testing/fakeDb.mjs");
+const { default: db } = await import("../../../db.js");
+const { installFakeDb } = await import("../../../lib/testing/fakeDb.mjs");
 const qs = await import("./question-signals.js");
-const { readQuestionSignals } = await import("./learner/learner-model.js");
-const { makePracticeRun } = await import("./practice/service.js");
+const { readQuestionSignals } = await import("../learner/learner-model.js");
+const { makePracticeRun } = await import("../practice/service.js");
 
 const C = "22222222-2222-4222-8222-222222222222";
 
@@ -94,7 +94,7 @@ test("proctored practice: signals recorded for a clean finished run only", async
 
 test("wiring: the battle worker records check signals; the proctor times first answers; the table is migrated", async () => {
   const read = (f) => readFile(new URL(f, import.meta.url), "utf8");
-  const [worker, proctor, sql, manifest] = await Promise.all([read("../battle/worker.js"), read("./agents/sargeant/proctor.js"), read("../../migrations/2026-learning-question-signals.sql"), read("../../migrations/manifest.json")]);
+  const [worker, proctor, sql, manifest] = await Promise.all([read("../../battle/worker.js"), read("../agents/sargeant/proctor.js"), read("../../../migrations/2026-learning-question-signals.sql"), read("../../../migrations/manifest.json")]);
   assert.match(worker, /recordCheckQuestionSignals\(battleId\)/);
   assert.match(proctor, /rec\.answerMs = Math\.max\(0, Date\.now\(\) - this\.askedAt\)/);
   assert.match(sql, /UNIQUE \(learner_id, session_ref, question_ref\)/);

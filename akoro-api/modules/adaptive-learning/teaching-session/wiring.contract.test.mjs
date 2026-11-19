@@ -6,7 +6,7 @@ import { readFileSync } from "node:fs";
 const read = (p) => readFileSync(new URL(p, import.meta.url), "utf8");
 
 test("the socket: mode, guide stream, the agent's end, open_workflow, the turn audit", () => {
-  const ws = read("../websocket.js");
+  const ws = read("../realtime/websocket.js");
   assert.match(ws, /socket\.on\("teacher_message", async \(\{ message, mode \} = \{\}\)/);
   assert.match(ws, /onGuideReplyChunk: \(token\) => socket\.emit\("guide_reply_token"/);
   assert.match(ws, /if \(result\.endRequested\) await endLiveSession\(socket, \{ endedBy: result\.endRequested, bounded: result\.boundedEnd \}\)/);

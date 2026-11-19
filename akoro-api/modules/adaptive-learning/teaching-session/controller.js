@@ -24,7 +24,7 @@ import {
 } from "./policy.js";
 import { guideTeach } from "./guideTeacher.js";
 import { assessmentConcepts, protegeLine, runTeachingAssessment } from "./assessment.js";
-import { recommendNextAction } from "../adaptive-engine.js";
+import { recommendNextAction } from "../teaching/adaptive-engine.js";
 
 export const AGENT_TURN_POLICY_VERSION = "adaptive-teaching-agent-v1";
 const LABELS = Object.fromEntries(TEACHING_TURN_TOOL_CATALOG.map((t) => [t.name, t.label]));

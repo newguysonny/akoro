@@ -14,12 +14,12 @@
 import { Router } from "express";
 import multer from "multer";
 import pdfParse from "pdf-parse/lib/pdf-parse.js";
-import db from "../../db.js";
-import { openai, llmComplete } from "../../lib/aiModel.js";
-import { requireRole } from "../auth/routes.js";
-import { renderPdfToImages } from "./pdfRender.js";
-import { contentKey, extractOnce, makePgCache } from "../../lib/extractionCache.js";
-import { modelRegistry } from "../../lib/modelRegistry.js";
+import db from "../../../db.js";
+import { openai, llmComplete } from "../../../lib/aiModel.js";
+import { requireRole } from "../../auth/routes.js";
+import { renderPdfToImages } from "../pdfRender.js";
+import { contentKey, extractOnce, makePgCache } from "../../../lib/extractionCache.js";
+import { modelRegistry } from "../../../lib/modelRegistry.js";
 
 
 const slugify = (s) => String(s || "").toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
@@ -90,7 +90,7 @@ export async function ingestSubject(doc) {
 
 /** Semantic RAG search across the syllabus (optionally one subject). */
 export async function searchSyllabus(query, { subject = null, limit = 6 } = {}) {
-  const { embedForSearch } = await import("../../lib/searchEmbedding.js");
+  const { embedForSearch } = await import("../../../lib/searchEmbedding.js");
   const { data, error } = await db.rpc("match_syllabus", {
     p_query_embedding: await embedForSearch(query, { feature: "syllabus_search" }),
     p_subject_slug: subject ? slugify(subject) : null,
@@ -309,7 +309,7 @@ syllabusRouter.post("/ingest-pdf", adminOnly, (req, res) => {
 });
 
 // ── Imports: a syllabus PDF → a draft for review → publish (syllabus-import/) ──
-const imports = () => import("./syllabus-import/service.js");
+const imports = () => import("../syllabus-import/service.js");
 const importError = (res, e) => res.status(e?.status || 500).json({ success: false, message: e?.message || "Import failed" });
 
 syllabusRouter.post("/imports", adminOnly, (req, res) => {

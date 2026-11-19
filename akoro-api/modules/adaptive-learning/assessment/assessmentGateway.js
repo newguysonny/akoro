@@ -16,16 +16,16 @@
  * the temporal scorer turns noisy per-frame signals into a stable probability.
  */
 
-import { SergeantProctor }   from "./agents/sargeant/proctor.js";
-import { TemporalScorer }    from "./proctoring/temporalScorer.js";
-import { analyzeFrame, proctorServiceEnabled } from "./proctoring/frameAnalyzer.js";
-import db                    from "../../db.js";
-import { runWithAiContext }  from "../../lib/aiContext.js";
+import { SergeantProctor }   from "../agents/sargeant/proctor.js";
+import { TemporalScorer }    from "../proctoring/temporalScorer.js";
+import { analyzeFrame, proctorServiceEnabled } from "../proctoring/frameAnalyzer.js";
+import db                    from "../../../db.js";
+import { runWithAiContext }  from "../../../lib/aiContext.js";
 // Phase 9: each exam is a `practice` workflow run; the agent picks each next
 // move (practice/controller.js); score, verdict and evidence are code's.
-import { conductPracticeTurn } from "./practice/controller.js";
-import { practiceRun }       from "./practice/service.js";
-import { PRACTICE_POLICY }   from "./practice/workflow.js";
+import { conductPracticeTurn } from "../practice/controller.js";
+import { practiceRun }       from "../practice/service.js";
+import { PRACTICE_POLICY }   from "../practice/workflow.js";
 
 // sessionId → { proctor, scorer, referenceImage, dbId, blocks, cheatEvents, studentId, lastFrameTs }
 const assessments = new Map();

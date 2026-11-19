@@ -174,7 +174,7 @@ export async function recordCheckQuestionSignals(battleId) {
       db.from("battle_participants").select("id, user_id, role").eq("battle_id", battleId),
     ]);
     if (!battle || battle.battle_type !== "check" || !questions?.length) return [];
-    const { checkQuestionSignals, recordQuestionSignals } = await import("../adaptive-learning/question-signals.js");
+    const { checkQuestionSignals, recordQuestionSignals } = await import("../adaptive-learning/assessment/question-signals.js");
     const out = [];
     for (const seat of (seats || []).filter((s) => s.role !== "teacher" && s.user_id)) {
       const { data: answers } = await db.from("battle_answers").select("question_id, selected_index, is_correct, answer_basis, response_time_ms").eq("participant_id", seat.id);
