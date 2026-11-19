@@ -8,6 +8,13 @@ Entry point: `modules/records/index.js` — a pure re-export list. Other modules
 and `app.js` import the barrel only; internals (`access.js`, `askLib.js`,
 `lib/storage.js`, …) are private to this module.
 
+Layering: `routes.js` only authenticates and wires handlers. The
+`service-*.js` files own orchestration (uploads, folders, extraction, ask /
+guide, tools, study material, transcription), `rules.js` holds pure
+validation and limits, and `store-*.js` holds every Supabase query. Ownership
+checks live in the service before any read or write: upload/cover keys must
+pass `ownsRecordFileKey`, and record/folder queries are user-scoped.
+
 To extend: add the function in the owning file (or a new sibling), export it,
 then add the name to `index.js`. Cross-module dependencies go through the other
 module's `index.js`.

@@ -24,7 +24,7 @@ const read = (name) => readFile(new URL(name, import.meta.url), "utf8");
 
 const [storageSrc, recordsRoutesSrc, tasksRoutesSrc] = await Promise.all([
   read("./lib/storage.js"),
-  read("./routes.js"),
+  Promise.all([read("./routes.js"), read("./service-records.js")]).then(([a, b]) => a + b),
   read("../tasks/routes.js"),
 ]);
 

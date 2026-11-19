@@ -1,7 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-const src = readFileSync(new URL("./routes.js", import.meta.url), "utf8");
+// The validation chains and the structured 422 shape live in rules.js now;
+// routes.js only wires them.
+const src = readFileSync(new URL("./rules.js", import.meta.url), "utf8");
 
 test("validation errors are friendly, structured and do not echo values", () => {
   assert.match(src, /code: "validation_failed"/);

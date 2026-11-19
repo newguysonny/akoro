@@ -9,7 +9,8 @@ const {
   PODCAST_LENGTHS, PODCAST_LIMITS, PODCAST_VOICES, lengthOf, podcastSchema, buildPodcastMessages, shapePodcastScript,
   narrateTurns, podcastInFlight, podcastForClient, runPodcastJob, parsePodcastScriptText,
 } = await import("./podcastLib.js");
-const routes = await readFile(new URL("./routes.js", import.meta.url), "utf8");
+const routes = await readFile(new URL("./routes.js", import.meta.url), "utf8")
+  + await readFile(new URL("./service-artifacts.js", import.meta.url), "utf8");
 // The episode itself is made in studyMaterial.js (shared with Agent Chat).
 const shared = await readFile(new URL("./studyMaterial.js", import.meta.url), "utf8");
 const artifacts = await readFile(new URL("./artifactsLib.js", import.meta.url), "utf8");
@@ -137,7 +138,7 @@ test("the job fails honestly: nothing to read, no script, no credit, a provider 
 test("routes: made by the server, polled, never client-writable, audio deleted with the item", () => {
   assert.match(routes, /router\.post\("\/podcast", authenticateToken/);
   assert.match(routes, /router\.get\("\/podcast\/:id", authenticateToken/);
-  const post = routes.slice(routes.indexOf('router.post("/podcast"'), routes.indexOf('router.get("/podcast/:id"'));
+  const post = routes.slice(routes.indexOf("export async function createPodcast"), routes.indexOf("export async function getPodcast"));
   assert.match(post, /resolveAskTarget\(req, req\.body\)/);
   assert.match(post, /startPodcast\(\{ userId, target, scope, pageNumber: page, pageText, values: raw, deps: \{ speakBuffer, putRecordObject \} \}\)/);
   assert.match(post, /res\.status\(202\)/);                                         // answers first

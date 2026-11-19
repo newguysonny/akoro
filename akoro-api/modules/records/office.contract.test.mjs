@@ -9,7 +9,10 @@ process.env.SUPABASE_SERVICE_KEY ||= "test-service-key";
 const {
   officeKindOf, docxToPages, pptxToPages, paginate, decodeXml, extractOfficeContent, downloadCapped, OFFICE_LIMITS,
 } = await import("./officeText.js");
-const routes = await readFile(new URL("./routes.js", import.meta.url), "utf8");
+const routes = await readFile(new URL("./routes.js", import.meta.url), "utf8")
+  + await readFile(new URL("./rules.js", import.meta.url), "utf8")
+  + await readFile(new URL("./service-records.js", import.meta.url), "utf8")
+  + await readFile(new URL("./service-extract.js", import.meta.url), "utf8");
 
 const W = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"';
 const zipOf = (files) => {
@@ -189,7 +192,7 @@ test("routes: docx/pptx upload, extract at create, and an inline retry route", (
   assert.match(routes, /return officeKindOf\(mime, name\);/);
   assert.match(routes, /storedTextKindOf\(data\.mime, data\.name\)\)[\s\S]{0,300}extractStoredText\(/);   // Office is a stored-text kind
   assert.match(routes, /router\.post\(\["\/extract\/text", "\/extract\/office"\], authenticateToken/);
-  const route = routes.slice(routes.indexOf('router.post(["/extract/text"'), routes.indexOf('router.get("/extract/:recordId"'));
+  const route = routes.slice(routes.indexOf("export async function extractText"), routes.indexOf("export async function getRecordExtraction"));
   assert.match(route, /resolveAiContent\(req\)/);            // the shared access rule
   assert.match(route, /createPresignedDownload\(id\.contentKey/);   // the STORED bytes
   assert.doesNotMatch(route, /req\.body\?\.(pages|markdown|text)/);  // never caller-supplied text

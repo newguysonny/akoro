@@ -37,7 +37,7 @@ test("missingUrlEnv names what production hasn't set", () => {
 
 test("wiring: no module spells a platform domain any more; the JWT claims are deliberately untouched; boot warns in production", async () => {
   const read = (p) => readFile(new URL(p, import.meta.url), "utf8");
-  for (const p of ["../modules/auth/routes.js", "../modules/admin/extended.js", "../modules/admin/pilotSchools.js", "../modules/school/socialOAuth.js",
+  for (const p of ["../modules/auth/service-links.js", "../modules/auth/service-google.js", "../modules/admin/extended.js", "../modules/admin/pilotSchools.js", "../modules/school/socialOAuth.js",
     "../modules/school/service.js", "../modules/school/service-site.js", "../modules/school/service-billing.js",
     "../modules/profiles/routes.js", "../modules/instructor/tools.js", "../modules/billing/gateway.js", "../modules/courses/payments.js", "../modules/courses/cart.js",
     "../modules/courses/meeting-integration.js", "../modules/auth/emails.js"]) {
@@ -46,7 +46,7 @@ test("wiring: no module spells a platform domain any more; the JWT claims are de
     assert.doesNotMatch(src, /"https:\/\/[a-z.-]*akoro\.app/, p);
     assert.match(src, /lib\/urls\.js/, p);
   }
-  const auth = await read("../modules/auth/routes.js");
+  const auth = await read("../modules/auth/tokens.js");
   assert.match(auth, /JWT_ISSUER\s*=\s*process\.env\.JWT_ISSUER\s*\|\|\s*"https:\/\/api\.akoro\.app"/);   // opaque claims: unchanged on purpose
   const cfg = await read("../config/index.js");
   assert.match(cfg, /missingUrlEnv\(env\)/);

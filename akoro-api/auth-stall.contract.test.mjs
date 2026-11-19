@@ -3,7 +3,13 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 const read = (p) => readFileSync(new URL(p, import.meta.url), "utf8");
-const auth = read("modules/auth/routes.js");
+// The deadline helper lives in tokens.js and is applied in session.js; keep the
+// contract over the whole auth middleware, not one file name.
+const auth = [
+  read("modules/auth/routes.js"),
+  read("modules/auth/session.js"),
+  read("modules/auth/tokens.js"),
+].join("\n");
 const meeting = read("modules/courses/meeting-integration.js");
 
 test("authenticateToken's network calls carry a deadline — the silent wedge is dead", () => {

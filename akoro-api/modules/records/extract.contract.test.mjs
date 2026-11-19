@@ -23,7 +23,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const read = (p) => readFileSync(join(here, p), "utf8");
 
 const [routesSrc, libSrc, appSrc, manifest, recordsMigration, teachSessionSrc, extractPagesSrc, recordsApiSrc, workerSrc, pdfPagesSrc, readerSrc, teachModalSrc, extractionCardSrc, pharmdReaderSrc, blockLayerSrc] = await Promise.all([
-  read("routes.js") + read("access.js"),   // the access rule lives in access.js
+  read("routes.js") + read("access.js") + read("rules.js") + read("service-extract.js") + read("service-records.js"),   // the access rule lives in access.js
   read("extractLib.js"),
   read("../../app.js"),
   read("../../migrations/manifest.json"),
@@ -298,8 +298,8 @@ test("settleParseJob: real pages save, '[]' is a blank page, an empty answer is 
 });
 
 test("POST /extract submits and returns at once; GET /extract/status collects and releases the claim", () => {
-  const post = routesSrc.slice(routesSrc.indexOf('router.post("/extract"'), routesSrc.indexOf('router.get("/extract/status"'));
-  const status = routesSrc.slice(routesSrc.indexOf('router.get("/extract/status"'), routesSrc.indexOf('router.get("/extract/:recordId"'));
+  const post = routesSrc.slice(routesSrc.indexOf("export async function submitExtract"), routesSrc.indexOf("export async function extractStatus"));
+  const status = routesSrc.slice(routesSrc.indexOf("export async function extractStatus"), routesSrc.indexOf("export async function getRecordExtraction"));
   assert.ok(post.length > 0 && status.length > 0, "both routes exist, status registered BEFORE /extract/:recordId");
 
   // No GPU work rides the request: submit via /run, never /runsync.

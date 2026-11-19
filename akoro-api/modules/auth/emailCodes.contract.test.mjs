@@ -5,7 +5,8 @@ const read = (p) => readFileSync(new URL(p, import.meta.url), "utf8");
 
 test("codes are hashed, single-use, rate-limited and emailed", () => {
   const codes = read("./emailCodes.js");
-  const routes = read("./routes.js");
+  // Router wiring stays in routes.js; the code responses live in the services.
+const routes = [read("./routes.js"), read("./service.js"), read("./service-password.js")].join("\n");
   const emails = read("./emails.js");
   const sql = read("../../migrations/2026-email-verification-codes.sql");
   const manifest = JSON.parse(read("../../migrations/manifest.json"));

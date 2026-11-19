@@ -5,8 +5,9 @@ import { buildGuideMessages, cleanGuideHistory, GUIDE_LIMITS } from "./guideLib.
 import { turnRows } from "./askLib.js";
 
 const read = (p) => readFile(new URL(p, import.meta.url), "utf8");
-const [routes, askLib, migration, manifest, modal, chatView, recordSession, api] = await Promise.all([
-  read("./routes.js"), read("./askLib.js"), read("../../migrations/2026-record-chat-guide.sql"), read("../../migrations/manifest.json"),
+const routes = (await read("./routes.js")) + (await read("./service-guide.js"));
+const [askLib, migration, manifest, modal, chatView, recordSession, api] = await Promise.all([
+  read("./askLib.js"), read("../../migrations/2026-record-chat-guide.sql"), read("../../migrations/manifest.json"),
   read("../../../akoro-learner/src/components/teaching/TeachAgentModal.jsx"), read("../../../akoro-learner/src/components/teaching/SessionChatView.jsx"),
   read("../../../akoro-learner/src/components/library/RecordTeachSession.jsx"), read("../../../akoro-learner/src/services/recordsApi.js"),
 ]);

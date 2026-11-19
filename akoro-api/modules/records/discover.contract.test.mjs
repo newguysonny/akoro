@@ -20,20 +20,21 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-const source = await readFile(new URL("./routes.js", import.meta.url), "utf8");
+const source = await readFile(new URL("./routes.js", import.meta.url), "utf8")
+  + await readFile(new URL("./service-records.js", import.meta.url), "utf8");
+const storeSrc = await readFile(new URL("./store-records.js", import.meta.url), "utf8");
 const accessSrc = await readFile(new URL("./access.js", import.meta.url), "utf8");   // the premium helper moved here
 
-const LIST_START = 'router.get("/discover"';
-const OPEN_START = 'router.get("/discover/:id/open"';
-const FOLDERS_START = "router.get(\"/folders\"";
-
-const listRoute = source.slice(
-  source.indexOf(LIST_START),
-  source.indexOf(OPEN_START),
+const listRoute = storeSrc.slice(
+  storeSrc.indexOf("export const listDiscover"),
+  storeSrc.indexOf("export const countDiscover"),
+) + source.slice(
+  source.indexOf("export async function listDiscover"),
+  source.indexOf("export async function openDiscover"),
 );
 const openRoute = source.slice(
-  source.indexOf(OPEN_START),
-  source.indexOf("router.get(\"/:id/file\""),
+  source.indexOf("export async function openDiscover"),
+  source.indexOf("export async function patchRecord"),
 );
 
 test("the feed list excludes Premium subscribers' uploads", () => {
@@ -74,6 +75,6 @@ test("the open route presigns with the record's download name", () => {
 });
 
 test("the shelf's /:id/file route keeps its owner check — discovery is its own seam", () => {
-  const fileRoute = source.slice(source.indexOf('router.get("/:id/file"'));
+  const fileRoute = source.slice(source.indexOf("export async function openFile"));
   assert.match(fileRoute, /if \(existing\.user_id !== req\.user\.id\) return res403\(res, "Not your record\."\);/);
 });

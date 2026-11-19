@@ -21,7 +21,11 @@ const read = (name) => readFile(new URL(name, import.meta.url), "utf8");
 const [migration, manifest, routes, storage, app, recordsApi, addModal, libraryPage, viewer, player, pdfPages, reader, searchPage, dashboard, configJs, envExample, foldersMigration, createSheet, folderPage, itemsMigration, atfPage, pharmd, parts, courseDetails] = await Promise.all([
   read("2026-records.sql"),
   read("manifest.json"),
-  read("../modules/records/routes.js"),
+  Promise.all([
+    read("../modules/records/routes.js"), read("../modules/records/service-records.js"),
+    read("../modules/records/service-folders.js"), read("../modules/records/store-folders.js"),
+    read("../modules/records/rules.js"),
+  ]).then((parts) => parts.join("")),
   read("../modules/records/lib/storage.js"),
   read("../app.js"),
   read("../../akoro-learner/src/services/recordsApi.js"),

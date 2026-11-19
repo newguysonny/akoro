@@ -11,9 +11,10 @@ const {
   isFrontMatter, isBareHeading, isVerbatimCopy, isMetaQuestion,
 } = await import("./toolsLib.js");
 const routes = await readFile(new URL("./routes.js", import.meta.url), "utf8");
+const toolsSrc = await readFile(new URL("./service-tools.js", import.meta.url), "utf8");
 // The generation itself lives in studyMaterial.js (shared with Agent Chat).
 const shared = await readFile(new URL("./studyMaterial.js", import.meta.url), "utf8");
-const route = routes.slice(routes.indexOf('router.post("/tools/:tool"'), routes.indexOf("/* GET /api/records/ask/history"));
+const route = toolsSrc;
 
 const block = (y, text) => ({ bbox_2d: [50, y, 950, y + 60], text_content: text });
 

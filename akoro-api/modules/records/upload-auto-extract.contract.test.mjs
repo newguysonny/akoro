@@ -30,7 +30,7 @@ const read = (p) => readFileSync(join(here, p), "utf8");
 const [avLibSrc, routesSrc, lessonSrc, streamSrc, envExample,
   extractPagesSrc, modalSrc, manifest] = await Promise.all([
   read("avTranscribeLib.js"),
-  read("routes.js"),
+  read("routes.js") + read("service-records.js"),
   read("../courses/course-content.js"),
   read("../courses/stream.js"),
   read("../../.env.example"),
@@ -53,7 +53,7 @@ test("the engine: gated, claim-first, kind-checked, and it cannot throw", () => 
 test("learner A/V uploads transcribe themselves at registration", () => {
   const createIdx = routesSrc.indexOf("router.post(\"/\"");
   const hookIdx = routesSrc.indexOf("autoTranscribeContent({");
-  assert.ok(createIdx !== -1 && hookIdx !== -1 && Math.abs(hookIdx - createIdx) < 4000, "the hook lives in the create route");
+  assert.ok(createIdx !== -1 && hookIdx !== -1 && hookIdx > createIdx, "the hook runs from the create flow");
   assert.match(routesSrc, /data\.kind === "upload" && data\.file_key && avEnabled\(\) && autoTranscribeEnabled\(\) && avKindOf\(data\.mime, data\.name\)/, "only real uploads with an A/V lane, only when armed");
   assert.match(routesSrc, /createPresignedDownload\(data\.file_key, \{ downloadName: data\.name \}\)/, "the fresh file signs its own download");
   assert.match(routesSrc, /\.catch\(\(\) => \{\}\);/, "and it never fails the create");

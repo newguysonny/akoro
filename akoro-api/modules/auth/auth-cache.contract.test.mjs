@@ -2,7 +2,13 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-const auth = await readFile(new URL("./routes.js", import.meta.url), "utf8");
+// The cache now spans the session middleware (user row) and the token module
+// (revoked-jti negatives); assert over both plus the router.
+const auth = [
+  await readFile(new URL("./routes.js", import.meta.url), "utf8"),
+  await readFile(new URL("./session.js", import.meta.url), "utf8"),
+  await readFile(new URL("./tokens.js", import.meta.url), "utf8"),
+].join("\n");
 const adminSource = await readFile(new URL("../admin/routes.js", import.meta.url), "utf8");
 const schoolMgmt = await readFile(new URL("../school/mgmt.js", import.meta.url), "utf8");
 const schoolService = await readFile(new URL("../school/service.js", import.meta.url), "utf8");

@@ -10,7 +10,8 @@ const {
   storedTextKindOf, runsToParagraphs, pdfPageFromParagraphs, pdfTextPages, textFilePages, extractStoredText, STORED_TEXT_LIMITS,
 } = await import("./storedText.js");
 const { keysNeedingText, backfillRecordText } = await import("./textBackfill.js");
-const routes = await readFile(new URL("./routes.js", import.meta.url), "utf8");
+const routes = await readFile(new URL("./routes.js", import.meta.url), "utf8")
+  + await readFile(new URL("./service-records.js", import.meta.url), "utf8");   // the upload hook lives in the records service
 const app = await readFile(new URL("../../app.js", import.meta.url), "utf8");
 const pkg = JSON.parse(await readFile(new URL("../../package.json", import.meta.url), "utf8"));
 const autoExtract = await readFile(new URL("../../../akoro-learner/src/components/library/extractPages.js", import.meta.url), "utf8");

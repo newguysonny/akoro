@@ -15,7 +15,9 @@ test("a paused parse worker is named in plain words, never as RunPod's raw JSON"
 });
 
 test("learner-facing extraction routes never answer 502 (Cloudflare swaps it for a page without CORS → 'Failed to fetch')", async () => {
-  const src = await readFile(new URL("./routes.js", import.meta.url), "utf8");
+  const src = await readFile(new URL("./routes.js", import.meta.url), "utf8")
+    + await readFile(new URL("./service-extract.js", import.meta.url), "utf8")
+    + await readFile(new URL("./service-records.js", import.meta.url), "utf8");
   assert.doesNotMatch(src, /status\(502\)/);
   assert.doesNotMatch(src, /status\(504\)/);
   assert.match(src, /res\.status\(424\)\.json\(\{ success: false, code: parseRefusalCode/);

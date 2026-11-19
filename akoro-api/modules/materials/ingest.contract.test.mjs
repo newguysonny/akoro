@@ -70,7 +70,9 @@ test("suggestions: after an upload one chip is always the study step (§7.17.5)"
 });
 
 test("chat uploads follow the Library visibility rule: public for free users, Premium stays out of Discover (2026-11-16, supersedes D53)", async () => {
-  const recRoutes = await readFile(new URL("../records/routes.js", import.meta.url), "utf8");
+  const recRoutes = await readFile(new URL("../records/routes.js", import.meta.url), "utf8")
+    + await readFile(new URL("../records/service-records.js", import.meta.url), "utf8")
+    + await readFile(new URL("../records/store-records.js", import.meta.url), "utf8");
   const access = await readFile(new URL("../records/access.js", import.meta.url), "utf8");
   const mig = await readFile(new URL("../../migrations/2026-material-structure.sql", import.meta.url), "utf8");
   assert.match(mig, /ALTER TABLE edu\.records ADD COLUMN IF NOT EXISTS private boolean NOT NULL DEFAULT false/);

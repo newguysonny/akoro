@@ -15,7 +15,7 @@ const [migration, manifest, pilots, authRoutes, adminRoutes, page, schoolsPage] 
   read("../../migrations/2026-pilot-login.sql"),
   read("../../migrations/manifest.json"),
   read("pilotSchools.js"),
-  read("../auth/routes.js"),
+  read("../auth/service-password.js"),
   read("routes.js"),
   read("../../../akoro-admin/src/pages/PilotSchoolsPage.jsx"),
   read("../../../akoro-admin/src/pages/SchoolsPage.jsx"),

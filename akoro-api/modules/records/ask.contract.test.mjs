@@ -10,7 +10,9 @@ const {
   mergeFolderPassages, turnRows,
 } = await import("./askLib.js");
 const routesSrc = await readFile(new URL("./routes.js", import.meta.url), "utf8")
-  + await readFile(new URL("./access.js", import.meta.url), "utf8");   // the access rule lives in access.js
+  + await readFile(new URL("./access.js", import.meta.url), "utf8")   // the access rule lives in access.js
+  + await readFile(new URL("./service-ask.js", import.meta.url), "utf8")   // Ask's orchestration
+  + await readFile(new URL("./service-guide.js", import.meta.url), "utf8");   // the guide's saved turn shares the row shape
 const migration = await readFile(new URL("../../migrations/2026-record-chat.sql", import.meta.url), "utf8");
 const manifest = await readFile(new URL("../../migrations/manifest.json", import.meta.url), "utf8");
 

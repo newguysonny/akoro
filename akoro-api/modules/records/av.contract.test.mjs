@@ -26,7 +26,7 @@ const read = (p) => readFileSync(join(here, p), "utf8");
 
 const [routesSrc, libSrc, appSrc, manifest, migration, envExample, deepgramSrc,
   teachSessionSrc, readerSrc, teachModalSrc, playerSrc, recordsApiSrc, courseViewerSrc] = await Promise.all([
-  read("routes.js") + read("access.js"),   // the access rule lives in access.js
+  read("routes.js") + read("access.js") + read("service-transcribe.js"),   // the access rule lives in access.js; the lane in its service
   read("avTranscribeLib.js"),
   read("../../app.js"),
   read("../../migrations/manifest.json"),
