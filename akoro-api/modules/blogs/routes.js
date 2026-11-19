@@ -8,7 +8,7 @@
  * user; drafts stay private. Mounted at /api/blogs.
  */
 import { Router } from "express";
-import { authenticateToken } from "../auth/routes.js";
+import { authenticateToken } from "../auth/index.js";
 import { listMyBlogs, getBlogFor, createBlogPost, updateBlogPost, deleteBlogPost } from "./service.js";
 
 const router = Router();

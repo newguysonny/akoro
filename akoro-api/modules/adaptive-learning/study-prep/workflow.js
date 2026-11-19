@@ -12,8 +12,8 @@
  *                         effort — Study Prep's own tables stay the source of
  *                         truth, and a mirror failure never fails the learner.
  */
-import { assertTransition, canTransition, defineWorkflow } from "../../workflows/definition.js";
-import { registerWorkflow } from "../../workflows/registry.js";
+import { assertTransition, canTransition, defineWorkflow } from "../../workflows/index.js";
+import { registerWorkflow } from "../../workflows/index.js";
 import {
   RUN_STATES, RUN_STATE_LABELS, RUN_TRANSITIONS, SESSION_STATES, SESSION_TRANSITIONS, TOPIC_STATES, TOPIC_TRANSITIONS, isTopicInProgress,
 } from "./state-machine.js";

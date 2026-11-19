@@ -9,16 +9,16 @@
 import { Router } from "express";
 
 import db from "../../db.js";
-import { authenticateToken, requireRole } from "../auth/routes.js";
+import { authenticateToken, requireRole } from "../auth/index.js";
 import {
   TOOL_REQUEST_STATUSES,
   DECISION_ONLY_STATUSES,
   boundedText,
   normaliseToolRequestUpdate,
 } from "../agent-tool-requests/validation.js";
-import { CAPABILITIES } from "../self-tooling/capabilities.js";
-import { decideRequest, revokeGrant } from "../self-tooling/escalation.js";
-import { enqueueResume } from "../self-tooling/resumeQueue.js";
+import { CAPABILITIES } from "../self-tooling/index.js";
+import { decideRequest, revokeGrant } from "../self-tooling/index.js";
+import { enqueueResume } from "../self-tooling/index.js";
 import { reviewToolRequest } from "../agent-tool-requests/service.js";
 
 const router = Router();

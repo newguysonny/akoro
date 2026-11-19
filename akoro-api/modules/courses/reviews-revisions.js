@@ -16,7 +16,7 @@
 import { Router }                         from "express";
 import { body, query, validationResult }  from "express-validator";
 import db                                 from "../../db.js";
-import { authenticateToken, requireRole } from "../auth/routes.js";
+import { authenticateToken, requireRole } from "../auth/index.js";
 import { notify }                         from "../notifications/events.js";
 
 const asyncHandler = (fn) => (req, res, next) =>

@@ -22,7 +22,7 @@
 
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { generate } from "../../modules/battle/questionSource.js";
+import { generate } from "../../modules/battle/index.js";
 
 // Goldens live in data/questions.json — data, not code, so a subject or a
 // nastier topic can be added without a deploy, and so the threshold sits

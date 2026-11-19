@@ -12,7 +12,7 @@ import { Router } from "express";
 import { randomUUID } from "crypto";
 import db from "../../db.js";
 import { serverError } from "../../lib/httpError.js";
-import { authenticateToken } from "../auth/routes.js";
+import { authenticateToken } from "../auth/index.js";
 import {
   ensureAccount, getBalance, payerAccountsForUser, creditTopup,
   allocateToStudent, InsufficientCoins,

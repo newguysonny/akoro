@@ -11,7 +11,7 @@
  * ideas, not data. The requesting learner's budget meters every call
  * (their coins, their feature), and replies are tightly capped.
  */
-import { isProtectedLearner } from "../modules/agent-network/autoReplyCore.js";
+import { isProtectedLearner } from "../modules/agent-network/index.js";
 import db from "../db.js";
 import { OPENAI_MODEL, openai } from "./aiModel.js";
 

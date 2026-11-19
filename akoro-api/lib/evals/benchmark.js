@@ -19,7 +19,7 @@ import { turnCorrections } from "../turnCheck.js";
 import { runIntentStep, renderIntent } from "../../modules/adaptive-learning/intent/intentStep.js";
 import { renderDraftPlan } from "../taskLedger.js";
 import { openai } from "../aiModel.js";
-import { canonicalArgs } from "../../modules/agent-runtime/loopGuard.js";
+import { canonicalArgs } from "../../modules/agent-runtime/index.js";
 
 const SCENARIOS = benchmarkScenarios();
 let chatModule = null;

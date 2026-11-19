@@ -37,7 +37,7 @@ import { Router }                         from "express";
 import { body, validationResult }         from "express-validator";
 import multerLib                          from "multer";
 import { contentDb }                      from "../../db.js";
-import { authenticateToken, requireRole } from "../auth/routes.js";
+import { authenticateToken, requireRole } from "../auth/index.js";
 import { ensureBucket, uploadPublicFile } from "../school/templateStorage.js";
 
 const router = Router();

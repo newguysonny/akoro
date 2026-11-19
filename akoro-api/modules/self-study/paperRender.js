@@ -8,7 +8,7 @@ import { edu } from "./createAssignment.js";
 import { paperOrg, renderAssignmentHtml, renderSubmissionHtml } from "./paperTemplate.js";
 import { loadSubmissionDocument } from "./submissionArtifacts.js";
 import { readSubmissionFile } from "./submissionFiles.js";
-import { docxToPages } from "../records/officeText.js";
+import { docxToPages } from "../records/index.js";
 
 const SCHOOL_COLS = "id, name, city, lga, state";
 

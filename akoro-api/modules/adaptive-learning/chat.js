@@ -8,11 +8,11 @@
 import express from "express";
 import { isDryRun, runDry, runInspected, isInspected } from "../../lib/dryRunContext.js";
 import { jsonbArray, jsonbObject } from "../../lib/jsonb.js";
-import { authenticateToken } from "../auth/routes.js";
+import { authenticateToken } from "../auth/index.js";
 import pkg from "pg";
 import { openai } from "../../lib/aiModel.js";
 import { shapeSuggestions, buildLearnSuggestionMessages, LEARN_LIMITS, buildCitedLearnSuggestionMessages, citedLearnSchema, shapeCitedLearnSuggestions } from "./chat/chatSuggestions.js";
-import { resolveAskTargetFor } from "../records/access.js";
+import { resolveAskTargetFor } from "../records/index.js";
 import {
   learnerInsightsEnabled, learnerSoulStateEnabled, conceptTrackerEnabled,
   examPrepConfidenceEnabled, studyPrepEnabled, durableAgentChatContextEnabled,
@@ -21,8 +21,8 @@ import {
   activeSessionTurns, decisionContinuations,
 } from "./chat/runtime-state.js";
 import { protegeDeps } from "./chat/handlers-social.js";
-import { gatherPassages, extractCitations } from "../records/askLib.js";
-import { getExtraction } from "../records/extractLib.js";
+import { gatherPassages, extractCitations } from "../records/index.js";
+import { getExtraction } from "../records/index.js";
 import { publicModelList, pickerInfo, pickerEnabled } from "../../lib/modelCatalogue.js";
 import { allowedModelsFor } from "../../lib/modelTiers.js";
 const { Pool } = pkg;
@@ -200,7 +200,7 @@ router.patch("/autonomy", async (req, res) => {
       level: typeof req.body.level === "number" ? req.body.level : undefined,
     });
     // Phase 21: switching the agent Online lets it handle messages that waited.
-    if (req.body.enabled) import("../agent-network/autoReply.js").then((m) => m.wakeInbox(req.user.id, "switched_on")).catch(() => {});
+    if (req.body.enabled) import("../agent-network/index.js").then((m) => m.wakeInbox(req.user.id, "switched_on")).catch(() => {});
     res.json({ success: true, ...result });
   } catch (error) {
     res.status(500).json({ error: error.message || "Could not save agent autonomy" });

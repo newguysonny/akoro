@@ -328,7 +328,7 @@ export const materialsMultiFileDiag = {
   description: "Diagnostic: for the newest chat uploads with 2+ files, how many files became records, how many have extracted pages, and how many the structure step read — per upload, counts and ids only.",
   async run(ctx) {
     const { default: db } = await import("../../../db.js");
-    const { getExtraction } = await import("../../records/extractLib.js");
+    const { getExtraction } = await import("../../records/index.js");
     const edu = () => db.schema("edu");
     const { data: rows, error } = await edu().from("material_ingests")
       .select("id, state, names, record_ids, structure, created_at, folder_id").order("created_at", { ascending: false }).limit(200);

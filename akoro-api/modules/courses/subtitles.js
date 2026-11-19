@@ -20,7 +20,7 @@ import { S3Client, PutObjectCommand,
          DeleteObjectCommand }            from "@aws-sdk/client-s3";
 import { body, validationResult }         from "express-validator";
 import db                                 from "../../db.js";
-import { authenticateToken, requireRole } from "../auth/routes.js";
+import { authenticateToken, requireRole } from "../auth/index.js";
 import config                             from "../../config/index.js";
 import { r2Send } from "../../lib/r2Breaker.js";
 

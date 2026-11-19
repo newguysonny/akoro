@@ -11,8 +11,8 @@
  * a JPEG / PNG image, a Word .docx or plain text — the kinds the submission
  * PDF can carry. Anything else is refused at upload.
  */
-import { putRecordObject, createPresignedDownload, removeRecordFile, ownsRecordFileKey } from "../records/lib/storage.js";
-import { downloadCapped } from "../records/officeText.js";
+import { putRecordObject, createPresignedDownload, removeRecordFile, ownsRecordFileKey } from "../records/index.js";
+import { downloadCapped } from "../records/index.js";
 
 // MAX_FILES: a submission without questions; PER_QUESTION: each question of
 // one with questions (a photo, a document, a whiteboard drawing).

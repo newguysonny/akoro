@@ -60,7 +60,7 @@ test("single-source rule (D4): the chat/voice prompt literals exist only as work
   // and the surfaces really load the files through the seam — IMPORTED
   // locally, not just re-exported: `export { x } from` does not bind x, and
   // the /agent route calls assembleChatDoctrine directly (the P1 outage)
-  assert.match(prepare, /import \{ tutorSystemPrompt, assembleChatDoctrine \} from "\.\.\/\.\.\/agent-context\/chat-doctrine\.js";/, "chat imports the doctrine seam locally");
+  assert.match(prepare, /import \{ tutorSystemPrompt, assembleChatDoctrine \} from "\.\.\/\.\.\/agent-context\/index\.js";/, "chat imports the doctrine seam locally");
   assert.match(chat, /export \{ tutorSystemPrompt, assembleChatDoctrine \};/, "chat re-exports the doctrine seam for voice");
   assert.match(prepare, /assembleChatDoctrine\(\{/, "the /agent route assembles doctrine through the seam");
   assert.match(voice, /await tutorSystemPrompt\(/, "voice awaits the async persona builder");

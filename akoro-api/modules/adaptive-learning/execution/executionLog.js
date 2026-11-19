@@ -94,7 +94,7 @@ async function alreadyAutoRetried(turnId) {
 /** Re-run a crashed turn in-process (same turnId → the user message is reused, not duplicated). */
 async function reRunCrashedTurn({ userId, conversationId, turnId, message }) {
   try {
-    const { signInternalAccess } = await import("../../auth/routes.js");
+    const { signInternalAccess } = await import("../../auth/index.js");
     const token = signInternalAccess({ id: userId, role: "student" }, 600);
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 120_000); timer.unref?.();
@@ -123,7 +123,7 @@ export async function recoverInterruptedRuns({ limit = 20, olderThanMs = 15 * 60
   const stale = await sweepStaleRuns({ olderThanMs });
   if (!stale.length) return { swept: 0, retried: 0, notified: 0 };
   let postIntoChat = null;
-  try { ({ postIntoChat } = await import("../../self-tooling/escalation.js")); } catch { /* chat unavailable */ }
+  try { ({ postIntoChat } = await import("../../self-tooling/index.js")); } catch { /* chat unavailable */ }
   let retried = 0, notified = 0;
   for (const run of stale.slice(0, limit)) {
     if (!run?.session_id || !run?.user_id) continue;

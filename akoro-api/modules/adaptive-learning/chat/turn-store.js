@@ -8,7 +8,7 @@
 import db from "../../../db.js";
 import { openai } from "../../../lib/aiModel.js";
 import { collectMaterials } from "./chat-materials.js";
-import { loadDoctrine } from "../../agent-context/context-manager.js";
+import { loadDoctrine } from "../../agent-context/index.js";
 export { loadDoctrine };
 import { renderPdfToImages } from "../../../lib/pdfRender.js";
 import {

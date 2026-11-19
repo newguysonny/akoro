@@ -13,7 +13,7 @@
  */
 import db from "../../../db.js";
 import { OPENAI_MODEL, openai } from "../../../lib/aiModel.js";
-import { parseJsonLoose } from "../../tasks/tools/_json.js";
+import { parseJsonLoose } from "../../tasks/index.js";
 import { topicSlug } from "./syllabus-resolver.js";
 
 const edu = () => db.schema("edu");

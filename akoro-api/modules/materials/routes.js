@@ -36,15 +36,15 @@
 import { Router } from "express";
 import { randomUUID } from "node:crypto";
 import db from "../../db.js";
-import { authenticateToken } from "../auth/routes.js";
+import { authenticateToken } from "../auth/index.js";
 import { openai } from "../../lib/aiModel.js";
-import { getExtraction } from "../records/extractLib.js";
-import { indexRecord } from "../records/searchLib.js";
-import { removeRecordFile } from "../records/lib/storage.js";
+import { getExtraction } from "../records/index.js";
+import { indexRecord } from "../records/index.js";
+import { removeRecordFile } from "../records/index.js";
 import { cleanStructure, structureChips, structureMessage, structureMessages, structureSchema, STRUCTURE_LIMITS } from "./structureCore.js";
 import { folderItemForCandidate, searchTopics, shapeCandidates, SIMILAR_LIMITS } from "./similarCore.js";
 import { searchBlogPosts } from "../../lib/blogResearch.js";
-import { assertTransition, TransitionError } from "../workflows/definition.js";
+import { assertTransition, TransitionError } from "../workflows/index.js";
 import {
   INGEST_LIMITS, RESTORE_DAYS, ingestWorkflow, folderItemFor, ingestToApi,
 } from "./ingestCore.js";

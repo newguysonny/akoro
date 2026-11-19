@@ -23,7 +23,7 @@
  * would misquote the learner.
  */
 import { PDFDocument } from "pdf-lib";
-import { docxToPages } from "../records/officeText.js";
+import { docxToPages } from "../records/index.js";
 import { paperBlocks, passageRange, figurePng } from "./paperLayout.js";
 import { readChoice } from "./submissionView.js";
 import { A4, M, INK, MUTED, ACCENT, newPdf, letterOf, fmtDate } from "../../lib/pdf.js";

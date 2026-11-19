@@ -19,8 +19,8 @@
  * Everything that decides — retained or not, the score, the hint ladder, the
  * caps, the evidence — is here or in the harness, never the model's.
  */
-import { defineWorkflow } from "../../workflows/definition.js";
-import { registerWorkflow } from "../../workflows/registry.js";
+import { defineWorkflow } from "../../workflows/index.js";
+import { registerWorkflow } from "../../workflows/index.js";
 
 export const DECAY_STATES = Object.freeze(["created", "inspecting", "diagnostic", "evaluating", "retained", "decayed", "intervention", "retest", "adapt_strategy", "completed", "paused", "abandoned", "cancelled"]);
 const OPEN = ["created", "inspecting", "diagnostic", "evaluating", "decayed", "intervention", "retest", "adapt_strategy"];

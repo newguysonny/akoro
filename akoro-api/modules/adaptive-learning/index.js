@@ -41,7 +41,7 @@ import assessmentRouter          from "./assessment/assessmentRoutes.js";
 import { setupWebSocket }        from "./realtime/websocket.js";
 import { setupAssessmentGateway } from "./assessment/assessmentGateway.js";
 import { decayEngine }           from "./agents/student/decayEngine.js";
-import { authenticateToken }     from "../auth/routes.js";
+import { authenticateToken }     from "../auth/index.js";
 
 // ─── HTTP Router ──────────────────────────────────────────────────────────────
 

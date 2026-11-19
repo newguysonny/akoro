@@ -12,8 +12,8 @@
 
 import db from '../../db.js';
 import { untrusted, UNTRUSTED_SYSTEM_RULE } from '../../lib/untrusted.js';
-import { buildContext } from '../../modules/tasks/lib/context.js';
-import { TaskDB } from '../../modules/tasks/lib/db.js';
+import { buildContext } from '../../modules/tasks/index.js';
+import { TaskDB } from '../../modules/tasks/index.js';
 
 let pass = 0, fail = 0;
 const check = (label, ok, detail = '') => {

@@ -14,7 +14,7 @@ import { traceRedis } from "../../lib/redisTrace.js";
 import { thinkingTimeMs, autoPlayers } from "./agentPlayer.js";
 import { embedQuestion, recall, recallStrength, answerFromRecall } from "./agentRecall.js";
 import { updateKnowledgeConfidence, flagBattleReviewTopics } from "./knowledge.js";
-import { emitAutonomyEvent } from "../autonomy/triggers.js";
+import { emitAutonomyEvent } from "../autonomy/index.js";
 import { workerJob } from "../../lib/workerLog.js";
 import { coinsAvailable, schoolBillTo, InsufficientCoins, grantCoins } from "../../lib/coins.js";
 import { REVIEW_REWARD_COINS, minPlayersFor, isMarkSheet } from "./entry.js";

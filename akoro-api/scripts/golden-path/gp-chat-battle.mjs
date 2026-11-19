@@ -14,9 +14,9 @@
 //     fractions" routed to generate_quiz — whose tool set has no assign_battle
 
 import db from '../../db.js';
-import { executeAssignBattle } from '../../modules/tasks/tools/assign-battle.js';
-import { extractIntent } from '../../modules/tasks/lib/context.js';
-import { TaskDB, TaskRunDB } from '../../modules/tasks/lib/db.js';
+import { executeAssignBattle } from '../../modules/tasks/index.js';
+import { extractIntent } from '../../modules/tasks/index.js';
+import { TaskDB, TaskRunDB } from '../../modules/tasks/index.js';
 
 let pass = 0, fail = 0;
 const check = (label, ok, detail = '') => {

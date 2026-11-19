@@ -3,11 +3,11 @@
  * during module evaluation, before any route, worker or job can call them, so
  * battle and tasks never import another module's internals.
  */
-import { dailyRanking }          from "../modules/agent-network/activities.js";
-import { postChallengeRequest }  from "../modules/agent-network/challenges.js";
+import { dailyRanking }          from "../modules/agent-network/index.js";
+import { postChallengeRequest }  from "../modules/agent-network/index.js";
 import { setAgentNetworkHooks }  from "./agentNetworkHooks.js";
 import { registerBattleJobHandler } from "./battleJobHandlers.js";
-import { runActivityReview }     from "../modules/self-study/activityReview.js";
+import { runActivityReview }     from "../modules/self-study/index.js";
 import { runTeachingTool }       from "../modules/teaching/tools.js";
 import { setTeachingToolRunner } from "./teachingTools.js";
 import { installAgentDeps }      from "./agentDepsSetup.js";

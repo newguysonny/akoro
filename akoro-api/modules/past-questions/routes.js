@@ -22,7 +22,7 @@ import { Router } from "express";
 import multer from "multer";
 import db from "../../db.js";
 import { openai } from "../../lib/aiModel.js";
-import { authenticateToken, requireRole } from "../auth/routes.js";
+import { authenticateToken, requireRole } from "../auth/index.js";
 import { embed } from "../../lib/embed.js";
 import { embedForSearch } from "../../lib/searchEmbedding.js";
 import { renderPdfToImages } from "../../lib/pdfRender.js";

@@ -12,7 +12,7 @@
  */
 import { Router } from "express";
 import db from "../../db.js";
-import { authenticateToken, requireRole } from "../auth/routes.js";
+import { authenticateToken, requireRole } from "../auth/index.js";
 import { serverError } from "../../lib/httpError.js";
 import { modelRegistry, availabilityOf, ROLES } from "../../lib/modelRegistry.js";
 import { featureModels, FEATURE_MODELS } from "../../lib/aiFeatureModels.js";

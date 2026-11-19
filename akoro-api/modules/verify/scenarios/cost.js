@@ -4,7 +4,7 @@ export const contextPrefilter = {
   name: "cost.context_prefilter", area: "cost", risk: "read",
   description: "The task-context pre-filter drops empty files, dedups whitespace-identical OCR, and caps per-file/total chars with a marker — fewer input tokens, same distinct content.",
   async run(ctx) {
-    const { preFilterFileTexts } = await import("../../tasks/lib/contextPrefilter.js");
+    const { preFilterFileTexts } = await import("../../tasks/index.js");
     const { fileTexts, stats } = preFilterFileTexts([
       { fileName: "a", text: "Water cycle evaporation condensation" },
       { fileName: "b", text: "  Water cycle evaporation   condensation " },  // dup of a
@@ -46,7 +46,7 @@ export const quizScaffold = {
   name: "cost.quiz_scaffold", area: "cost", risk: "read",
   description: "The quiz scaffold is deterministic code: ids, sequential numbers, marks and lettered options are assembled from the model's content rows, so the fixed shape is identical every run.",
   async run(ctx) {
-    const { assembleQuiz } = await import("../../tasks/tools/quiz-scaffold.js");
+    const { assembleQuiz } = await import("../../tasks/index.js");
     let i = 0;
     const out = assembleQuiz([
       { question: "2+2?", options: ["1", "2", "3", "4"], answer: "4" },
@@ -65,7 +65,7 @@ export const generatorScaffold = {
   name: "cost.generator_scaffold", area: "cost", risk: "read",
   description: "Worksheet and lesson-plan structure is built in code: question numbers, lettered options, type coercion, and request-owned subject/class/duration with a canonical phase skeleton.",
   async run(ctx) {
-    const { assembleWorksheetQuestions, assembleLessonPlan } = await import("../../tasks/tools/generator-scaffold.js");
+    const { assembleWorksheetQuestions, assembleLessonPlan } = await import("../../tasks/index.js");
     const qs = assembleWorksheetQuestions([
       { type: "mcq", question: "Capital of France?", options: ["Paris", "Rome"], answer: "Paris" },
       { question: "Explain osmosis" },
@@ -106,7 +106,7 @@ export const activitiesPlan = {
   name: "cost.activities_plan", area: "cost", risk: "read",
   description: "The activity study plan is scripted: deduped subtopics, objectives keyed to exactly those subtopics, and a placeholder when the model returned none.",
   async run(ctx) {
-    const { assemblePlan } = await import("../../self-study/plan-scaffold.js");
+    const { assemblePlan } = await import("../../self-study/index.js");
     const { subtopics, objectives } = assemblePlan(
       ["  Cells ", "Cells", "Genetics", ""],
       { Cells: ["Identify organelles"], Genetics: [] },

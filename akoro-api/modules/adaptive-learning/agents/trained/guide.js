@@ -6,7 +6,7 @@
 
 import { guidePassagesBlock } from "../../grounding/documentGrounding.js";
 import { buildGuidePrompt } from "../../training/agentPromptBuilder.js";
-import { buildTrainedMustKnowPrompt, buildTrainedEvaluateSessionPrompt } from "../../../agent-context/personas/trained.js";
+import { buildTrainedMustKnowPrompt, buildTrainedEvaluateSessionPrompt } from "../../../agent-context/index.js";
 
 import { openai } from "../../../../lib/aiModel.js";
 

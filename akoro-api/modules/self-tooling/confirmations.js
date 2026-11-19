@@ -18,8 +18,8 @@ import db from "../../db.js";
 import { CAPABILITIES, learnerGrantable } from "./capabilities.js";
 import { capabilityStatus, learnerGrants } from "./registry.js";
 import { WRITE_RUNNERS } from "./capRuntime.js";
-import { agentToolArgumentsDigest } from "../agent-tools/capability.js";
-import { basisColumns, basisOfRow, currentActionBasis } from "../agent-runtime/actionBasis.js";
+import { agentToolArgumentsDigest } from "../agent-tools/index.js";
+import { basisColumns, basisOfRow, currentActionBasis } from "../agent-runtime/index.js";
 
 const edu = () => db.schema("edu");
 const TABLE = "agent_tool_write_confirmations";

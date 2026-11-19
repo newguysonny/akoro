@@ -18,7 +18,7 @@ import { verificationAssertions } from "../../lib/verificationAssertions.js";
 import { escalate, rowsText } from "./escalation.js";
 import { proposeWrite, proposePermission, proposeBuild } from "./confirmations.js";
 import { codeEnabled } from "./sandbox/index.js";
-import { basisColumns, currentActionBasis } from "../agent-runtime/actionBasis.js";
+import { basisColumns, currentActionBasis } from "../agent-runtime/index.js";
 import { isDocumentGoal, similarGoal, goalTokens } from "./toolSimilarity.js";
 import { deriveToolArea } from "./areas.js";
 import { DOMAINS, domainForGoal, genericDomain, genericReadGoal, inferAction, verifyDomainActions, byActionForGoal, aggregateForGoal, bestSelfView, MAX_DOMAIN_ACTIONS } from "./domains.js";

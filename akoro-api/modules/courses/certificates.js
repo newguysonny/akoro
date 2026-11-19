@@ -17,7 +17,7 @@ import { Router }                         from "express";
 import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 import { S3Client, PutObjectCommand }     from "@aws-sdk/client-s3";
 import db                                 from "../../db.js";
-import { authenticateToken }              from "../auth/routes.js";
+import { authenticateToken }              from "../auth/index.js";
 import config                             from "../../config/index.js";
 import { r2Send } from "../../lib/r2Breaker.js";
 

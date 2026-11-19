@@ -16,7 +16,7 @@ import axios from "axios";
 import jwt from "jsonwebtoken";
 import { randomUUID, randomBytes, createHash } from "crypto";
 import db from "../../db.js";
-import { authenticateToken, requireRole } from "../auth/routes.js";
+import { authenticateToken, requireRole } from "../auth/index.js";
 import { urlFor } from "../../lib/urls.js";
 
 const router = Router();

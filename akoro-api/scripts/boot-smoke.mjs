@@ -45,7 +45,7 @@ const { default: app } = await import("../app.js");
 // The context-layer preflight runs inside app.js boot (P0); assert it here too
 // so the smoke answers for the workspace, not just the routes.
 {
-  const { preflight } = await import("../modules/agent-context/context-manager.js");
+  const { preflight } = await import("../modules/agent-context/index.js");
   const pf = await preflight();
   if (!pf.ok) throw new Error(`context-layer preflight failed: ${pf.problems.join(" | ")}`);
   console.log(`[boot-smoke] context-layer ok v${pf.version} (${pf.sets.length} sets)`);

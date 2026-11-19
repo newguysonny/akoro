@@ -19,7 +19,7 @@ import axios                              from "axios";
 import { paystackPost, paystackGet }            from "../../lib/paystackBreaker.js";
 import { body, query, validationResult }  from "express-validator";
 import db                                 from "../../db.js";
-import { authenticateToken, requireRole } from "../auth/routes.js";
+import { authenticateToken, requireRole } from "../auth/index.js";
 import { businessConfig }                 from "../../config/index.js";
 
 const asyncHandler = (fn) => (req, res, next) =>

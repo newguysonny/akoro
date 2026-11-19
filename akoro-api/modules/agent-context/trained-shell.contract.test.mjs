@@ -53,7 +53,7 @@ test("single-source: the trained prompt literals exist only as workspace templat
     assert.doesNotMatch(source, /How to respond based on understanding/, `${name}: student ladder literal remains`);
     assert.doesNotMatch(source, /nextAction: DIG_DEEPER/, `${name}: decide contract literal remains`);
   }
-  assert.match(builder, /personas\/trained\.js/, "the builder loads the trained seam");
-  assert.match(guide, /personas\/trained\.js/, "guide loads the trained seam");
-  assert.match(control, /personas\/trained\.js/, "control loads the trained seam");
+  assert.match(builder, /agent-context\/index\.js/, "the builder loads the trained seam");
+  assert.match(guide, /agent-context\/index\.js/, "guide loads the trained seam");
+  assert.match(control, /agent-context\/index\.js/, "control loads the trained seam");
 });

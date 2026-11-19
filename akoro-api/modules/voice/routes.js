@@ -13,10 +13,10 @@
 import { Router }        from "express";
 import OpenAI, { toFile } from "openai";
 import multer            from "multer";
-import { authenticateToken } from "../auth/routes.js";
+import { authenticateToken } from "../auth/index.js";
 import { transcribeBufferDeepgram, hasDeepgram, grantAgentToken } from "./deepgram.js";
 import { speakBuffer } from "./tts.js";
-import { loadDoctrine } from "../agent-context/context-manager.js";
+import { loadDoctrine } from "../agent-context/index.js";
 import { coinsAvailable, debitCoins, InsufficientCoins } from "../../lib/coins.js";
 import { getAiBillTo } from "../../lib/aiContext.js";
 import { estimateAudioMinutes, coinsForSttMinutes, coinsForTtsChars } from "../../lib/aiPricing.js";

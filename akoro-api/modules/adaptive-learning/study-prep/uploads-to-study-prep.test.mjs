@@ -6,7 +6,7 @@ process.env.SUPABASE_URL ||= "http://localhost:1";
 process.env.SUPABASE_SERVICE_KEY ||= "test";
 process.env.OPENAI_API_KEY ||= "test";
 const { sessionForUpload } = await import("./materials-source.js");
-const { notesBlock } = await import("../../battle/basedOn.js");
+const { notesBlock } = await import("../../battle/index.js");
 const read = (f) => readFile(new URL(f, import.meta.url), "utf8");
 
 const S = (id, subject, status = "topic_active") => ({ id, subject, status });

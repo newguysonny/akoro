@@ -13,8 +13,8 @@
  * Everything that decides — the score, the hint policy and its deductions,
  * the verdict, whether evidence may be written — is here, in code.
  */
-import { defineWorkflow } from "../../workflows/definition.js";
-import { registerWorkflow } from "../../workflows/registry.js";
+import { defineWorkflow } from "../../workflows/index.js";
+import { registerWorkflow } from "../../workflows/index.js";
 
 const PROCTORED = ["created", "consent", "preparing", "in_progress", "paused", "scoring", "evaluated", "completed", "terminated", "abandoned", "cancelled"];
 const CHECK = ["running", "stopped"];

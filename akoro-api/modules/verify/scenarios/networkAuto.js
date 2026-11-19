@@ -12,8 +12,8 @@ const SENDER = "@tester01", RECIPIENT = "@tester02";
 
 async function pair(ctx) {
   const from = await ctx.as(SENDER), to = await ctx.as(RECIPIENT);
-  const { messageAgent } = await import("../../agent-network/messaging.js");
-  const { processInbox } = await import("../../agent-network/autoReply.js");
+  const { messageAgent } = await import("../../agent-network/index.js");
+  const { processInbox } = await import("../../agent-network/index.js");
   const { protegeDeps } = await import("../../adaptive-learning/chat.js");
   const send = (kind, text) => messageAgent(from.id, { to: to.id, kind, question: `${ctx.marker} ${text}` }, { deps: protegeDeps });
   // Every row this run makes is removed afterwards (both sides).
@@ -24,7 +24,7 @@ const cleanCard = (ctx, to, a) => {
   if (a?.proposalId) ctx.cleanup(() => ctx.db.deleteOwned("edu.agent_proposals", { ownerColumn: "user_id", ownerId: to.id, filters: { id: a.proposalId } }));
 };
 async function withSetting(ctx, userId, mode) {
-  const { getSettings, saveSettings } = await import("../../agent-network/network.js");
+  const { getSettings, saveSettings } = await import("../../agent-network/index.js");
   const was = (await getSettings(userId)).auto_reply || "study";
   ctx.cleanup(() => saveSettings(userId, { auto_reply: was }));
   await saveSettings(userId, { auto_reply: mode });
@@ -115,7 +115,7 @@ export const chatReplySetting = {
     ctx.note(`reply: ${m?.answer}`);
     // A JSS/primary learner is always asked — the tester's level decides which is right.
     const { data: lvl } = await (await import("../../../db.js")).default.from("users").select("study_level, year_group").eq("id", to.id).maybeSingle();
-    const { isProtectedLearner } = await import("../../agent-network/autoReplyCore.js");
+    const { isProtectedLearner } = await import("../../agent-network/index.js");
     if (isProtectedLearner({ studyLevel: lvl?.study_level, yearGroup: lvl?.year_group })) {
       cleanCard(ctx, to, a2);
       ctx.expect.eq("a protected (primary/JSS) learner is still asked", a2?.action, "ask_learner");
@@ -131,7 +131,7 @@ export const offlineWaits = {
   description: "With its agent switched Offline, a message waits unprocessed; switched Online, it is handled.",
   async run(ctx) {
     const { to, send } = await pair(ctx);
-    const { processInbox } = await import("../../agent-network/autoReply.js");
+    const { processInbox } = await import("../../agent-network/index.js");
     const { protegeDeps } = await import("../../adaptive-learning/chat.js");
     const before = await ctx.http({ as: RECIPIENT, path: "/api/adaptive/chat/autonomy" });
     const was = { enabled: !!before.body?.enabled, level: before.body?.level ?? 1 };

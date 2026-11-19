@@ -19,7 +19,7 @@ import { scheduleChatFollowUp, listChatFollowUps, cancelChatFollowUp } from "./c
 import { listChats, readChat, searchChats, postToChat, ownedChatId } from "./chat-history-tools.js";
 import { getLearnerProfileContext } from "../../../lib/learnerProfileContext.js";
 import { localiseInstant } from "../../../lib/learnerTime.js";
-import { sendNotificationEmail } from "../../auth/emails.js";
+import { sendNotificationEmail } from "../../auth/index.js";
 import { retrieveAgentKnowledge } from "../agents/student/knowledge.js";
 
 /* Where the protégé's taught knowledge comes from (edu.student_agents / agent_knowledge). */

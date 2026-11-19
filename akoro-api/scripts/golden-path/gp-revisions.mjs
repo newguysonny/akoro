@@ -89,7 +89,7 @@ const { rows: during } = await sql.query(
 check('no revision card appears mid-battle', during[0].n === 0, `${during[0].n} cards`);
 
 console.log('\n· When it ends, exactly one revision is raised');
-const { flagBattleReviewTopics } = await import('../../modules/battle/knowledge.js');
+const { flagBattleReviewTopics } = await import('../../modules/battle/index.js');
 await flagBattleReviewTopics(battleId);
 
 const { rows: after } = await sql.query(

@@ -200,7 +200,7 @@ export const battleChatPosts = {
       const s = await seriesOf(ctx, rp.result.seriesId);
       ctx.expect.eq("recurring post: a network series of posts on Saturdays", [s?.scope, s?.template?.post, (s?.days || []).join(",")], ["network", true, "6"]);
       // The first post goes up 12 hours before its start: make it now, in-process, and see it posted.
-      const { runOccurrence } = await import("../../battle/series.js");
+      const { runOccurrence } = await import("../../battle/index.js");
       const [row] = await ctx.db.rows("battle_series", { id: s.id }, { columns: "next_at" });
       const out = await runOccurrence(s.id, new Date(row.next_at).getTime());
       if (out.requestId) made.requests.add(out.requestId);

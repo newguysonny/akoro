@@ -37,8 +37,8 @@
 import { Router } from "express";
 import bcrypt from "bcrypt";
 import db from "../../db.js";
-import { authenticateToken, requireRole } from "../auth/routes.js";
-import { sendWelcomeEmail } from "../auth/emails.js";
+import { authenticateToken, requireRole } from "../auth/index.js";
+import { sendWelcomeEmail } from "../auth/index.js";
 import { urlFor } from "../../lib/urls.js";
 
 const router   = Router();

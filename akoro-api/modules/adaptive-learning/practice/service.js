@@ -93,7 +93,7 @@ let _run = null;
 export async function practiceRun() {
   if (_run) return _run;
   const [{ default: db }, { createWorkflowEngine }, { makeSupabaseWorkflowStore }, { supabaseStore }] = await Promise.all([
-    import("../../../db.js"), import("../../workflows/engine.js"), import("../../workflows/store.js"), import("../study-prep/store.js"),
+    import("../../../db.js"), import("../../workflows/index.js"), import("../../workflows/index.js"), import("../study-prep/store.js"),
   ]);
   _run = makePracticeRun({
     engine: createWorkflowEngine({ store: makeSupabaseWorkflowStore(db) }),

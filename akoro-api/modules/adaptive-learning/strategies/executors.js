@@ -247,7 +247,7 @@ export function defaultExecutorDeps({ learnerId, store, now = () => new Date().t
       return (data || []).map((r) => String(r.evidence_summary || "").slice(0, 200)).filter(Boolean);
     },
     saveFile: async ({ name, body, contentType }) => {
-      const { putRecordObject, createPresignedDownload } = await import("../../records/lib/storage.js");
+      const { putRecordObject, createPresignedDownload } = await import("../../records/index.js");
       const fileKey = await putRecordObject({ userId: learnerId, name, body: Buffer.from(body, "utf8"), contentType });
       const downloadUrl = await createPresignedDownload(fileKey, { downloadName: name.split("/").pop() }).catch(() => null);
       return { fileKey, downloadUrl: typeof downloadUrl === "string" ? downloadUrl : downloadUrl?.url || null };

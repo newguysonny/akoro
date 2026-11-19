@@ -1,7 +1,7 @@
 // Phase 3 (Grand Plan §7.9): a Study Prep session's steps are one v3 stream —
 // replayed after any sequence, learner-safe, owner-only — and the SSE stream
 // replays the gap, says caught_up, then delivers a new step live.
-import { signInternalAccess } from "../../auth/routes.js";
+import { signInternalAccess } from "../../auth/index.js";
 
 const API_BASE = process.env.INTERNAL_API_URL || `http://127.0.0.1:${process.env.PORT || 3000}`;
 

@@ -20,7 +20,7 @@ import db from "../../db.js";
 import { CAPABILITIES, FORBIDDEN } from "./capabilities.js";
 import { activeGrants } from "./registry.js";
 import { notifyUser } from "../notify.js";
-import { RULES, withActionBasis } from "../agent-runtime/actionBasis.js";
+import { RULES, withActionBasis } from "../agent-runtime/index.js";
 import { appLink } from "../../lib/urls.js";
 
 const edu = () => db.schema("edu");

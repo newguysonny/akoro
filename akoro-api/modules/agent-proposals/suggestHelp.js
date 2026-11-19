@@ -16,7 +16,7 @@
 import db from "../../db.js";
 import { notifyUser } from "../notify.js";
 import { appLink } from "../../lib/urls.js";
-import { quietOf, inQuiet } from "../autonomy/quietHours.js";
+import { quietOf, inQuiet } from "../autonomy/index.js";
 // inbox.js is imported lazily inside the delivery: it pulls the planner's
 // delivery graph, and this module is also loaded by the chat handler.
 

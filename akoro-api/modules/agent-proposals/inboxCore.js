@@ -2,8 +2,8 @@
  * modules/agent-proposals/inboxCore.js — the one inbox's pure rules (no db):
  * merging all three sources, refs, dismiss reasons, title normalisation.
  */
-import { READY } from "../autonomy/readyKinds.js";
-import { RULES } from "../agent-runtime/actionBasis.js";
+import { READY } from "../autonomy/index.js";
+import { RULES } from "../agent-runtime/index.js";
 export const DISMISS_REASONS = Object.freeze(["not_useful", "wrong_time", "too_much", "already_doing", "other"]);
 export const reasonOf = (r) => (DISMISS_REASONS.includes(r) ? r : "other");
 export const normalizeTitle = (t) => String(t || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();

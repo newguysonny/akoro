@@ -18,8 +18,8 @@ import { UPDATE_PLAN_TOOL, applyPlanUpdate } from "../../../lib/taskLedger.js";
 import { startRun, recordStep, finishRun, stepRow } from "../execution/executionLog.js";
 import { failed as toolFailed, shouldRetry, recoveryHint } from "./toolRecovery.js";
 import { runWithinLimit } from "./toolLimits.js";
-import { createLoopGuard } from "../../agent-runtime/loopGuard.js";
-import { agreesToBuild } from "../../self-tooling/capabilities.js";
+import { createLoopGuard } from "../../agent-runtime/index.js";
+import { agreesToBuild } from "../../self-tooling/index.js";
 import { adminRequestOf } from "./requestClaims.js";
 import {
   openAiChatTools, isSideEffecting, PARALLEL_CALL_BARRIERS, PARALLEL_READ_BATCH,

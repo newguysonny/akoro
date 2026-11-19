@@ -4,8 +4,8 @@
  * reinforcement, alerts) and the recall model.
  */
 import db from "../../../db.js";
-import { createWorkflowEngine } from "../../workflows/engine.js";
-import { makeSupabaseWorkflowStore } from "../../workflows/store.js";
+import { createWorkflowEngine } from "../../workflows/index.js";
+import { makeSupabaseWorkflowStore } from "../../workflows/index.js";
 import { makeDecayReview } from "./service.js";
 import "./workflow.js";   // registers the decay_review workflow
 
@@ -76,14 +76,14 @@ export const decayReview = () => (_svc ||= makeDecayReview({
     // A journaled outside step (Phase 18 item 5): made once per actionKey; after an interruption
     // the battle it already made (same title, this learner, since the step began) is reused.
     async start({ learnerId, subject, topic, mode, total, title, actionKey = null }) {
-      const { createCheckBattle } = await import("../../battle/agentCheck.js");
+      const { createCheckBattle } = await import("../../battle/index.js");
       const act = () => createCheckBattle({ learnerId, subject, topic, mode, total, title });
       if (!actionKey) return act();
       const { outsideAction } = await import("../../../lib/outbox.js");
       return (await outsideAction({ kind: "decay_check", key: actionKey, userId: learnerId, act,
         check: (journal) => madeSince({ learnerId, title, since: journal.created_at }) })).result;
     },
-    async results(battleId) { return (await import("../../battle/agentCheck.js")).checkResults(battleId); },
+    async results(battleId) { return (await import("../../battle/index.js")).checkResults(battleId); },
   },
   recall: { question: recallQuestion, judge: judgeRecall },
   agentOf: async (learnerId) => (await (await import("../agents/student/knowledge.js")).getOrCreateStudentAgent(learnerId))?.id || null,

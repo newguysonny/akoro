@@ -21,7 +21,7 @@ import { budgetState, noteBudget } from "../../lib/budget.js";
 import { modesFor, recordObservations } from "./kindModes.js";
 import { allOff, defaultModeFor, LEARNER_PROACTIVE_KINDS, MAX_OBSERVATIONS_PER_RUN, observeOnly, splitByMode } from "./kindModesCore.js";
 import { usdCost } from "../../lib/aiPricing.js";
-import { RULES, basisColumns } from "../agent-runtime/actionBasis.js";
+import { RULES, basisColumns } from "../agent-runtime/index.js";
 import { appLink } from "../../lib/urls.js";
 
 const edu = () => db.schema("edu");

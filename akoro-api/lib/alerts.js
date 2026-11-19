@@ -285,7 +285,7 @@ async function notify(rule, kind, result) {
   const to = (process.env.ALERT_EMAIL_TO || "").split(",").map(s => s.trim()).filter(Boolean);
   if (to.length && process.env.RESEND_API_KEY) {
     try {
-      const { sendOpsAlertEmail } = await import("../modules/auth/emails.js");
+      const { sendOpsAlertEmail } = await import("../modules/auth/index.js");
       await sendOpsAlertEmail({ to, subject, title: rule.title, detail: result.detail, kind, severity: rule.severity });
     } catch (e) { console.warn("[alerts] email failed:", e.message); }
   }

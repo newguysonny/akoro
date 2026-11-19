@@ -16,7 +16,7 @@
 import db from "../../db.js";
 import { CAPABILITIES, learnerGrantable } from "./capabilities.js";
 import { activeGrants } from "./registry.js";
-import { basisOfRow } from "../agent-runtime/actionBasis.js";
+import { basisOfRow } from "../agent-runtime/index.js";
 
 const edu = () => db.schema("edu");
 const NAME = /^[a-z][a-z0-9_]{2,47}$/;

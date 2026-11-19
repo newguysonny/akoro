@@ -3,7 +3,7 @@
 
 import { z }                    from "zod";
 import { TaskDB, TaskOutputDB } from "../lib/db.js";
-import { createNetworkBattle } from "../../battle/networkBattle.js";
+import { createNetworkBattle } from "../../battle/index.js";
 
 
 export const challengePeerDefinition = {

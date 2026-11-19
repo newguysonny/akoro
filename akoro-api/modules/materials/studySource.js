@@ -106,7 +106,7 @@ export async function folderRecordIds({ learnerId, folderId }) {
 export async function searchMaterials({ learnerId, folderId = null, recordIds = null, query, limit = 6 }, deps = {}) {
   const ids = new Set(recordIds?.length ? recordIds : (folderId ? await folderRecordIds({ learnerId, folderId }) : []));
   if (!ids.size || !String(query || "").trim()) return [];
-  const search = deps.search || (await import("../records/searchLib.js")).searchRecordChunks;
+  const search = deps.search || (await import("../records/index.js")).searchRecordChunks;
   const hits = (await search({ userId: learnerId, q: query, limit: 25 })).filter((h) => ids.has(h.recordId));
   if (hits.length < limit && ids.size <= 3) {
     for (const recordId of ids) {

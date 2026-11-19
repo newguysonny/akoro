@@ -18,7 +18,7 @@ import {
   isTopicInProgress, practiceStart, publicTopicStatus, topicStateAfterScore, validatePlan,
 } from "./state-machine.js";
 import { makeEvent, stampThoughtType } from "./events.js";
-import { HarnessRejection, createChecker, createRejector, stateIs } from "../../agent-runtime/harness.js";
+import { HarnessRejection, createChecker, createRejector, stateIs } from "../../agent-runtime/index.js";
 import { deliberate } from "./narration.js";
 import { guardStudyPrepStore } from "./workflow.js";
 import { autoStartFor, checkBudget, spentOnChecks } from "./wake.js";

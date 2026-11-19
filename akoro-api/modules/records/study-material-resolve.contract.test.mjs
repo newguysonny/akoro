@@ -295,7 +295,7 @@ test("indexing wiring: a chat upload is indexed when its read completes", async 
   // since the agent-driven build — shared by /structure and file_upload.
   const { readFile } = await import("node:fs/promises");
   const filingDb = await readFile(new URL("../materials/filingDb.js", import.meta.url), "utf8");
-  assert.match(filingDb, /import \{ indexRecord \} from "\.\.\/records\/searchLib\.js";/);
+  assert.match(filingDb, /import \{ indexRecord \} from "\.\.\/records\/index\.js";/);
   const filingAt = filingDb.indexOf("export async function fileIngestFromDecision");
   const readyAt = filingDb.indexOf('move(row, "ready", { structure', filingAt);
   const indexAt = filingDb.indexOf("indexRecord({", filingAt);

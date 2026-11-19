@@ -40,7 +40,7 @@ import crypto                             from "crypto";
 import db                                 from "../../db.js";
 import { notifyUser }                      from "../notify.js";
 import { authenticateToken, requireRole, endSession, invalidateCachedUser,
-         signCourseInvite, verifyCourseInvite, INVITE_MAX_DAYS } from "../auth/routes.js";
+         signCourseInvite, verifyCourseInvite, INVITE_MAX_DAYS } from "../auth/index.js";
 import multerLib                           from "multer";
 import { urlFor } from "../../lib/urls.js";
 

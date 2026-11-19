@@ -23,7 +23,7 @@
 
 import { Router } from "express";
 import db from "../../db.js";
-import { authenticateToken, requireRole } from "../auth/routes.js";
+import { authenticateToken, requireRole } from "../auth/index.js";
 import {
   APPLICATION_STATUSES, PRORATION_POLICIES,
   validateTierInput, buildTierPatch,

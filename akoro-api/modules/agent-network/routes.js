@@ -25,7 +25,7 @@
  *   GET  /league?scope&subject&exam
  */
 import { Router } from "express";
-import { authenticateToken } from "../auth/routes.js";
+import { authenticateToken } from "../auth/index.js";
 import {
   heartbeat, onlineCount, searchAgents, profileFor, getSettings, saveSettings,
   blockedWith, block, unblock, report, logPastQuestions, pastQuestionSummary,

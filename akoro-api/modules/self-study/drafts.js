@@ -22,7 +22,7 @@ import { withInstructionLine } from "./questionPaper.js";
 import { normalizeStages } from "./journeyStages.js";
 import { saveToolDraft, reviseToolDraft, retryToolVersion } from "./toolDrafts.js";
 import { cleanReview, reviewInstruction, scheduleActivityReview } from "./activityReview.js";
-import { callAsUser } from "../tasks/tools/assign-battle.js";
+import { callAsUser } from "../tasks/index.js";
 import { mergePlanItems, wantsPlanEdit } from "./planEdit.js";
 import { assemblePlan } from "./plan-scaffold.js";
 import db from "../../db.js";
@@ -482,7 +482,7 @@ async function draftBattleQuestions(instructor, payload, keep = []) {
   const d = payload.details || {};
   const total = d.total_questions || 10;
   try {
-    const { collectQuestions, presetQuestions } = await import("../battle/questionSource.js");
+    const { collectQuestions, presetQuestions } = await import("../battle/index.js");
     const topic = d.topic || payload.topic || null;
     const out = await Promise.race([
       // `keep`: questions already on the draft — kept first, in order; only the rest are written.
@@ -510,7 +510,7 @@ export async function prepareReviewQuestions(instructor, id, count) {
   if (!["self_study", "assignment", "project"].includes(draft.type)) throw invalid("Only a self study or an assignment has a review battle", 400);
   if (draft.status !== "draft") throw invalid("Only pending drafts can be changed", 409);
   const { REVIEW_LIMITS } = await import("./activityReview.js");
-  const { reviewFocus } = await import("../battle/guideReview.js");
+  const { reviewFocus } = await import("../battle/index.js");
   const p = draft.payload || {};
   const n = Math.min(REVIEW_LIMITS.MAX_Q, Math.max(REVIEW_LIMITS.MIN_Q, Math.round(Number(count) || REVIEW_LIMITS.DEFAULT_Q)));
   const topic = reviewFocus(p.topic || draft.title, Array.isArray(p.subtopics) ? p.subtopics : []);

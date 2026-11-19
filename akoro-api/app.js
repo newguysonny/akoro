@@ -39,7 +39,7 @@ import {
   internalLimit, attachRateLimitIdentity, requestLogger,
 } from "./middleware/security.js";
 
-import config                     from "./config/index.js";
+import config                     from "./config/index.js"; import "./lib/bootChecks.js";
 import { requireSharedSecret }    from "./lib/safeCompare.js";
 import { runConfigChecks }         from "./lib/preflightChecks.js";
 import { runWithRouteUsage } from "./lib/usageMeter.js";
@@ -53,7 +53,7 @@ import { applyMigrations, migrationsAlreadyApplied, migrationUrl, currentGitSha 
 import { traceRedis, startRedisTraceReporting } from "./lib/redisTrace.js";
 
 // ─── Module imports ───────────────────────────────────────────────────────────
-import authModule, { authenticateSocket } from "./modules/auth/routes.js";
+import { authModule, authenticateSocket } from "./modules/auth/index.js";
 import walletModule from "./modules/wallet/routes.js";
 import vouchersModule from "./modules/vouchers/index.js";
 import coursesModule              from "./modules/courses/index.js";
@@ -71,12 +71,12 @@ import pharmdModule              from "./modules/pharmd/routes.js";
 import programmesModule          from "./modules/programmes/routes.js";
 import courseBuilderModule       from "./modules/course-builder/routes.js";
 import hfMirrorModule            from "./modules/hfmirror/routes.js";
-import parseConsoleModule        from "./modules/records/parseConsole.js";
+import { parseConsoleModule }     from "./modules/records/index.js";
 import agentConsoleModule        from "./modules/agentConsole/routes.js";
 import verifyModule              from "./modules/verify/routes.js";
 import selfToolingModule         from "./modules/self-tooling/routes.js";
-import { startViewRegistry }     from "./modules/self-tooling/viewRegistry.js";
-import { startRoutineScheduler }  from "./modules/self-study/routines.js";
+import { startViewRegistry }     from "./modules/self-tooling/index.js";
+import { startRoutineScheduler }  from "./modules/self-study/index.js";
 import communitiesModule, { COMMUNITIES_QUERY_TIMEOUT_MS } from "./modules/communities/routes.js";
 import { setupDiscussionSocket } from "./modules/communities/discussionSocket.js";
 import instructorModule           from "./modules/instructor/index.js";
@@ -89,7 +89,7 @@ import schoolModule               from "./modules/school/index.js";
 import { studentFeedRouter,
          battleFeedRouter }       from "./modules/courses/student-feed.js";
 import voiceModule               from "./modules/voice/routes.js";
-import { setupVoiceStreaming }   from "./modules/voice/streaming.js";
+import { setupVoiceStreaming }   from "./modules/voice/index.js";
 import contentModule             from "./modules/content/routes.js";
 import paystackWebhookRouter     from "./modules/webhooks/paystack.js";
 import adminModule              from "./modules/admin/index.js";
@@ -101,16 +101,14 @@ import "./modules/billing/jobs.js"; // billing cron jobs (trial-expiry / invoice
 import learnerGoalsModule       from "./modules/learner-goals/routes.js";
 import agentProposalsModule      from "./modules/agent-proposals/routes.js";
 import agentLearnerModule      from "./modules/autonomy/learnerRoutes.js";
-import workflowsModule         from "./modules/workflows/routes.js";
+import { workflowsModule }        from "./modules/workflows/index.js";
 import materialsModule           from "./modules/materials/routes.js";
 import blogsModule               from "./modules/blogs/routes.js";
-import recordsModule             from "./modules/records/routes.js";
-import { recordsExtractionEnabled, runpodEndpointHealth } from "./modules/records/extractLib.js";
-import {
-  agentToolsRouter as agentToolsModule,
-  agentActionConfirmationsRouter as agentActionConfirmationsModule,
-  agentMemoryRouter as agentMemoryModule,
-} from "./modules/agent-tools/index.js";
+import { recordsModule }          from "./modules/records/index.js";
+import { recordsExtractionEnabled, runpodEndpointHealth } from "./modules/records/index.js";
+import agentToolsModule from "./modules/agent-tools/routes.js";
+import agentActionConfirmationsModule from "./modules/agent-tools/confirmation-routes.js";
+import agentMemoryModule from "./modules/agent-tools/memory-routes.js";
 import passport                  from "passport";
 import "./lib/bootHooks.js";
 const __dirname  = path.dirname(fileURLToPath(import.meta.url));
@@ -758,7 +756,7 @@ if (process.env.REDIS_URL && !skipJob("battle worker")) {
   // (a message arriving / the agent coming online wakes it; a 5-min sweep).
   try {
     if (!skipJob("agent inbox worker")) {
-      const { startAgentInboxWorker } = await import("./modules/agent-network/autoReply.js");
+      const { startAgentInboxWorker } = await import("./modules/agent-network/index.js");
       startAgentInboxWorker();
       console.log("[agent-inbox] worker started at boot");
     }
@@ -796,7 +794,7 @@ if (process.env.REDIS_URL && !skipJob("battle worker")) {
     const withWorker = !skipJob("self-tool resumes worker");
     const withSweep = withWorker || !skipJob("self-tool resume sweep");
     if (withWorker || withSweep) {
-      import("./modules/self-tooling/resumeQueue.js")
+      import("./modules/self-tooling/index.js")
         .then((m) => {
           if (withWorker) { m.startResumeWorker(); console.log("[self-tool-resumes] worker started at boot"); }
           else { m.armSweep(); console.log("[self-tool-resumes] sweep only (resumes run in-process)"); }
@@ -827,7 +825,7 @@ if (process.env.REDIS_URL && !skipJob("battle worker")) {
   // AKORO_AUTONOMY_* in modules/autonomy/cadence.js.
   try {
     if (!skipJob("autonomy cycle worker")) {
-      const autonomy = await import("./modules/autonomy/index.js");
+      const autonomy = await import("./modules/autonomy/scheduler.js");
       autonomy.startAutonomyCycleWorker();
       console.log("[autonomy] planner worker started at boot");
     }
@@ -859,7 +857,7 @@ if (!skipJob("embedding sweeper")) {
 // Scans, images and recordings stay on the reader's tap-to-extract offer.
 if (!skipJob("record text backfill")) {
   setTimeout(() => {
-    import("./modules/records/textBackfill.js")
+    import("./modules/records/index.js")
       .then((m) => m.backfillRecordText())
       .catch((e) => console.error("[records/text-backfill] failed:", e.message));
   }, 3 * 60_000).unref?.();
@@ -1036,7 +1034,7 @@ if (!skipJob("routine scheduler")) startRoutineScheduler();
 // agent behaviour can never silently change because a workspace file went
 // missing. The logged version hash makes doctrine drift observable.
 {
-  const { preflight } = await import("./modules/agent-context/context-manager.js");
+  const { preflight } = await import("./modules/agent-context/index.js");
   const contextLayer = await preflight();
   if (!contextLayer.ok) {
     console.error("[context-layer] PREFLIGHT FAIL:", contextLayer.problems.join(" | "));
@@ -1046,7 +1044,7 @@ if (!skipJob("routine scheduler")) startRoutineScheduler();
   // Admin-edited prompt parts (Phase 18 item 7): from now on a part with an
   // override loads the admin's text (30-second cache; AGENT_PROMPT_OVERRIDES=off
   // turns them all off). The preflight above checked the shipped defaults.
-  const { installPromptOverrides } = await import("./modules/agent-context/override-store.js");
+  const { installPromptOverrides } = await import("./modules/agent-context/index.js");
   if (installPromptOverrides()) console.log("[context-layer] prompt overrides on");
 }
 

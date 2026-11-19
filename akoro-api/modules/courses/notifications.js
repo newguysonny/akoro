@@ -16,7 +16,7 @@
 import { Router }                         from "express";
 import { body, validationResult }         from "express-validator";
 import db                                 from "../../db.js";
-import { authenticateToken }              from "../auth/routes.js";
+import { authenticateToken }              from "../auth/index.js";
 import { getPublicKey, isPushEnabled }    from "../notifications/webpush.js";
 
 const asyncHandler = (fn) => (req, res, next) =>

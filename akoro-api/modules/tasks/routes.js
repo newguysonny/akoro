@@ -15,8 +15,8 @@ import { createPresignedUpload }          from "./lib/storage.js";
 import { extractTextFromUrl }             from "./lib/ocr.js";
 import { ALL_TOOLS }                      from "./tools/index.js";
 import { OPENAI_MODEL }                   from "../../lib/aiModel.js";
-import { authenticateToken, requireRole } from "../auth/routes.js";
-import { emitAutonomyEvent } from "../autonomy/triggers.js";
+import { authenticateToken, requireRole } from "../auth/index.js";
+import { emitAutonomyEvent } from "../autonomy/index.js";
 import { agentDeps } from "../../lib/agentDeps.js";
 
 const router = Router();
@@ -592,7 +592,7 @@ router.post("/:taskId/create-challenge", async (req, res) => {
     // seats set up, the opponent notified with the full challenge card, entry
     // gate and HP/XP rules. This route used to insert a battle with no
     // questions, which ended the moment it started.
-    const { createNetworkBattle } = await import("../battle/networkBattle.js");
+    const { createNetworkBattle } = await import("../battle/index.js");
     const difficulty = { easy: "easy", medium: "intermediate", intermediate: "intermediate", hard: "hard" }[String(task.payload?.difficulty ?? "medium").toLowerCase()] || "intermediate";
     const result = await createNetworkBattle({
       creatorId: req.user.id, opponents: [opponentId], source: "challenge",

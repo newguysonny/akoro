@@ -19,7 +19,7 @@ import {
   buildKnowledgeMapPrompt, buildObjectivesPrompt, buildOpenSubtopicPrompt, buildCoachTurnPrompt,
   buildPushFurtherPrompt, buildEvaluateSubtopicPrompt, buildMustKnowPrompt, buildEvidenceInstruction,
   buildTipDecisionPrompt, buildClassAnalyticsPrompt, buildEvaluateSessionPrompt,
-} from "../../../agent-context/personas/nana-esumai.js";
+} from "../../../agent-context/index.js";
 
 /**
  * Turn whatever the model returned into a ladder that holds its shape.

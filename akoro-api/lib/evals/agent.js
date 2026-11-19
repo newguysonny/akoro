@@ -22,9 +22,9 @@
 
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { runAgentLoop } from "../../modules/tasks/lib/agentLoop.js";
-import { getToolsForTaskType } from "../../modules/tasks/tools/index.js";
-import { buildSystemPrompt } from "../../modules/tasks/lib/context.js";
+import { runAgentLoop } from "../../modules/tasks/index.js";
+import { getToolsForTaskType } from "../../modules/tasks/index.js";
+import { buildSystemPrompt } from "../../modules/tasks/index.js";
 import { argMatches } from "./match.js";
 
 const DATA = JSON.parse(readFileSync(fileURLToPath(new URL("./data/agent.json", import.meta.url)), "utf8"));

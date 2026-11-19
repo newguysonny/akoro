@@ -18,7 +18,7 @@ import { openai } from "../base-orchestrator.js";
 import {
   buildAssessmentQuestionsPrompt, buildAssessmentEvaluatePrompt,
   buildAssessmentVerdictPrompt, buildAssessmentDriftPrompt,
-} from "../../../agent-context/personas/sargeant.js";
+} from "../../../agent-context/index.js";
 
 export class Sargeant {
 

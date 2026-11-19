@@ -33,8 +33,8 @@
 import { Router }                         from "express";
 import { body, param, validationResult }  from "express-validator";
 import db                                 from "../../db.js";
-import { autoTranscribeContent } from "../records/avTranscribeLib.js";
-import { authenticateToken, requireRole } from "../auth/routes.js";
+import { autoTranscribeContent } from "../records/index.js";
+import { authenticateToken, requireRole } from "../auth/index.js";
 import { awardXP, XP }                     from "../ranking/routes.js";
 import { canManageCourse, canUseCourse, courseOfModule, courseOfLesson } from "./courseAccess.js";
 

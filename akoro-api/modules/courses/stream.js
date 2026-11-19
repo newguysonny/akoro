@@ -57,10 +57,10 @@ import {
 import { getSignedUrl }                   from "@aws-sdk/s3-request-presigner";
 import path                               from "path";
 import { fileURLToPath }                  from "url";
-import { authenticateToken, requireRole } from "../auth/routes.js";
+import { authenticateToken, requireRole } from "../auth/index.js";
 import db                                 from "../../db.js";
-import { autoTranscribeContent }          from "../records/avTranscribeLib.js";
-import { mediaWorkerEnabled }             from "../records/mediaClient.js";
+import { autoTranscribeContent }          from "../records/index.js";
+import { mediaWorkerEnabled }             from "../records/index.js";
 import { dispatchEncode }                 from "./encodeDispatch.js";
 import { r2Send } from "../../lib/r2Breaker.js";
 import { requireSharedSecret }            from "../../lib/safeCompare.js";

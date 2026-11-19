@@ -15,13 +15,13 @@
  */
 
 import { Router } from "express";
-import { invalidateCachedUser } from "../auth/routes.js";
+import { invalidateCachedUser } from "../auth/index.js";
 import crypto from "crypto";
 import bcrypt from "bcrypt";
 import multerLib from "multer";
 import AdmZip from "adm-zip";
 import db from "../../db.js";
-import { authenticateToken, requireRole } from "../auth/routes.js";
+import { authenticateToken, requireRole } from "../auth/index.js";
 import { ensureBucket, uploadPublicFile } from "./templateStorage.js";
 import { renderDocument } from "./documentRenderer.js";
 import { openai } from "../../lib/aiModel.js";

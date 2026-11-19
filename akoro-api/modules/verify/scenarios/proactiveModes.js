@@ -8,10 +8,10 @@
  *   outbox.delivery                a send that fails twice then succeeds goes once, in order; the
  *                                  same work again is a no-op
  */
-import { runAutonomyCycleForUser } from "../../autonomy/cycle.js";
-import { deliverProactive } from "../../autonomy/deliver.js";
-import { forgetKindModes } from "../../autonomy/kindModes.js";
-import { LEARNER_PROACTIVE_KINDS } from "../../autonomy/kindModesCore.js";
+import { runAutonomyCycleForUser } from "../../autonomy/index.js";
+import { deliverProactive } from "../../autonomy/index.js";
+import { forgetKindModes } from "../../autonomy/index.js";
+import { LEARNER_PROACTIVE_KINDS } from "../../autonomy/index.js";
 import { budgetState } from "../../../lib/budget.js";
 
 const db = async () => (await import("../../../db.js")).default;

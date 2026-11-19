@@ -18,7 +18,7 @@
 import { z }            from "zod";
 import db               from "../../../db.js";
 import { TaskOutputDB } from "../lib/db.js";
-import { signInternalAccess } from "../../auth/routes.js";
+import { signInternalAccess } from "../../auth/index.js";
 
 const API_BASE = process.env.INTERNAL_API_URL || `http://127.0.0.1:${process.env.PORT || 3000}`;
 

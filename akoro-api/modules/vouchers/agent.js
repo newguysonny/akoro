@@ -4,7 +4,7 @@
  */
 import { Router } from "express";
 import { randomUUID } from "crypto";
-import { authenticateToken } from "../auth/routes.js";
+import { authenticateToken } from "../auth/index.js";
 import { vdb } from "./db.js";
 import { serverError } from "./lib/httpError.js";
 import { getBalance, debit, credit, transactions } from "./lib/wallet.js";

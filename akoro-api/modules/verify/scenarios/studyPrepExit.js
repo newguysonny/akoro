@@ -69,8 +69,8 @@ export const setsPerOperation = {
   name: "context.sets_per_operation", area: "agent-context", risk: "read",
   description: "Every workflow operation (planning, strategy selection, teaching turns, decay, practice) loads its own manifest set on this build — the right files in order, within budget — and the context preflight is green.",
   async run(ctx) {
-    const { contextSetFor, loadContext, preflight, CONTEXT_MANIFEST, CONTEXT_BUDGET } = await import("../../agent-context/context-manager.js");
-    const { operationRows } = await import("../../agent-context/operations.mjs");
+    const { contextSetFor, loadContext, preflight, CONTEXT_MANIFEST, CONTEXT_BUDGET } = await import("../../agent-context/index.js");
+    const { operationRows } = await import("../../agent-context/index.js");
     const report = await preflight();
     ctx.note(`context version ${report.version}; ${report.sets.length} sets`);
     ctx.expect.ok("context preflight is green", report.ok, report.problems);

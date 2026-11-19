@@ -28,7 +28,7 @@
 import cron from "node-cron";
 import db from "../../db.js";
 import config from "../../config/index.js";
-import { sendGenericEmail } from "../auth/emails.js";
+import { sendGenericEmail } from "../auth/index.js";
 
 /* ── settings ──────────────────────────────────────────────────────────────── */
 

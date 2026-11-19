@@ -22,11 +22,11 @@
  * the caller belongs to one, otherwise to the teacher — the same rule as every
  * other AI feature.
  */
-import { speakBuffer } from "../voice/tts.js";
+import { speakBuffer } from "../voice/index.js";
 import { Router } from "express";
 import db from "../../db.js";
 import { openai, OPENAI_MODEL } from "../../lib/aiModel.js";
-import { authenticateToken, requireRole } from "../auth/routes.js";
+import { authenticateToken, requireRole } from "../auth/index.js";
 import { chargeForAI, schoolBillTo, debitCoins, coinsAvailable, InsufficientCoins } from "../../lib/coins.js";
 import { serverError } from "../../lib/httpError.js";
 import { closeJson } from "./jsonRepair.js";

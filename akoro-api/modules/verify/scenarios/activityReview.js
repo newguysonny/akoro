@@ -39,8 +39,8 @@ async function assignWithReview(ctx) {
     if (!found) ctx.expect.blocked(`${BATTLE_INSTRUCTOR} has no class with 2 test learners who have an agent`);
     const { classroom, learners } = found;
     const db = (await import("../../../db.js")).default;
-    const { createActivityDraft } = await import("../../self-study/drafts.js");
-    const { runActivityReview } = await import("../../self-study/activityReview.js");
+    const { createActivityDraft } = await import("../../self-study/index.js");
+    const { runActivityReview } = await import("../../self-study/index.js");
 
     // A self-study draft, as the chat makes one.
     const { draft } = await createActivityDraft({

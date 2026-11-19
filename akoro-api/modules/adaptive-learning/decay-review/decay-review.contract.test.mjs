@@ -9,8 +9,8 @@ import assert from "node:assert/strict";
 process.env.SUPABASE_URL ||= "http://127.0.0.1:9";
 process.env.SUPABASE_SERVICE_KEY ||= "test";
 
-const { createWorkflowEngine } = await import("../../workflows/engine.js");
-const { memoryWorkflowStore } = await import("../../workflows/store.js");
+const { createWorkflowEngine } = await import("../../workflows/index.js");
+const { memoryWorkflowStore } = await import("../../workflows/index.js");
 await import("./workflow.js");
 const { makeDecayReview } = await import("./service.js");
 const { recallOutcome, nextHintLevel, evaluateRetention, conceptOutcomes, DECAY_POLICY } = await import("./workflow.js");

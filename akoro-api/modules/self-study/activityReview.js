@@ -72,8 +72,8 @@ export async function runActivityReview(assignmentId) {
   const { data: targets } = await edu().from("self_study_targets").select("student_id").eq("assignment_id", assignmentId);
   const learnerIds = [...new Set((targets || []).map((t) => t.student_id))];
   if (!learnerIds.length) return { sent: 0, skipped: "no learners" };
-  const { createCheckBattle } = await import("../battle/agentCheck.js");
-  const { reviewFocus } = await import("../battle/guideReview.js");
+  const { createCheckBattle } = await import("../battle/index.js");
+  const { reviewFocus } = await import("../battle/index.js");
   const at = a.details.review.at;
   let made;
   try {
@@ -135,7 +135,7 @@ export async function activityReviews(assignmentId) {
     db.from("battle_participants").select("user_id, joined_at, declined_at").eq("battle_id", battleId).neq("role", "teacher"),
   ]) : [{ data: null }, { data: [] }];
   const seatOf = new Map((seats || []).map((s) => [s.user_id, s]));
-  const { checkResults } = await import("../battle/agentCheck.js");
+  const { checkResults } = await import("../battle/index.js");
   const out = [];
   for (const t of targets || []) {
     const seat = seatOf.get(t.student_id);

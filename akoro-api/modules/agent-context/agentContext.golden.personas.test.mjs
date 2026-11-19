@@ -126,11 +126,11 @@ test("single-source rule (D4): the persona prompt literals exist only as workspa
     assert.doesNotMatch(source, /You consolidate a student's own study notes/, `${name}: merge rule literal remains`);
   }
   // and the surfaces really build their prompts through the persona modules
-  assert.match(files.guide, /agent-context\/personas\/nana-esumai\.js/, "guide imports the nana builders");
-  assert.match(files.assessment, /agent-context\/personas\/sargeant\.js/, "assessment imports the sargeant builders");
-  assert.match(files.proctor, /agent-context\/personas\/sargeant\.js/, "proctor imports the sargeant builders");
-  assert.match(files.base, /agent-context\/personas\/student-clone\.js/, "base-orchestrator imports the clone builders");
-  assert.match(files.student, /agent-context\/personas\/student\.js/, "the Student Agent imports its persona builders");
-  assert.match(files.decay, /personas\/student\.js/, "the decay engine loads its judge from the seam");
-  assert.match(files.merge, /personas\/student\.js/, "the merge rule loads from the seam");
+  assert.match(files.guide, /agent-context\/index\.js/, "guide imports the nana builders");
+  assert.match(files.assessment, /agent-context\/index\.js/, "assessment imports the sargeant builders");
+  assert.match(files.proctor, /agent-context\/index\.js/, "proctor imports the sargeant builders");
+  assert.match(files.base, /agent-context\/index\.js/, "base-orchestrator imports the clone builders");
+  assert.match(files.student, /agent-context\/index\.js/, "the Student Agent imports its persona builders");
+  assert.match(files.decay, /agent-context\/index\.js/, "the decay engine loads its judge from the seam");
+  assert.match(files.merge, /agent-context\/index\.js/, "the merge rule loads from the seam");
 });

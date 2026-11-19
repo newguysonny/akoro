@@ -34,7 +34,7 @@ import cron          from "node-cron";
 import { meetingsPost, meetingsDelete } from "../../lib/meetingsBreaker.js";
 import db            from "../../db.js";
 import { createMeeting } from "./meeting-integration.js";
-import { authenticateToken, requireRole } from "../auth/routes.js";
+import { authenticateToken, requireRole } from "../auth/index.js";
 import { isEnrolled } from "./courseAccess.js";
 import { workerTick } from "../../lib/workerLog.js";
 

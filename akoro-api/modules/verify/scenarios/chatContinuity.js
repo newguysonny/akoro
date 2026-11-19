@@ -22,7 +22,7 @@ export const historyOrder = {
         body: { role: i % 2 ? "user" : "agent", text: i === 1 ? "Which subject have I earned the most XP in?" : `turn ${i}` } });
       if (r.status >= 300) ctx.expect.blocked(`adding a message answered ${r.status}`);
     }
-    const { loadLearnerAgentConversationContext } = await import("../../agent-tools/conversation-context-routes.js");
+    const { loadLearnerAgentConversationContext } = await import("../../agent-tools/index.js");
     const c = await loadLearnerAgentConversationContext({ conversationId: chatId, userId: me.id });
     const texts = (c.messages || []).map((m) => m.content);
     ctx.note(`first=${texts[0]} last=${texts.at(-1)} n=${texts.length}`);
@@ -80,7 +80,7 @@ export const turnSavedOnce = {
     const chatId = made.body?.session?.id;
     if (!chatId) ctx.expect.blocked(`couldn't create the chat (${made.status})`);
     ctx.cleanup(() => ctx.db.deleteOwned("chat_sessions", { ownerColumn: "user_id", ownerId: me.id, filters: { id: chatId } }));
-    const { persistLearnerAgentConversationTurn } = await import("../../agent-tools/conversation-context-routes.js");
+    const { persistLearnerAgentConversationTurn } = await import("../../agent-tools/index.js");
     const turnId = `gate-${Date.now().toString(36)}`;
     const out = await persistLearnerAgentConversationTurn({
       conversationId: chatId, userId: me.id, sessionId: `agentchat_${chatId.replace(/-/g, "")}`, turnId,

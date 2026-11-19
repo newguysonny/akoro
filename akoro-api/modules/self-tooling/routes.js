@@ -12,7 +12,7 @@
  * No definitions or internal names are returned (rule 36) — label, goal, status, usage.
  */
 import express from "express";
-import { authenticateToken } from "../auth/routes.js";
+import { authenticateToken } from "../auth/index.js";
 import { listMyTools, updateMyTool } from "./pipeline.js";
 import { selfToolingAllowedFor } from "./access.js";
 import { listMyRequests, cancelMyRequest } from "./escalation.js";

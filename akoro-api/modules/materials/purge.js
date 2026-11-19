@@ -8,7 +8,7 @@
  *   startMaterialsPurge()    a pass soon after boot, then every 6 hours
  */
 import db from "../../db.js";
-import { removeRecordFile } from "../records/lib/storage.js";
+import { removeRecordFile } from "../records/index.js";
 import { RESTORE_DAYS } from "./ingestCore.js";
 import { workerTick } from "../../lib/workerLog.js";
 

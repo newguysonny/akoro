@@ -17,7 +17,7 @@ import multer from "multer";
 import pdfParse from "pdf-parse/lib/pdf-parse.js";
 import db from "../../../db.js";
 import { openai, llmComplete } from "../../../lib/aiModel.js";
-import { requireRole } from "../../auth/routes.js";
+import { requireRole } from "../../auth/index.js";
 import { renderPdfToImages } from "../../../lib/pdfRender.js";
 import { contentKey, extractOnce, makePgCache } from "../../../lib/extractionCache.js";
 import { modelRegistry } from "../../../lib/modelRegistry.js";

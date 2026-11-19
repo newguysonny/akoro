@@ -15,8 +15,8 @@
  * db); handlers throw HarnessRejection with stable codes on denial.
  */
 
-import { bindRegistry } from "../../agent-runtime/tools.js";
-import { RULES } from "../../agent-runtime/actionBasis.js";
+import { bindRegistry } from "../../agent-runtime/index.js";
+import { RULES } from "../../agent-runtime/index.js";
 import { STRATEGY_LIBRARY } from "../study-prep/education-engine.js";
 
 // Study Prep's levels (the runtime adds `persona`; Study Prep has none yet).

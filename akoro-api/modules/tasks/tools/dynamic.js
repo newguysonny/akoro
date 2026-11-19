@@ -11,7 +11,7 @@
  *   loadDynamicToolsForUser(userId) → array of built config tools the user can use
  */
 
-import { createNetworkBattle } from "../../battle/networkBattle.js";
+import { createNetworkBattle } from "../../battle/index.js";
 import db               from "../../../db.js";
 import { TaskDB, TaskOutputDB } from "../lib/db.js";
 import { openai, OPENAI_MODEL } from "../../../lib/aiModel.js";

@@ -16,11 +16,11 @@
  * Who may be challenged follows their privacy (canFind) and "open to
  * challenges"; blocks hide both ways.
  */
-import { assertEntry, entryCheck } from "../battle/entry.js";
+import { assertEntry, entryCheck } from "../battle/index.js";
 import db from "../../db.js";
-import { createNetworkBattle, cleanBattleOptions, seatsFor } from "../battle/networkBattle.js";
-import { createSeries } from "../battle/series.js";
-import { NETWORK_KEYS, seriesTemplate } from "../battle/seriesCore.js";
+import { createNetworkBattle, cleanBattleOptions, seatsFor } from "../battle/index.js";
+import { createSeries } from "../battle/index.js";
+import { NETWORK_KEYS, seriesTemplate } from "../battle/index.js";
 import { canFind } from "./filters.js";
 import { relationsOf, blockedWith, getSettings } from "./network.js";
 import { notifyUser } from "../notify.js";

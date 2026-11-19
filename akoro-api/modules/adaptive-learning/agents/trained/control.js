@@ -5,7 +5,7 @@
 // =============================================================
 
 import { buildControlPrompt } from "../../training/agentPromptBuilder.js";
-import { buildTrainedBoundaryPrompt } from "../../../agent-context/personas/trained.js";
+import { buildTrainedBoundaryPrompt } from "../../../agent-context/index.js";
 
 import { openai } from "../../../../lib/aiModel.js";
 

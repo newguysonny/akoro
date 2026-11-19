@@ -22,9 +22,9 @@ export const ratingSavedNotInPrompt = {
     const { labelKeyFor } = await import("../../agent-ratings/ratings.js");
     const { saveEpisode, recordsRealTraffic } = await import("../../agent-contract/store.js");
     const { createEpisodeRecorder } = await import("../../agent-contract/episode.js");
-    const { loadLearnerAgentConversationContext } = await import("../../agent-tools/conversation-context-routes.js");
+    const { loadLearnerAgentConversationContext } = await import("../../agent-tools/index.js");
     const { safeHistory } = await import("../../adaptive-learning/chat.js");
-    const { assembleChatDoctrine } = await import("../../agent-context/chat-doctrine.js");
+    const { assembleChatDoctrine } = await import("../../agent-context/index.js");
 
     const made = await ctx.http({ as: p.learner, method: "POST", path: "/api/adaptive/chat/sessions", body: { title: `${ctx.marker} rating` } });
     ctx.expect.status("chat created", made, 201);
@@ -99,8 +99,8 @@ export const promptOverrideFlagged = {
     if (flagged.length) ctx.note(`Default updated under an override: ${flagged.join(", ")}`);
 
     // A deploy changed the default under an override (simulated in memory on a live file).
-    const O = await import("../../agent-context/overrides.js");
-    const CM = await import("../../agent-context/context-manager.js");
+    const O = await import("../../agent-context/index.js");
+    const CM = await import("../../agent-context/index.js");
     const file = "channels/CHAT.md";
     const shipped = await CM.loadDefaultRaw(file);
     const older = `${shipped}\n(an older default)`;

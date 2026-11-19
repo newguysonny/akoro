@@ -483,7 +483,7 @@ const DenyList = {
     for (const [k, v] of _jtiClear) if (v < now) _jtiClear.delete(k);
   },
 };
-setInterval(DenyList.sweep, 60_000); // clean expired entries every minute
+setInterval(DenyList.sweep, 60_000).unref?.(); // clean expired entries every minute; unref so a test process can exit
 
 // ─── § REFRESH TOKEN STORE ────────────────────────────────────────────────────
 // Stores valid refresh token metadata.  Supports rotation + family revocation.
@@ -1195,7 +1195,7 @@ const authHandlers = {
 
 const CALLBACK_URL = process.env.GOOGLE_CALLBACK_URL || `${urlFor("API_URL")}/api/auth/google/callback`;
 
-passport.use(new GoogleStrategy(
+if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) passport.use(new GoogleStrategy(
   {
     clientID:     process.env.GOOGLE_CLIENT_ID     || "",
     clientSecret: process.env.GOOGLE_CLIENT_SECRET || "",

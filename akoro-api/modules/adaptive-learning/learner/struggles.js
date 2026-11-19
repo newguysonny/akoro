@@ -136,7 +136,7 @@ export async function afterLearningEvent(event) {
       // ask a friend's (or an opted-in learner's) agent what worked. Fire-and-forget.
       const opened = out[out.length - 1];
       if (opened?.status === "opened" && event.conceptId && !struggleType(fx.type)?.sensitive) {
-        import("../../agent-network/outreach.js").then((o) => o.reachOut({ learnerId: event.learnerId, trigger: "struggle", purpose: "study_question",
+        import("../../agent-network/index.js").then((o) => o.reachOut({ learnerId: event.learnerId, trigger: "struggle", purpose: "study_question",
           conceptId: event.conceptId, subject: event.subject || null, topic: event.details?.concept || event.topic || event.details?.part || null,
           gaps: [event.details?.part].filter(Boolean) })).catch(() => {});
       }

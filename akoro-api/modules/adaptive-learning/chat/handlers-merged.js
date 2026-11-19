@@ -11,8 +11,8 @@
 // so recursion goes through the per-call context's seams and there is no
 // import cycle.
 
-import { schemaLookup } from "../../self-tooling/registry.js";
-import { awaitDecision, listConfirmedDecisions } from "../../self-tooling/confirmations.js";
+import { schemaLookup } from "../../self-tooling/index.js";
+import { awaitDecision, listConfirmedDecisions } from "../../self-tooling/index.js";
 import { listChats, searchChats } from "./chat-history-tools.js";
 import { searchMyStudyKnowledge } from "../learner/learner-chat-read-tools.js";
 

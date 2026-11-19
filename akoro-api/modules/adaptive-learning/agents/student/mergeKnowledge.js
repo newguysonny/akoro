@@ -18,7 +18,7 @@
 // does, and consolidate with one model call when it gets long.
 
 import { openai } from "../../../../lib/aiModel.js";
-import { buildMergeNotesPrompt } from "../../../agent-context/personas/student.js";
+import { buildMergeNotesPrompt } from "../../../agent-context/index.js";
 
 /** Past this many characters a note is consolidated rather than appended to. */
 const CAP = 1200;

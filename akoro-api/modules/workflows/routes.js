@@ -17,7 +17,7 @@ import { Router } from "express";
 
 import db from "../../db.js";
 import { workflowWiring } from "../../lib/workflowWiring.js";
-import { authenticateToken, requireRole } from "../auth/routes.js";
+import { authenticateToken, requireRole } from "../auth/index.js";
 import { createWorkflowEngine } from "./engine.js";
 import { makeSupabaseWorkflowStore } from "./store.js";
 import { forLearner, toEnvelope } from "./envelope.js";

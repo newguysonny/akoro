@@ -18,7 +18,7 @@ import db from "../../db.js";
 import { notifyUser } from "../notify.js";
 import { inQuiet, quietOf } from "./quietHours.js";
 import { READY } from "./readyKinds.js";
-import { RULES, actionBasis, basisRefusal } from "../agent-runtime/actionBasis.js";
+import { RULES, actionBasis, basisRefusal } from "../agent-runtime/index.js";
 import { modesFor } from "./kindModes.js";
 import { appLink } from "../../lib/urls.js";
 import { agentDeps } from "../../lib/agentDeps.js";

@@ -9,7 +9,7 @@
  */
 import { Router } from "express";
 import db from "../../db.js";
-import { authenticateToken } from "../auth/routes.js";
+import { authenticateToken } from "../auth/index.js";
 import { listGoals, createGoal, updateGoal } from "./service.js";
 
 const router = Router();

@@ -20,7 +20,7 @@ import { SCENARIOS } from "./scenarios/index.js";
 import { startRun } from "./runner.js";
 import { resolveAccount, realUserWritesEnabled, PolicyError, TARGET } from "./policy.js";
 import { refusal, ownerNotice, firstName, MAX_PER_ACCOUNT_PER_DAY } from "./realUserRules.js";
-import { basisColumns, basisOfRow } from "../agent-runtime/actionBasis.js";
+import { basisColumns, basisOfRow } from "../agent-runtime/index.js";
 
 const edu = () => db.schema("edu");
 const TABLE = "verify_real_user_runs";
@@ -73,7 +73,7 @@ async function notifyOwner(account, row, notice) {
   try {
     if (!user?.email) out.email = "skipped (no email)";
     else {
-      const { sendNotificationEmail } = await import("../auth/emails.js");
+      const { sendNotificationEmail } = await import("../auth/index.js");
       await sendNotificationEmail({ to: user.email, name: firstName(user.full_name), subject: notice.title, heading: notice.title, body: notice.body });
       out.email = "sent";
     }
@@ -102,7 +102,7 @@ async function alertAdmin(row, account, residue) {
   const to = String(process.env.ALERT_EMAIL_TO || "").split(",").map((s) => s.trim()).filter(Boolean);
   if (to.length && TARGET === "production") {
     try {
-      const { sendOpsAlertEmail } = await import("../auth/emails.js");
+      const { sendOpsAlertEmail } = await import("../auth/index.js");
       await sendOpsAlertEmail({ to, subject: "[Akoro] Real-account check left data behind", title: "Real-account check left data behind", detail: text, kind: "fired", severity: "warning" });
     } catch (e) { console.warn(`[verify] residue alert email failed: ${e.message}`); }
   }

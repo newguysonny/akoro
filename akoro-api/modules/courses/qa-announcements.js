@@ -13,7 +13,7 @@
 import { Router }                         from "express";
 import { body, query, validationResult }  from "express-validator";
 import db                                 from "../../db.js";
-import { authenticateToken, requireRole } from "../auth/routes.js";
+import { authenticateToken, requireRole } from "../auth/index.js";
 import { sendDirectNotification }         from "../../services/notificationService.js";
 import { canManageCourse }                from "./courseAccess.js";
 

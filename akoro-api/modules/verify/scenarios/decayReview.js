@@ -22,7 +22,7 @@ export const decayReviewFlow = {
     const battles = [];
     let wfId = null;
     ctx.cleanup(async () => {
-      const { discardCheckBattle } = await import("../../battle/agentCheck.js");
+      const { discardCheckBattle } = await import("../../battle/index.js");
       for (const b of battles) await discardCheckBattle(b, me.id).catch(() => {});
       if (wfId) await ctx.db.deleteOwned("edu.workflow_instances", { ownerColumn: "learner_id", ownerId: me.id, filters: { id: wfId } });
     });

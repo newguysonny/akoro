@@ -106,7 +106,7 @@ export function formatToolRows(out, { max = 12 } = {}) {
 async function freshToolText(followUp) {
   if (!followUp.run_tool) return null;
   try {
-    const { runLearnerTool } = await import("../../self-tooling/pipeline.js");
+    const { runLearnerTool } = await import("../../self-tooling/index.js");
     const { selfToolDeps } = await import("../chat.js");
     const out = await runLearnerTool(followUp.run_tool, {}, followUp.user_id, {
       callCapability: selfToolDeps(followUp.user_id).callCapability, conversationId: followUp.chat_session_id, dry: true,

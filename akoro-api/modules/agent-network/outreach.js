@@ -24,7 +24,7 @@ import db from "../../db.js";
 import { OUTREACH, KIND_FOR_PURPOSE, decideOutreach, outreachQuestion, outreachLearnerText } from "./outreachCore.js";
 import { isProtectedLearner } from "./autoReplyCore.js";
 import { blockedWith } from "./network.js";
-import { inQuiet, quietOf } from "../autonomy/quietHours.js";
+import { inQuiet, quietOf } from "../autonomy/index.js";
 import { agentDeps } from "../../lib/agentDeps.js";
 
 const edu = () => db.schema("edu");

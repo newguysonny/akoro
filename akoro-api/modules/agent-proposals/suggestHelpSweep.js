@@ -81,7 +81,7 @@ async function transcriptFor(userId, sinceIso) {
  * sweep still works from the chats alone. */
 async function factsDigest(userId) {
   try {
-    const { gatherSignals } = await import("../autonomy/cycle.js");
+    const { gatherSignals } = await import("../autonomy/index.js");
     const s = await gatherSignals(userId);
     const lines = [];
     const weak = (s.weakConcepts || []).map((w) => `${w.concept_catalog?.title || "a concept"} (${w.concept_catalog?.subject || "general"}, mastery ${Math.round((w.mastery ?? 0) * 100)}%${w.misconception_active ? ", active misconception" : ""})`);

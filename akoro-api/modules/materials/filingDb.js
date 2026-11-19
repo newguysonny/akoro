@@ -10,9 +10,9 @@
 import db from "../../db.js";
 import { openai } from "../../lib/aiModel.js";
 import { studyPrepHooks } from "../../lib/studyPrepHooks.js";
-import { getExtraction } from "../records/extractLib.js";
-import { indexRecord } from "../records/searchLib.js";
-import { assertTransition, TransitionError } from "../workflows/definition.js";
+import { getExtraction } from "../records/index.js";
+import { indexRecord } from "../records/index.js";
+import { assertTransition, TransitionError } from "../workflows/index.js";
 import { INGEST_LIMITS, ingestWorkflow, folderItemFor } from "./ingestCore.js";
 import { pickFolder } from "./folderMatch.js";
 import { cleanStructure, structureMessages, structureSchema, STRUCTURE_LIMITS } from "./structureCore.js";

@@ -5,13 +5,13 @@
 // The seam is immediately after forcedTool is computed: the tool list, the
 // loop and the answer all depend on it, and nothing before it executes a tool.
 
-import { chatEnvelope } from "../../workflows/envelope.js";
+import { chatEnvelope } from "../../workflows/index.js";
 import { openai } from "../../../lib/aiModel.js";
 import { MAX_FILES, processAttachments, safeHistory, runningWorkBrief, loadDoctrine } from "./turn-store.js";
 import { resolveChatChoice, pickerEnabled } from "../../../lib/modelCatalogue.js";
 import { modelRegistry } from "../../../lib/modelRegistry.js";
 import { allowedModelsFor } from "../../../lib/modelTiers.js";
-import { modelPicks, supabaseThreads } from "../../workflows/modelPicks.js";
+import { modelPicks, supabaseThreads } from "../../workflows/index.js";
 import db from "../../../db.js";
 import { renderRelevantMemory } from "./chat-memory.js";
 import {
@@ -37,7 +37,7 @@ import { renderLedger, summaryMarkOf } from "../../../lib/taskLedger.js";
 import { requiresAgentCapabilitiesTool, requiresActivityPreparation, isDraftFollowUp, isToolDraftFollowUp, requiredLearnerDataTool, requiredStudyPrepTool } from "../intent/agent-chat-intent.js";
 import { createChatTrace } from "./chat-trace.js";
 import { inboxBrief, buddyBrief } from "./handlers-network-study.js";
-import { tutorSystemPrompt, assembleChatDoctrine } from "../../agent-context/chat-doctrine.js";
+import { tutorSystemPrompt, assembleChatDoctrine } from "../../agent-context/index.js";
 import {
   openAiInstructorTools, openAiChatTools, PARALLEL_READS_NOTE, STEP_NARRATION_NOTE,
   learnerToolDefs, learnerToolDefsWithAreas, forcedSelfTool,

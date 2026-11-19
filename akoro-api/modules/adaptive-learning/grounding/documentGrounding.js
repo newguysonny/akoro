@@ -18,9 +18,9 @@
  * Grounding is best-effort: any failure leaves the session exactly as it
  * was (the fixed reference, no citations). It never blocks a turn.
  */
-import { resolveAskTargetFor } from "../../records/access.js";
-import { gatherPassages, extractCitations, passageWhere } from "../../records/askLib.js";
-import { searchRecordChunks } from "../../records/searchLib.js";
+import { resolveAskTargetFor } from "../../records/index.js";
+import { gatherPassages, extractCitations, passageWhere } from "../../records/index.js";
+import { searchRecordChunks } from "../../records/index.js";
 
 /** The protégé sees at most this much passage text per turn. */
 const MAX_TURN_REFERENCE_CHARS = 9000;

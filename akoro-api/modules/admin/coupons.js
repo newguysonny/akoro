@@ -20,7 +20,7 @@
 
 import { Router } from "express";
 import db from "../../db.js";
-import { authenticateToken, requireRole } from "../auth/routes.js";
+import { authenticateToken, requireRole } from "../auth/index.js";
 import { couponStatus, couponText, couponEligibility, validateCouponInput, todayStr } from "../../lib/couponModel.js";
 
 const router    = Router();

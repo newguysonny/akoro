@@ -16,10 +16,10 @@
 //   POST /api/admin/agent-prompts/part/use-new-default { file }
 
 import { Router } from "express";
-import { authenticateToken, requireRole } from "../auth/routes.js";
+import { authenticateToken, requireRole } from "../auth/index.js";
 import {
   PromptPartError, assembledPrompt, editPart, keepMine, listParts, partHistory, promptSets, readPart, resetPart, useNewDefault,
-} from "../agent-context/override-store.js";
+} from "../agent-context/index.js";
 
 const router = Router();
 const adminOnly = [authenticateToken, requireRole(["admin"])];

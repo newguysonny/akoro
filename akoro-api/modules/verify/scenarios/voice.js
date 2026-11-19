@@ -2,7 +2,7 @@
 // (risk: write — one small TTS charge). Deepgram Aura speaks; OpenAI is only
 // the fallback, so a fallback line in the server log fails the check.
 import { readLogs, logSeq } from "../../../lib/logTap.js";
-import { createDeepgramTranscriber } from "../../voice/deepgramLive.js";
+import { createDeepgramTranscriber } from "../../voice/index.js";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 

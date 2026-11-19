@@ -17,7 +17,7 @@
  *   ctx.note(text)            a line in the evidence
  */
 import db from "../../db.js";
-import { signInternalAccess } from "../auth/routes.js";
+import { signInternalAccess } from "../auth/index.js";
 import { runDry } from "../../lib/dryRunContext.js";
 import { readLogs, logSeq } from "../../lib/logTap.js";
 import { createExpect, BlockedError } from "./assertions.js";

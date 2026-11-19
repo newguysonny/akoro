@@ -12,7 +12,7 @@
 import db from "../../db.js";
 import { instructorProposals, INSTRUCTOR_LIMITS } from "./instructorCore.js";
 import { deliverProactive } from "./deliver.js";
-import { RULES, basisColumns } from "../agent-runtime/actionBasis.js";
+import { RULES, basisColumns } from "../agent-runtime/index.js";
 import { modesFor, recordObservations } from "./kindModes.js";
 import { defaultModeFor, INSTRUCTOR_PROACTIVE_KINDS, splitByMode } from "./kindModesCore.js";
 

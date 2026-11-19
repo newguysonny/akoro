@@ -19,7 +19,7 @@ export { guideTeachPrompt };
 export async function strategyGuideFor(strategy) {
   const s = getStrategy(strategy);
   if (!s || s.runsAs.executor !== "teaching") return null;
-  try { return await (await import("../../agent-context/context-manager.js")).loadDoctrine(s.guide); }
+  try { return await (await import("../../agent-context/index.js")).loadDoctrine(s.guide); }
   catch (e) { console.warn("[guide teach] strategy guide:", e?.message || e); return null; }
 }
 

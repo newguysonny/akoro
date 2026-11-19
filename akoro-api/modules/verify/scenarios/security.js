@@ -128,7 +128,7 @@ export const courseInviteJoin = {
   params: { teacher: { default: "@demo_teacher1" } },
   async run(ctx, p) {
     const jwt = (await import("jsonwebtoken")).default;
-    const { signCourseInvite, signHandoff } = await import("../../auth/routes.js");
+    const { signCourseInvite, signHandoff } = await import("../../auth/index.js");
     const teacher = await ctx.as(p.teacher);
     const course = (await ctx.db.rows("courses", { instructor_id: teacher.id }, { columns: "id, title", limit: 1 }))[0];
     if (!course) ctx.expect.blocked(`${p.teacher} has no course on this server to invite to`);
@@ -186,7 +186,7 @@ export const noFallbackSecrets = {
   params: { learner: { default: "@tester30" } },
   async run(ctx, p) {
     const jwt = (await import("jsonwebtoken")).default;
-    const { signInternalAccess } = await import("../../auth/routes.js");
+    const { signInternalAccess } = await import("../../auth/index.js");
     const me = await ctx.as(p.learner);
     const asBearer = (token) => ctx.http({ path: "/api/auth/me", headers: { Authorization: `Bearer ${token}` } });
     ctx.expect.status("a real access token signs in", await asBearer(signInternalAccess({ id: me.id, role: me.role }, 120)), 200);

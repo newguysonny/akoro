@@ -23,7 +23,7 @@ const supabase = {
   rpc: (...a) => db.rpc(...a),
 };
 import { openai } from "../../../../lib/aiModel.js";
-import { buildDecayMustKnowPrompt } from "../../../agent-context/personas/student.js";
+import { buildDecayMustKnowPrompt } from "../../../agent-context/index.js";
 import { retainedConfidence, afterReview, outcomeForScore, topicHealth, conceptName, RETENTION } from "./retention.js";
 
 // =============================================================

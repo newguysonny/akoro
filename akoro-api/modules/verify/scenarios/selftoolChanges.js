@@ -15,7 +15,7 @@ const needCreate = async (ctx) => {
 async function changeFlow(ctx, p, { cap, goal, args = null, seed, current, changed, kept }) {
   const me = await ctx.as(p.learner);
   const { default: db } = await import("../../../db.js");
-  const { learnerGrants } = await import("../../self-tooling/registry.js");
+  const { learnerGrants } = await import("../../self-tooling/index.js");
   const revoke = async () => { await db.schema("edu").from("capability_grants").update({ revoked_at: new Date().toISOString() }).eq("learner_id", me.id).eq("capability", cap).is("revoked_at", null); await learnerGrants(me.id, { fresh: true }); };
   await revoke(); ctx.cleanup(revoke);
   const tag = ctx.marker.slice(8, 16).replace(/[^a-z0-9]/g, "x");

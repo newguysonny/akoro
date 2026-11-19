@@ -5,7 +5,7 @@
  * reopening the workflow (Scenario B's resume leg).
  */
 import { io } from "socket.io-client";
-import { signInternalAccess } from "../../auth/routes.js";
+import { signInternalAccess } from "../../auth/index.js";
 
 const API_BASE = process.env.INTERNAL_API_URL || `http://127.0.0.1:${process.env.PORT || 3000}`;
 const once = (socket, event, ms) => new Promise((resolve) => {

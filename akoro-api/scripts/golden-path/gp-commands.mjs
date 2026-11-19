@@ -8,7 +8,7 @@
 // Every line below is copied from that file. If you change one there, change it
 // here.
 
-import { extractIntent } from '../../modules/tasks/lib/context.js';
+import { extractIntent } from '../../modules/tasks/index.js';
 
 const TEACHER = [
   ['create_battle', 'Set JSS1 a Mathematics battle on fractions — 10 questions, medium'],

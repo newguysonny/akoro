@@ -36,7 +36,7 @@
  */
 import { Router }            from "express";
 import db                    from "../../db.js";
-import { authenticateToken, requireRole } from "../auth/routes.js";
+import { authenticateToken, requireRole } from "../auth/index.js";
 import { adoptOldCourses, linkUnlinked, createLinkedCourse, publishLinkedCourse, removeLinkedCourse, syncLinkedCourse } from "./link.js";
 
 const edu = () => db.schema("edu");

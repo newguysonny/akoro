@@ -4,10 +4,10 @@
  * run): each seeds what a cycle would have produced, then checks the parts
  * code owns — validation, delivery, approval, the report, consents, budget.
  */
-import { deliverProactive } from "../../autonomy/deliver.js";
-import { validateAndShapeProposals, gatherSignals } from "../../autonomy/cycle.js";
-import { fixIts } from "../../autonomy/readyKinds.js";
-import { runInstructorCycle } from "../../autonomy/instructorCycle.js";
+import { deliverProactive } from "../../autonomy/index.js";
+import { validateAndShapeProposals, gatherSignals } from "../../autonomy/index.js";
+import { fixIts } from "../../autonomy/index.js";
+import { runInstructorCycle } from "../../autonomy/index.js";
 
 const db = async () => (await import("../../../db.js")).default;
 const later = () => new Date(Date.now() + 15 * 60 * 1000);

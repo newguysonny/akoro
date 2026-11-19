@@ -10,7 +10,7 @@
  * generic count/list/by_<field> actions can't reproduce it.
  */
 
-import { CAPABILITIES } from "../self-tooling/capabilities.js";
+import { CAPABILITIES } from "../self-tooling/index.js";
 
 const isDomainTool = (t) => t?.mode === "code" && Array.isArray(t?.params_schema?.action?.enum);
 /** A tool that can change data must never be swept. Read capabilities (e.g.

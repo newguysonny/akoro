@@ -24,7 +24,7 @@
 import { Router }                         from "express";
 import { query, validationResult }        from "express-validator";
 import db                                 from "../../db.js";
-import { authenticateToken, requireRole } from "../auth/routes.js";
+import { authenticateToken, requireRole } from "../auth/index.js";
 import cron                               from "node-cron";
 
 const asyncHandler = (fn) => (req, res, next) =>

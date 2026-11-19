@@ -13,7 +13,7 @@ import "dotenv/config";
 const arg = (name) => process.argv.find((a) => a.startsWith(`--${name}=`))?.split("=")[1];
 const limit = Number(arg("limit")) || Infinity;
 
-const { backfillRecordText } = await import("../modules/records/textBackfill.js");
+const { backfillRecordText } = await import("../modules/records/index.js");
 const counts = await backfillRecordText({ limit });
 console.log(JSON.stringify(counts, null, 2));
 process.exit(0);

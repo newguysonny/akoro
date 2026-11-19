@@ -3,9 +3,9 @@
  * real engine, store and auth. Kept apart so the router's tests stay db-free.
  */
 import db from "../../../db.js";
-import { authenticateToken } from "../../auth/routes.js";
-import { createWorkflowEngine } from "../../workflows/engine.js";
-import { makeSupabaseWorkflowStore } from "../../workflows/store.js";
+import { authenticateToken } from "../../auth/index.js";
+import { createWorkflowEngine } from "../../workflows/index.js";
+import { makeSupabaseWorkflowStore } from "../../workflows/index.js";
 import { workflowEngineEnabled } from "../study-prep/workflow.js";
 import "./workflow.js";   // registers the teaching workflow type with the engine
 import { createTeachingWorkflowsRouter } from "./workflowRoutes.js";

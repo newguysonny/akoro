@@ -9,7 +9,7 @@
  * (toolRecovery.js) takes it from there: a read is tried once more, a change
  * is not repeated (it may still finish on its own).
  */
-import { withToolTimeLimit } from "../../agent-runtime/toolTime.js";
+import { withToolTimeLimit } from "../../agent-runtime/index.js";
 
 export const CHAT_TOOL_FAMILY_LIMITS_MS = Object.freeze({
   read: 45_000,

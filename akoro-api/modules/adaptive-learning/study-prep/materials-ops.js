@@ -22,7 +22,7 @@
  *                                                            → { id, topics, from, recordIds, folderName }
  *   materials.request({ learnerId, reason, goal, subject, sessionId }) → { suggestionId, duplicate? }
  */
-import { HarnessRejection } from "../../agent-runtime/harness.js";
+import { HarnessRejection } from "../../agent-runtime/index.js";
 
 export const DOCUMENTS_OUTLINE_LABEL = "Outline drawn from your files";
 export const MATERIALS_REQUESTED_NARRATIVE = "I asked for your syllabus or past questions — upload them in the chat, or tell me to draft an outline instead.";

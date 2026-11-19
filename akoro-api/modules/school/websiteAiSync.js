@@ -17,7 +17,7 @@
 import { Router } from "express";
 import db from "../../db.js";
 import { openai, OPENAI_MODEL } from "../../lib/aiModel.js";
-import { authenticateToken, requireRole } from "../auth/routes.js";
+import { authenticateToken, requireRole } from "../auth/index.js";
 import { chargeForAI, schoolBillTo, InsufficientCoins } from "../../lib/coins.js";
 import { serverError } from "../../lib/httpError.js";
 

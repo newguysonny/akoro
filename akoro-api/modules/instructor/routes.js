@@ -24,12 +24,12 @@
 import { Router }                         from "express";
 import multerLib                          from "multer";
 import db                                 from "../../db.js";
-import { authenticateToken, requireRole } from "../auth/routes.js";
+import { authenticateToken, requireRole } from "../auth/index.js";
 import { generateSchedule }               from "./schedule.js";
 import { renderDocument }                  from "../school/documentRenderer.js";
 import { DEFAULT_DOC_TEMPLATES, getDefaultDoc } from "../school/defaultDocs/index.js";
 import { openai, OPENAI_MODEL }            from "../../lib/aiModel.js";
-import { parseJsonLoose }                  from "../tasks/tools/_json.js";
+import { parseJsonLoose }                  from "../tasks/index.js";
 import { ensureBucket, uploadPublicFile } from "../school/templateStorage.js";
 import { linkUnlinked }                    from "../course-builder/link.js";
 

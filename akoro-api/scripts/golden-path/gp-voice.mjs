@@ -48,7 +48,7 @@ wss.on('connection', (ws, req) => {
 process.env.REALTIME_STT_URL = `ws://127.0.0.1:${PORT}/v1/realtime?intent=transcription`;
 process.env.OPENAI_API_KEY   = process.env.OPENAI_API_KEY || 'sk-test-local';
 
-const { createRealtimeTranscriber } = await import('../../modules/voice/openaiRealtime.js');
+const { createRealtimeTranscriber } = await import('../../modules/voice/index.js');
 const wait = (ms) => new Promise(r => setTimeout(r, ms));
 const reset = () => { state.sent = []; state.url = null; state.auth = null; state.beta = null; };
 

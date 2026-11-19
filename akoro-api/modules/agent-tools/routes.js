@@ -11,7 +11,7 @@ import db from "../../db.js";
 import { chatBridge } from "../../lib/chatBridge.js";
 import { getLearnerProfileContext } from "../../lib/learnerProfileContext.js";
 import { isIanaTimeZone, localiseInstant } from "../../lib/learnerTime.js";
-import { getToolsForTask } from "../tasks/tools/index.js";
+import { getToolsForTask } from "../tasks/index.js";
 import {
   isTeacherRole,
   requireAgentToolsCredential,

@@ -18,8 +18,8 @@ export const loopGuardTimeLimits = {
   description: "Phase 18 item 3: the same tool with the same arguments in a row → a reminder on the 2nd call and a firm one (tool, count, arguments) on the 4th; a tool past its time limit → a `timeout` observation the recovery rule retries once for a read, never a stalled step; every Agent Chat tool has a limit and a real read answers within it.",
   params: { learner: { default: "@tester20" } },
   async run(ctx, p) {
-    const { runAgentLoop } = await import("../../agent-runtime/loop.js");
-    const { bindRegistry } = await import("../../agent-runtime/tools.js");
+    const { runAgentLoop } = await import("../../agent-runtime/index.js");
+    const { bindRegistry } = await import("../../agent-runtime/index.js");
     const registry = bindRegistry({
       definitions: [
         { name: "status.read", level: "read", description: "status" },
@@ -84,7 +84,7 @@ export const actionBasis = {
     ctx.expect.ok("a read needs no rule", readOnly?.code !== "no_rule_for_inferred_action", readOnly);
     ctx.expect.eq("nothing was created", await ctx.db.count("tasks", { creator_id: me.id, title: task.title }), 0);
 
-    const { auditRows } = await import("../../self-tooling/library.js");
+    const { auditRows } = await import("../../self-tooling/index.js");
     const rows = await auditRows({ days: 30, limit: 50 });
     ctx.note(`self-tooling audit: ${rows.length} rows in 30 days; with a basis: ${rows.filter((r) => r.basis).length}`);
     ctx.expect.ok("every audit row has the basis fields", rows.every((r) => "basis" in r && "rule" in r), rows.slice(0, 3));

@@ -16,7 +16,7 @@
 import { Router }         from "express";
 import { jsonbArray, jsonbObject } from "../../lib/jsonb.js";
 import db                 from "../../db.js";
-import { authenticateToken } from "../auth/routes.js";
+import { authenticateToken } from "../auth/index.js";
 
 const router = Router();
 

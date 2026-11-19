@@ -20,8 +20,8 @@ import { v4 as uuid } from "uuid";
 import fs   from "fs";
 import path from "path";
 import { deriveAndSaveOrchestrationConfig } from "./agentOrchestration.js";
-import { createRealtimeTranscriber } from "../../voice/openaiRealtime.js";
-import { transcribeFileDeepgram, transcribeBufferDeepgram, hasDeepgram } from "../../voice/deepgram.js";
+import { createRealtimeTranscriber } from "../../voice/index.js";
+import { transcribeFileDeepgram, transcribeBufferDeepgram, hasDeepgram } from "../../voice/index.js";
 
 const router   = express.Router();
 import { openai } from "../../../lib/aiModel.js";

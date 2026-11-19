@@ -13,7 +13,7 @@
  */
 import { Router } from "express";
 import db from "../../db.js";
-import { authenticateToken } from "../auth/routes.js";
+import { authenticateToken } from "../auth/index.js";
 import { budgetState } from "../../lib/budget.js";
 import { quietOf, validHHMM, validTimeZone } from "./quietHours.js";
 import { agentDeps } from "../../lib/agentDeps.js";

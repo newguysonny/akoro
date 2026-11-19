@@ -26,8 +26,8 @@ import { backgroundQueue, handleBackground } from "../../lib/backgroundQueue.js"
 import { AUTO, decide, isProtectedLearner, learnerText, proposalFor } from "./autoReplyCore.js";
 import { answerNow, screenMessage, MESSAGE_LIMITS } from "./messaging.js";
 import { getSettings } from "./network.js";
-import { inQuiet, quietOf } from "../autonomy/quietHours.js";
-import { chatFor } from "../autonomy/deliver.js";
+import { inQuiet, quietOf } from "../autonomy/index.js";
+import { chatFor } from "../autonomy/index.js";
 import { appLink } from "../../lib/urls.js";
 import { agentDeps } from "../../lib/agentDeps.js";
 

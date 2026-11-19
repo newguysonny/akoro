@@ -19,7 +19,7 @@
  */
 import { Router } from "express";
 import db from "../../db.js";
-import { authenticateToken } from "../auth/routes.js";
+import { authenticateToken } from "../auth/index.js";
 import { loadInbox, parseRef, approveProposal, dismissProposal, acceptChatSuggestion, dismissChatSuggestion, acceptInboxIdea, dismissInboxIdea, DISMISS_REASONS } from "./inbox.js";
 
 const router = Router();

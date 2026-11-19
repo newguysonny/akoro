@@ -16,7 +16,7 @@ process.env.JWT_SECRET ||= "invite-contract-test-secret-0123456789abcdef";
 for (const k of ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"]) process.env[k] ||= "test";
 const realSetInterval = globalThis.setInterval;
 globalThis.setInterval = (...args) => { const t = realSetInterval(...args); t?.unref?.(); return t; };
-const auth = await import("../auth/routes.js").finally(() => { globalThis.setInterval = realSetInterval; });
+const auth = await import("../auth/index.js").finally(() => { globalThis.setInterval = realSetInterval; });
 const { signCourseInvite, verifyCourseInvite, authenticateToken, signHandoff, INVITE_MAX_DAYS } = auth;
 
 const TEACHER = "00000000-0000-0000-0000-0000000000aa";

@@ -31,7 +31,7 @@ const { rows: [ag] } = await sql.query('SELECT id FROM edu.student_agents WHERE 
 
 await sql.query("DELETE FROM edu.student_knowledge WHERE student_id = $1 AND topic LIKE 'GP Recall%'", [me.id]);
 
-const { recall, recallStrength, answerFromRecall, guess } = await import('../../modules/battle/agentRecall.js');
+const { recall, recallStrength, answerFromRecall, guess } = await import('../../modules/battle/index.js');
 
 console.log('· An agent taught nothing knows nothing');
 const empty = await recall({ studentId: me.id, embedding: null, topic: 'GP Recall Photosynthesis' });
@@ -93,7 +93,7 @@ check('an encounter placeholder is not recalled as a note',
   `${placeholder.length} notes: ${placeholder.map(n => n.topic).join(' | ') || 'none'}`);
 
 console.log('\n· Recall strength paces the answer, it does not decide it');
-const { thinkingTimeMs } = await import('../../modules/battle/agentPlayer.js');
+const { thinkingTimeMs } = await import('../../modules/battle/index.js');
 check('nothing recalled scores zero strength', recallStrength([]) === 0, `${recallStrength([])}`);
 const strong = recallStrength([{ similarity: 0.9, confidence: 0.9 }]);
 const weak   = recallStrength([{ similarity: 0.35, confidence: 0.2 }]);
@@ -107,7 +107,7 @@ check('but always inside the question clock',
   Array.from({ length: 200 }, () => thinkingTimeMs(Math.random(), 15)).every(ms => ms < 15000), 'all under 15s');
 
 console.log('\n· The dice are gone, not deprecated');
-const player = await import('../../modules/battle/agentPlayer.js');
+const player = await import('../../modules/battle/index.js');
 // A probability that produces plausible battle logs is exactly what gets
 // quietly reinstated when something is slow or expensive, so its absence is
 // worth asserting rather than trusting.

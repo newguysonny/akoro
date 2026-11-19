@@ -158,7 +158,7 @@ export const sessionTokensOnly = {
   name: "smoke.session_tokens_only", area: "smoke", risk: "read",
   description: "Only an access token signs in: a refresh, 2FA-challenge or hand-off token gets 401 token_invalid on /api/auth/me. The endpoints removed by the audit answer 404.",
   async run(ctx) {
-    const auth = await import("../../auth/routes.js");
+    const auth = await import("../../auth/index.js");
     const { signInternalAccess } = auth;
     const me = await ctx.as("@tester30");
     const asBearer = (token) => ctx.http({ path: "/api/auth/me", headers: { Authorization: `Bearer ${token}` } });

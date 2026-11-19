@@ -51,7 +51,7 @@ import db                            from "../../db.js";
 import { traceRedis } from "../../lib/redisTrace.js";
 import { redisConnectionOptions } from "../../lib/redisOptions.js";
 import { authenticateToken,
-         requireRole }               from "../auth/routes.js";
+         requireRole }               from "../auth/index.js";
 
 // ─── § PROVIDER NAMING + OAUTH STATE ──────────────────────────────────────────
 // Frontend speaks { zoom, meet, teams, youtube }.

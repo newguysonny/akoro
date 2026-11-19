@@ -18,7 +18,7 @@ import { openai } from "../base-orchestrator.js";
 import {
   buildProctorQuestionsPrompt, buildProctorEvaluatePrompt,
   buildProctorHintPrompt, buildProctorVerdictPrompt, buildProctorProbePrompt,
-} from "../../../agent-context/personas/sargeant.js";
+} from "../../../agent-context/index.js";
 import { assessmentScore, computeVerdict } from "../../practice/workflow.js";
 
 const MODEL = "gpt-4.1-mini";

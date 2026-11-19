@@ -42,8 +42,8 @@
 
 import { Router }                         from "express";
 import db                                 from "../../db.js";
-import { authenticateToken }              from "../auth/routes.js";
-import { emitAutonomyEvent } from "../autonomy/triggers.js";
+import { authenticateToken }              from "../auth/index.js";
+import { emitAutonomyEvent } from "../autonomy/index.js";
 import { step, DEFAULT_QUERY_TIMEOUT_MS } from "../../lib/queryDeadline.js";
 
 const router = Router();

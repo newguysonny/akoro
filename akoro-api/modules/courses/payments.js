@@ -17,7 +17,7 @@ import { paystackPost, paystackGet }            from "../../lib/paystackBreaker.
 import crypto                             from "crypto";
 import { body, validationResult }         from "express-validator";
 import db                                 from "../../db.js";
-import { authenticateToken, requireRole } from "../auth/routes.js";
+import { authenticateToken, requireRole } from "../auth/index.js";
 import { businessConfig }                 from "../../config/index.js";
 import { cartHandlers }                   from "./cart.js";
 import { recordPaymentItems, logPaymentEvent } from "../../lib/paymentAudit.js";

@@ -19,8 +19,8 @@
 import db from "../../db.js";
 import { agentDeps } from "../../lib/agentDeps.js";
 import { createGoal } from "../learner-goals/service.js";
-import { markPostedDecision, reportFor, reportInChat } from "../autonomy/deliver.js";
-import { spreadDue } from "../autonomy/readyKinds.js";
+import { markPostedDecision, reportFor, reportInChat } from "../autonomy/index.js";
+import { spreadDue } from "../autonomy/index.js";
 
 import { DISMISS_REASONS, reasonOf, normalizeTitle, mergeInbox, parseRef } from "./inboxCore.js";
 
@@ -204,7 +204,7 @@ export async function approveProposal(userId, id) {
       ref = result.sessionId;
       detail = { sessionId: result.sessionId, status: result.status || null };
     } else if (kind === "revision_battle") {
-      const { createCheckBattle } = await import("../battle/agentCheck.js");
+      const { createCheckBattle } = await import("../battle/index.js");
       const { outsideAction } = await import("../../lib/outbox.js");
       // At most once (Phase 18 item 5): interrupted after the battle was made, the retry finds it instead of making a second.
       const r = (await outsideAction({ kind: "proposal_check_battle", key: `proposal:${claimed.id}:battle`, userId,
@@ -234,7 +234,7 @@ export async function approveProposal(userId, id) {
       let topic = payload.topic;
       if (kind === "next_activity") {
         const { resolveTopics } = agentDeps();
-        const { nextTopicAfter } = await import("../autonomy/instructorCore.js");
+        const { nextTopicAfter } = await import("../autonomy/index.js");
         const syllabus = await resolveTopics({ subject: payload.subject }).catch(() => []);
         topic = nextTopicAfter(payload.topic, syllabus);
       } else topic = `Revision: ${String(payload.topic).slice(0, 100)}`;
@@ -245,19 +245,19 @@ export async function approveProposal(userId, id) {
       detail = { draftId: result.draftId, title: result.title, draft: { id: result.draftId, title: result.title, type: result.type, audience: result.audience } };
     } else if (kind === "agent_friend") {
       // Phase 21: "Be friends" on a friend request from another learner's agent.
-      const { acceptFriend } = await import("../agent-network/friends.js");
+      const { acceptFriend } = await import("../agent-network/index.js");
       const r = await acceptFriend(userId, payload.messageId);
       ref = payload.messageId;
       detail = { friends: true, with: r.with };
     } else if (kind === "agent_reply") {
       // Phase 21: "Yes, reply" — the drafted reply goes to the other agent.
-      const { sendApprovedReply } = await import("../agent-network/friends.js");
+      const { sendApprovedReply } = await import("../agent-network/index.js");
       const r = await sendApprovedReply(userId, payload.messageId, payload.draft);
       ref = payload.messageId;
       detail = { replied: true, to: r.to, text: r.text };
     } else if (kind === "agent_outreach") {
       // Phase 21 part 2: Allow on "Shall I ask X's agent…?" — the agent sends it now.
-      const { approveOutreach } = await import("../agent-network/outreach.js");
+      const { approveOutreach } = await import("../agent-network/index.js");
       const r = await approveOutreach(userId, payload);
       ref = r.messageId;
       detail = { sent: true, to: r.to, delivered: r.delivered, ...(r.answer ? { answer: r.answer } : {}) };
@@ -302,7 +302,7 @@ export async function dismissProposal(userId, id, reason) {
   // Phase 21: "No" on an agent message card declines it politely (the sender's agent is told).
   const { data: prop } = await edu().from("agent_proposals").select("kind, payload").eq("id", id).maybeSingle();
   if (prop?.kind === "agent_friend" || prop?.kind === "agent_reply") {
-    const { declineMessage } = await import("../agent-network/friends.js");
+    const { declineMessage } = await import("../agent-network/index.js");
     await declineMessage(userId, prop.payload?.messageId).catch(() => {});
   }
   return { dismissed: true, reason: why };

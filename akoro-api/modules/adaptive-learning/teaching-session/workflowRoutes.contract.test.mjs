@@ -7,9 +7,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
 import express from "express";
-import { createWorkflowEngine } from "../../workflows/engine.js";
-import { memoryWorkflowStore } from "../../workflows/store.js";
-import { describeWorkflow } from "../../workflows/dashboard.js";
+import { createWorkflowEngine } from "../../workflows/index.js";
+import { memoryWorkflowStore } from "../../workflows/index.js";
+import { describeWorkflow } from "../../workflows/index.js";
 import "./workflow.js";
 import { createTeachingWorkflowsRouter, directSessionInput } from "./workflowRoutes.js";
 

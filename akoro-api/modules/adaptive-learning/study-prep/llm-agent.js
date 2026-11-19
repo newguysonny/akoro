@@ -5,10 +5,10 @@
  * (propose_plan, advance_topic, defer_topic, conclude_session,
  * offer_strategy, topic.flag, session.replan).
  */
-import { makeLlmAgent as makeRuntimeAgent, providerToolName } from "../../agent-runtime/llm-agent.js";
+import { makeLlmAgent as makeRuntimeAgent, providerToolName } from "../../agent-runtime/index.js";
 import { llmFacingTools } from "../tools/registry.js";
 import { POLICY } from "./state-machine.js";
-import { pickFields } from "../../workflows/modelPicks.js";
+import { pickFields } from "../../workflows/index.js";
 
 export { providerToolName };
 

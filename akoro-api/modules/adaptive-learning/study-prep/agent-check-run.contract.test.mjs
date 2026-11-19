@@ -3,9 +3,9 @@
 // result — and a retest is a new battle with its own workflow and card.
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createWorkflowEngine } from "../../workflows/engine.js";
-import { memoryWorkflowStore } from "../../workflows/store.js";
-import { narrate } from "../../workflows/narrator.js";
+import { createWorkflowEngine } from "../../workflows/index.js";
+import { memoryWorkflowStore } from "../../workflows/index.js";
+import { narrate } from "../../workflows/index.js";
 import "./workflow.js";
 import { agentCheckWorkflow, CHECK_QUESTION_TOOL, checkView, makeAgentCheckRun, markedRow, questionRow, START_CHECK_TOOL } from "./agent-check-run.js";
 

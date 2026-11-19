@@ -1,6 +1,6 @@
 // Self-tooling (plan §7, phase S1): the registry is safe and matches the database.
-import { DATA_VIEWS, viewColumns } from "../../self-tooling/views.js";
-import { CAPABILITIES, FORBIDDEN } from "../../self-tooling/capabilities.js";
+import { DATA_VIEWS, viewColumns } from "../../self-tooling/index.js";
+import { CAPABILITIES, FORBIDDEN } from "../../self-tooling/index.js";
 
 // Words that must never leak from schema_lookup: tables, schemas, secrets.
 const LEAK = /\b(public|edu|content|mgmt)\.|\b(users|password_hash|password|email|phone|service[_ ]key|token|information_schema|pg_catalog|select \*)\b/i;
@@ -220,8 +220,8 @@ export const escalateAndResume = {
     ctx.expect.ok("asking again returns the same request", again?.requestId === r.requestId && again?.duplicate === true, again);
 
     // The admin decision (in-process, as the gate): approve for everyone, short expiry.
-    const { decideRequest, revokeGrant } = await import("../../self-tooling/escalation.js");
-    const { enqueueResume } = await import("../../self-tooling/resumeQueue.js");
+    const { decideRequest, revokeGrant } = await import("../../self-tooling/index.js");
+    const { enqueueResume } = await import("../../self-tooling/index.js");
     const decided = await decideRequest({ requestId: r.requestId, decision: "approve", note: "gate test", expiresAt: new Date(Date.now() + 15 * 60_000).toISOString(),
       admin: { id: null, label: "verification gate" }, enqueue: enqueueResume });
     ctx.expect.ok("approved with a grant", decided?.request?.status === "approved" && !!decided?.grant?.id, decided);
@@ -267,7 +267,7 @@ export const agentEscalates = {
   params: { learner: { default: "@tester41" } },
   async run(ctx, p) {
     await needCreate(ctx);
-    const { capabilityStatus } = await import("../../self-tooling/registry.js");
+    const { capabilityStatus } = await import("../../self-tooling/index.js");
     if ((await capabilityStatus("battles.class_results")) === "enabled") ctx.expect.blocked("battles.class_results is granted on this server — nothing to escalate");
     const me = await ctx.as(p.learner);
     const before = await ctx.db.count("edu.agent_tool_requests", { requester_id: me.id });
@@ -300,17 +300,17 @@ export const promotionCheck = {
     if (!p.toolId) ctx.expect.blocked("pass { toolId }");
     const t = (await ctx.db.rows("edu.agent_tools", { id: p.toolId }, { columns: "id, scope, audience, status, definition, params_schema, capabilities, views, verification", limit: 1 }))[0];
     if (!t) ctx.expect.blocked("no such tool");
-    const { validateDefinition, runDefinition } = await import("../../self-tooling/interpreters.js");
-    const { coerceInput } = await import("../../self-tooling/bind.js");
-    const { capabilityStatus } = await import("../../self-tooling/registry.js");
-    const { CAPABILITIES } = await import("../../self-tooling/capabilities.js");
-    const { LIMITS } = await import("../../self-tooling/pipeline.js");
+    const { validateDefinition, runDefinition } = await import("../../self-tooling/index.js");
+    const { coerceInput } = await import("../../self-tooling/index.js");
+    const { capabilityStatus } = await import("../../self-tooling/index.js");
+    const { CAPABILITIES } = await import("../../self-tooling/index.js");
+    const { LIMITS } = await import("../../self-tooling/index.js");
     const { selfToolDeps } = await import("../../adaptive-learning/chat.js");
     const { runDry } = await import("../../../lib/dryRunContext.js");
 
     const audience = t.audience || "learner";
     const role = audience === "instructor" ? "instructor" : "student";
-    const { learnerGrantable } = await import("../../self-tooling/capabilities.js");
+    const { learnerGrantable } = await import("../../self-tooling/index.js");
     const v = await validateDefinition(structuredClone(t.definition), t.params_schema, { audience });
     // Not yet on for everyone is expected for an own-data change: the promotion turns it on.
     const errs = v.errors.filter((e) => !(/capability (\S+) needs approval/.test(e) && learnerGrantable(e.match(/capability (\S+) needs approval/)[1])));
@@ -376,7 +376,7 @@ export const promotePlatform = {
     const src = (await ctx.db.rows("edu.agent_tools", { owner_id: me.id, name: srcName }, { columns: "id", limit: 1 }))[0];
     if (!src) return;
 
-    const { promoteTool, setToolStatus } = await import("../../self-tooling/library.js");
+    const { promoteTool, setToolStatus } = await import("../../self-tooling/index.js");
     const { startRun } = await import("../runner.js");
     const { selfToolDeps } = await import("../../adaptive-learning/chat.js");
     const gateAdmin = { id: null, label: "verification gate" };
@@ -392,7 +392,7 @@ export const promotePlatform = {
     ctx.expect.ok("platform row: no owner, promoted from the source, carries the check", row?.scope === "platform" && row?.owner_id === null && row?.promoted_from === src.id && row?.verification?.promotion?.verdict === "PASS", row);
 
     // Another learner sees it in their catalogue and runs it on their own tasks.
-    const { learnerToolDefs } = await import("../../self-tooling/pipeline.js");
+    const { learnerToolDefs } = await import("../../self-tooling/index.js");
     const defs = await learnerToolDefs(other.id);
     ctx.expect.ok("in another learner's catalogue", defs.some((d) => d.function?.name === platformName), defs.map((d) => d.function?.name));
     const out = await ctx.agent.tool({ as: p.other, tool: platformName, learnerTool: true, mode: "live", input: {} });
@@ -414,7 +414,7 @@ export const sandboxContained = {
   name: "selftool.sandbox_contained", area: "self-tooling", risk: "read",
   description: "On the deployed server the code sandbox runs plain code and contains escape attempts: no network or host objects, infinite loops and memory bombs stopped, prototype tampering confined to one run.",
   async run(ctx) {
-    const { runCode, staticCheck, CODE_LIMITS } = await import("../../self-tooling/sandbox/index.js");
+    const { runCode, staticCheck, CODE_LIMITS } = await import("../../self-tooling/index.js");
     const ok = await runCode("function run(input, data){ return data.a.map(function (r) { return { x: r.x * 2 }; }); }", { input: {}, data: { a: [{ x: 1 }, { x: 2 }] }, akoro: {} });
     ctx.expect.ok("plain code runs", ok.ok && ok.value?.[1]?.x === 4, ok);
     // Network names are refused before running; host objects simply aren't there.
@@ -440,7 +440,7 @@ export const codeToolBuilt = {
   params: { learner: { default: "@tester21" } },
   async run(ctx, p) {
     await needCreate(ctx);
-    const { codeEnabled } = await import("../../self-tooling/sandbox/index.js");
+    const { codeEnabled } = await import("../../self-tooling/index.js");
     if (!codeEnabled()) ctx.expect.blocked("AKORO_SELF_TOOLING_CODE_ENABLED is off on this server");
     const exam = new Date(Date.now() + 21 * 86_400_000).toISOString().slice(0, 10);
     const r = await ctx.agent.tool({ as: p.learner, tool: "create_tool", mode: "dry", input: {
@@ -482,7 +482,7 @@ export const writeConfirm = {
     const me = await ctx.as(p.learner);
     await ctx.as(p.other);
     const { default: db } = await import("../../../db.js");
-    const { activeGrants } = await import("../../self-tooling/registry.js");
+    const { activeGrants } = await import("../../self-tooling/index.js");
     const tag = ctx.marker.slice(8, 16).replace(/[^a-z0-9]/g, "x");
     const name = `verify_done_${tag}`;
     const titles = [`${ctx.marker} revise fractions`, `${ctx.marker} revise motion`];
@@ -595,8 +595,8 @@ export const instructorScope = {
   async run(ctx, p) {
     const A = await ctx.as(p.a), B = await ctx.as(p.b), L = await ctx.as(p.learner);
     if (A.role !== "instructor" || B.role !== "instructor") ctx.expect.blocked("instructor testers missing (seed 2026-seed-instructor-testers.sql)");
-    const { readView } = await import("../../self-tooling/viewRuntime.js");
-    const { validateDefinition } = await import("../../self-tooling/interpreters.js");
+    const { readView } = await import("../../self-tooling/index.js");
+    const { validateDefinition } = await import("../../self-tooling/index.js");
     const bResults = await readView("my_activity_results", B.id);
     const aResults = await readView("my_activity_results", A.id);
     ctx.expect.gte("instructor B sees their own results", bResults.length, 1);
@@ -715,8 +715,8 @@ export const toolJourney = {
       !!queued && queued.requested_capability === "verify.probe" && queued.resume_status === "waiting" && queued.proposed_tool?.name === name, queued);
 
     // 3. Admin approves.
-    const { decideRequest, revokeGrant } = await import("../../self-tooling/escalation.js");
-    const { enqueueResume } = await import("../../self-tooling/resumeQueue.js");
+    const { decideRequest, revokeGrant } = await import("../../self-tooling/index.js");
+    const { enqueueResume } = await import("../../self-tooling/index.js");
     const admin = { id: null, label: "verification gate" };
     const decided = await decideRequest({ requestId: r.requestId, decision: "approve", note: "gate journey", expiresAt: new Date(Date.now() + 15 * 60_000).toISOString(), admin, enqueue: enqueueResume });
     ctx.expect.ok("3. admin approved: permission granted", decided?.request?.status === "approved" && !!decided?.grant?.id, decided);
@@ -777,7 +777,7 @@ export const deleteTasks = {
     await needCreate(ctx);
     const me = await ctx.as(p.learner);
     const { default: db } = await import("../../../db.js");
-    const { learnerGrants } = await import("../../self-tooling/registry.js");
+    const { learnerGrants } = await import("../../self-tooling/index.js");
     const revokeMine = async () => {
       await db.schema("edu").from("capability_grants").update({ revoked_at: new Date().toISOString() }).eq("learner_id", me.id).eq("capability", "tasks.delete").is("revoked_at", null);
       await learnerGrants(me.id, { fresh: true });
@@ -842,14 +842,14 @@ export const deleteTasks = {
     ctx.expect.eq("2. card lists exactly the two old tasks", [...(perm.items || [])].sort().join(" | "), [...old].sort().join(" | "));
     const draftRow = async () => (await ctx.db.rows("edu.agent_tools", { owner_id: me.id, name }, { columns: "status, capabilities", limit: 1 }))[0];
     ctx.expect.eq("2. the draft is OFF until approved", (await draftRow())?.status, "disabled");
-    const { learnerToolDefs } = await import("../../self-tooling/pipeline.js");
+    const { learnerToolDefs } = await import("../../self-tooling/index.js");
     ctx.expect.ok("2. and not usable by the agent yet", !(await learnerToolDefs(me.id)).some((d) => d.function?.name === name));
     const approved = await ctx.http({ as: p.learner, method: "POST", path: `/api/self-tooling/confirmations/${perm.confirmationId}/confirm`, body: { continueInChat: true } });
     ctx.note(`approve → ${JSON.stringify(approved.body?.data?.result || approved.body).slice(0, 400)}`);
     ctx.expect.status("2. approved", approved, 200);
     ctx.expect.eq("2. approval switched it on", (await draftRow())?.status, "active");
     ctx.expect.eq("2. on for this learner", (await learnerGrants(me.id, { fresh: true })).has("tasks.delete"), true);
-    const { capabilityStatus } = await import("../../self-tooling/registry.js");
+    const { capabilityStatus } = await import("../../self-tooling/index.js");
     ctx.expect.eq("2. still off for everyone else", await capabilityStatus("tasks.delete"), "locked");
     ctx.expect.ok("2. no second change card from the approval itself", !approved.body?.data?.next, approved.body?.data?.next);
     ctx.expect.eq("2. nothing deleted before Confirm", (await titles()).length, 3);
@@ -873,7 +873,7 @@ export const deleteTasks = {
     ctx.expect.ok("2. after Confirm it looks again before reporting", (t4.tools || []).length > 0, (t4.tools || []).map((t) => t.tool));
 
     // 3. Admins see the new tool (Agent tools), marked as one that changes data.
-    const { listTools } = await import("../../self-tooling/library.js");
+    const { listTools } = await import("../../self-tooling/index.js");
     const listed = await listTools({ scope: "learner", status: "active", search: "Clear old tasks", limit: 20 }).catch((e) => ({ error: e.message }));
     const row = (listed?.tools || []).find((t) => String(t.label).startsWith(ctx.marker));
     ctx.expect.ok("3. on the admins' Agent tools page, marked as changing data", !!row && (row.changes || []).length > 0, listed);
@@ -1003,11 +1003,11 @@ export const myLibraryView = {
   params: { learner: { default: "@tester01" } },
   async run(ctx, p) {
     const me = await ctx.as(p.learner);
-    const { DATA_VIEWS } = await import("../../self-tooling/views.js");
+    const { DATA_VIEWS } = await import("../../self-tooling/index.js");
     const v = DATA_VIEWS.my_library;
     ctx.expect.ok("my_library reads edu.records (self-scoped)", !!v && v.source.table === "records" && v.scope === "self", v && v.source);
     ctx.expect.ok("it has no subject field (the Library has none)", !!v && !("subject" in v.fields), v && Object.keys(v.fields));
-    const { runDefinition } = await import("../../self-tooling/interpreters.js");
+    const { runDefinition } = await import("../../self-tooling/index.js");
     const out = await runDefinition({ kind: "spec", from: "my_library", select: ["name", "kind"], limit: 50 }, {}, { learnerId: me.id });
     ctx.expect.ok("reading my_library works", Array.isArray(out.rows) && typeof out.total === "number", { total: out.total });
   },
@@ -1027,7 +1027,7 @@ export const groupTotal = {
       if (t?.taskId) { made.push(t.taskId); ctx.cleanup(() => ctx.db.deleteOwned("tasks", { ownerColumn: "creator_id", ownerId: me.id, filters: { id: t.taskId } })); }
     }
     ctx.expect.gte("created probe tasks", made.length, 2);
-    const { runDefinition } = await import("../../self-tooling/interpreters.js");
+    const { runDefinition } = await import("../../self-tooling/index.js");
     const out = await runDefinition({ kind: "spec", from: "my_tasks", group: { by: ["priority"], count: true }, select: ["priority", "count"] }, {}, { learnerId: me.id });
     const sum = (out.rows || []).reduce((n, r) => n + (Number(r.count) || 0), 0);
     ctx.expect.ok("total equals the sum of group counts (records, not groups)", out.total === sum && sum >= 2, { total: out.total, sum, rows: out.rows });
@@ -1145,7 +1145,7 @@ export const decisionFollowUp = {
     await needCreate(ctx);
     const me = await ctx.as(p.learner);
     const { default: db } = await import("../../../db.js");
-    const { activeGrants } = await import("../../self-tooling/registry.js");
+    const { activeGrants } = await import("../../self-tooling/index.js");
     const tag = ctx.marker.slice(8, 16).replace(/[^a-z0-9]/g, "x");
     const name = `verify_done_${tag}`;
 

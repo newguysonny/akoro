@@ -19,8 +19,8 @@ import db from "../../db.js";
 import { loadOwn, move, pagesOfRecord, readStructure, fileIngestFromDecision } from "./filingDb.js";
 import { DOC_KINDS } from "./ingestCore.js";
 import { subjectLabel } from "./folderMatch.js";
-import { storedTextKindOf, extractStoredText } from "../records/storedText.js";
-import { createPresignedDownload } from "../records/lib/storage.js";
+import { storedTextKindOf, extractStoredText } from "../records/index.js";
+import { createPresignedDownload } from "../records/index.js";
 
 const edu = () => db.schema("edu");
 const TEXT_CAP = 12_000;             // the same cap the old context injection used

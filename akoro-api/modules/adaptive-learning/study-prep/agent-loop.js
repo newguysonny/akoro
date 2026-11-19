@@ -16,8 +16,8 @@
 
 import { POLICY } from "./state-machine.js";
 import { makeEvent, publicEvent } from "./events.js";
-import { runAgentLoop, observationFor as runtimeObservationFor } from "../../agent-runtime/loop.js";
-import { capsFor } from "../../agent-runtime/caps.js";
+import { runAgentLoop, observationFor as runtimeObservationFor } from "../../agent-runtime/index.js";
+import { capsFor } from "../../agent-runtime/index.js";
 import { studyPrepResultLine } from "./workflow.js";
 
 export const TERMINAL_ACTIONS = Object.freeze([

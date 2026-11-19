@@ -10,7 +10,7 @@ export const bridgePersists = {
   async run(ctx, p) {
     const me = await ctx.as(p.learner);
     const other = await ctx.as(p.other);
-    const { teachingBridge } = await import("../../agent-tools/teaching-workflow-routes.js");
+    const { teachingBridge } = await import("../../agent-tools/index.js");
     const claims = { sub: me.id, scope: "student" };
     const sid = (tag) => `gate-${tag}-${Date.now().toString(36)}`;
     const rows = new Set();

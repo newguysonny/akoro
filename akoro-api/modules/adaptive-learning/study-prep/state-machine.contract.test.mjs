@@ -12,7 +12,7 @@ import {
   practiceStart, topicStateAfterScore, runStatusAfterScore,
 } from "./state-machine.js";
 import { canTransitionRun, examPrepRunWorkflow, runStepEvent, studyPrepWorkflow } from "./workflow.js";
-import { canTransition } from "../../workflows/definition.js";
+import { canTransition } from "../../workflows/index.js";
 
 const SYLLABUS = [
   { id: "water-cycle" }, { id: "photosynthesis" }, { id: "matter" }, { id: "energy" },

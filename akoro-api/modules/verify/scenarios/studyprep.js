@@ -171,7 +171,7 @@ async function startAgentCheckFor(ctx, p) {
   ctx.expect.ok("a check battle was created", !!battleId, JSON.stringify(started.check || null));
   // Registered after the session's cleanup, so it runs first (cleanups run newest first).
   ctx.cleanup(async () => {
-    const { discardCheckBattle } = await import("../../battle/agentCheck.js");
+    const { discardCheckBattle } = await import("../../battle/index.js");
     await discardCheckBattle(battleId, me.id);
   });
   ctx.note(`topic "${topic.label}", battle ${battleId}, ${started.check?.questions} questions`);
@@ -486,7 +486,7 @@ export const agentWakes = {
     if (startedCheck?.facts?.battleId) {
       const battleId = startedCheck.facts.battleId;
       ctx.cleanup(async () => {
-        const { discardCheckBattle } = await import("../../battle/agentCheck.js");
+        const { discardCheckBattle } = await import("../../battle/index.js");
         await discardCheckBattle(battleId, me.id);
       });
     }

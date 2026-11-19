@@ -151,10 +151,9 @@ const embeddingsBreaker = makeAiBreaker(
 // baseURL is overridable so the golden-path tests can point the whole platform
 // at a local stand-in and exercise every tool path end to end without a live
 // key. Unset in every real environment, where the SDK's default applies.
-const rawClient = new OpenAI({
-  apiKey:  process.env.OPENAI_API_KEY,
-  ...(process.env.OPENAI_BASE_URL ? { baseURL: process.env.OPENAI_BASE_URL } : {}),
-});
+let _rawClient = null;   // lazy: importing this module must not throw without a key
+const rawClient = new Proxy({}, { get(_t, k) { _rawClient ||= new OpenAI({ apiKey: process.env.OPENAI_API_KEY, ...(process.env.OPENAI_BASE_URL ? { baseURL: process.env.OPENAI_BASE_URL } : {}) });
+  const v = _rawClient[k]; return typeof v === "function" ? v.bind(_rawClient) : v; } });
 
 /**
  * Metered chat completion. The acting user comes from (in order): explicit

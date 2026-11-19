@@ -32,8 +32,8 @@ const { openai, runWithProviders, refusalOf } = await import("./aiModel.js");
 const { makeAnthropicAdapter } = await import("./providers/anthropic.js");
 const { usdCost } = await import("./aiPricing.js");
 const { makeLlmAgent: studyPrepAgent } = await import("../modules/adaptive-learning/study-prep/llm-agent.js");
-const { makeLlmAgent } = await import("../modules/agent-runtime/llm-agent.js");
-const { runAgentLoop } = await import("../modules/agent-runtime/loop.js");
+const { makeLlmAgent } = await import("../modules/agent-runtime/index.js");
+const { runAgentLoop } = await import("../modules/agent-runtime/index.js");
 const { modelDecide, executeAgentTeachingTurn } = await import("../modules/adaptive-learning/teaching-session/controller.js");
 const { guideTeach } = await import("../modules/adaptive-learning/teaching-session/guideTeacher.js");
 

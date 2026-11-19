@@ -41,7 +41,7 @@ test("a follow-up naming questions still matches the prepare guard (why the revi
 });
 
 test("the revision writer sees questions numbered from 1, as the teacher counts them", async () => {
-  const { buildRevisionMessages } = await import("../../self-study/questionPaper.js");
+  const { buildRevisionMessages } = await import("../../self-study/index.js");
   const base = { questions: [{ q: "First?", type: "MCQ", options: ["a", "b", "c", "d"], correct: 0 }, { q: "Second?", type: "Short answer" }] };
   const [sys, user] = buildRevisionMessages({ topic: "T", subject: "S", request: "Make question 2 harder", base });
   assert.match(user.content, /"index":1,"number":2,"text":"Second\?"/);
@@ -49,7 +49,7 @@ test("the revision writer sees questions numbered from 1, as the teacher counts 
 });
 
 test("true or false questions get a part of their own", async () => {
-  const { layoutPaper } = await import("../../self-study/paperTemplate.js");
+  const { layoutPaper } = await import("../../self-study/index.js");
   const { paper } = layoutPaper({ questions: [
     { q: "Pick one", type: "MCQ", options: ["a", "b", "c", "d"] },
     { q: "x = 2 is a solution of 2x = 4.", type: "True or false", format: "true_false", options: ["True", "False"] },

@@ -5,7 +5,7 @@
  * planning call draws on it. The platform pays (D46); nothing is persisted.
  */
 import { runQuietPass } from "../../agent-memory/quietLearning.js";
-import { gatherSignals, planningMessages, reasonAboutSignals, validateAndShapeProposals } from "../../autonomy/cycle.js";
+import { gatherSignals, planningMessages, reasonAboutSignals, validateAndShapeProposals } from "../../autonomy/index.js";
 import { CHAT } from "./quietLearning.js";
 
 export const plannerRichGather = {

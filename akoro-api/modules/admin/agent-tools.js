@@ -16,9 +16,9 @@
  */
 import { Router } from "express";
 
-import { authenticateToken, requireRole } from "../auth/routes.js";
+import { authenticateToken, requireRole } from "../auth/index.js";
 import { agentFeaturesCatalogue, agentToolsCatalogue } from "../agent-capabilities/catalogue.js";
-import { listTools, getTool, setToolStatus, promoteTool, similarTools, analytics, auditRows } from "../self-tooling/library.js";
+import { listTools, getTool, setToolStatus, promoteTool, similarTools, analytics, auditRows } from "../self-tooling/index.js";
 
 const router = Router();
 const adminOnly = [authenticateToken, requireRole(["admin"])];

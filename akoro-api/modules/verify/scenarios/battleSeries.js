@@ -25,7 +25,7 @@ export const battleSeriesRuns = {
     if (!found) ctx.expect.blocked(`${p.instructor} has no class with 2 test learners who have an agent`);
     const { classroom, learners } = found;
     const [a, b] = await Promise.all(learners.map((l) => ctx.as(`@${l.username}`)));
-    const { runOccurrence } = await import("../../battle/series.js");
+    const { runOccurrence } = await import("../../battle/index.js");
     const db = (await import("../../../db.js")).default;
 
     // Every day, three hours from now (Lagos), for two days: the first start is far enough off to wait in Postgres.

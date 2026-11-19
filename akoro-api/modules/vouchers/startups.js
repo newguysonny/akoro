@@ -6,7 +6,7 @@
  */
 import { Router } from "express";
 import multer from "multer";
-import { authenticateToken } from "../auth/routes.js";
+import { authenticateToken } from "../auth/index.js";
 import db, { vdb } from "./db.js";
 import { serverError } from "./lib/httpError.js";
 import { issueApiKey } from "./lib/apiKeys.js";

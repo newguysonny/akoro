@@ -10,8 +10,8 @@
  *   guessKind()          the no-model fallback · guessFile() the same for one file
  *   ingestToApi()        the row as the app sees it
  */
-import { defineWorkflow } from "../workflows/definition.js";
-import { registerWorkflow } from "../workflows/registry.js";
+import { defineWorkflow } from "../workflows/index.js";
+import { registerWorkflow } from "../workflows/index.js";
 
 export const INGEST_LIMITS = Object.freeze({ FILES: 5, NAME: 120, ASK: 600 });
 

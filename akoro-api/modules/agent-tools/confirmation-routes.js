@@ -5,7 +5,7 @@
  */
 import { Router } from "express";
 
-import { authenticateToken } from "../auth/routes.js";
+import { authenticateToken } from "../auth/index.js";
 import {
   confirmWriteConfirmation,
   listWriteConfirmations,

@@ -28,14 +28,14 @@ import { planReadyMessage } from "./planReady.js";
 export { planReadyMessage };
 import db from "../../../db.js";
 import { outsideAction, undoOutsideAction } from "../../../lib/outbox.js";
-import { createWorkflowEngine } from "../../workflows/engine.js";
-import { makeSupabaseWorkflowStore } from "../../workflows/store.js";
-import { publishLiveDeveloper } from "../../workflows/bus.js";
-import { keepFactual } from "../../agent-runtime/factFilter.js";
+import { createWorkflowEngine } from "../../workflows/index.js";
+import { makeSupabaseWorkflowStore } from "../../workflows/index.js";
+import { publishLiveDeveloper } from "../../workflows/index.js";
+import { keepFactual } from "../../agent-runtime/index.js";
 import { aiContext } from "../../../lib/aiContext.js";
 import { makeWorkflowMirror, studyPrepWorkflow, workflowEngineEnabled } from "./workflow.js";
 import { TOPIC_STARTABLE_STATES } from "./state-machine.js";
-import { registerWorkflow } from "../../workflows/registry.js";
+import { registerWorkflow } from "../../workflows/index.js";
 import { makeTeachingHandoff } from "./teaching-handoff.js";
 import { makeAgentCheckRun } from "./agent-check-run.js";
 import { HANDOFF_AUTO_APPROVE_MS, teachingView } from "../teaching-session/workflow.js";
@@ -73,7 +73,7 @@ export const agentCheckEnabled = () => String(process.env.AKORO_STUDY_PREP_AGENT
 /** The Agent Check behind the harness (battle/agentCheck.js + the learner's notes). */
 const makeAgentCheck = ({ questions, secondsPerQuestion } = {}) => ({
   async coverage({ learnerId, topic, subject }) {
-    const { embedQuestion, recall } = await import("../../battle/agentRecall.js");
+    const { embedQuestion, recall } = await import("../../battle/index.js");
     const embedding = await embedQuestion(topic);
     // Deciding whether there is anything to check is the platform's, not a charge.
     const notes = await recall({ studentId: learnerId, embedding, topic, queryText: topic, subject, limit: 4, payer: "platform" });
@@ -81,12 +81,12 @@ const makeAgentCheck = ({ questions, secondsPerQuestion } = {}) => ({
     return { notes: n, strength: n === 0 ? "none" : n < 3 ? "thin" : "good" };
   },
   async start({ learnerId, subject, topic, studyPrepTopicId, mode, basedOn = [], fromNotes = [] }) {
-    const { createCheckBattle } = await import("../../battle/agentCheck.js");
+    const { createCheckBattle } = await import("../../battle/index.js");
     return createCheckBattle({ learnerId, subject, topic, studyPrepTopicId, mode, basedOn, fromNotes,
       ...(questions ? { total: questions } : {}), ...(secondsPerQuestion ? { secondsPerQuestion } : {}) });
   },
   async results(battleId) {
-    const { checkResults } = await import("../../battle/agentCheck.js");
+    const { checkResults } = await import("../../battle/index.js");
     return checkResults(battleId);
   },
   /** Recovery (Phase 18 item 5): the check battle an interrupted start already made for this topic. */
@@ -107,7 +107,7 @@ const agentCheck = makeAgentCheck();
 /** The protégé's messages: one chat thread per Study Prep session, carrying the battle to watch. */
 const protege = {
   async say({ learnerId, session, text, battle }) {
-    const { postIntoChat } = await import("../../self-tooling/escalation.js");
+    const { postIntoChat } = await import("../../self-tooling/index.js");
     return postIntoChat({
       userId: learnerId, conversationId: null, createId: session.id,
       title: `Study Prep: ${session.goal || session.subject || "your plan"}`.slice(0, 80),
@@ -212,7 +212,7 @@ async function openRunMessage({ sessionId, learnerId, wakeId, trigger, label, ex
   if (conversationId) return postToConversation({ learnerId, conversationId, text: label, meta });
   // No chat thread for this plan yet: the protégé's Study Prep thread (as protege.say makes it).
   if (!createThread) return null;
-  const { postIntoChat } = await import("../../self-tooling/escalation.js");
+  const { postIntoChat } = await import("../../self-tooling/index.js");
   return postIntoChat({ userId: learnerId, conversationId: null, createId: sessionId, title: createThread.slice(0, 80), text: label, kind: "agent_check", meta: { ...meta, studyPrepSessionId: sessionId } });
 }
 
@@ -681,7 +681,7 @@ export function afterLearnerAction({ sessionId, learnerId, action, conversationI
  */
 export function outreachOnTopicStart({ learnerId, topic, conceptId = null, subject = null, force = false }) {
   if (!learnerId || !topic) return Promise.resolve(null);
-  return import("../../agent-network/outreach.js")
+  return import("../../agent-network/index.js")
     .then((o) => o.reachOut({ learnerId, trigger: "topic_start", purpose: "study_question", topic, conceptId, subject, friendsOnly: true, force }))
     .catch(() => null);
 }

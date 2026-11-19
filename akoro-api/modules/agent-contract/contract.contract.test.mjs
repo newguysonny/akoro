@@ -14,7 +14,7 @@ const { createEpisodeRecorder, computeChecks, verdictOf } = await import("./epis
 const { anonymiseEpisode, scrubText } = await import("./anonymise.js");
 const { episodeMode, saveEpisode, recordsRealTraffic } = await import("./store.js");
 const { toolObservation } = await import("../../utils/toolObservation.js");
-const { observationFor } = await import("../agent-runtime/loop.js");
+const { observationFor } = await import("../agent-runtime/index.js");
 
 const read = (p) => readFileSync(new URL(p, import.meta.url), "utf8");
 

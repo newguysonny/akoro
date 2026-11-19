@@ -12,8 +12,8 @@ import { createHarness, HarnessRejection, InsufficientBalanceError } from "./har
 import { POLICY } from "./state-machine.js";
 import { makeEvent } from "./events.js";
 import { guardStudyPrepStore, makeWorkflowMirror, studyPrepWorkflow } from "./workflow.js";
-import { createWorkflowEngine } from "../../workflows/engine.js";
-import { memoryWorkflowStore } from "../../workflows/store.js";
+import { createWorkflowEngine } from "../../workflows/index.js";
+import { memoryWorkflowStore } from "../../workflows/index.js";
 import { memorySubmitAttempt } from "./submit-attempt.testkit.mjs";
 
 // ── in-memory store double ─────────────────────────────────────────────────

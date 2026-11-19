@@ -16,7 +16,7 @@ import rateLimit from "express-rate-limit";
 import { ipKeyGenerator } from "express-rate-limit";
 import db from "../../db.js";
 import { openai, OPENAI_MODEL, llmComplete } from "../../lib/aiModel.js";
-import { authenticateToken, requireRole } from "../auth/routes.js";
+import { authenticateToken, requireRole } from "../auth/index.js";
 import { resolveSchoolByHost, SITE_BASE_DOMAIN } from "./tenant.js";
 import { getSyllabusContext } from "../../lib/syllabusGrounding.js";
 

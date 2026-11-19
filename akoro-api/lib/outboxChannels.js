@@ -47,7 +47,7 @@ export function outboxChannels() {
     }],
     ["email", {
       async send(p) {
-        const { sendNotificationEmail } = await import("../modules/auth/emails.js");
+        const { sendNotificationEmail } = await import("../modules/auth/index.js");
         await sendNotificationEmail(p);
         return {};
       },

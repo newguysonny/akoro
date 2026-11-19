@@ -27,7 +27,7 @@ import { v4 as uuid } from "uuid";
 
 import db from "../../../db.js";
 import { OPENAI_MODEL, openai } from "../../../lib/aiModel.js";
-import { parseJsonLoose } from "../../tasks/tools/_json.js";
+import { parseJsonLoose } from "../../tasks/index.js";
 import { normaliseExamConfidenceQuestions } from "./exam-prep-confidence-validation.js";
 import { applyThreshold, scoreAttempt } from "../study-prep/education-engine.js";
 import { runStatusAfterScore } from "../study-prep/state-machine.js";

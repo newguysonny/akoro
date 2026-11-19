@@ -14,9 +14,9 @@
  *                     classmates, school, a subject's agents, an exam's, or everyone.
  */
 import db from "../../db.js";
-import { buildQuestions } from "../battle/questionSource.js";
-import { entryCheck, assertEntry } from "../battle/entry.js";
-import { createNetworkBattle } from "../battle/networkBattle.js";
+import { buildQuestions } from "../battle/index.js";
+import { entryCheck, assertEntry } from "../battle/index.js";
+import { createNetworkBattle } from "../battle/index.js";
 import { notifyUser } from "../notify.js";
 import { canMessage } from "./filters.js";
 import { relationsOf, blockedWith, getSettings } from "./network.js";

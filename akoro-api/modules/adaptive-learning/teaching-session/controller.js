@@ -107,7 +107,7 @@ const withTimeout = (promise, ms) => {
 /** Run one agent-driven turn. Returns the same context shape the fixed runner did, plus the agent's record. */
 /** The learner's model pick for this turn's controller decisions and persona replies (never the locked assessor). */
 async function defaultPick({ orchestrator }) {
-  const { pickFields } = await import("../../workflows/modelPicks.js");
+  const { pickFields } = await import("../../workflows/index.js");
   return pickFields({ learnerId: orchestrator.userId || orchestrator.studentId, workflow: orchestrator.teachingWorkflowId || null, role: "persona" });
 }
 

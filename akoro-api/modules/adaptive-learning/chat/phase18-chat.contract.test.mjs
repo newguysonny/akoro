@@ -51,7 +51,7 @@ const { chatToolTimeLimit, runWithinLimit, timeoutResult, CHAT_TOOL_FAMILY_LIMIT
 const { shouldRetry, recoveryHint } = await import("./toolRecovery.js");
 const { toolObservation } = await import("../../../utils/toolObservation.js");
 const { runDry } = await import("../../../lib/dryRunContext.js");
-const { withActionBasis, NO_RULE_CODE } = await import("../../agent-runtime/actionBasis.js");
+const { withActionBasis, NO_RULE_CODE } = await import("../../agent-runtime/index.js");
 const { scoreRun, longestRepeat } = await import("../../../lib/evals/benchmark.js");
 const { benchmarkScenarios } = await import("../../../lib/evals/benchmark/scenarios.js");
 
@@ -205,12 +205,12 @@ test("the rows: self-tooling builds and change cards, proactive proposals, V4 ru
   const manifest = JSON.parse(read("../../../migrations/manifest.json"));
   assert.ok(manifest.schema.includes("2026-agent-action-basis.sql"));
 
-  const { auditRow } = await import("../../self-tooling/library.js");
+  const { auditRow } = await import("../../self-tooling/index.js");
   assert.deepEqual(auditRow({ id: "e", user_id: "u", goal: "g", outcome: "created", created_at: "t", basis: "inferred", basis_rule: "approved_request:r" }, "build"),
     { kind: "build", id: "e", userId: "u", goal: "g", outcome: "created", toolId: null, reason: null, createdAt: "t", basis: "inferred", rule: "approved_request:r" });
   assert.equal(auditRow({ id: "c", principal_id: "u", tool_name: "selftool:tasks.delete", status: "pending", created_at: "t", basis: "explicit" }, "change").tool, "tasks.delete");
 
-  const { proposalMeta, proposalBasis } = await import("../../autonomy/deliver.js");
+  const { proposalMeta, proposalBasis } = await import("../../autonomy/index.js");
   assert.deepEqual(proposalBasis({ kind: "task" }), { basis: "inferred", rule: "proactive:task" });
   assert.equal(proposalBasis({}).rule, null, "no kind, no rule: never delivered");
   assert.equal(proposalMeta({ id: "p", kind: "goal", title: "T" }).rule, "proactive:goal");

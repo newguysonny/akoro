@@ -10,7 +10,7 @@ import db     from "../../../db.js";
 // P2 (Context Layer Adoption): prompts load VERBATIM from the akoro-agent/
 // workspace — byte-identical to the pre-migration literals, pinned by
 // agentContext.golden.personas.test.mjs.
-import { buildStudentCloneReplyPrompt, buildStudentCloneAnalyzePrompt } from "../../agent-context/personas/student-clone.js";
+import { buildStudentCloneReplyPrompt, buildStudentCloneAnalyzePrompt } from "../../agent-context/index.js";
 
 // Import AND re-export the coin-metered client: every orchestrator/agent
 // that imports `openai` from here is billed automatically (see

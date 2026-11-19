@@ -94,7 +94,7 @@ export const gatewayStruggle = {
     const observations = [{ conceptId: concept.id, kind: "misconception_detected", claimStatus: "contradicted", responseQuality: 0.2, claimValidity: 0.3, modelConfidence: 0.85, evidenceSummary: "Thinks evaporation only happens at boiling point." }];
     let states;
     if (viaHttp) {
-      const { issueAgentToolsCapability } = await import("../../agent-tools/capability.js");
+      const { issueAgentToolsCapability } = await import("../../agent-tools/index.js");
       const toolContext = issueAgentToolsCapability({ user: { id: me.id, role: "student" }, sessionId, learningScope: { curriculumKey: "verify-gate", subject: "Biology", topicKey: key } });
       const res = await ctx.http({
         method: "POST", path: "/api/internal/agent-tools/v1/concept-state/observations",
@@ -106,8 +106,8 @@ export const gatewayStruggle = {
       states = res.body?.states;
     } else {
       ctx.note("gateway secrets not set here: checking the gateway's recording path in-process (the HTTP route stays closed without them)");
-      const { recordGatewayObservations } = await import("../../agent-tools/concept-state-routes.js");
-      const { conceptObservationsRequest } = await import("../../agent-tools/concept-state-validation.js");
+      const { recordGatewayObservations } = await import("../../agent-tools/index.js");
+      const { conceptObservationsRequest } = await import("../../agent-tools/index.js");
       states = await recordGatewayObservations(me.id, conceptObservationsRequest({ sessionId, toolContext: "in-process", turnId: "turn-1", observations }));
     }
     ctx.expect.ok("…and returns the learner's state with the misconception on", states?.[0]?.misconceptionActive === true, states);

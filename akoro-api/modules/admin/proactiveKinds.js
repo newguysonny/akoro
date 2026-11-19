@@ -9,8 +9,8 @@
  * admin_audit_log). The rules live in modules/autonomy/kindModesCore.js.
  */
 import { Router } from "express";
-import { authenticateToken, requireRole } from "../auth/routes.js";
-import { kindModeHistory, listKindModes, listObservations, setKindMode } from "../autonomy/kindModes.js";
+import { authenticateToken, requireRole } from "../auth/index.js";
+import { kindModeHistory, listKindModes, listObservations, setKindMode } from "../autonomy/index.js";
 
 const router = Router();
 const adminOnly = [authenticateToken, requireRole(["admin"])];

@@ -65,7 +65,7 @@ test("course videos transcribe themselves wherever video_url lands", () => {
   assert.match(lessonSrc, /fireLessonTranscription\(data, req\.user\?\.id\);\n    res201/, "a lesson created with a video queues its transcription");
   assert.match(lessonSrc, /if \(updates\.video_url !== undefined\) fireLessonTranscription\(data, req\.user\?\.id\);/, "setting/patching video_url queues it too");
   assert.match(lessonSrc, /contentKey: `lesson:\$\{lesson\.id\}`/, "the shared per-lesson cache key");
-  assert.match(lessonSrc, /import \{ autoTranscribeContent \} from "\.\.\/records\/avTranscribeLib\.js";/, "reuses the records lane — no second pipeline");
+  assert.match(lessonSrc, /import \{ autoTranscribeContent \} from "\.\.\/records\/index\.js";/, "reuses the records lane — no second pipeline");
   // encode-completion callback
   assert.match(streamSrc, /data\.encodingStatus === "completed" && updated\.videoUrl/, "fires the moment the encode lands in the bucket");
   assert.match(streamSrc, /\.eq\("video_url", updated\.videoUrl\)/, "finds the lesson already pointing at this URL");

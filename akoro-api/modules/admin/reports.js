@@ -26,7 +26,7 @@
 
 import { Router } from "express";
 import db from "../../db.js";
-import { authenticateToken, requireRole } from "../auth/routes.js";
+import { authenticateToken, requireRole } from "../auth/index.js";
 import { paystackGet } from "../../lib/paystackBreaker.js";
 import { computeOverview, todayStr } from "../../lib/billingModel.js";
 import { fulfillSubscriptionEvent } from "../billing/gateway.js";

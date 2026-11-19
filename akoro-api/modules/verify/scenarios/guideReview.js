@@ -18,7 +18,7 @@ export const guideReviewRuns = {
     ctx.expect.status("the review is requested", r, 201);
     const battleId = r.body?.data?.battleId;
     if (!battleId) return;
-    ctx.cleanup(async () => { const { discardCheckBattle } = await import("../../battle/agentCheck.js"); await discardCheckBattle(battleId, me.id); });
+    ctx.cleanup(async () => { const { discardCheckBattle } = await import("../../battle/index.js"); await discardCheckBattle(battleId, me.id); });
 
     const [b] = await ctx.db.rows("battles", { id: battleId }, { columns: "id, battle_type, review_host, requested_by, title, total_questions, xp_prize, hp_per_miss" });
     ctx.expect.eq("it runs as a check (the guide asks, the protégé answers)", b?.battle_type, "check");

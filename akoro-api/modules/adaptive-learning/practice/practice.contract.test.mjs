@@ -10,8 +10,8 @@ process.env.SUPABASE_URL ||= "http://127.0.0.1:9";
 process.env.SUPABASE_SERVICE_KEY ||= "test";
 process.env.OPENAI_API_KEY ||= "test";
 
-const { createWorkflowEngine } = await import("../../workflows/engine.js");
-const { memoryWorkflowStore } = await import("../../workflows/store.js");
+const { createWorkflowEngine } = await import("../../workflows/index.js");
+const { memoryWorkflowStore } = await import("../../workflows/index.js");
 const W = await import("./workflow.js");
 const { conductPracticeTurn, validatePracticeDecision, practiceDecisionState } = await import("./controller.js");
 const { makePracticeRun } = await import("./service.js");

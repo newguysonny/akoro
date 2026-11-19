@@ -8,7 +8,7 @@
  */
 const engineFor = async () => {
   const [{ default: db }, { createWorkflowEngine }, { makeSupabaseWorkflowStore }] = await Promise.all([
-    import("../../../db.js"), import("../../workflows/engine.js"), import("../../workflows/store.js")]);
+    import("../../../db.js"), import("../../workflows/index.js"), import("../../workflows/index.js")]);
   // Registers every type (the engine refuses an unregistered one).
   await Promise.all([
     import("../../adaptive-learning/study-prep/workflow.js"), import("../../adaptive-learning/teaching-session/workflow.js"),

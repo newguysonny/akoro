@@ -48,7 +48,7 @@
 import { speakBuffer } from "../voice/tts.js";
 import { Router }           from "express";
 import db                   from "../../db.js";
-import { authenticateToken } from "../auth/routes.js";
+import { authenticateToken } from "../auth/index.js";
 import {
   recordsStorageEnabled, createPresignedUpload, createPresignedDownload, removeRecordFile,
   putRecordObject, ownsRecordFileKey, isFallbackFileKey, MAX_FALLBACK_FILE_BYTES,

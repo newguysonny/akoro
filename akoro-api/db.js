@@ -17,9 +17,26 @@ const clientOptions = {
   global: { headers: { "x-akoro-instance": config.instanceId } },
 };
 
-if (!config.supabase.url || !config.supabase.serviceKey) {
-  console.error("❌  SUPABASE_URL or SUPABASE_SERVICE_KEY missing from .env");
-  process.exit(1);
+function requireSupabase() {
+  if (!config.supabase.url || !config.supabase.serviceKey) {
+    console.error("❌  SUPABASE_URL or SUPABASE_SERVICE_KEY missing from .env");
+    process.exit(1);
+  }
+}
+
+// Lazy: importing this module (directly or through a barrel) must not exit the
+// process just because a test env has no Supabase credentials. The server still
+// fails fast — app.js asserts the config at boot.
+function lazyClient(build) {
+  let client = null;
+  return new Proxy({}, {
+    get(target, prop) {
+      if (prop in target) return target[prop];   // a test fake replaced it
+      if (!client) client = build();
+      const value = client[prop];
+      return typeof value === "function" ? value.bind(client) : value;
+    },
+  });
 }
 
 // Meter every PostgREST entry point (from/rpc/schema) so the platform's
@@ -42,13 +59,20 @@ function metered(client) {
   return client;
 }
 
-const db = metered(createClient(config.supabase.url, config.supabase.serviceKey, clientOptions));
+const primary = lazyClient(() => {
+  requireSupabase();
+  return metered(createClient(config.supabase.url, config.supabase.serviceKey, clientOptions));
+});
+const db = primary;
 
 export const readDb = config.db.readUrl && config.db.readUrl !== config.supabase.url
-  ? metered(createClient(config.db.readUrl, config.supabase.serviceKey, {
-      ...clientOptions,
-      global: { headers: { "x-akoro-instance": `${config.instanceId}-read` } },
-    }))
+  ? lazyClient(() => {
+      requireSupabase();
+      return metered(createClient(config.db.readUrl, config.supabase.serviceKey, {
+        ...clientOptions,
+        global: { headers: { "x-akoro-instance": `${config.instanceId}-read` } },
+      }));
+    })
   : db;
 
 export const checkDb = async () => {
@@ -63,6 +87,6 @@ export const checkDb = async () => {
 // schema, isolated from the core app tables in `public`.
 // Requires `content` to be in the project's exposed schemas (see
 // migrations/2026-content-schema.sql header).
-export const contentDb = db.schema("content");
+export const contentDb = lazyClient(() => db.schema("content"));
 
 export default db;

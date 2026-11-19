@@ -26,7 +26,7 @@ const edu = () => db.schema("edu");
 async function setup(ctx, { friends = false, optedIn = true, level = "SS 2" } = {}) {
   const a = await ctx.as(A), b = await ctx.as(B);
   await setLevel(ctx, a.id, level);
-  const o = await import("../../agent-network/outreach.js");
+  const o = await import("../../agent-network/index.js");
   ctx.cleanup(() => ctx.db.deleteOwned("edu.agent_messages", { ownerColumn: "from_user", ownerId: a.id, filters: { topic: { like: `${ctx.marker}%` } } }));
   ctx.cleanup(() => ctx.db.deleteOwned("edu.agent_proposals", { ownerColumn: "user_id", ownerId: a.id, filters: { kind: "agent_outreach", rationale: { like: `%${ctx.marker}%` } } }));
   ctx.cleanup(() => ctx.db.deleteOwned("chat_messages", { ownerColumn: "user_id", ownerId: a.id, filters: { text: { like: `%${ctx.marker}%` } } }));
@@ -201,7 +201,7 @@ export const offlineThenAnswers = {
   description: "B's agent is Offline: A's question waits in B's inbox; B's agent comes Online and answers; A is told the answer in chat.",
   async run(ctx) {
     const { a, b, o, topic } = await setup(ctx, { friends: true });
-    const { processInbox } = await import("../../agent-network/autoReply.js");
+    const { processInbox } = await import("../../agent-network/index.js");
     const { protegeDeps } = await import("../../adaptive-learning/chat.js");
     await setAutonomy(ctx, B, false);
     const t = topic("Electrolysis");
@@ -229,7 +229,7 @@ export const dailyCap = {
   description: "An agent starts at most 3 conversations a day on its own; the 4th is skipped.",
   async run(ctx) {
     const { a, b, o, topic } = await setup(ctx, { friends: true });
-    const { OUTREACH } = await import("../../agent-network/outreachCore.js");
+    const { OUTREACH } = await import("../../agent-network/index.js");
     const since = new Date(); since.setUTCHours(0, 0, 0, 0);
     const { count: already } = await edu().from("agent_messages").select("id", { count: "exact", head: true }).eq("from_user", a.id).eq("origin", "agent").gte("created_at", since.toISOString());
     const need = Math.max(0, OUTREACH.PER_DAY - (already ?? 0));
@@ -249,7 +249,7 @@ export const blockedSkipped = {
   description: "A blocked pair (the tester04 / tester03 seed) is never contacted — not even with a card.",
   async run(ctx) {
     const blocker = await ctx.as("@tester04"); await ctx.as("@tester03");
-    const o = await import("../../agent-network/outreach.js");
+    const o = await import("../../agent-network/index.js");
     const t = `${ctx.marker} Trigonometry`;
     ctx.cleanup(() => ctx.db.deleteOwned("edu.agent_messages", { ownerColumn: "from_user", ownerId: blocker.id, filters: { topic: { like: `${ctx.marker}%` } } }));
     const r = await o.reachOut({ learnerId: blocker.id, trigger: "manual", topic: t, target: "@tester03", force: true });
@@ -274,9 +274,9 @@ export const roundTrip = {
   description: "A's agent asks, B's agent answers on its own, the answer comes back: A is told the answer and B is told what its agent said.",
   async run(ctx) {
     const { a, b, o, topic } = await setup(ctx, { friends: true });
-    const { processInbox } = await import("../../agent-network/autoReply.js");
+    const { processInbox } = await import("../../agent-network/index.js");
     const { protegeDeps } = await import("../../adaptive-learning/chat.js");
-    const { getSettings, saveSettings } = await import("../../agent-network/network.js");
+    const { getSettings, saveSettings } = await import("../../agent-network/index.js");
     const was = (await getSettings(b.id)).auto_reply || "study";
     ctx.cleanup(() => saveSettings(b.id, { auto_reply: was }));
     await saveSettings(b.id, { auto_reply: "study" });

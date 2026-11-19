@@ -10,7 +10,7 @@ import db from "../../../db.js";
 import { embed } from "../agents/student/knowledge.js";
 import {
   trainedShell, buildTrainedGuideTipPrompt, buildTrainedControlDriftPrompt, buildTrainedStudentReplyPrompt,
-} from "../../agent-context/personas/trained.js";
+} from "../../agent-context/index.js";
 
 import { openai } from "../../../lib/aiModel.js";
 // db.js handles supabase //

@@ -5,7 +5,7 @@ import test from "node:test";
 process.env.SUPABASE_URL ||= "http://localhost:59999";
 process.env.SUPABASE_SERVICE_KEY ||= "test-service-key";
 process.env.OPENAI_API_KEY ||= "test-openai-key";
-const { cleanBattleOptions, seatsFor, assignTeams, NETWORK_LIMITS } = await import("../battle/networkBattle.js");
+const { cleanBattleOptions, seatsFor, assignTeams, NETWORK_LIMITS } = await import("../battle/index.js");
 const read = (p) => readFile(new URL(p, import.meta.url), "utf8");
 const [worker, challenges, network, toolCatalogue] = await Promise.all([read("../battle/worker.js"), read("./challenges.js"), read("../adaptive-learning/chat/handlers-network-study.js"), read("../adaptive-learning/chat/tool-catalogue-core.js")]);
 

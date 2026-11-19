@@ -113,7 +113,7 @@ check('but sees genuinely new material as new',
   coverage(monday, tuesday) < 0.5, coverage(monday, tuesday).toFixed(2));
 
 console.log('\n· Battles feed the mastery model');
-const { updateKnowledgeConfidence } = await import('../../modules/battle/knowledge.js');
+const { updateKnowledgeConfidence } = await import('../../modules/battle/index.js');
 await updateKnowledgeConfidence(me.id, 'GPK Family', 'Social Studies', false, 'Family Roles');
 const { rows: [kc] } = await sql.query(
   `SELECT confidence, prev_confidence, assess_count, passed_count

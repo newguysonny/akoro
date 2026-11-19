@@ -17,8 +17,8 @@
  *   completed        done — the outcome went to the parent
  *   cancelled / abandoned
  */
-import { defineWorkflow } from "../../workflows/definition.js";
-import { registerWorkflow } from "../../workflows/registry.js";
+import { defineWorkflow } from "../../workflows/index.js";
+import { registerWorkflow } from "../../workflows/index.js";
 
 export const TEACHING_STATES = Object.freeze(["proposed", "scheduled", "teaching_active", "adapt_strategy", "assessment", "completed", "cancelled", "abandoned"]);
 export const TEACHING_TRANSITIONS = Object.freeze({

@@ -11,7 +11,7 @@
  * after every run (in-app, email, SMS) and every run is audit-logged.
  */
 import { Router } from "express";
-import { authenticateToken, requireRole } from "../auth/routes.js";
+import { authenticateToken, requireRole } from "../auth/index.js";
 import { startRealUserRun, listRealUserRuns, realUserScenarios } from "../verify/realUser.js";
 import { realUserWritesEnabled, resolveAccount, TARGET } from "../verify/policy.js";
 import { getRun } from "../verify/runner.js";

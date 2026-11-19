@@ -21,7 +21,7 @@ import multer                from "multer";
 import { jsonbArray, jsonbObject } from "../../../lib/jsonb.js";
 import db                    from "../../../db.js";
 import { NaNaEsumai }        from "../agents/nana-esumai/guide.js";
-import { authenticateToken } from "../../auth/routes.js";
+import { authenticateToken } from "../../auth/index.js";
 import {
   MAX_REFERENCE_BYTES,
   isSupportedSessionReference,

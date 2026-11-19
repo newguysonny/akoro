@@ -118,7 +118,7 @@ export const pickReachesWorkflows = {
     }
 
     // 3. The calls: served by the picked model (stand-in providers record which), recorded at its price.
-    const { modelPicks } = await import("../../workflows/modelPicks.js");
+    const { modelPicks } = await import("../../workflows/index.js");
     const { runWithProviders } = await import("../../../lib/aiModel.js");
     const { modelRegistry } = await import("../../../lib/modelRegistry.js");
     const picks = await modelPicks();
@@ -162,7 +162,7 @@ export const noForcedToolChoiceClaude = {
   async run(ctx) {
     const { runWithProviders, openai } = await import("../../../lib/aiModel.js");
     const { makeAnthropicAdapter } = await import("../../../lib/providers/anthropic.js");
-    const { makeLlmAgent } = await import("../../agent-runtime/llm-agent.js");
+    const { makeLlmAgent } = await import("../../agent-runtime/index.js");
     const { modelRegistry, availabilityOf } = await import("../../../lib/modelRegistry.js");
     const bodies = [];
     const client = { messages: { create: async (body) => { bodies.push(body); return { id: "m", model: body.model, stop_reason: "tool_use", content: [{ type: "tool_use", id: "t", name: body.tools[0].name, input: { intent: "x", args: {} } }], usage: { input_tokens: 5, output_tokens: 3 } }; } } };
@@ -200,8 +200,8 @@ export const refusalFallback = {
     const { runWithProviders, openai } = await import("../../../lib/aiModel.js");
     const { makeAnthropicAdapter } = await import("../../../lib/providers/anthropic.js");
     const { modelRegistry, availabilityOf } = await import("../../../lib/modelRegistry.js");
-    const { makeLlmAgent } = await import("../../agent-runtime/llm-agent.js");
-    const { runAgentLoop } = await import("../../agent-runtime/loop.js");
+    const { makeLlmAgent } = await import("../../agent-runtime/index.js");
+    const { runAgentLoop } = await import("../../agent-runtime/index.js");
     // Where the server itself sends a refused Claude call (the default, or AI_FORCE_MODEL's model on a sandbox).
     const { refusalFallbackFor } = await import("../../../lib/aiModel.js");
     const fallback = refusalFallbackFor(modelRegistry.get("claude-sonnet"));

@@ -4,7 +4,7 @@ import test from "node:test";
 
 const src = await readFile(new URL("./deliver.js", import.meta.url), "utf8");
 const cycle = await readFile(new URL("./cycle.js", import.meta.url), "utf8");
-const index = await readFile(new URL("./index.js", import.meta.url), "utf8");
+const scheduler = await readFile(new URL("./scheduler.js", import.meta.url), "utf8");
 const inbox = await readFile(new URL("../agent-proposals/inbox.js", import.meta.url), "utf8");
 const tab = await readFile(new URL("../../../akoro-learner/src/components/tabs/AgentChatTab.jsx", import.meta.url), "utf8");
 
@@ -38,7 +38,7 @@ test("wired: the planner tags the source note and posts after a run; a sweep ret
   assert.match(cycle, /sourceChatId: readyChat \|\| note\?\.chatId \|\| null/);
   assert.match(cycle, /const delivered = await deliverProactive\(userId\)/);
   assert.match(cycle, /if \(!delivered\.posted\) await notifyUser\(\{/, "one bell row when nothing was posted");
-  assert.match(index, /if \(\+\+deliveryTicks % 10 === 0\) deliverDue\(\)/);
+  assert.match(scheduler, /if \(\+\+deliveryTicks % 10 === 0\) deliverDue\(\)/);
   assert.equal((inbox.match(/await markPostedDecision\(/g) || []).length, 3, "executed, failed, dismissed");
   assert.match(tab, /\.\.\.\(m\.role !== "user" && m\.meta\?\.proposal \? \{ proposal: m\.meta\.proposal \} : \{\}\)/);
   // One approval row everywhere (2026-11-06): Allow / Reject / Later — Later keeps it pending.

@@ -36,11 +36,11 @@
  */
 import { Router }             from "express";
 import db                     from "../../db.js";
-import { authenticateToken }  from "../auth/routes.js";
+import { authenticateToken }  from "../auth/index.js";
 import { runPharmdUpload }    from "./uploader.js";
 import { safeCompare } from "../../lib/safeCompare.js";
 import { openai, OPENAI_MODEL } from "../../lib/aiModel.js";
-import { buildAskMessages, extractCitations, cleanModelOutput } from "../records/askLib.js";
+import { buildAskMessages, extractCitations, cleanModelOutput } from "../records/index.js";
 import { pharmdContentKey } from "../../lib/contentKey.js";
 
 const edu = () => db.schema("edu");

@@ -5,8 +5,8 @@
  * once a day; and a decision in Suggestions shows on the chat message.
  */
 import { runQuietPass } from "../../agent-memory/quietLearning.js";
-import { runAutonomyCycleForUser } from "../../autonomy/cycle.js";
-import { deliverProactive } from "../../autonomy/deliver.js";
+import { runAutonomyCycleForUser } from "../../autonomy/index.js";
+import { deliverProactive } from "../../autonomy/index.js";
 import { CHAT } from "./quietLearning.js";
 
 const TRIGGER = "event:verify";

@@ -8,7 +8,7 @@
 
 import { Router } from "express";
 import db from "../../db.js";
-import { authenticateToken, requireRole } from "../auth/routes.js";
+import { authenticateToken, requireRole } from "../auth/index.js";
 import { labelKeyFor, rateBySurface, worstFirst } from "../agent-ratings/ratings.js";
 import { scrubText } from "../agent-contract/anonymise.js";
 

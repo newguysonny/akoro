@@ -6,7 +6,7 @@
  * (an admin grant for locked ones), and that is re-checked on every run.
  */
 import db from "../../db.js";
-import { blockedWith } from "../agent-network/network.js";
+import { blockedWith } from "../agent-network/index.js";
 import { agentDeps } from "../../lib/agentDeps.js";
 
 const MAX_BATTLES = 30;
@@ -57,7 +57,7 @@ const markTaskDone = async (learnerId, ref) => {
   if (!data) return { ok: false, error: "not found or already done" };
   try {
     const [{ cancelAutonomyReviewForTask }, { emitAutonomyEvent }] = await Promise.all([
-      Promise.resolve(agentDeps()), import("../autonomy/triggers.js"),
+      Promise.resolve(agentDeps()), import("../autonomy/index.js"),
     ]);
     await cancelAutonomyReviewForTask({ taskId: data.id, userId: learnerId }).catch(() => {});
     emitAutonomyEvent(learnerId, "task_done").catch(() => {});

@@ -18,7 +18,7 @@
 import { upgradeSaved } from "../teaching/tools.js";
 import { Router } from "express";
 import db from "../../db.js";
-import { authenticateToken, requireRole } from "../auth/routes.js";
+import { authenticateToken, requireRole } from "../auth/index.js";
 import { openai, OPENAI_MODEL } from "../../lib/aiModel.js";
 import {
   initializeTransaction,

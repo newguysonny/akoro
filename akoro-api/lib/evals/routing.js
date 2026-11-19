@@ -20,8 +20,8 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { openai } from "../aiModel.js";
-import { getToolsForTaskType } from "../../modules/tasks/tools/index.js";
-import { extractIntent } from "../../modules/tasks/lib/context.js";
+import { getToolsForTaskType } from "../../modules/tasks/index.js";
+import { extractIntent } from "../../modules/tasks/index.js";
 import { argMatches } from "./match.js";
 
 // Goldens live in data/routing.json — data, not code, so a case can be added

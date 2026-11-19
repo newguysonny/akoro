@@ -26,7 +26,7 @@
 
 import { Router } from "express";
 import db from "../../db.js";
-import { authenticateToken } from "../auth/routes.js";
+import { authenticateToken } from "../auth/index.js";
 import { paystackPost } from "../../lib/paystackBreaker.js";
 import { addCycleDays, todayStr } from "../../lib/billingModel.js";
 import { urlFor } from "../../lib/urls.js";

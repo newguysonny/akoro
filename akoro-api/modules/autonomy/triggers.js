@@ -6,7 +6,7 @@
  * Every real gate (enabled, level 2, pace, caps, quiet hours) is checked
  * later by the cycle itself — a trigger PROPOSES a run, it never starts one.
  */
-import { enqueueAutonomyCycle } from "./index.js";
+import { enqueueAutonomyCycle } from "./scheduler.js";
 
 // Per-process cooldown so a rapid-fire path (bulk completes, replays) does
 // not chatter Redis: one enqueue per user+kind per cooldown window, in-memory.

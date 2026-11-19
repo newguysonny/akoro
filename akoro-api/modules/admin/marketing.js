@@ -9,7 +9,7 @@
  *   GET  /api/admin/marketing/health        provider/key availability
  */
 import { Router } from "express";
-import { authenticateToken, requireRole } from "../auth/routes.js";
+import { authenticateToken, requireRole } from "../auth/index.js";
 
 const router    = Router();
 const adminOnly = [authenticateToken, requireRole(["admin"])];

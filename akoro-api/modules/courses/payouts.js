@@ -23,7 +23,7 @@ import axios                              from "axios";
 import { paystackPost, paystackGet }            from "../../lib/paystackBreaker.js";
 import { body, validationResult }         from "express-validator";
 import db                                 from "../../db.js";
-import { authenticateToken, requireRole } from "../auth/routes.js";
+import { authenticateToken, requireRole } from "../auth/index.js";
 import { businessConfig }                 from "../../config/index.js";
 import { verifyTransaction }              from "../../lib/paystackService.js";
 import { performRefund }                  from "./payments.js";

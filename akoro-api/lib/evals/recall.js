@@ -24,7 +24,7 @@
 
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { answerFromRecall } from "../../modules/battle/agentRecall.js";
+import { answerFromRecall } from "../../modules/battle/index.js";
 
 const DATA = JSON.parse(readFileSync(fileURLToPath(new URL("./data/recall.json", import.meta.url)), "utf8"));
 

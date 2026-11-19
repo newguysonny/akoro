@@ -16,15 +16,15 @@ import { consultPeerAgents, consultBreakthroughs, PEER_QUESTION_MIN, PEER_QUESTI
 import { agentNetworkEnabled } from "./tool-catalogue-rest.js";
 import { studyPrepEnabled } from "./runtime-state.js";
 import { classForExam } from "../intent/agent-chat-intent.js";
-import { searchAgents, saveSettings as saveAgentNetworkSettings, block as blockAgent, report as reportAgent, logPastQuestions, pastQuestionSummary } from "../../agent-network/network.js";
-import { challengeAgents, postChallengeRequest, searchChallengeRequests, acceptChallengeRequest, cancelChallengeRequest, rematch } from "../../agent-network/challenges.js";
-import { requestGuideReview } from "../../battle/guideReview.js";
-import { classBattleFromChat } from "../../battle/chatBattle.js";
-import { messageAgent, inbox as agentInbox, replyToAgent, consultOnlineAgents, inboxBrief } from "../../agent-network/messaging.js";
+import { searchAgents, saveSettings as saveAgentNetworkSettings, block as blockAgent, report as reportAgent, logPastQuestions, pastQuestionSummary } from "../../agent-network/index.js";
+import { challengeAgents, postChallengeRequest, searchChallengeRequests, acceptChallengeRequest, cancelChallengeRequest, rematch } from "../../agent-network/index.js";
+import { requestGuideReview } from "../../battle/index.js";
+import { classBattleFromChat } from "../../battle/index.js";
+import { messageAgent, inbox as agentInbox, replyToAgent, consultOnlineAgents, inboxBrief } from "../../agent-network/index.js";
 import {
   requestBuddy, respondBuddy, listBuddies, buddyCheckin, endBuddy, buddyBrief,
   joinDaily, skipDaily, dailyRanking, dailyStatus, createCircle, searchCircles, joinCircle, leaveCircle, weeklyLeague,
-} from "../../agent-network/activities.js";
+} from "../../agent-network/index.js";
 import { resolveMaterialsFolder } from "../../materials/studySource.js";
 import { recurringTopics } from "../../materials/structureCore.js";
 import { createLearnerToolRequest } from "../../agent-tool-requests/service.js";
@@ -189,7 +189,7 @@ export function createHandlers(deps) {
     async set_agent_auto_reply(input, { studentId, conversationId = null, role = "student", channel = "ai_chat" }) {
       if (!["off", "study", "study_chat"].includes(input?.mode)) return clarify("mode", "Should I ask you every time, answer study questions on my own, or also reply to friendly chat?", { action: "set_agent_auto_reply" });
       try {
-        const { saveSettings } = await import("../../agent-network/network.js");
+        const { saveSettings } = await import("../../agent-network/index.js");
         const saved = await saveSettings(studentId, { auto_reply: input.mode });
         return { saved: true, mode: saved.auto_reply, means: { off: "I'll ask you before answering any agent.", study: "I'll answer study questions on my own (from what you taught me) and ask you about everything else.", study_chat: "I'll answer study questions and reply to friendly chat on my own; friend requests and anything about you still come to you." }[saved.auto_reply] };
       } catch (error) { return { error: error.message || "Could not save that setting" }; }
@@ -249,7 +249,7 @@ export function createHandlers(deps) {
       const courseIds = (enrolled ?? []).map((e) => e.course_id);
       const classIds = (classes ?? []).map((c) => c.classroom_id);
       const seatOf = new Map((seats ?? []).map((s) => [s.battle_id, s]));
-      const { upcomingDay } = await import("../../agent-network/activities.js");
+      const { upcomingDay } = await import("../../agent-network/index.js");
       const lists = await Promise.all([
         seatOf.size ? db.from("battles").select(COLS).in("id", [...seatOf.keys()].slice(0, 200)).in("status", OPEN) : { data: [] },
         courseIds.length ? db.from("battles").select(COLS).in("course_id", courseIds).in("status", OPEN).limit(10) : { data: [] },
@@ -306,7 +306,7 @@ export function createHandlers(deps) {
     async search_my_library(input, ctx) { return searchMyLibraryTool(ctx.studentId, input); },
     async make_study_material(input, { studentId, conversationId = null, role = "student", channel = "ai_chat" }) {
       // The learner's own records only; the result is a saved reader tab (edu.record_artifacts).
-      const { makeStudyMaterial } = await import("../../records/studyMaterial.js");
+      const { makeStudyMaterial } = await import("../../records/index.js");
       return makeStudyMaterial({ userId: studentId, tool: input?.tool, query: input?.query, folder: input?.folder,
         focus: input?.focus || "", count: input?.count || "", difficulty: input?.difficulty || "", length: input?.length || "",
         scope: input?.scope === "page" ? "page" : "document", pageNumber: input?.pageNumber ?? null,

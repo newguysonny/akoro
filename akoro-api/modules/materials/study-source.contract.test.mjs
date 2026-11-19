@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { folderTopics, materialTopicId, questionsForTopic } from "./studySourceCore.js";
 import { createHarness } from "../adaptive-learning/study-prep/harness.js";
-import { basedOnBlock } from "../battle/basedOn.js";
+import { basedOnBlock } from "../battle/index.js";
 
 const chat = await readFile(new URL("../adaptive-learning/chat.js", import.meta.url), "utf8");
 const toolCatalogue = await readFile(new URL("../adaptive-learning/chat/tool-catalogue-rest.js", import.meta.url), "utf8");

@@ -13,7 +13,7 @@
 import { Router }                         from "express";
 import { body, validationResult }         from "express-validator";
 import db                                 from "../../db.js";
-import { authenticateToken }              from "../auth/routes.js";
+import { authenticateToken }              from "../auth/index.js";
 import { createMeeting }                  from "./meeting-integration.js";
 
 const asyncHandler = (fn) => (req, res, next) =>

@@ -12,8 +12,8 @@
 import db from "../../db.js";
 import { buildSubmissionPdf, submissionMarkdown } from "./submissionPdf.js";
 import { readSubmissionFile, sniffSubmissionFile, removeSubmissionObject } from "./submissionFiles.js";
-import { putRecordObject, createPresignedDownload } from "../records/lib/storage.js";
-import { downloadCapped, docxToPages } from "../records/officeText.js";
+import { putRecordObject, createPresignedDownload } from "../records/index.js";
+import { downloadCapped, docxToPages } from "../records/index.js";
 import { pdfIsCurrent } from "./submissionView.js";
 import { submissionDocument } from "./paperSchema.js";
 
@@ -26,7 +26,7 @@ async function attachmentText(kind, bytes) {
     if (kind === "text") return Buffer.from(bytes).toString("utf8").replace(/^﻿/, "");
     if (kind === "docx") return docxToPages(bytes).map((p) => p.markdown).join("\n\n");
     if (kind === "pdf") {
-      const { pdfTextPages } = await import("../records/storedText.js");
+      const { pdfTextPages } = await import("../records/index.js");
       const { pages, scanned } = await pdfTextPages(bytes);
       return scanned ? null : pages.map((p) => p.markdown).join("\n\n");
     }

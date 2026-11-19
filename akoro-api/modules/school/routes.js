@@ -21,7 +21,7 @@ import bcrypt from "bcrypt";
 import crypto from "crypto";
 import db from "../../db.js";
 import { notifyUser } from "../notify.js";
-import { authenticateToken, requireRole, issueTokenPair, signHandoff, verifyHandoff, invalidateCachedUser } from "../auth/routes.js";
+import { authenticateToken, requireRole, issueTokenPair, signHandoff, verifyHandoff, invalidateCachedUser } from "../auth/index.js";
 import {
   initializeTransaction,
   verifyTransaction,

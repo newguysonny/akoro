@@ -21,7 +21,7 @@
 
 import { Router } from "express";
 import db from "../../db.js";
-import { authenticateToken, requireRole } from "../auth/routes.js";
+import { authenticateToken, requireRole } from "../auth/index.js";
 import { currentAlerts, evaluateAll } from "../../lib/alerts.js";
 
 const router = Router();
@@ -181,7 +181,7 @@ router.post("/embeddings/sweep", adminOnly, asyncHandler(async (req, res) => {
  * problem is in the browser; if it says ok:false the message is the answer.
  */
 router.get("/voice/diagnose", adminOnly, asyncHandler(async (req, res) => {
-  const { createRealtimeTranscriber } = await import("../../modules/voice/openaiRealtime.js");
+  const { createRealtimeTranscriber } = await import("../voice/index.js");
   const started = Date.now();
 
   const outcome = await new Promise((resolve) => {

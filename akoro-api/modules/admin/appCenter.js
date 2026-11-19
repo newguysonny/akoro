@@ -19,7 +19,7 @@
  */
 import { Router } from "express";
 import db from "../../db.js";
-import { authenticateToken, requireRole } from "../auth/routes.js";
+import { authenticateToken, requireRole } from "../auth/index.js";
 import { serverError } from "../../lib/httpError.js";
 
 const router = Router();

@@ -10,7 +10,7 @@
 import { Router } from "express";
 import { body, validationResult } from "express-validator";
 import db from "../../db.js";
-import { authenticateToken, requireRole } from "../auth/routes.js";
+import { authenticateToken, requireRole } from "../auth/index.js";
 
 const router    = Router();
 const adminOnly = [authenticateToken, requireRole(["admin"])];

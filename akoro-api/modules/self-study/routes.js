@@ -54,7 +54,7 @@
 
 import { Router }                         from "express";
 import db                                 from "../../db.js";
-import { authenticateToken, requireRole } from "../auth/routes.js";
+import { authenticateToken, requireRole } from "../auth/index.js";
 import { getStudentState }               from "../learner-state/index.js";
 import {
   nana, edu, ACTIVITY_TYPES, announceFor, mySchool,
@@ -70,7 +70,7 @@ import { rubricView } from "./markScheme.js";
 import {
   listRoutines, createRoutine, updateRoutine, deleteRoutine,
 } from "./routines.js";
-import { emitAutonomyEvent } from "../autonomy/triggers.js";
+import { emitAutonomyEvent } from "../autonomy/index.js";
 import {
   SUBMISSION_FILE_LIMITS, sniffSubmissionFile, storeSubmissionFile, readSubmissionFile, isDrawingName, cropDrawing,
   removeSubmissionObject, contentDisposition,

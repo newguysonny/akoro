@@ -14,7 +14,7 @@ import {
   getStrategy, isPermittedStrategy, normaliseStrategyId, strategiesFor, strategiesForStruggle, strategyRefusal,
 } from "./library.js";
 import { STRUGGLE_TYPES } from "../../../lib/struggleTypes.js";
-import { SETS } from "../../agent-context/manifest.mjs";
+import { SETS } from "../../agent-context/index.js";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const API_ROOT = path.resolve(HERE, "../../..");

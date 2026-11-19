@@ -36,7 +36,7 @@ export const handwritingRead = {
   description: "Measurement: hanji reads four handwritten answer photos (neat, fast/messy, crossed-out word, maths working); reports word recall, cold vs warm time and whether a crossed-out word was dropped. Bars: recall ≥ minRecall per sample, a warm read within warmSeconds.",
   params: { minRecall: { default: 0.85 }, warmSeconds: { default: 8 }, maxWaitSeconds: { default: 120 } },
   async run(ctx, p) {
-    const lib = await import("../../records/extractLib.js");
+    const lib = await import("../../records/index.js");
     if (!lib.extractEnabled?.() && !(process.env.RUNPOD_API_KEY && process.env.RUNPOD_PARSE_ENDPOINT_ID)) ctx.expect.blocked("hanji (RunPod) isn't configured on this server");
     const health = await lib.runpodEndpointHealth().catch((e) => ({ error: e.message }));
     ctx.note(`RunPod before: ${JSON.stringify(health?.workers || health).slice(0, 200)}`);
