@@ -3998,6 +3998,21 @@ flag-by-flag rollout; old paths removed only after a release with flags on.
   so unifying them is a UI decision per page — previews first — not a
   mechanical copy. i18n exists only in the learner (8 languages, 480 KB); the
   consoles use no translation layer yet.
+- **Status (2026-11-19): step 2 started; step 3 ✅ complete.** Step 3 finished
+  the seven-commit extraction map: `chat/runtime-state.js` (shared Maps and
+  feature flags), `tool-catalogue-core/-rest.js`, `tool-runtime.js` (assembly,
+  policy, dispatcher), four `handlers-*.js` groups behind one registry,
+  `turn-store.js`, `agent-loop.js`, and `turn-prepare.js` + `turn-answer.js`
+  (the handler split, SSE shell included). Dead formatters deleted (no
+  callers), `/decay` and `/student/agent` routes moved to their owning modules.
+  **`chat.js` 6,689 → 924 lines**; every public export re-exported, dispatch
+  order and `Unknown tool` copy preserved, structure counts unchanged
+  (41 oversized / 576 cross-module imports / 29 cyclic / 48 missing READMEs).
+  Test health improved as stale source assertions were re-pointed with their
+  subjects: `test:agent-chat` 53 pass / 15 fail → 60 / 8 (remaining: bcrypt
+  binding absent and old unit drift). Step 2 remains: `chat/` (21 files) and
+  `exam-prep/` (7) moved, ~97 loose top-level files and the module-entry /
+  README rules still to go.
 - **Status (2026-11-18): step 1 (guardrails) ✅ built.** `akoro-api/scripts/
   structure-scan.mjs` + `modules/structure.contract.test.mjs`, ratcheted against
   `modules/structure-baseline.json` (regenerate with `npm run structure:baseline`,

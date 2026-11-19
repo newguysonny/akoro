@@ -5,7 +5,7 @@
     "modules/adaptive-learning/agents/student/decayEngine.js": 831,
     "modules/adaptive-learning/agents/student/knowledge.js": 630,
     "modules/adaptive-learning/agents/student/orchestrator.js": 630,
-    "modules/adaptive-learning/chat.js": 1175,
+    "modules/adaptive-learning/chat.js": 925,
     "modules/adaptive-learning/marketplace/routes.js": 875,
     "modules/adaptive-learning/study-prep/harness.js": 1233,
     "modules/adaptive-learning/study-prep/wiring.js": 755,

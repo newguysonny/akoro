@@ -6,7 +6,7 @@ const websocket = await readFile(new URL("./websocket.js", import.meta.url), "ut
 const teachingSessionContext = await readFile(new URL("./teaching-session/context.js", import.meta.url), "utf8");
 const decayEngine = await readFile(new URL("./agents/student/decayEngine.js", import.meta.url), "utf8");
 const orchestrator = await readFile(new URL("./agents/student/orchestrator.js", import.meta.url), "utf8");
-const chat = await readFile(new URL("./chat.js", import.meta.url), "utf8");
+const decayChatRoutes = await readFile(new URL("./decay-review/routes.js", import.meta.url), "utf8");
 // Session preparation (continuation / decay loading) is shared by every
 // transport since D43 — the socket and the agent bridge both call it.
 const sessionStart = await readFile(new URL("./teaching-session/start.js", import.meta.url), "utf8");
@@ -44,7 +44,9 @@ test("decay-alert mutations are scoped to their authenticated owner", () => {
   assert.match(orchestrator, /markNotificationActioned\(this\.notificationId, sessionId, studentId\)/);
   assert.match(sessionStart, /markNotificationRead\(notificationId, studentId\)/);
   assert.match(websocket, /markNotificationRead\(notificationId, socket\.data\.user\.id\)/);
-  assert.match(chat, /markNotificationRead\(req\.params\.notifId, req\.user\.id\)/);
+  // The legacy /decay route lives in decay-review/routes.js since the chat.js
+  // split (Phase 19 step 3, 7/7); the ownership contract is unchanged.
+  assert.match(decayChatRoutes, /markNotificationRead\(req\.params\.notifId, req\.user\.id\)/);
 });
 
 test("minimize parks the session instead of ending it — the conversation survives", () => {

@@ -1,14 +1,8 @@
 // =============================================================
 // chat.js  v3.1
-// HTTP routes — all session types + decay system routes.
-// New in v3.1:
-//   GET  /decay/status/:studentId     — knowledge health dashboard
-//   GET  /decay/alerts/:studentId     — unread decay notifications
-//   GET  /decay/subjects/:studentId   — all subjects + confidence
-//   GET  /decay/topics/:studentId/:subject — topics in a subject
-//   POST /decay/session/start         — start a decay review session
-//   POST /decay/acknowledge/:notifId  — mark notification read
-//   POST /decay/run                   — manually trigger decay check
+// HTTP routes — all session types.
+// The legacy knowledge-health (decay) routes live in decay-review/routes.js and
+// the student-agent routes in agents/student/routes.js; both are mounted below.
 // =============================================================
 
 import express from "express";
@@ -34,16 +28,8 @@ import { allowedModelsFor } from "../../lib/modelTiers.js";
 const { Pool } = pkg;
 import db from "../../db.js";
 import config from "../../config/index.js";
-import {
-  getOrCreateStudentAgent,
-  getAgentGrowthHistory,
-  getAgentIntelligence,
-  retrieveAgentKnowledge,
-  getAgentKnowledgeBySubject,
-  getTopicsBySubject,
-} from "./agents/student/knowledge.js";
-import { decayEngine } from "./agents/student/decayEngine.js";
-import { subjectMastery } from "./agents/student/knowledge.js";
+import { decayRoutes } from "./decay-review/routes.js";
+import studentAgentRoutes from "./agents/student/routes.js";
 import { activeSessions } from "./websocket.js";
 import {
   getLearnerAutonomy,
@@ -190,114 +176,6 @@ async function reconstructHistoryBlocks(sessionId, topic, subject, agentName, ag
     console.warn("[reconstructHistoryBlocks]", e.message);
     return [];
   }
-}
-
-// =============================================================
-// FORMAT HELPERS
-// =============================================================
-
-function fmtAdaptiveEngine(engine, agentPairId) {
-  const lines = ["🧠 Adaptive Engine:"];
-  if (engine.misconception)        lines.push(`  • Misconception flagged: "${engine.misconception}"`);
-  if (engine.misconceptionCleared) lines.push(`  • Misconception cleared ✅`);
-  if (engine.newConceptLearned)    lines.push(`  • New concept: "${engine.newConceptLearned}" 💡`);
-  lines.push(`  • Understanding → ${engine.understanding}%`);
-  if (engine.confusion > 25)       lines.push(`  • Confusion spike → ${engine.confusion}%`);
-  lines.push(`  • Action → ${engine.actionLabel}`);
-  if (agentPairId === "student-session" && engine.agentKnowledgeAdded > 0)
-    lines.push(`  • Agent knowledge added → ${engine.agentKnowledgeAdded} chunks 📚`);
-  return lines.join("\n");
-}
-
-function fmtGuide(message, isUrgent, guideName) {
-  if (!message) return null;
-  return `${isUrgent ? `${guideName} (Intervenes):` : `${guideName}:`}\n${isUrgent ? "⚠️" : "💡"} ${message}`;
-}
-
-function fmtControl(line, controlName) {
-  return line ? `${controlName}:\n${line}` : null;
-}
-
-function fmtPhaseHeader(label) {
-  return [
-    `═══════════════════════════════════════════════════════════════`,
-    label,
-    `═══════════════════════════════════════════════════════════════`,
-  ].join("\n");
-}
-
-function fmtSubtopicHeader(subtopic, agentPairId) {
-  const prefix = agentPairId === "professor-warden" ? "Module" : "Phase 2 — Must-know parts";
-  return fmtPhaseHeader(`${prefix}: ${subtopic}`);
-}
-
-function fmtSessionEnd({ evaluation, controlReport, finalState, agentPairId,
-                         drillSummary, agentGrowth, decayResult, sessionType }) {
-  const score     = evaluation?.overallScore || 0;
-  const stars     = "⭐".repeat(Math.round(score / 20));
-  const strengths = (evaluation?.strengths || []).map(s => `  ✅ ${s}`).join("\n");
-  const guideName = agentPairId?.startsWith("trained:") ? "Teaching Guide"
-    : agentPairId === "professor-warden" ? "Professor Ade" : "NaNa Esumai";
-
-  const lines = [``, `${guideName}:`, `🎉 Teaching Score: ${score}/100 ${stars}`];
-  if (evaluation?.academicGrade) lines.push(`📋 Academic Grade: ${evaluation.academicGrade}`);
-  if (drillSummary) lines.push(`📊 Drill Accuracy: ${drillSummary.accuracy}%`);
-
-  if (decayResult && sessionType === "decay_review") {
-    lines.push(``, `🔄 Knowledge Reinforcement:`);
-    lines.push(`  Topic: ${decayResult.subject} — ${decayResult.topicReinforced}`);
-    lines.push(`  Confidence: ${Math.round(decayResult.confidenceBefore * 100)}% → ${Math.round(decayResult.confidenceAfter * 100)}%`);
-    lines.push(`  Next review: ${new Date(decayResult.nextReviewDue).toLocaleDateString()}`);
-  }
-
-  if (agentGrowth) {
-    lines.push(``, `🤖 Student Agent Growth:`);
-    lines.push(`  • Knowledge chunks saved: ${agentGrowth.knowledgeChunksSaved}`);
-    lines.push(`  • XP earned: +${agentGrowth.xpEarned}`);
-    lines.push(`  • Agent level: ${agentGrowth.agentLevel}`);
-    if (agentGrowth.leveledUp) lines.push(`  🎊 LEVEL UP!`);
-  }
-
-  if (strengths) lines.push(``, `What you did really well:`, strengths);
-  lines.push(
-    ``, `One tip for next time:`, `  👉 ${evaluation?.nextTimeTip || "Keep going!"}`,
-    ``, controlReport?.summary || "",
-    ``, `🧠 FINAL STATE`,
-    `Understanding: ${finalState.understanding}% | Confusion: ${finalState.confusion}%`,
-    `Mode: MASTERY`, ``,
-    `═══════════════════════════════════════════════════════════════`,
-    sessionType === "decay_review" ? `DECAY REVIEW COMPLETE` : `SESSION COMPLETE`,
-    `Next lesson: ${evaluation?.nextLesson || "Continue the topic"}`,
-    `═══════════════════════════════════════════════════════════════`,
-  );
-  return lines.join("\n");
-}
-
-function buildTurnBlocks(result, agentPairId) {
-  if (result.type === "drift_warning") {
-    return [result.guideMessage || result.sargeantMessage || "Let\u2019s bring that back to the topic."];
-  }
-  const blocks = [];
-  if (result.phaseChanged && result.phaseLabel)     blocks.push(fmtPhaseHeader(result.phaseLabel));
-  else if (result.subtopicAdvanced && result.currentSubtopic)
-    blocks.push(fmtSubtopicHeader(result.currentSubtopic, agentPairId));
-  if (result.wardenHolding && result.wardenHoldMessage) blocks.push(result.wardenHoldMessage);
-  if (result.studentAgentResponse) blocks.push(`🤖 STUDENT AGENT:\n"${result.studentAgentResponse}"`);
-  if (result.adaptiveEngine)       blocks.push(fmtAdaptiveEngine(result.adaptiveEngine, agentPairId));
-  const guideMsg = fmtGuide(result.guideMessage, result.guideIsUrgent, result.guideName || "Guide");
-  if (guideMsg) blocks.push(guideMsg);
-  const showCtrl = result.wardenHolding || result.driftInfo?.driftLevel === "edge" ||
-    ["PHASE_3","STAGE_3"].includes(result.currentPhase) || result.adaptiveEngine?.understanding >= 88;
-  if (result.controlStatusLine && showCtrl) {
-    const ctrl = fmtControl(result.controlStatusLine, result.controlName || "Control");
-    if (ctrl) blocks.push(ctrl);
-  }
-  if (result.turnXP) {
-    blocks.push(result.sessionType === "decay_review"
-      ? `✨ +${result.turnXP} XP (Reinforcement Bonus!)`
-      : `✨ +${result.turnXP} XP`);
-  }
-  return blocks;
 }
 
 // =============================================================
@@ -531,145 +409,17 @@ router.delete("/soul-state", async (req, res) => {
 // =============================================================
 
 // =============================================================
-// DECAY ROUTES  (v3.1)
+// DECAY ROUTES  (v3.1) — handlers live in decay-review/routes.js, mounted
+// here after the dry-run/inspect middleware so it still applies.
 // =============================================================
 
-// GET /decay/status/:studentId — full knowledge health dashboard
-router.get("/decay/status/:studentId", async (req, res) => {
-  try {
-    const agent     = await getOrCreateStudentAgent(req.user.id);
-    const dashboard = await decayEngine.getKnowledgeDashboard(req.user.id, agent.id);
-    res.json({ success: true, agentId: agent.id, dashboard });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-// GET /decay/alerts/:studentId — unread decay notifications + subtopic alerts
-router.get("/decay/alerts/:studentId", async (req, res) => {
-  try {
-    const { limit = 20 } = req.query;
-    const studentId = req.user.id;
-
-    // Original topic-level notifications
-    const notifications = await decayEngine.getUnreadNotifications(
-      studentId, Number(limit)
-    );
-
-    // Subtopic-level alerts from knowledge_confidence table
-    const subtopicAlerts = await decayEngine.getSubtopicAlerts(studentId);
-
-    // Merge: subtopic alerts take priority, deduplicate by sessionId
-    const seenSessions = new Set();
-    const alerts = [];
-
-    for (const a of subtopicAlerts) {
-      // Only dedupe by a REAL sessionId — subtopic alerts without a session
-      // (session_id null) are distinct rows and must all be kept, else they
-      // all collapse onto the single `null` key.
-      if (a.sessionId && seenSessions.has(a.sessionId)) continue;
-      if (a.sessionId) seenSessions.add(a.sessionId);
-      alerts.push(a);
-    }
-
-    // Add topic-level notifications not already covered by subtopic alerts
-    for (const n of notifications) {
-      const sessionMatch = subtopicAlerts.find(a =>
-        a.topic === n.topic && a.subject === n.subject
-      );
-      if (!sessionMatch) {
-        alerts.push({
-          id:              n.id,
-          sessionId:       n.session_id || null,
-          topic:           n.topic,
-          subtopic:        n.subtopic || n.topic,
-          subject:         n.subject,
-          confidence:      Math.round((n.confidence ?? 0.5) * 100),
-          prevConfidence:  Math.round((n.prev_confidence ?? 0.7) * 100),
-          daysSince:       n.days_since_review || 0,
-          misconceptions:  n.misconceptions || [],
-        });
-      }
-    }
-
-    res.json({
-      success: true,
-      alerts,                       // ← frontend uses this shape
-      notifications,                // keep for backward compat
-      count: alerts.length,
-    });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-// GET /decay/subjects/:studentId — all subjects + confidence summary
-router.get("/decay/subjects/:studentId", async (req, res) => {
-  try {
-    const agent    = await getOrCreateStudentAgent(req.user.id);
-    const subjects = await getAgentKnowledgeBySubject(agent.id);
-    res.json({ success: true, subjects, agentId: agent.id });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-// GET /decay/topics/:studentId/:subject — topics in a subject with health
-router.get("/decay/topics/:studentId/:subject", async (req, res) => {
-  try {
-    const agent  = await getOrCreateStudentAgent(req.user.id);
-    const topics = await getTopicsBySubject(agent.id, req.params.subject);
-    res.json({ success: true, subject: req.params.subject, topics, agentId: agent.id });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-// POST /decay/acknowledge/:notifId — mark notification as read
-router.post("/decay/acknowledge/:notifId", async (req, res) => {
-  try {
-    // A notification UUID is not authorization. The decay engine scopes the
-    // update to the authenticated learner so one learner cannot acknowledge
-    // another learner's alert.
-    const acknowledged = await decayEngine.markNotificationRead(req.params.notifId, req.user.id);
-    res.json({ success: true, acknowledged, notificationId: req.params.notifId });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-// POST /decay/run — manually trigger decay check for a student (admin/dev use)
-router.post("/decay/run", async (req, res) => {
-  try {
-    const runAll = req.body?.all === true;
-    if (runAll) {
-      // Full scheduler across every agent — admin only.
-      if (req.user.role !== "admin") return res.status(403).json({ error: "Admin only" });
-      const result = await decayEngine.runDecayScheduler(null);
-      return res.json({ success: true, ...result });
-    }
-    // Otherwise run decay for the authenticated caller's own agent.
-    const agent       = await getOrCreateStudentAgent(req.user.id);
-    const alertTopics = await decayEngine.applyDecay(agent.id);
-    res.json({ success: true, agentId: agent.id, alertTopics, count: alertTopics.length });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
+router.use("/decay", decayRoutes);
 
 // =============================================================
-// STUDENT AGENT ROUTES
+// STUDENT AGENT ROUTES — handlers live in agents/student/routes.js.
 // =============================================================
 
-router.get("/student/agent/:studentId", async (req, res) => {
-  try { res.json({ success: true, agent: await getOrCreateStudentAgent(req.user.id) }); }
-  catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-router.get("/student/agent/:studentId/intelligence", async (req, res) => {
-  try {
-    const agent = await getOrCreateStudentAgent(req.user.id);
-    const intel = await getAgentIntelligence(agent.id);
-    res.json({ success: true, intelligence: intel, agent });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-router.get("/student/agent/:studentId/growth", async (req, res) => {
-  try {
-    const { limit = 20 } = req.query;
-    const agent   = await getOrCreateStudentAgent(req.user.id);
-    const history = await getAgentGrowthHistory(agent.id, Number(limit));
-    res.json({ success: true, agent, history });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
+router.use("/student/agent", studentAgentRoutes);
 
 // =============================================================
 // STANDARD CHAT
