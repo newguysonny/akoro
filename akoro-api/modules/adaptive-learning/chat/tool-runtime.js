@@ -13,7 +13,7 @@ import { CHAT_TOOLS_CORE } from "./tool-catalogue-core.js";
 import { CHAT_TOOLS_REST, buildInstructorTools, peerConsultEnabled, blogResearchEnabled, agentNetworkEnabled } from "./tool-catalogue-rest.js";
 import { learnerInsightsEnabled, conceptTrackerEnabled, examPrepConfidenceEnabled, studyPrepEnabled, durableAgentChatContextEnabled } from "./runtime-state.js";
 import { TALK_AFTER_TOOLS } from "./chat-trace.js";
-import { UPDATE_PLAN_TOOL } from "../taskLedger.js";
+import { UPDATE_PLAN_TOOL } from "./taskLedger.js";
 import { subjectMastery } from "../agents/student/knowledge.js";
 import { TOOLS as TEACHING_TOOLS, ToolError as TeachingToolError } from "../../teaching/tools.js";
 import { createToolDraft } from "../../teaching/toolDrafts.js";
@@ -563,7 +563,7 @@ export function latestUserText(transcript = []) {
 }
 
 export async function unsaidActivityFields(tool, input, transcript) {
-  const { unnamedFields, askFor, teacherTextOf, knownNames, currentRequest, TYPE_LABEL } = await import("./activityFields.js");
+  const { unnamedFields, askFor, teacherTextOf, knownNames, currentRequest, TYPE_LABEL } = await import("../activityFields.js");
   let fields = null, check;
   if (tool === "prepare_activity") { fields = input; check = ["topic", "subject", "audience"]; }
   else if (tool === "schedule_activity_routine" && input?.brief) { fields = input.brief; check = ["topic", "subject", "audience"]; }

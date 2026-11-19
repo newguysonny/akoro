@@ -17,7 +17,7 @@ const network = readFileSync(new URL("./chat/handlers-network-study.js", import.
 const toolCatalogue = readFileSync(new URL("./chat/tool-catalogue-rest.js", import.meta.url), "utf8");
 const tools = readFileSync(new URL("../materials/uploadTools.js", import.meta.url), "utf8");
 const examples = readFileSync(new URL("../agent-capabilities/examples.js", import.meta.url), "utf8");
-const selection = readFileSync(new URL("./toolSelection.js", import.meta.url), "utf8");
+const selection = readFileSync(new URL("./chat/toolSelection.js", import.meta.url), "utf8");
 
 test("the four upload tools are defined and executed", () => {
   for (const name of ["read_upload", "retry_extraction", "list_folders", "file_upload"]) {

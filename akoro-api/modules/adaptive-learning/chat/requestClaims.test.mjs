@@ -1,9 +1,9 @@
-// node --test modules/adaptive-learning/requestClaims.test.mjs — the agent only says a request reached an admin when one did.
+// node --test modules/adaptive-learning/chat/requestClaims.test.mjs — the agent only says a request reached an admin when one did.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { adminRequestOf, claimsRequest, requestClaimCorrection } from "./requestClaims.js";
-import { hasExplicitToolRequestConsent } from "./intent/agent-tool-request-intent.js";
+import { hasExplicitToolRequestConsent } from "../intent/agent-tool-request-intent.js";
 
 test("adminRequestOf: a real feature request, a still-open duplicate, a real escalation; dry runs and rejections are not", () => {
   assert.deepEqual(adminRequestOf("submit_tool_request", { submitted: true, duplicate: false }), { made: true, waiting: false });
@@ -39,12 +39,12 @@ test("asking for permission is consent to send the request", () => {
 });
 
 test("wiring: the chat records each turn's admin request and corrects an unbacked claim; a closed duplicate re-opens", () => {
-  const chat = readFileSync(new URL("./chat/turn-answer.js", import.meta.url), "utf8");
-  const loop = readFileSync(new URL("./chat/agent-loop.js", import.meta.url), "utf8");
+  const chat = readFileSync(new URL("./turn-answer.js", import.meta.url), "utf8");
+  const loop = readFileSync(new URL("./agent-loop.js", import.meta.url), "utf8");
   assert.match(loop, /adminRequest: adminRequestOf\(tool, toolResult\)/);
   assert.match(chat, /const fix = requestClaimCorrection\(reply, prepared\.toolExecutions\)/);
-  const svc = readFileSync(new URL("../agent-tool-requests/service.js", import.meta.url), "utf8");
+  const svc = readFileSync(new URL("../../agent-tool-requests/service.js", import.meta.url), "utf8");
   assert.match(svc, /if \(CLOSED_STATUSES\.has\(existing\.data\.status\)\)/);
-  const admin = readFileSync(new URL("../admin/agent-tool-requests.js", import.meta.url), "utf8");
+  const admin = readFileSync(new URL("../../admin/agent-tool-requests.js", import.meta.url), "utf8");
   assert.match(admin, /order\("last_status_changed_at", \{ ascending: false, nullsFirst: false \}\)/);
 });

@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { ensureNotTaughtOpener, promisedTeachTopic, scrubInternalIds } from "./reply-scrub.js";
 
-const chat = await readFile(new URL("./chat/turn-answer.js", import.meta.url), "utf8");
+const chat = await readFile(new URL("./turn-answer.js", import.meta.url), "utf8");
 
 test("internal ids the model saw in tool results never reach the learner", () => {
   assert.equal(scrubInternalIds("Done! I'll message you here in 10 minutes (request req_1c3838ef)."), "Done! I'll message you here in 10 minutes.");

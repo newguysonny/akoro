@@ -1,5 +1,5 @@
 /**
- * adaptive-learning/toolLimits.js — Agent Chat's tool time limits (Grand Plan
+ * adaptive-learning/chat/toolLimits.js — Agent Chat's tool time limits (Grand Plan
  * Phase 18, item 3). Pure, apart from the timer.
  *
  * Every chat tool has a limit: its own (CHAT_TOOL_TIME_LIMITS_MS), else its
@@ -9,7 +9,7 @@
  * (toolRecovery.js) takes it from there: a read is tried once more, a change
  * is not repeated (it may still finish on its own).
  */
-import { withToolTimeLimit } from "../agent-runtime/toolTime.js";
+import { withToolTimeLimit } from "../../agent-runtime/toolTime.js";
 
 export const CHAT_TOOL_FAMILY_LIMITS_MS = Object.freeze({
   read: 45_000,

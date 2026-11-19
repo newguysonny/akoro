@@ -36,9 +36,9 @@ test("the tool: defined for the chat, executable, always in the turn's tool list
   assert.match(toolCatalogue, /name: "await_decision",\n    featureGate: "self_tooling"/);
   assert.match(chat, /async await_decision\(input/);
   assert.match(chat, /awaitDecision\(\{ id: String\(input\.confirmationId\), userId: studentId,/);
-  const sel = read("../adaptive-learning/toolSelection.js");
+  const sel = read("../adaptive-learning/chat/toolSelection.js");
   assert.match(sel, /"await_decision"/, "CORE: area selection never drops it");
-  const limits = read("../adaptive-learning/toolLimits.js");
+  const limits = read("../adaptive-learning/chat/toolLimits.js");
   assert.match(limits, /await_decision: 150_000/);
   const examples = read("../agent-capabilities/examples.js");
   assert.match(examples, /await_decision: e\("building"/);

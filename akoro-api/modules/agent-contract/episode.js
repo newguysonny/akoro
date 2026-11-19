@@ -9,8 +9,8 @@
  */
 import { randomUUID } from "node:crypto";
 import { CONTRACT, contractObservation } from "./contract.js";
-import { actionClaimCorrection, ledgerLeftCorrection } from "../adaptive-learning/turnCheck.js";
-import { planOf } from "../adaptive-learning/taskLedger.js";
+import { actionClaimCorrection, ledgerLeftCorrection } from "../adaptive-learning/chat/turnCheck.js";
+import { planOf } from "../adaptive-learning/chat/taskLedger.js";
 
 export const CAPABILITIES = Object.freeze(["intent", "planning", "tool_selection", "tool_execution", "context", "recovery", "verification", "coordination", "security", "stopping"]);
 export const FAILURE_CLASSES = Object.freeze(["wrong_tool", "bad_arguments", "unbacked_claim", "missed_recovery", "policy_violation", "looped", "gave_up_early", "other"]);

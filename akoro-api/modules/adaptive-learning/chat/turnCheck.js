@@ -1,5 +1,5 @@
 /**
- * adaptive-learning/turnCheck.js — the end-of-turn check (Grand Plan Phase 16,
+ * adaptive-learning/chat/turnCheck.js — the end-of-turn check (Grand Plan Phase 16,
  * step 2). Pure; no db.
  *
  * The reply is held against what really happened this turn:

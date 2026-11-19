@@ -8,7 +8,7 @@
 // context's runChatTool / executeChatTool seams and there is no import cycle.
 
 import db from "../../../db.js";
-import { AREAS, toolArea } from "../toolSelection.js";
+import { AREAS, toolArea } from "./toolSelection.js";
 import { stickyAreasFor, durableAgentChatContextEnabled } from "./runtime-state.js";
 import { agentNetworkEnabled } from "./tool-catalogue-rest.js";
 import { getLearnerProfileContext } from "../learner-profile-context.js";

@@ -1,5 +1,5 @@
 /**
- * adaptive-learning/requestClaims.js — the agent may only say a request went
+ * adaptive-learning/chat/requestClaims.js — the agent may only say a request went
  * to an admin when one did, this turn.
  *
  * Two tools put a request in front of an admin (the Agent requests page):

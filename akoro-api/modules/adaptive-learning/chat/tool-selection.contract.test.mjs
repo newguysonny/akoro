@@ -5,17 +5,17 @@
  * conversation; get_agent_capabilities { area } loads an area mid-turn;
  * AKORO_TOOL_AREA_SELECTION=false turns selection off entirely.
  */
-import "../../test-env.mjs";
+import "../../../test-env.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { CORE_TOOL_NAMES, areasForMessage, filterDefsByAreas, toolArea } from "./toolSelection.js";
 
-const chat = readFileSync(new URL("./chat.js", import.meta.url), "utf8");
-const handlers = readFileSync(new URL("./chat/handlers-instructor-learner.js", import.meta.url), "utf8");
-const runtimeState = readFileSync(new URL("./chat/runtime-state.js", import.meta.url), "utf8");
-const pipeline = readFileSync(new URL("../self-tooling/pipeline.js", import.meta.url), "utf8");
-const manifest = readFileSync(new URL("../../migrations/manifest.json", import.meta.url), "utf8");
+const chat = readFileSync(new URL("../chat.js", import.meta.url), "utf8");
+const handlers = readFileSync(new URL("./handlers-instructor-learner.js", import.meta.url), "utf8");
+const runtimeState = readFileSync(new URL("./runtime-state.js", import.meta.url), "utf8");
+const pipeline = readFileSync(new URL("../../self-tooling/pipeline.js", import.meta.url), "utf8");
+const manifest = readFileSync(new URL("../../../migrations/manifest.json", import.meta.url), "utf8");
 
 const def = (name) => ({ type: "function", function: { name } });
 

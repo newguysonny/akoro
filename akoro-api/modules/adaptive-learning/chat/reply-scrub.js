@@ -1,5 +1,5 @@
 /**
- * modules/adaptive-learning/reply-scrub.js — what never reaches the learner in
+ * modules/adaptive-learning/chat/reply-scrub.js — what never reaches the learner in
  * an Agent Chat reply: the internal ids the model can see in tool results.
  * Tool observations carry a correlation id ("req_1c3838ef") and records carry
  * UUIDs; a model sometimes repeats them ("Done (request req_1c3838ef)",

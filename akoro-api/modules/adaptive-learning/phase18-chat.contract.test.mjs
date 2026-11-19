@@ -47,8 +47,8 @@ process.env.FAKE_AGENT_KEY = "test";
 process.env.AI_MODELS = JSON.stringify([{ id: "p18-fake", provider: "openai_compatible", apiModel: "p18-fake", baseURL: `http://127.0.0.1:${server.address().port}/v1`, apiKeyEnv: "FAKE_AGENT_KEY", price: { in: 0, out: 0 }, caps: { tools: true, stream: true } }]);
 
 const chat = await import("./chat.js");
-const { chatToolTimeLimit, runWithinLimit, timeoutResult, CHAT_TOOL_FAMILY_LIMITS_MS } = await import("./toolLimits.js");
-const { shouldRetry, recoveryHint } = await import("./toolRecovery.js");
+const { chatToolTimeLimit, runWithinLimit, timeoutResult, CHAT_TOOL_FAMILY_LIMITS_MS } = await import("./chat/toolLimits.js");
+const { shouldRetry, recoveryHint } = await import("./chat/toolRecovery.js");
 const { toolObservation } = await import("../../utils/toolObservation.js");
 const { runDry } = await import("../../lib/dryRunContext.js");
 const { withActionBasis, NO_RULE_CODE } = await import("../agent-runtime/actionBasis.js");

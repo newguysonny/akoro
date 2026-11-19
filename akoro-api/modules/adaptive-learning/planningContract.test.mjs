@@ -3,9 +3,9 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { applyPlanUpdate, doneWhenOf, meetDoneWhen, nextLedger, renderDraftPlan, renderLedger, UPDATE_PLAN_TOOL } from "./taskLedger.js";
+import { applyPlanUpdate, doneWhenOf, meetDoneWhen, nextLedger, renderDraftPlan, renderLedger, UPDATE_PLAN_TOOL } from "./chat/taskLedger.js";
 import { parseIntent, renderIntent, NEXT_STEPS } from "./intent/intentStep.js";
-import { turnCorrections } from "./turnCheck.js";
+import { turnCorrections } from "./chat/turnCheck.js";
 import { normaliseScratchpad } from "../agent-tools/conversation-context-validation.js";
 
 const plan = { goal: "Revise for Friday", steps: [{ step: "Create the Friday task", status: "pending" }, { step: "Schedule a battle", status: "pending" }],

@@ -44,8 +44,8 @@ test("an unfinished plan in the turn's own ledger means work is owed", () => {
 });
 
 test("the loop wires the guard: one-shot, streamed turns only, kill switch, narration kept as activity", () => {
-  const src = readFileSync(new URL("./chat/agent-loop.js", import.meta.url), "utf8");
-  assert.match(src, /import \{ looksLikeStepNarration, containsDeferral, admitsNonCompletion, looksTruncated, planHasOpenSteps \} from "\.\.\/narration-stall\.js";/);
+  const src = readFileSync(new URL("./agent-loop.js", import.meta.url), "utf8");
+  assert.match(src, /import \{ looksLikeStepNarration, containsDeferral, admitsNonCompletion, looksTruncated, planHasOpenSteps \} from "\.\/narration-stall\.js";/);
   assert.match(src, /narrationContinuationUsed = false/);
   assert.match(src, /process\.env\.AKORO_NARRATION_CONTINUATION !== "false"/);
   assert.match(src, /const owesWork = planHasOpenSteps\(ledgerNow\) \|\| \(executions\.length === 0 && \(looksLikeStepNarration\(content\) \|\| containsDeferral\(content\) \|\| admitsNonCompletion\(content\)\)\);/);
@@ -104,7 +104,7 @@ test("the fallback answer call carries the anti-deferral closing on every attemp
   // can actually do before answering…". The closing therefore rides on
   // the first attempts too (non-stream + stream + both retries + the
   // fragment retry = 5).
-  const chat = readFileSync(new URL("./chat/turn-answer.js", import.meta.url), "utf8");
+  const chat = readFileSync(new URL("./turn-answer.js", import.meta.url), "utf8");
   assert.match(chat, /nothing runs after you, so do not defer/);
   assert.equal(chat.split("[...finalMessages, answerClosing]").length - 1, 5);
 });
@@ -129,6 +129,6 @@ test("ended replies are not fragments", () => {
 });
 
 test("the answer call retries a fragment once, only when the turn did no work", () => {
-  const chat = readFileSync(new URL("./chat/turn-answer.js", import.meta.url), "utf8");
+  const chat = readFileSync(new URL("./turn-answer.js", import.meta.url), "utf8");
   assert.match(chat, /looksTruncated\(reply\) && !prepared\.toolExecutions\.length/);
 });

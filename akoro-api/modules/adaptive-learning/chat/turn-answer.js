@@ -6,14 +6,14 @@
 import db from "../../../db.js";
 import { OPENAI_MODEL, openai } from "../../../lib/aiModel.js";
 import { runtimeFeatureModel } from "../../../lib/modelRuntime.js";
-import { ensureNotTaughtOpener, promisedTeachTopic, scrubInternalIds, stripDsmlMarkup, stripToolCallMarkup } from "../reply-scrub.js";
-import { looksTruncated } from "../narration-stall.js";
+import { ensureNotTaughtOpener, promisedTeachTopic, scrubInternalIds, stripDsmlMarkup, stripToolCallMarkup } from "./reply-scrub.js";
+import { looksTruncated } from "./narration-stall.js";
 import { akoroMaterialFor } from "./handlers-social.js";
 import { teachRequest } from "../protege.js";
 import { materialsFrom, collectMaterials } from "./chat-materials.js";
-import { requestClaimCorrection } from "../requestClaims.js";
-import { turnCorrections } from "../turnCheck.js";
-import { nextLedger, renderDraftPlan } from "../taskLedger.js";
+import { requestClaimCorrection } from "./requestClaims.js";
+import { turnCorrections } from "./turnCheck.js";
+import { nextLedger, renderDraftPlan } from "./taskLedger.js";
 import { renderIntent } from "../intent/intentStep.js";
 import { createEpisodeRecorder } from "../../agent-contract/episode.js";
 import { recordsRealTraffic, saveEpisode } from "../../agent-contract/store.js";
@@ -26,7 +26,7 @@ import {
   MERGED_DOMAINS, MERGED_DOMAIN_LIST,
 } from "./tool-runtime.js";
 import { hasExplicitToolRequestConsent } from "../intent/agent-tool-request-intent.js";
-import { AREAS, areaSelectionEnabled, areasForMessage, filterDefsByAreas, namedLearnerTool, toolArea } from "../toolSelection.js";
+import { AREAS, areaSelectionEnabled, areasForMessage, filterDefsByAreas, namedLearnerTool, toolArea } from "./toolSelection.js";
 import { savedTurnReplyId, persistLearnerAgentConversationTurn } from "./turn-prepare.js";
 import {
   compactAgentSummary, safeMemoryUpdates, appendFastChatTurn, appendBasicChatTurn,

@@ -48,7 +48,7 @@ export function normaliseScratchpad(value) {
   // once the summary grew past 1200 characters (2026-11-04).
   const scratchpad = { goal, progressSummary: boundedText(clipEnd(value.progressSummary, 1_200), 1_200) };
   for (const name of SCRATCHPAD_SECTIONS) scratchpad[name] = normaliseItems(value[name]);
-  // Agent Chat's task ledger (adaptive-learning/taskLedger.js, Phase 16): up to 8
+  // Agent Chat's task ledger (adaptive-learning/chat/taskLedger.js, Phase 16): up to 8
   // steps, each with the tool that did it; "done" is the ledger's word for completed.
   if (!Array.isArray(value.plan)) throw new Error("scratchpad plan is invalid");
   // The newest 6 steps (the table holds 6).

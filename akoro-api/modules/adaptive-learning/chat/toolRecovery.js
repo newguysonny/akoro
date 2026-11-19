@@ -1,5 +1,5 @@
 /**
- * adaptive-learning/toolRecovery.js — what Agent Chat does after a tool call
+ * adaptive-learning/chat/toolRecovery.js — what Agent Chat does after a tool call
  * fails (Grand Plan Phase 16, step 3). Pure; no db.
  *
  * Before telling the learner, in this order:

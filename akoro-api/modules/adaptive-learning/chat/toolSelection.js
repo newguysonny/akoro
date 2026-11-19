@@ -1,5 +1,5 @@
 /**
- * modules/adaptive-learning/toolSelection.js — runtime area selection
+ * modules/adaptive-learning/chat/toolSelection.js — runtime area selection
  * (2026-11-14). Tools are grouped by the ONE taxonomy (agent-capabilities
  * AREAS / TOOL_EXAMPLES for built-ins; a self-built tool's derived primary
  * area). A turn sends the always-on CORE plus the tools of the areas active
@@ -14,7 +14,7 @@
  *  - kill switch: AKORO_TOOL_AREA_SELECTION=false restores the full list
  *    for every turn.
  */
-import { AREAS, TOOL_EXAMPLES } from "../agent-capabilities/examples.js";
+import { AREAS, TOOL_EXAMPLES } from "../../agent-capabilities/examples.js";
 
 export { AREAS };
 

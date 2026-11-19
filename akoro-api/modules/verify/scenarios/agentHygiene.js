@@ -47,8 +47,8 @@ export const loopGuardTimeLimits = {
     ctx.expect.eq("…and the step goes on to its terminal action", out.ended, "terminal");
 
     const chat = await import("../../adaptive-learning/chat.js");
-    const { chatToolTimeLimit, runWithinLimit } = await import("../../adaptive-learning/toolLimits.js");
-    const { shouldRetry } = await import("../../adaptive-learning/toolRecovery.js");
+    const { chatToolTimeLimit, runWithinLimit } = await import("../../adaptive-learning/chat/toolLimits.js");
+    const { shouldRetry } = await import("../../adaptive-learning/chat/toolRecovery.js");
     const missing = chat.getLearnerChatTools().filter((t) => !(chatToolTimeLimit(t.name, { sideEffecting: chat.isSideEffecting(t.name, {}) }) > 0)).map((t) => t.name);
     ctx.expect.eq("every Agent Chat tool has a time limit", missing, []);
     const stuck = await runWithinLimit(() => new Promise(() => {}), "get_running_work", { limitMs: 200 });

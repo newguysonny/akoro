@@ -10,17 +10,17 @@ import { isInspected } from "../../../lib/dryRunContext.js";
 import { agentToolActivity } from "../../../lib/agentActivity.js";
 import { newToolRequestId, toolObservation } from "../../../utils/toolObservation.js";
 import { toResponsesInput, toResponsesTools } from "../responses-input.js";
-import { hasDsmlMarkup, hasToolCallMarkup } from "../reply-scrub.js";
-import { looksLikeStepNarration, containsDeferral, admitsNonCompletion, looksTruncated, planHasOpenSteps } from "../narration-stall.js";
+import { hasDsmlMarkup, hasToolCallMarkup } from "./reply-scrub.js";
+import { looksLikeStepNarration, containsDeferral, admitsNonCompletion, looksTruncated, planHasOpenSteps } from "./narration-stall.js";
 import { decisionNarration, TALK_AFTER_TOOLS, talkAfterTool } from "./chat-trace.js";
 import { materialsFrom, collectMaterials } from "./chat-materials.js";
-import { UPDATE_PLAN_TOOL, applyPlanUpdate } from "../taskLedger.js";
+import { UPDATE_PLAN_TOOL, applyPlanUpdate } from "./taskLedger.js";
 import { startRun, recordStep, finishRun, stepRow } from "../execution/executionLog.js";
-import { failed as toolFailed, shouldRetry, recoveryHint } from "../toolRecovery.js";
-import { runWithinLimit } from "../toolLimits.js";
+import { failed as toolFailed, shouldRetry, recoveryHint } from "./toolRecovery.js";
+import { runWithinLimit } from "./toolLimits.js";
 import { createLoopGuard } from "../../agent-runtime/loopGuard.js";
 import { agreesToBuild } from "../../self-tooling/capabilities.js";
-import { adminRequestOf } from "../requestClaims.js";
+import { adminRequestOf } from "./requestClaims.js";
 import {
   openAiChatTools, isSideEffecting, PARALLEL_CALL_BARRIERS, PARALLEL_READ_BATCH,
   DECIDED_CONFIRM_STATUSES, executeChatTool, latestUserText, unsaidActivityFields, inspectResult,

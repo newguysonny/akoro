@@ -7,9 +7,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { UPDATE_PLAN_TOOL, applyPlanUpdate, nextLedger, renderLedger, planOf, summaryMarkOf } from "./taskLedger.js";
-import { actionClaims, actionClaimCorrection, ledgerLeftCorrection, turnCorrections } from "./turnCheck.js";
-import { TOOL_FALLBACKS, failed, shouldRetry, recoveryHint } from "./toolRecovery.js";
+import { UPDATE_PLAN_TOOL, applyPlanUpdate, nextLedger, renderLedger, planOf, summaryMarkOf } from "./chat/taskLedger.js";
+import { actionClaims, actionClaimCorrection, ledgerLeftCorrection, turnCorrections } from "./chat/turnCheck.js";
+import { TOOL_FALLBACKS, failed, shouldRetry, recoveryHint } from "./chat/toolRecovery.js";
 import { fitDialogue, unsummarised, markOf, summariseEarlier, CONTEXT_LIMITS } from "./contextBudget.js";
 import { needsIntentStep, parseIntent, renderIntent, runIntentStep } from "./intent/intentStep.js";
 import { normaliseScratchpad } from "../agent-tools/conversation-context-validation.js";
