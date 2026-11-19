@@ -4025,6 +4025,29 @@ flag-by-flag rollout; old paths removed only after a release with flags on.
   48 → 47 after `adaptive-learning/README.md`. Not yet met, still baselined:
   576 cross-module internal imports and the 29-module cycle — those are the
   remaining step-2 exit criteria and a separate, much larger refactor.
+- **Status (2026-11-19, later): step 2 ✅ complete.** The import graph was
+  inverted in slices S1–S11: pure helpers and shared services moved to `lib/`,
+  boot-installed bridges (`agentDeps`, `chatBridge`, `teachingWorkflowBridge`,
+  `learningRecordBridge`, `workflowWiring`, `studyPrepHooks`, `jobQueues`)
+  replaced upward imports, learner state became `modules/learner-state/`, every
+  module gained a pure `index.js` (+ README where missing), and the last queue
+  edges became registries installed after the workers start. Final baseline:
+  `crossModuleImports: []`, `cyclicModules: []`, oversized 40, missing READMEs
+  14. `structure.contract.test.mjs` now asserts both lists stay empty, so a
+  regenerated baseline cannot legitimise them. New deploy guards:
+  `lib/moduleImports.contract.test.mjs` (every relative import resolves — it
+  caught the `paymentAudit` depth bug that crashed Render) and
+  `lib/barrelExports.contract.test.mjs` (named/default/dynamic-import symbols
+  exist in the target barrel — it caught `auth.signChallengeForGate`). Root
+  fixes along the way: lazy OpenAI and Supabase clients (imports never throw
+  without keys; the server's fail-fast moved to `lib/bootChecks.js`), Google
+  strategy registered only with credentials, auth sweep timer `unref`'d, test
+  cron skipped under `NODE_TEST_CONTEXT`.
+  Sandbox/production regression at the final commit: 52/54 PASS; the two
+  non-pass are known and unrelated — `evals.benchmark_cases` (4/5
+  `plan_three_tasks`, model behaviour) and `syllabus.import_cost` (reads
+  `edu.ai_call_log` on production, which has no importer history; passes on the
+  seeded sandbox).
 - **Status (2026-11-18): step 1 (guardrails) ✅ built.** `akoro-api/scripts/
   structure-scan.mjs` + `modules/structure.contract.test.mjs`, ratcheted against
   `modules/structure-baseline.json` (regenerate with `npm run structure:baseline`,
