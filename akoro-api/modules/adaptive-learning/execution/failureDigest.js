@@ -5,7 +5,7 @@
  * prompt/rule change (never auto-applied). Best-effort; never throws into a
  * request.
  */
-import db from "../../db.js";
+import db from "../../../db.js";
 import { recentFailures } from "./executionLog.js";
 import { clusterFailures, digestText } from "./failureDigestCore.js";
 

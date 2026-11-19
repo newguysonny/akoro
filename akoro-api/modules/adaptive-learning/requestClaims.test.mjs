@@ -3,7 +3,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { adminRequestOf, claimsRequest, requestClaimCorrection } from "./requestClaims.js";
-import { hasExplicitToolRequestConsent } from "./agent-tool-request-intent.js";
+import { hasExplicitToolRequestConsent } from "./intent/agent-tool-request-intent.js";
 
 test("adminRequestOf: a real feature request, a still-open duplicate, a real escalation; dry runs and rejections are not", () => {
   assert.deepEqual(adminRequestOf("submit_tool_request", { submitted: true, duplicate: false }), { made: true, waiting: false });

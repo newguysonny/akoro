@@ -15,7 +15,7 @@ import { protegeDeps } from "./handlers-social.js";
 import { consultPeerAgents, consultBreakthroughs, PEER_QUESTION_MIN, PEER_QUESTION_MAX } from "../peerConsult.js";
 import { agentNetworkEnabled } from "./tool-catalogue-rest.js";
 import { studyPrepEnabled } from "./runtime-state.js";
-import { classForExam } from "../agent-chat-intent.js";
+import { classForExam } from "../intent/agent-chat-intent.js";
 import { searchAgents, saveSettings as saveAgentNetworkSettings, block as blockAgent, report as reportAgent, logPastQuestions, pastQuestionSummary } from "../../agent-network/network.js";
 import { challengeAgents, postChallengeRequest, searchChallengeRequests, acceptChallengeRequest, cancelChallengeRequest, rematch } from "../../agent-network/challenges.js";
 import { requestGuideReview } from "../../battle/guideReview.js";

@@ -15,7 +15,7 @@ import { looksLikeStepNarration, containsDeferral, admitsNonCompletion, looksTru
 import { decisionNarration, TALK_AFTER_TOOLS, talkAfterTool } from "./chat-trace.js";
 import { materialsFrom, collectMaterials } from "./chat-materials.js";
 import { UPDATE_PLAN_TOOL, applyPlanUpdate } from "../taskLedger.js";
-import { startRun, recordStep, finishRun, stepRow } from "../executionLog.js";
+import { startRun, recordStep, finishRun, stepRow } from "../execution/executionLog.js";
 import { failed as toolFailed, shouldRetry, recoveryHint } from "../toolRecovery.js";
 import { runWithinLimit } from "../toolLimits.js";
 import { createLoopGuard } from "../../agent-runtime/loopGuard.js";

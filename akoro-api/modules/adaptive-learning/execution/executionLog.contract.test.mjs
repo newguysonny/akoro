@@ -6,7 +6,7 @@ import { dirname, join } from "node:path";
 import { stepRow, classifyError } from "./executionLogCore.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const apiRoot = join(here, "..", "..");
+const apiRoot = join(here, "..", "..", "..");
 const read = (p) => readFileSync(join(apiRoot, p), "utf8");
 
 test("Phase 22: the tool loop opens a run, records a step per call, closes the run", () => {
@@ -32,7 +32,7 @@ test("Phase 22: the migration defines the trace + digest tables, service-role on
 });
 
 test("Phase 22: crash recovery posts one interrupt notice for a stale run", () => {
-  const src = read("modules/adaptive-learning/executionLog.js");
+  const src = read("modules/adaptive-learning/execution/executionLog.js");
   assert.match(src, /export async function recoverInterruptedRuns/);
   assert.match(src, /postIntoChat\(/, "posts into the chat");
   assert.match(src, /agent_interrupted/, "notice kind");
@@ -62,7 +62,7 @@ test("Phase 22 #1: user message persisted at turn start; a crashed turn re-runs 
   assert.match(chat, /persistLearnerAgentUserTurnMessage\(/, "persists the user message at turn start");
   assert.match(loop, /startRun\(\{ sessionId: conversationId, userId: studentId, model, turnId \}\)/, "run carries the turn id");
   assert.match(loop, /sideEffecting: changes/, "steps mark side-effecting calls");
-  const log = read("modules/adaptive-learning/executionLog.js");
+  const log = read("modules/adaptive-learning/execution/executionLog.js");
   assert.match(log, /canAutoRetry\(\{ run, steps \}\)/, "guarded by the pure check");
   assert.match(log, /reRunCrashedTurn\(/, "re-runs the same turn");
   assert.match(log, /auto_retried_at/, "once-only");

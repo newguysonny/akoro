@@ -221,7 +221,7 @@ test("nothing that builds a prompt reads the ratings", () => {
   const promptSources = [
     "../adaptive-learning/chat.js", "../agent-tools/conversation-context-routes.js", "../agent-context/chat-doctrine.js",
     "../agent-context/context-manager.js", "../agent-context/template.js", "../agent-runtime/loop.js", "../agent-runtime/harness.js",
-    "../adaptive-learning/contextBudget.js", "../adaptive-learning/intentStep.js", "../tasks/lib/agentLoop.js",
+    "../adaptive-learning/contextBudget.js", "../adaptive-learning/intent/intentStep.js", "../tasks/lib/agentLoop.js",
   ];
   for (const p of promptSources) {
     const src = read(p);

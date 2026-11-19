@@ -14,7 +14,7 @@ import { materialsFrom, collectMaterials } from "./chat-materials.js";
 import { requestClaimCorrection } from "../requestClaims.js";
 import { turnCorrections } from "../turnCheck.js";
 import { nextLedger, renderDraftPlan } from "../taskLedger.js";
-import { renderIntent } from "../intentStep.js";
+import { renderIntent } from "../intent/intentStep.js";
 import { createEpisodeRecorder } from "../../agent-contract/episode.js";
 import { recordsRealTraffic, saveEpisode } from "../../agent-contract/store.js";
 import { labelKeyFor } from "../../agent-ratings/ratings.js";
@@ -25,7 +25,7 @@ import {
   mergedLibraryEnabled, mergedChatsEnabled,
   MERGED_DOMAINS, MERGED_DOMAIN_LIST,
 } from "./tool-runtime.js";
-import { hasExplicitToolRequestConsent } from "../agent-tool-request-intent.js";
+import { hasExplicitToolRequestConsent } from "../intent/agent-tool-request-intent.js";
 import { AREAS, areaSelectionEnabled, areasForMessage, filterDefsByAreas, namedLearnerTool, toolArea } from "../toolSelection.js";
 import { savedTurnReplyId, persistLearnerAgentConversationTurn } from "./turn-prepare.js";
 import {

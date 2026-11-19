@@ -16,7 +16,7 @@ import { benchmarkScenarios } from "./benchmark/scenarios.js";
 import { createEpisodeRecorder } from "../../modules/agent-contract/episode.js";
 import { saveEpisode } from "../../modules/agent-contract/store.js";
 import { turnCorrections } from "../../modules/adaptive-learning/turnCheck.js";
-import { runIntentStep, renderIntent } from "../../modules/adaptive-learning/intentStep.js";
+import { runIntentStep, renderIntent } from "../../modules/adaptive-learning/intent/intentStep.js";
 import { renderDraftPlan } from "../../modules/adaptive-learning/taskLedger.js";
 import { openai } from "../aiModel.js";
 import { canonicalArgs } from "../../modules/agent-runtime/loopGuard.js";

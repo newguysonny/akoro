@@ -18,7 +18,7 @@ import { actionClaimCorrection, ledgerLeftCorrection } from "../../modules/adapt
 import { applyPlanUpdate } from "../../modules/adaptive-learning/taskLedger.js";
 import { shouldRetry, recoveryHint } from "../../modules/adaptive-learning/toolRecovery.js";
 import { fitDialogue } from "../../modules/adaptive-learning/contextBudget.js";
-import { runIntentStep } from "../../modules/adaptive-learning/intentStep.js";
+import { runIntentStep } from "../../modules/adaptive-learning/intent/intentStep.js";
 
 const load = (f) => JSON.parse(readFileSync(fileURLToPath(new URL(`./data/${f}`, import.meta.url)), "utf8"));
 const CHECKS = load("agent-checks.json");

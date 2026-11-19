@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { applyPlanUpdate, doneWhenOf, meetDoneWhen, nextLedger, renderDraftPlan, renderLedger, UPDATE_PLAN_TOOL } from "./taskLedger.js";
-import { parseIntent, renderIntent, NEXT_STEPS } from "./intentStep.js";
+import { parseIntent, renderIntent, NEXT_STEPS } from "./intent/intentStep.js";
 import { turnCorrections } from "./turnCheck.js";
 import { normaliseScratchpad } from "../agent-tools/conversation-context-validation.js";
 
@@ -65,7 +65,7 @@ test("a multi-step request gets a starting plan to adopt; never over an open pla
 
 test("wiring: the chat turn shows the starting plan for multi-step requests; the intent call has room for the steps", async () => {
   const chat = await readFile(new URL("./chat/turn-answer.js", import.meta.url), "utf8");
-  const intent = await readFile(new URL("./intentStep.js", import.meta.url), "utf8");
+  const intent = await readFile(new URL("./intent/intentStep.js", import.meta.url), "utf8");
   assert.match(chat, /\+ \(intent\?\.multiStep \? renderDraftPlan\(intent\.steps, conversation\?\.scratchpad \|\| null\) : ""\)/);
   assert.match(intent, /max_tokens: 320/);
 });

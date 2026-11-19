@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { isDraftFollowUp, requiresActivityPreparation } from "./agent-chat-intent.js";
+import { isDraftFollowUp, requiresActivityPreparation } from "./intent/agent-chat-intent.js";
 
 // What teachers say after the first draft: each revises it (the next version).
 const FOLLOW_UPS = [

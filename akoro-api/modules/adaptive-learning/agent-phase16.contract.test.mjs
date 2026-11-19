@@ -11,7 +11,7 @@ import { UPDATE_PLAN_TOOL, applyPlanUpdate, nextLedger, renderLedger, planOf, su
 import { actionClaims, actionClaimCorrection, ledgerLeftCorrection, turnCorrections } from "./turnCheck.js";
 import { TOOL_FALLBACKS, failed, shouldRetry, recoveryHint } from "./toolRecovery.js";
 import { fitDialogue, unsummarised, markOf, summariseEarlier, CONTEXT_LIMITS } from "./contextBudget.js";
-import { needsIntentStep, parseIntent, renderIntent, runIntentStep } from "./intentStep.js";
+import { needsIntentStep, parseIntent, renderIntent, runIntentStep } from "./intent/intentStep.js";
 import { normaliseScratchpad } from "../agent-tools/conversation-context-validation.js";
 
 /* ── 1. The task ledger ─────────────────────────────────────────────────── */
