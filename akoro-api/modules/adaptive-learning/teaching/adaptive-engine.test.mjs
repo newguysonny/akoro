@@ -135,7 +135,7 @@ test("misconception titles come from learner_concept_state rows (deduped, bounde
 
 test("wiring: one decision path; the session copies are retired or read from the centre", async () => {
   const [studentState, gate, controller, orchestrator, readTools, store, practice] = await Promise.all([
-    read("../learner/student-state.js"), read("../teaching-session/state-machine.js"), read("../teaching-session/controller.js"),
+    read("../../learner-state/index.js"), read("../teaching-session/state-machine.js"), read("../teaching-session/controller.js"),
     read("../agents/student/orchestrator.js"), read("../study-prep/read-tools.js"), read("../study-prep/store.js"), read("../practice/service.js"),
   ]);
   assert.doesNotMatch(studentState, /export function decideNextAction/, "decideNextAction is folded into the engine");

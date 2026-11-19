@@ -77,7 +77,7 @@ export async function listRecentActivities(instructor, limit = 5) {
 
 async function getStudentStateSafe(agentId) {
   try {
-    const { getStudentState } = await import("../adaptive-learning/learner/student-state.js");
+    const { getStudentState } = await import("../learner-state/index.js");
     const st = await getStudentState(agentId);
     return st?.cognitive ?? null;
   } catch { return null; }

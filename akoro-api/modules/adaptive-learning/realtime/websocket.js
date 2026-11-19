@@ -14,7 +14,7 @@ import {
   getStudentState,
   getAgentPreferences,
   userOwnsAgent,
-} from "../learner/student-state.js";
+} from "../../learner-state/index.js";
 import {
   getOrCreateStudentAgent,
   getAgentKnowledgeBySubject,

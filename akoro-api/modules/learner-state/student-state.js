@@ -8,9 +8,9 @@
 // =============================================================
 
 import Redis  from "ioredis";
-import db     from "../../../db.js";
-import { traceRedis } from "../../../lib/redisTrace.js";
-import { redisConnectionOptions } from "../../../lib/redisOptions.js";
+import db     from "../../db.js";
+import { traceRedis } from "../../lib/redisTrace.js";
+import { redisConnectionOptions } from "../../lib/redisOptions.js";
 
 // ── ioredis singleton (reuses the same Redis URL as the rest of akoro) ────────
 let _redis = null;

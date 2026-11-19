@@ -55,7 +55,7 @@
 import { Router }                         from "express";
 import db                                 from "../../db.js";
 import { authenticateToken, requireRole } from "../auth/routes.js";
-import { getStudentState }               from "../adaptive-learning/learner/student-state.js";
+import { getStudentState }               from "../learner-state/index.js";
 import {
   nana, edu, ACTIVITY_TYPES, announceFor, mySchool,
   resolveStudents, notifyAll, createAssignment, invalid,

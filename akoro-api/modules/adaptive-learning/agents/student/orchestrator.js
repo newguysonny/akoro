@@ -17,7 +17,7 @@ import {
 } from "./knowledge.js";
 import { decayEngine } from "./decayEngine.js";
 import { outcomeForEvidence } from "./retention.js";
-import { getStudentState } from "../../learner/student-state.js";
+import { getStudentState } from "../../../learner-state/index.js";
 import { createTeachingEvidenceState, publicTeachingEvidence, applyCentralMisconceptions } from "../../learner/teaching-evidence.js";
 import { createPublicLearningState } from "../../learner/public-learning-state.js";
 import { executeTeachingTurnWorkflow } from "../../teaching-workflow/runner.js";

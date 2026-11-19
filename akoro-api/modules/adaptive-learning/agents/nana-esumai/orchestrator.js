@@ -7,7 +7,7 @@
 import { BaseOrchestrator } from "../base-orchestrator.js";
 import { NaNaEsumai }       from "./guide.js";
 import { Sargeant }         from "../sargeant/assessment.js";
-import { getStudentState, updateStudentState } from "../../learner/student-state.js";
+import { getStudentState, updateStudentState } from "../../../learner-state/index.js";
 
 export const PHASES = {
   PHASE_1: "Phase 1 — What does Student Agent already know?",

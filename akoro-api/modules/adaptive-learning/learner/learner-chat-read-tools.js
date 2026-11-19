@@ -13,7 +13,7 @@ import {
   retrieveStudentKnowledge,
 } from "../agents/student/knowledge.js";
 import { getAgentPairProfile } from "../agents/registry.js";
-import { getAgentPreferences } from "./student-state.js";
+import { getAgentPreferences } from "../../learner-state/index.js";
 import { getLearnerAutonomy } from "./learner-autonomy.js";
 import { publicMemory } from "../../../lib/conversationContextValidation.js";
 

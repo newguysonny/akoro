@@ -35,7 +35,7 @@ export const learnerModelNextAction = {
     const { recommendForLearner, centralMisconceptionFlags } = await import("../../adaptive-learning/learner/learner-model.js");
     const { recordTeachingEvidence } = await import("../../adaptive-learning/teaching-workflow/tools.js");
     const { createTeachingEvidenceState, applyCentralMisconceptions } = await import("../../adaptive-learning/learner/teaching-evidence.js");
-    const studentState = await import("../../adaptive-learning/learner/student-state.js");
+    const studentState = await import("../../learner-state/index.js");
     ctx.expect.ok("decideNextAction is gone from student-state (one decision path)", typeof studentState.decideNextAction === "undefined");
 
     const before = await recommendForLearner({ learnerId: me.id, conceptId: concept.id });

@@ -5,7 +5,7 @@
  * tool has one bounded responsibility and shares one private in-memory context;
  * only the runner's public step labels may cross the WebSocket boundary.
  */
-import { getStudentState, updateStudentState } from "../learner/student-state.js";
+import { getStudentState, updateStudentState } from "../../learner-state/index.js";
 import {
   applyTeachingObservation,
   capProtegeAnalysis,

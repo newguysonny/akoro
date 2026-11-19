@@ -849,7 +849,7 @@ export async function startLiveStream(req, res) {
 
   // Store session in Redis for chunk accumulation
   try {
-    const redis = (await import("../learner/student-state.js")).getRedis();
+    const redis = (await import("../../learner-state/index.js")).getRedis();
     await redis.setex(
       `live_stream:${session.id}`,
       3600,
@@ -897,7 +897,7 @@ export async function receiveChunk(req, res) {
 
   // Append to Redis session
   try {
-    const redis = (await import("../learner/student-state.js")).getRedis();
+    const redis = (await import("../../learner-state/index.js")).getRedis();
     const raw   = await redis.get(`live_stream:${session_id}`);
     if (raw) {
       const state = JSON.parse(raw);
@@ -924,7 +924,7 @@ export async function endLiveStream(req, res) {
   let teacherId, subject;
 
   try {
-    const redis = (await import("../learner/student-state.js")).getRedis();
+    const redis = (await import("../../learner-state/index.js")).getRedis();
     const raw   = await redis.get(`live_stream:${session_id}`);
     if (raw) {
       const state = JSON.parse(raw);
