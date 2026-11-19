@@ -34,6 +34,18 @@ issuing and redemption.
 
 ## How it works
 
+- `routes.js` wires authentication middleware and `express-validator` chains to
+  thin handlers; it keeps the default export and `/api/profiles` mount.
+- `service-*.js` holds the orchestration by resource: `settings` (the caller's
+  account), `teacher` (classrooms/students), `school` (school profiles,
+  classrooms, teachers, admin listings), `students` (instructor roll, CSV
+  import, edit, message), `invites` (signed course invites) and `links`
+  (directories, onboarding prefill, school/teacher requests and join queues).
+- `rules.js` holds pure predicates and normalisers (no database import):
+  limits, profile projections, timezone validation, class-level parsing and CSV
+  parsing.
+- `store-*.js` holds every Supabase query (no Express import), grouped by
+  users/settings, classrooms, schools and invites.
 - All routes use `authenticateToken`; teacher/admin routes add
   `requireRole(["instructor", "admin"])`, and admin-only listings add
   `requireRole(["admin"])`. Input is validated with `express-validator`.
@@ -55,15 +67,17 @@ issuing and redemption.
 
 ## How to extend
 
-Add handlers in the matching handler block (`teacherHandlers`,
-`schoolHandlers`, `adminHandlers`) and register the route near the bottom of
-`routes.js` with its validator chain. Keep ownership checks before any read or
-write. Another module is used only through its `index.js`
+Add a handler in the matching `service-*.js` and register the route in
+`routes.js` with its validator chain. Put pure predicates/normalisers in
+`rules.js` and every Supabase query in `store-*.js`. Keep ownership checks in
+the store query (`teacher_id`, `school_id`, `admin_user_id`) and in the service
+before any read or write. Another module is used only through its `index.js`
 (`modules/README.md`); files stay at or under 600 lines.
 
 ## Known limits
 
-- `routes.js` is 1969 lines and is baselined as oversized; it may only shrink.
+- `routes.js` is no longer an oversized baselined entry; the split files stay
+  well under the 600-line limit.
 - `upgradeClassroom` is a simulated upgrade with a TODO to add Paystack; it sets
   `is_upgraded` and a 9999 student limit without taking payment.
 - Tests are source-contract only (`routes`, `invite`, and `students-ownership`

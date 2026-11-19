@@ -87,7 +87,7 @@ test("no new OPENAI_MODEL imports: new code names a role (§7.11.6 step 3)", () 
     "modules/adaptive-learning/chat.js", "modules/adaptive-learning/teaching/draw.js", "modules/adaptive-learning/exam-prep/exam-prep-service.js",
     "lib/peerConsult.js", "modules/adaptive-learning/study-prep/syllabus-generator.js",
     "modules/agent-network/messaging.js", "modules/autonomy/cycle.js", "modules/battle/questionSource.js", "modules/battle/service-bank.js",
-    "modules/instructor/routes.js", "modules/instructor/tools.js", "modules/records/routes.js", "modules/pharmd/routes.js", "modules/school/aiConcierge.js",
+    "modules/instructor/service-documents.js", "modules/instructor/tools.js", "modules/records/routes.js", "modules/pharmd/routes.js", "modules/school/aiConcierge.js",
     "modules/school/websiteAiSync.js", "modules/self-study/submissionArtifacts.js", "modules/tasks/lib/agentLoop.js", "modules/tasks/lib/ocr.js",
     "modules/tasks/routes.js", "modules/tasks/tools/_llm.js", "modules/tasks/tools/dynamic.js", "modules/tasks/tools/explain-concept.js",
     "modules/tasks/tools/export-report.js", "modules/tasks/tools/generate-quiz.js", "modules/tasks/tools/grade-submissions.js",

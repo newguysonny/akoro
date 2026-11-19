@@ -38,9 +38,23 @@ Under `/api/instructor/tools`: `GET /`, `POST /checkout`,
 
 ## How it works
 
+The router is split the Phase 19 way:
+
+- `routes.js` — `Router`, middleware and route registration only.
+- `service.js` — one export per handler; re-exports the resource services
+  (`service-dashboard`, `service-courses`, `service-curriculum`,
+  `service-sessions`, `service-students`, `service-battles`,
+  `service-credentials`, `service-documents`) and shares plumbing through
+  `service-core.js`.
+- `rules.js` — pure predicates, normalisers and constants (no db import).
+- `store*.js` — every Supabase query, grouped by table (no Express import).
+
+Behaviour:
+
 - `router.use(authenticateToken)` guards everything; the streaming/social
   routes accept school roles and are registered before
   `requireRole(["instructor", "admin"])` gates the rest.
+
 - Lists are scoped to the caller. `/classrooms` includes classes the teacher
   owns plus classes of the school they administer, and the roster endpoint
   re-checks teacher, school-admin, or platform-admin access before reading.
@@ -58,15 +72,17 @@ Under `/api/instructor/tools`: `GET /`, `POST /checkout`,
 
 ## How to extend
 
-Add ordinary CRUD in the relevant section of `routes.js`, pure date/recurrence
-logic in `schedule.js`, and catalogue/purchase behaviour in `tools.js`. Export
-new public helpers through `index.js`; cross-module imports must target another
-module's `index.js` (`modules/README.md`). Files stay at or under 600 lines.
+Add a route in `routes.js`, its orchestration in the matching `service-*.js`
+(and the barrel in `service.js`), pure normalisers in `rules.js`, and queries
+in the relevant `store*.js`. Pure date/recurrence logic stays in `schedule.js`
+and catalogue/purchase behaviour in `tools.js`. Export new public helpers
+through `index.js`; cross-module imports must target another module's
+`index.js` (`modules/README.md`). Files stay at or under 600 lines.
 
 ## Known limits
 
-- `routes.js` is 2020 lines and is baselined as oversized in
-  `modules/structure-baseline.json`; it may only shrink.
+- The dashboard split is new (Phase 19); the baseline no longer lists
+  `routes.js` as oversized.
 - `index.js` exports only the dashboard router. The tools router is not
   re-exported, so `app.js` imports `tools.js` directly.
 - Tests are source-contract only (`classroom-roster-ownership.contract.test.mjs`)

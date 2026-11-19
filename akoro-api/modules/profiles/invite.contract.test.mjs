@@ -24,7 +24,12 @@ const COURSES = ["00000000-0000-0000-0000-0000000000c1", "00000000-0000-0000-000
 const ISS = process.env.JWT_ISSUER || "https://api.akoro.app";
 const AUD = process.env.JWT_AUDIENCE || "https://akoro.app";
 
-const src     = readFileSync(new URL("./routes.js", import.meta.url), "utf8");
+const src = [
+  readFileSync(new URL("./routes.js", import.meta.url), "utf8"),
+  readFileSync(new URL("./service-invites.js", import.meta.url), "utf8"),
+  readFileSync(new URL("./store-invites.js", import.meta.url), "utf8"),
+  readFileSync(new URL("./service-links.js", import.meta.url), "utf8"),
+].join("\n");
 const app     = readFileSync(new URL("../../../akoro-learner/src/App.jsx", import.meta.url), "utf8");
 const page    = readFileSync(new URL("../../../akoro-learner/src/pages/JoinPage.jsx", import.meta.url), "utf8");
 const caller  = readFileSync(new URL("../../../akoro-instructor/src/hooks/useStudentsAPI.js", import.meta.url), "utf8");

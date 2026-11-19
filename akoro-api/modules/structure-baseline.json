@@ -24,8 +24,6 @@
     "modules/courses/live-sessions.js": 1101,
     "modules/courses/meeting-integration.js": 754,
     "modules/courses/payouts.js": 717,
-    "modules/instructor/routes.js": 2021,
-    "modules/profiles/routes.js": 1969,
     "modules/ranking/routes.js": 639,
     "modules/records/routes.js": 1428,
     "modules/records/studyMaterial.js": 863,
