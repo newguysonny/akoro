@@ -9,6 +9,7 @@ process.env.SUPABASE_SERVICE_KEY ||= "test-service-key";
 process.env.OPENAI_API_KEY ||= "test-openai-key";
 const { partName, reviewFocus, GUIDE_REVIEW } = await import("./guideReview.js");
 const read = (p) => readFile(new URL(p, import.meta.url), "utf8");
+const toolCatalogue = await read("../adaptive-learning/chat/tool-catalogue-core.js");
 
 test("the questions cover the topic, narrowed to the parts that were taught", () => {
   assert.equal(reviewFocus("Photosynthesis"), "Photosynthesis");
@@ -28,6 +29,6 @@ test("a guide review is an Agent Check the learner asked for: marked, limited, n
   assert.ok(GUIDE_REVIEW.PER_DAY >= 1);
   assert.match(check, /\.\.\.extra,/);                         // the check carries who asked
   assert.match(routes, /router\.post\("\/guide-reviews", authenticateToken/);
-  assert.match(chat, /name: "request_guide_review"/);
+  assert.match(toolCatalogue, /name: "request_guide_review"/);
   assert.match(chat, /case "request_guide_review": \{\s*if \(role === "instructor"\)/);
 });

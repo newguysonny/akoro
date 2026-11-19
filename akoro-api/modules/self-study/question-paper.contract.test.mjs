@@ -8,8 +8,8 @@ process.env.SUPABASE_SERVICE_KEY ||= "test-service-key";
 const qp = await import("./questionPaper.js");
 const dv = await import("./draftVersions.js");
 const read = (p) => readFile(new URL(p, import.meta.url), "utf8");
-const [chat, drafts, routes, guide] = await Promise.all([
-  read("../adaptive-learning/chat.js"), read("./drafts.js"), read("./routes.js"), read("../adaptive-learning/agents/nana-esumai/guide.js"),
+const [chat, toolCatalogue, drafts, routes, guide] = await Promise.all([
+  read("../adaptive-learning/chat.js"), read("../adaptive-learning/chat/tool-catalogue-rest.js"), read("./drafts.js"), read("./routes.js"), read("../adaptive-learning/agents/nana-esumai/guide.js"),
 ]);
 
 const TRI = '<svg viewBox="0 0 100 100"><polygon points="0,0 100,0 0,100" stroke="#000" fill="none"/><text x="5" y="50">P</text></svg>';
@@ -161,9 +161,9 @@ test("one writer per draft at a time", async () => {
 });
 
 test("wiring: chat tools carry the request; drafts build versions in the background; assign sends one", () => {
-  assert.match(chat, /question_request: \{ type: "string", description: "assignment only: the instructor's own words/);
-  assert.match(chat, /question_plan: \{ type: "object"/);
-  assert.match(chat, /base_version: \{ type: "number"/);
+  assert.match(toolCatalogue, /question_request: \{ type: "string", description: "assignment only: the instructor's own words/);
+  assert.match(toolCatalogue, /question_plan: \{ type: "object"/);
+  assert.match(toolCatalogue, /base_version: \{ type: "number"/);
   assert.match(chat, /\.\.\.\(toolResult\.version \? \{ version: toolResult\.version \} : \{\}\)/);
   assert.match(drafts, /payload\.versions = \[newVersion\(payload, \{ request: request \|\| `Questions on \$\{topic\}` \}\)\]/);
   assert.match(drafts, /void runVersionJob\(draft\.id, 1, \{ chat: questionChat\(instructor\.id\), onReady: autoRubric\(draft\.id, instructor\.id\) \}\)/);

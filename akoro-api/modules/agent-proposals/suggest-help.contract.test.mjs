@@ -14,6 +14,7 @@ import { readFileSync } from "node:fs";
 
 const read = (p) => readFileSync(new URL(p, import.meta.url), "utf8");
 const chat = read("../adaptive-learning/chat.js");
+const toolCatalogue = read("../adaptive-learning/chat/tool-catalogue-core.js");
 const trace = read("../adaptive-learning/chat/chat-trace.js");
 const resumeQueue = read("../self-tooling/resumeQueue.js");
 const toolSuggestions = read("../self-tooling/toolSuggestions.js");
@@ -27,10 +28,10 @@ test("the tools sweep still lands in the Suggestions list", () => {
 });
 
 test("the in-turn tool describes the new-chat filing with concrete triggers", () => {
-  assert.match(chat, /Open a NEW CHAT for the learner with one proactive idea/);
-  assert.match(chat, /not in the Suggestions list, so it gets priority/);
-  assert.match(chat, /something they put off or turned down for now but still need/);
-  assert.doesNotMatch(chat, /Use sparingly — at most one per reply/);
+  assert.match(toolCatalogue, /Open a NEW CHAT for the learner with one proactive idea/);
+  assert.match(toolCatalogue, /not in the Suggestions list, so it gets priority/);
+  assert.match(toolCatalogue, /something they put off or turned down for now but still need/);
+  assert.doesNotMatch(toolCatalogue, /Use sparingly — at most one per reply/);
 });
 
 test("the in-turn handler delivers a new chat, not a list row", () => {

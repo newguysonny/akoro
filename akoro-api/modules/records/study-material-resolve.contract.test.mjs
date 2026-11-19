@@ -7,6 +7,7 @@ const studyMaterial = await readFile(new URL("./studyMaterial.js", import.meta.u
 const searchLib = await readFile(new URL("./searchLib.js", import.meta.url), "utf8");
 const materialsRoutes = await readFile(new URL("../materials/routes.js", import.meta.url), "utf8");
 const chat = await readFile(new URL("../adaptive-learning/chat.js", import.meta.url), "utf8");
+const toolCatalogue = await readFile(new URL("../adaptive-learning/chat/tool-catalogue-rest.js", import.meta.url), "utf8");
 
 /* A tiny Postgres LIKE (default \ escape), so the filename tests prove
    semantics, not just string shapes. */
@@ -157,7 +158,7 @@ test("chat files: precedence and the no-fall-through rule are wired into the res
 });
 
 test("chat files: the tool carries from_chat_file and the handler hands the conversation in", () => {
-  assert.match(chat, /from_chat_file: \{ type: "boolean", description: "OPTIONAL\. Set true when the learner means a file they sent in this chat/);
+  assert.match(toolCatalogue, /from_chat_file: \{ type: "boolean", description: "OPTIONAL\. Set true when the learner means a file they sent in this chat/);
   const callAt = chat.indexOf("makeStudyMaterial({ userId: studentId");
   assert.ok(callAt >= 0);
   const call = chat.slice(callAt, callAt + 600);
@@ -241,9 +242,9 @@ test("copy-on-use: a platform winner is copied into the learner's Library before
 });
 
 test("platform tier: the agent is told to call the tool for bare topic asks and to name the source", () => {
-  assert.match(chat, /bare topic ask like 'create a quiz on properties of matter'/);
-  assert.match(chat, /source 'discover'/, "Discover is reached through its source action");
-  assert.match(chat, /free notes in Discover/);
+  assert.match(toolCatalogue, /bare topic ask like 'create a quiz on properties of matter'/);
+  assert.match(toolCatalogue, /source 'discover'/, "Discover is reached through its source action");
+  assert.match(toolCatalogue, /free notes in Discover/);
 });
 
 /* ── Gathered content: several helpful free notes → ONE cited text ───────── */
@@ -286,7 +287,7 @@ test("gathered content: several sources become ONE cited text record in the Libr
   assert.match(studyMaterial, /platformNote\?\.sources \? \{ gathered: true, sources:/);
   assert.match(studyMaterial, /brought together \$\{built\.sources\.length\} free notes from Discover/, "the reply is told what the gathered content is");
   // The agent's tool description explains the gathered outcome.
-  assert.match(chat, /ONE gathered content/, "the agent's tool description explains the gathered outcome");
+  assert.match(toolCatalogue, /ONE gathered content/, "the agent's tool description explains the gathered outcome");
 });
 
 test("indexing wiring: a chat upload is indexed when its read completes", async () => {
@@ -371,10 +372,10 @@ test("source actions: resolvers, dispatch and the taught materialisation are wir
 });
 
 test("source actions: the tool definition teaches the order and the chaining rule", () => {
-  assert.match(chat, /source: \{ type: "string", enum: \["taught", "library", "discover", "upload"\]/);
-  assert.match(chat, /work through them in this order/);
-  assert.match(chat, /call again with source set to it/, "a `next` field means: call again with that source");
-  assert.match(chat, /when the learner NAMES a source in their ask/, "a named source overrides the default order");
-  assert.match(chat, /a hit in an earlier source never overrides the source they named/);
+  assert.match(toolCatalogue, /source: \{ type: "string", enum: \["taught", "library", "discover", "upload"\]/);
+  assert.match(toolCatalogue, /work through them in this order/);
+  assert.match(toolCatalogue, /call again with source set to it/, "a `next` field means: call again with that source");
+  assert.match(toolCatalogue, /when the learner NAMES a source in their ask/, "a named source overrides the default order");
+  assert.match(toolCatalogue, /a hit in an earlier source never overrides the source they named/);
   assert.match(chat, /source: input\?\.source \|\| null/, "the handler hands the action through");
 });

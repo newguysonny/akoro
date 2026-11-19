@@ -11,8 +11,8 @@ process.env.SUPABASE_SERVICE_KEY ||= "test-service-key";
 const { cleanQuestionMarks } = await import("./submissionView.js");
 const { expireStaleVersions, isStaleDrafting, STALE_DRAFTING_MS } = await import("./draftVersions.js");
 const read = (p) => readFile(new URL(p, import.meta.url), "utf8");
-const [routes, drafts, versions, createA, chat, chatPage, panel, form, modal, subs, marker, learner, socket, api, answerPaper, answerPaperT] = await Promise.all([
-  read("./routes.js"), read("./drafts.js"), read("./draftVersions.js"), read("./createAssignment.js"), read("../adaptive-learning/chat.js"),
+const [routes, drafts, versions, createA, chatCatalogue, chatPage, panel, form, modal, subs, marker, learner, socket, api, answerPaper, answerPaperT] = await Promise.all([
+  read("./routes.js"), read("./drafts.js"), read("./draftVersions.js"), read("./createAssignment.js"), read("../adaptive-learning/chat/tool-catalogue-rest.js"),
   read("../../../akoro-instructor/src/pages/ChatPage.jsx"), read("../../../akoro-instructor/src/components/ActivityPreviewPanel.jsx"),
   Promise.all([   // the Activities page and the parts it was split into
     "../../../akoro-instructor/src/pages/ActivitiesPage.jsx", "../../../akoro-instructor/src/components/activities/ActivityForm.jsx",
@@ -46,7 +46,7 @@ test("assign: the due date is pinned, Edit details keeps it and resolves the car
   assert.ok(panel.includes("onAssigned={(count) => markResolved('assigned', count)}"));
   assert.ok(panel.includes("const needsFigure =") && panel.includes("disabled={phase === 'assigning' || vEditing || (shown && shown.status !== 'ready') || !!assignBlock || reviewWriting || rubricWriting}"));
   assert.ok(form.includes(".slice(0, 30);"));
-  assert.ok(chat.includes('due_at: { type: "string", description: "A new exact due instant') && drafts.includes('applied.push("audience")'));
+  assert.ok(chatCatalogue.includes('due_at: { type: "string", description: "A new exact due instant') && drafts.includes('applied.push("audience")'));
   assert.ok(createA.includes('await edu().from("self_study_assignments").delete().eq("id", assignment.id)'));
 });
 

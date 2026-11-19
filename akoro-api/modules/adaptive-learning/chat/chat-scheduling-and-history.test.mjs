@@ -6,6 +6,7 @@ import { validateFollowUpInput } from "./chat-follow-up-validation.js";
 import { validateLearnerTaskInput } from "../learner-task-validation.js";
 
 const chat = readFileSync(new URL("../chat.js", import.meta.url), "utf8");
+const toolCatalogue = readFileSync(new URL("./tool-catalogue-core.js", import.meta.url), "utf8");
 const followUps = readFileSync(new URL("./chat-follow-ups.js", import.meta.url), "utf8");
 const history = readFileSync(new URL("./chat-history-tools.js", import.meta.url), "utf8");
 
@@ -30,17 +31,17 @@ test("a task can be due 'in 30 minutes'", () => {
 });
 
 test("schedule_chat_follow_up can deliver into THIS chat or a chosen one; message-me requests don't become tasks", () => {
-  assert.match(chat, /where: \{ type: "string", enum: \["here", "chat", "new"\]/);
+  assert.match(toolCatalogue, /where: \{ type: "string", enum: \["here", "chat", "new"\]/);
   assert.match(chat, /if \(where === "here"\) \{[\s\S]{0,200}targetSessionId = conversationId;/);
   assert.match(chat, /targetSessionId = await ownedChatId\(studentId, input\.chatId\);/);
-  assert.match(chat, /use schedule_chat_follow_up instead — a task does not send anything/);
-  assert.match(chat, /required: \["message"\],/);
+  assert.match(toolCatalogue, /use schedule_chat_follow_up instead — a task does not send anything/);
+  assert.match(toolCatalogue, /required: \["message"\],/);
   assert.match(followUps, /const chatSessionId = targetSessionId \|\| randomUUID\(\);/);
 });
 
 test("chat-history tools exist, are scoped to the learner, and only post_to_chat writes", () => {
   for (const name of ["list_chats", "read_chat", "post_to_chat"]) {
-    assert.match(chat, new RegExp(`name: "${name}",`));
+    assert.match(toolCatalogue, new RegExp(`name: "${name}",`));
     assert.match(chat, new RegExp(`case "${name}": \\{`));
   }
   assert.match(chat, /export const SIDE_EFFECT_TOOLS = \[[^\]]*"post_to_chat"/);

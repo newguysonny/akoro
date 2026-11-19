@@ -4,8 +4,8 @@ import test from "node:test";
 
 const { loadTaughtKnowledge, renderTaughtContext, buildGuideMessages, shapeGuideAnswer, teachRequest, PROTEGE_LIMITS } = await import("./protege.js");
 const read = (p) => readFile(new URL(p, import.meta.url), "utf8");
-const [chat, doctrine, manifest, trace, learnerTab, dashboard] = await Promise.all([
-  read("./chat.js"), read("../../akoro-agent/policies/PROTEGE.md"), read("../agent-context/manifest.mjs"), read("./chat/chat-trace.js"),
+const [chat, toolCatalogue, doctrine, manifest, trace, learnerTab, dashboard] = await Promise.all([
+  read("./chat.js"), read("./chat/tool-catalogue-rest.js"), read("../../akoro-agent/policies/PROTEGE.md"), read("../agent-context/manifest.mjs"), read("./chat/chat-trace.js"),
   read("../../../akoro-learner/src/components/tabs/AgentChatTab.jsx"), read("../../../akoro-learner/src/pages/LearnerDashboard.jsx"),
 ]);
 
@@ -71,8 +71,8 @@ test("wiring: every learner turn carries the taught knowledge; the two tools; th
   assert.match(chat, /role === "student"\s*\? timed\("taught", loadTaughtKnowledge\(\{ studentId: req\.user\.id, query: userMessage, deps: protegeDeps \}\)/);
   assert.match(chat, /const protegeCtx = taught \? `\\n\\n\$\{await loadDoctrine\("policies\/PROTEGE\.md"\)\}\$\{renderTaughtContext\(taught\)\}` : "";/);
   assert.match(chat, /\(goalsCtx \|\| ""\) \+\n\s*protegeCtx \+/);
-  assert.match(chat, /name: "ask_to_be_taught",/);
-  assert.match(chat, /name: "consult_teaching_guide",/);
+  assert.match(toolCatalogue, /name: "ask_to_be_taught",/);
+  assert.match(toolCatalogue, /name: "consult_teaching_guide",/);
   assert.match(chat, /case "ask_to_be_taught": \{/);
   assert.match(chat, /case "consult_teaching_guide": \{[\s\S]*?__feature: "teaching_guide"/);
   assert.match(chat, /tool === "consult_teaching_guide" && toolResult\?\.consulted \? \{ guide:/);

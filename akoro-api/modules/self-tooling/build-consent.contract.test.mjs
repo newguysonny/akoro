@@ -11,6 +11,7 @@ import { readFileSync } from "node:fs";
 import { chatToolChange } from "../adaptive-learning/chat/chat-trace.js";
 
 const read = (p) => readFileSync(new URL(p, import.meta.url), "utf8");
+const toolCatalogue = read("../adaptive-learning/chat/tool-catalogue-core.js");
 
 test("a brand-new built tool is drafted OFF behind a card, never saved active", () => {
   const src = read("./pipeline.js");
@@ -46,7 +47,7 @@ test("the trace says 'Drafted', not 'Built', while a tool waits for Keep", () =>
 });
 
 test("the agent is told the new outcome, and the app renders a Keep card for it", () => {
-  assert.match(read("../adaptive-learning/chat.js"), /needs_consent \(a brand-new tool: built and checked, but drafted OFF/);
+  assert.match(toolCatalogue, /needs_consent \(a brand-new tool: built and checked, but drafted OFF/);
   const card = read("../../../akoro-learner/src/components/tabs/agentChat/ConfirmChangeCard.jsx");
   assert.match(card, /state\.kind === 'build'\) return <BuildCard/);
   assert.match(card, /data-build-card=""/);
@@ -74,8 +75,8 @@ test("a brand-new domain tool is not even drafted until the learner wants their 
   assert.match(pipe, /if \(audience === "learner" && !resumed && !replaced && \(!existing \|\| existingDraft\) && hint\?\.ownCopy !== true && !\(await ownCopyOfferOpen\(learnerId, spec\.view\)\)\) \{\s+await finish\("offer_own_copy", \{\}\);\s+await logEvent\(\{ user_id: learnerId, goal, outcome: "own_copy_offered", detail: \{ view: spec\.view, name: spec\.name \} \}\);/);
   assert.match(pipe, /status: "offer_own_copy", tool: spec\.name, label: spec\.label, actions,/);
   // The agent is told the outcome and the re-call contract.
-  assert.match(read("../adaptive-learning/chat.js"), /offer_own_copy \(a built-in already covers this data/);
-  assert.match(read("../adaptive-learning/chat.js"), /ownCopy: true/);
+  assert.match(toolCatalogue, /offer_own_copy \(a built-in already covers this data/);
+  assert.match(toolCatalogue, /ownCopy: true/);
   // The trace names the ask honestly — nothing was built.
   assert.equal(chatToolChange("create_tool", { status: "offer_own_copy", label: "Library documents" }).label, "A built-in covers this — asked about their own copy");
 });

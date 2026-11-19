@@ -32,7 +32,8 @@ test("confirmations: decide records, execute applies, await waits — and nothin
 
 test("the tool: defined for the chat, executable, always in the turn's tool list, with a wait-sized limit", () => {
   const chat = read("../adaptive-learning/chat.js");
-  assert.match(chat, /name: "await_decision",\n    featureGate: "self_tooling"/);
+  const toolCatalogue = read("../adaptive-learning/chat/tool-catalogue-core.js");
+  assert.match(toolCatalogue, /name: "await_decision",\n    featureGate: "self_tooling"/);
   assert.match(chat, /case "await_decision": \{/);
   assert.match(chat, /awaitDecision\(\{ id: String\(input\.confirmationId\), userId: studentId,/);
   const sel = read("../adaptive-learning/toolSelection.js");

@@ -7,6 +7,7 @@ import { guidePassagesBlock } from "../documentGrounding.js";
 import { memoryForPrompt, renderRelevantMemory } from "./chat-memory.js";
 
 const chat = await readFile(new URL("../chat.js", import.meta.url), "utf8");
+const toolCatalogue = await readFile(new URL("./tool-catalogue-rest.js", import.meta.url), "utf8");
 const ID = "0f8fad5b-d9cb-469f-a165-70867728950e";
 
 test("materials: links only from tool results, only to the app's own pages", () => {
@@ -66,9 +67,9 @@ test("study tools: the agent sends learners to the reader, the link opens it on 
   const out = materialsFrom("search_my_library", { records: [{ recordId: ID, name: "Cell notes", tool: "quiz" }] });
   assert.deepEqual(out, [{ kind: "study_tool", title: "Quiz · Cell notes", href: `/library?record=${ID}&tool=quiz` }]);
   assert.equal(materialsFrom("search_my_library", { records: [{ recordId: ID, name: "x", tool: "essay" }] })[0], null, "an unknown tool never makes a link");
-  assert.match(chat, /tool: \{ type: "string", enum: \["quiz", "flashcards", "summary", "notes", "podcast"\]/);
-  assert.match(chat, /use make_study_material instead/, "making one goes to the tool that builds and saves it");
-  assert.match(chat, /never write the questions, cards or summary in chat/);
+  assert.match(toolCatalogue, /tool: \{ type: "string", enum: \["quiz", "flashcards", "summary", "notes", "podcast"\]/);
+  assert.match(toolCatalogue, /use make_study_material instead/, "making one goes to the tool that builds and saves it");
+  assert.match(toolCatalogue, /never write the questions, cards or summary in chat/);
   const made = materialsFrom("make_study_material", { made: true, tool: "quiz", name: "Cell notes", count: 10, href: `/library?record=${ID}&artifact=${ID}` });
   assert.deepEqual(made, [{ kind: "study_output", title: "Quiz · Cell notes", href: `/library?record=${ID}&artifact=${ID}`, sub: "10 questions", tool: "quiz" }]);
   assert.equal(materialsFrom("make_study_material", { made: true, tool: "quiz", name: "x", href: "https://evil.example/" })[0], null, "only the app's own reader link");

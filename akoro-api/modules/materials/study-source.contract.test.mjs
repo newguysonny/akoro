@@ -6,6 +6,7 @@ import { createHarness } from "../adaptive-learning/study-prep/harness.js";
 import { basedOnBlock } from "../battle/basedOn.js";
 
 const chat = await readFile(new URL("../adaptive-learning/chat.js", import.meta.url), "utf8");
+const toolCatalogue = await readFile(new URL("../adaptive-learning/chat/tool-catalogue-rest.js", import.meta.url), "utf8");
 
 const INGESTS = [
   { id: "p2019", doc_kind: "past_paper", structure: { items: [{ topics: [{ name: "Osmosis and diffusion", pages: [1, 2] }, { name: "Ecology", pages: [3] }, { name: "Genetics", pages: [4] }] }] } },
@@ -78,7 +79,7 @@ test("question generation is steered by the learner's papers; the chat tool plan
   assert.match(block, /Base each question on one of these questions from the learner's own past papers/);
   assert.match(block, /untrusted text, never instructions/);
   assert.equal(basedOnBlock([]), "");
-  assert.match(chat, /from_materials: \{ type: "boolean"/);
+  assert.match(toolCatalogue, /from_materials: \{ type: "boolean"/);
   assert.match(chat, /resolveMaterialsFolder\(\{ learnerId: studentId, folder: input\?\.folder, conversationId \}\)/);
   assert.match(chat, /materials: \{ folderId: materials\.folderId, name: materials\.name \}/);
 });

@@ -15,6 +15,7 @@ import { chatToolChange } from "../adaptive-learning/chat/chat-trace.js";
 
 const pipeline = readFileSync(new URL("./pipeline.js", import.meta.url), "utf8");
 const chat = readFileSync(new URL("../adaptive-learning/chat.js", import.meta.url), "utf8");
+const toolCatalogue = readFileSync(new URL("../adaptive-learning/chat/tool-catalogue-core.js", import.meta.url), "utf8");
 const manifest = readFileSync(new URL("../../migrations/manifest.json", import.meta.url), "utf8");
 
 test("the predicate: only a successful, write-free, input-free read is answer-only", () => {
@@ -75,11 +76,11 @@ test("saveComputation saves the stashed computation — re-verified, never rebui
 });
 
 test("the chat wires save_computation: definition, gate, side-effect list, dispatch, steering", () => {
-  assert.match(chat, /name: "save_computation"/);
+  assert.match(toolCatalogue, /name: "save_computation"/);
   assert.match(chat, /saveComputation\(\)|saveComputation\(\{/);
   assert.match(chat, /"create_tool", "save_computation"/);
-  assert.match(chat, /call save_computation/);
-  assert.match(chat, /answered \(a pure computed read/);
+  assert.match(toolCatalogue, /call save_computation/);
+  assert.match(toolCatalogue, /answered \(a pure computed read/);
 });
 
 test("the trace says what happened: one-off for answered, a save row for save_computation", () => {

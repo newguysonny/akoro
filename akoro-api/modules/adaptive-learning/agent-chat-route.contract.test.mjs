@@ -4,6 +4,9 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const source = await readFile(new URL("./chat.js", import.meta.url), "utf8");
+const toolCatalogueCore = await readFile(new URL("./chat/tool-catalogue-core.js", import.meta.url), "utf8");
+const toolCatalogueRest = await readFile(new URL("./chat/tool-catalogue-rest.js", import.meta.url), "utf8");
+const toolCatalogue = `${toolCatalogueCore}\n${toolCatalogueRest}`;
 const agentChatDoctrine = await readFile(
   new URL("../../akoro-agent/policies/AGENT_CHAT.md", import.meta.url), "utf8");
 const instructorChatPage = await readFile(
@@ -80,13 +83,13 @@ test("learner study projections remain bounded tools and product feedback needs 
     "get_learning_overview", "get_knowledge_map", "search_my_study_knowledge",
     "get_concept_tracker_summary", "get_learning_insights_summary", "get_exam_prep_status",
     "get_chat_memory", "get_agent_preferences", "get_autonomy_status", "submit_tool_request",
-  ]) assert.match(source, new RegExp(`name: "${tool}"`));
+  ]) assert.match(toolCatalogue, new RegExp(`name: "${tool}"`));
   // Consent is the learner's own message (a plain yes counts only after the agent's own offer).
   assert.match(source, /hasExplicitToolRequestConsent\(userMessage, \{ previousAgentText: lastAgentText\(fit\.kept\) \}\)/);
   // P1: the agent-chat operating doctrine loads from the workspace.
   assert.match(agentChatDoctrine, /never submit one automatically/);
   assert.match(source, /assembleChatDoctrine/);
-  assert.match(source, /Never expose a raw transcript, internal scratchpad, hidden reasoning, or raw tool output/);
+  assert.match(toolCatalogue, /Never expose a raw transcript, internal scratchpad, hidden reasoning, or raw tool output/);
 });
 
 test("the instructor chat is durable and uses the shared Fortizo composer", () => {
@@ -129,7 +132,7 @@ test("school/class/teacher directory tools are privacy-bounded and forced for id
   // school's own records, and the route FORCES the matching read tool on
   // iteration 0 — exactly like the capabilities force.
   for (const tool of ["get_my_school", "list_school_subjects", "list_my_teachers", "find_teacher"]) {
-    assert.match(source, new RegExp(`name: "${tool}"`), `${tool} missing from the learner catalogue`);
+    assert.match(toolCatalogue, new RegExp(`name: "${tool}"`), `${tool} missing from the learner catalogue`);
     assert.match(source, new RegExp(`case "${tool}":`), `${tool} missing from executeChatTool`);
   }
   assert.match(source, /requiredLearnerDataTool\(userMessage\)/,
@@ -198,16 +201,16 @@ test("learning-session history is its own tool — never answered with the schoo
   // have learned". The learner's teaching history and the school catalogue
   // are different questions with different tools, and both descriptions own
   // the distinction so the model can never conflate them.
-  assert.match(source, /name: "get_my_learning_sessions"/, "missing from the learner catalogue");
+  assert.match(toolCatalogue, /name: "get_my_learning_sessions"/, "missing from the learner catalogue");
   assert.match(source, /case "get_my_learning_sessions":/, "missing from executeChatTool");
-  const catalogueDef = source.slice(
-    source.indexOf('name: "list_school_subjects"'),
-    source.indexOf('name: "list_my_teachers"'),
+  const catalogueDef = toolCatalogue.slice(
+    toolCatalogue.indexOf('name: "list_school_subjects"'),
+    toolCatalogue.indexOf('name: "list_my_teachers"'),
   );
   assert.match(catalogueDef, /NOT what the learner has learnt/);
-  const historyDef = source.slice(
-    source.indexOf('name: "get_my_learning_sessions"'),
-    source.indexOf("input_schema", source.indexOf('name: "get_my_learning_sessions"')),
+  const historyDef = toolCatalogue.slice(
+    toolCatalogue.indexOf('name: "get_my_learning_sessions"'),
+    toolCatalogue.indexOf("input_schema", toolCatalogue.indexOf('name: "get_my_learning_sessions"')),
   );
   assert.match(historyDef, /NOT the school's subject catalogue/);
   // The history case reads only the learner's own learning records — bounded

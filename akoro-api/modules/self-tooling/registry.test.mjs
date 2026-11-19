@@ -8,7 +8,9 @@ import { CAPABILITIES, FORBIDDEN, forbiddenFor, learnerGrantable, ownChangeAsked
 import { decideAccess } from "./access.js";
 
 const chatSrc = readFileSync(new URL("../adaptive-learning/chat.js", import.meta.url), "utf8");
-const toolNames = new Set([...chatSrc.matchAll(/^\s{4}name: "([a-z_]+)",$/gm)].map((m) => m[1]));
+const toolCatalogue = readFileSync(new URL("../adaptive-learning/chat/tool-catalogue-core.js", import.meta.url), "utf8")
+  + readFileSync(new URL("../adaptive-learning/chat/tool-catalogue-rest.js", import.meta.url), "utf8");
+const toolNames = new Set([...toolCatalogue.matchAll(/^\s{4}name: "([a-z_]+)",$/gm)].map((m) => m[1]));
 
 test("every view is scoped: self views name an owner column; public views fix their filter", () => {
   for (const [name, v] of Object.entries(DATA_VIEWS)) {

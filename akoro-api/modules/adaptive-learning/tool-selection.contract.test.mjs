@@ -12,6 +12,7 @@ import { readFileSync } from "node:fs";
 import { CORE_TOOL_NAMES, areasForMessage, filterDefsByAreas, toolArea } from "./toolSelection.js";
 
 const chat = readFileSync(new URL("./chat.js", import.meta.url), "utf8");
+const runtimeState = readFileSync(new URL("./chat/runtime-state.js", import.meta.url), "utf8");
 const pipeline = readFileSync(new URL("../self-tooling/pipeline.js", import.meta.url), "utf8");
 const manifest = readFileSync(new URL("../../migrations/manifest.json", import.meta.url), "utf8");
 
@@ -39,7 +40,7 @@ test("filtering keeps core + active areas, built-in and learner-built alike", ()
 });
 
 test("chat wiring: sticky areas, the forced tool's area, the loader, the merge, the kill switch", () => {
-  assert.match(chat, /const conversationAreas = new Map\(\)/);
+  assert.match(runtimeState, /const conversationAreas = new Map\(\)/);
   assert.match(chat, /if \(forcedTool\) active\.add\(toolArea\(forcedTool\)\)/);
   assert.match(chat, /requiredTool: forcedTool/);
   assert.match(chat, /tools: turnTools/);

@@ -7,7 +7,7 @@ process.env.SUPABASE_SERVICE_KEY ||= "test-service-key";
 process.env.OPENAI_API_KEY ||= "test-openai-key";
 const { cleanBattleOptions, seatsFor, assignTeams, NETWORK_LIMITS } = await import("../battle/networkBattle.js");
 const read = (p) => readFile(new URL(p, import.meta.url), "utf8");
-const [worker, challenges, chat] = await Promise.all([read("../battle/worker.js"), read("./challenges.js"), read("../adaptive-learning/chat.js")]);
+const [worker, challenges, chat, toolCatalogue] = await Promise.all([read("../battle/worker.js"), read("./challenges.js"), read("../adaptive-learning/chat.js"), read("../adaptive-learning/chat/tool-catalogue-core.js")]);
 
 test("battle options: subject required, 5–30 questions, schedule in the future and within 30 days", () => {
   assert.throws(() => cleanBattleOptions({}), /Which subject/);
@@ -39,7 +39,7 @@ test("team battles are scored by team; requests fill seats with a lock; challeng
   assert.match(challenges, /\.eq\("accepted_by", `\{\$\{\(r\.accepted_by \|\| \[\]\)\.join\(","\)\}\}`\)/);
   assert.match(challenges, /isn't taking challenges right now/);
   for (const name of ["find_competitors", "challenge_agent", "post_challenge_request", "search_challenge_requests", "accept_challenge_request", "cancel_challenge_request", "rematch_battle"]) {
-    assert.match(chat, new RegExp(`name: "${name}",`));
+    assert.match(toolCatalogue, new RegExp(`name: "${name}",`));
     assert.match(chat, new RegExp(`case "${name}": \\{`));
   }
 });

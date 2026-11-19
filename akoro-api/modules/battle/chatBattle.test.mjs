@@ -37,12 +37,14 @@ test("network series: a post goes up 12 hours ahead, an invite an hour; cards sh
 
 test("chat: every battle tool takes repeat; class_battle is a side effect and routes through the invite route", async () => {
   const chat = await read("../adaptive-learning/chat.js");
+  const core = await read("../adaptive-learning/chat/tool-catalogue-core.js");
+  const rest = await read("../adaptive-learning/chat/tool-catalogue-rest.js");
   for (const tool of ["challenge_agent", "post_challenge_request", "class_battle"]) {
-    const def = chat.slice(chat.indexOf(`name: "${tool}"`), chat.indexOf(`name: "${tool}"`) + 2500);
+    const def = core.slice(core.indexOf(`name: "${tool}"`), core.indexOf(`name: "${tool}"`) + 2500);
     assert.match(def, /repeat: REPEAT_SCHEMA/, `${tool} takes repeat`);
   }
   assert.match(chat, /"challenge_agent", "class_battle", "post_challenge_request"/);
-  assert.match(chat, /battle_format: \{ type: "string", enum: \["battle", "review"\]/, "instructor drafts say battle or review");
+  assert.match(rest, /battle_format: \{ type: "string", enum: \["battle", "review"\]/, "instructor drafts say battle or review");
   const mod = await read("./chatBattle.js");
   assert.match(mod, /occurrenceHandlers\.classInvite/);
   const drafts = await read("../self-study/drafts.js");

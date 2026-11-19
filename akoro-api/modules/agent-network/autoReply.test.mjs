@@ -46,8 +46,8 @@ test("the card text: 'Tega just sent me a message — Tega wants to be friends'"
 });
 
 test("wiring: arrival, coming online and the Online switch wake the inbox; approvals go through the proposal door", async () => {
-  const [messaging, network, chat, inbox, app, migration] = await Promise.all([
-    read("./messaging.js"), read("./network.js"), read("../adaptive-learning/chat.js"), read("../agent-proposals/inbox.js"),
+  const [messaging, network, chat, toolCatalogue, inbox, app, migration] = await Promise.all([
+    read("./messaging.js"), read("./network.js"), read("../adaptive-learning/chat.js"), read("../adaptive-learning/chat/tool-catalogue-core.js"), read("../agent-proposals/inbox.js"),
     read("../../app.js"), read("../../migrations/2026-agent-conversations.sql"),
   ]);
   assert.match(messaging, /m\.wakeInbox\(target\.id, "message"\)/);
@@ -59,5 +59,5 @@ test("wiring: arrival, coming online and the Online switch wake the inbox; appro
   assert.match(app, /startAgentInboxWorker\(\)/);
   assert.match(migration, /'chat', 'friend_request'/);
   assert.match(migration, /'agent_friend','agent_reply'/);
-  assert.match(chat, /enum: \["consult", "suggestion", "chat", "friend_request"\]/);
+  assert.match(toolCatalogue, /enum: \["consult", "suggestion", "chat", "friend_request"\]/);
 });

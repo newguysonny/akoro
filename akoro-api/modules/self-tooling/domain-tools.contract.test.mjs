@@ -12,7 +12,7 @@ test("split domain tools: one per view, action cap, cleanup + builder guidance",
   assert.match(pipe, /MAX_DOMAIN_ACTIONS/, "action cap enforced");
   assert.match(pipe, /retireSameView\(learnerId, spec\.view, spec\.name\)/, "retires other domain tools over the same view");
   assert.match(pipe, /isDomainTool/, "writes (no action enum) are never retired with read domains");
-  assert.match(read("../adaptive-learning/chat.js"), /Prefer ONE tool per data domain/, "builder guidance");
+  assert.match(read("../adaptive-learning/chat/tool-catalogue-core.js"), /Prefer ONE tool per data domain/, "builder guidance");
   const consoleSrc = read("../agentConsole/routes.js");
   assert.match(consoleSrc, /router\.post\("\/cleanup-domain-tools"/, "cleanup endpoint");
   assert.match(consoleSrc, /router\.post\("\/repair-library-tools"/, "repair endpoint");
