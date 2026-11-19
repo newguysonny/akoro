@@ -38,6 +38,19 @@ export const sharedCall = (input, make) => {
 export const searchEmbedStats = () => ({ ...stats, timeoutMs: SEARCH_EMBED_TIMEOUT_MS });
 
 /**
+ * Plain embedding for storing a vector (notes, chunks, topics) — no search
+ * limit. One text → its vector, or an array → its vectors.
+ */
+export async function embed(input) {
+  const one = (text) => String(text ?? "").slice(0, 8000);
+  const res = await (await import("./aiModel.js")).openai.embeddings.create({
+    model: "text-embedding-3-small",
+    input: Array.isArray(input) ? input.map(one) : one(input),
+  });
+  return Array.isArray(input) ? res.data.map((d) => d.embedding) : res.data[0].embedding;
+}
+
+/**
  * → the query's vector, or null when it failed or took longer than the limit
  * (the caller searches on text alone). Never throws.
  */

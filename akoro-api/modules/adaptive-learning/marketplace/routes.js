@@ -38,7 +38,7 @@ import {
   verifyTransaction,
   validateWebhookSignature,
   generateReference,
-} from "./paystackService.js";
+} from "../../../lib/paystackService.js";
 
 const router = express.Router();
 

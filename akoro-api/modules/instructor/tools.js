@@ -24,7 +24,7 @@ import {
   initializeTransaction,
   verifyTransaction,
   generateReference,
-} from "../adaptive-learning/marketplace/paystackService.js";
+} from "../../lib/paystackService.js";
 import { urlFor } from "../../lib/urls.js";
 
 const router = Router();

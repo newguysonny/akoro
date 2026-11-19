@@ -26,7 +26,7 @@ import {
   initializeTransaction,
   verifyTransaction,
   generateReference,
-} from "../adaptive-learning/marketplace/paystackService.js";
+} from "../../lib/paystackService.js";
 import multerLib from "multer";
 import { renderMiniTemplate, renderThemePage, renderSitePage, renderThemeDocument, buildContext } from "./siteRenderer.js";
 import { assembleTemplateFromZip, ensureResponsiveViewport } from "./templateZip.js";

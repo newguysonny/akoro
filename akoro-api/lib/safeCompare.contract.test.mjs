@@ -99,7 +99,7 @@ test("every shared-secret and signature check in the API goes through the helper
   assert.doesNotMatch(app, /config\.isDev;?\s*(\/\/.*)?\n\s*if \(!authorized\)/, "no dev-mode open door on /internal/*");
   assert.equal((app.match(/app\.get\("\/internal\/(egress|preflight)", requireSharedSecret\("INTERNAL_SECRET"\)/g) || []).length, 2);
 
-  for (const f of ["../modules/courses/payments.js", "../modules/courses/payouts.js", "../modules/webhooks/paystack.js", "../modules/adaptive-learning/marketplace/paystackService.js"]) {
+  for (const f of ["../modules/courses/payments.js", "../modules/courses/payouts.js", "../modules/webhooks/paystack.js", "./paystackService.js"]) {
     const s = read(f);
     assert.match(s, /paystackSignatureValid\(/, `${f} uses the shared Paystack check`);
     assert.doesNotMatch(s, /hash !== req\.headers|hash === req\.headers|return hash === signature/, `${f} has no plain compare`);

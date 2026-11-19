@@ -5,8 +5,8 @@
 // =============================================================
 
 import crypto from "crypto";
-import { paystackThrough } from "../../../lib/paystackBreaker.js";
-import { paystackSignatureValid } from "../../../lib/safeCompare.js";
+import { paystackThrough } from "./paystackBreaker.js";
+import { paystackSignatureValid } from "./safeCompare.js";
 
 const PAYSTACK_BASE    = "https://api.paystack.co";
 const SECRET_KEY       = process.env.PAYSTACK_SECRET_KEY;

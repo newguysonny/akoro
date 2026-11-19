@@ -25,7 +25,7 @@ import { body, validationResult }         from "express-validator";
 import db                                 from "../../db.js";
 import { authenticateToken, requireRole } from "../auth/routes.js";
 import { businessConfig }                 from "../../config/index.js";
-import { verifyTransaction }              from "../adaptive-learning/marketplace/paystackService.js";
+import { verifyTransaction }              from "../../lib/paystackService.js";
 import { performRefund }                  from "./payments.js";
 import { notify }                         from "../notifications/events.js";
 import { paystackSignatureValid } from "../../lib/safeCompare.js";

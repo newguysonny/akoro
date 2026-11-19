@@ -4,7 +4,7 @@
  * its explanation). Same fonts and layout as the submission PDF
  * (self-study/submissionPdf.js), so Yoruba, Igbo and Hausa letters print.
  */
-import { newPdf, PDF_STYLE } from "../self-study/submissionPdf.js";
+import { newPdf, PDF_STYLE } from "../../lib/pdf.js";
 
 const { M, MUTED, ACCENT, letterOf, fmtDate } = PDF_STYLE;
 const GREEN = [0.02, 0.47, 0.34];

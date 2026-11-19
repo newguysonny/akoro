@@ -20,7 +20,7 @@ import db                                 from "../../db.js";
 import { authenticateToken, requireRole } from "../auth/routes.js";
 import { businessConfig }                 from "../../config/index.js";
 import { cartHandlers }                   from "./cart.js";
-import { recordPaymentItems, logPaymentEvent } from "../webhooks/paymentAudit.js";
+import { recordPaymentItems, logPaymentEvent } from "../../lib/paymentAudit.js";
 import { notify }                           from "../notifications/events.js";
 import { paystackSignatureValid } from "../../lib/safeCompare.js";
 import { requireCourseManager }             from "./courseAccess.js";

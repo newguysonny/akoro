@@ -9,7 +9,7 @@
  *                     cart order's contents are queryable, not buried in JSON.
  */
 
-import db from "../../db.js";
+import db from "../db.js";
 
 /**
  * @param {object} e

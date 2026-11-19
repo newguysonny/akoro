@@ -21,7 +21,7 @@ import {
   COIN_USD, AI_MARKUP, USD_NGN, WELCOME_GRANT,
   coinsToKobo, nairaToCoins, coinsToUsd, coinsForUsage,
 } from "../../lib/aiPricing.js";
-import { initializeTransaction } from "../adaptive-learning/marketplace/paystackService.js";
+import { initializeTransaction } from "../../lib/paystackService.js";
 import { redeemVoucher, VoucherError, voucherRedeemConfigured } from "../../lib/voucherRedeem.js";
 import { urlFor, displayHost } from "../../lib/urls.js";
 

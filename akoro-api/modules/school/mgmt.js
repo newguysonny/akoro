@@ -25,7 +25,7 @@ import { authenticateToken, requireRole } from "../auth/routes.js";
 import { ensureBucket, uploadPublicFile } from "./templateStorage.js";
 import { renderDocument } from "./documentRenderer.js";
 import { openai } from "../../lib/aiModel.js";
-import { renderPdfToImages } from "../adaptive-learning/grounding/pdfRender.js";
+import { renderPdfToImages } from "../../lib/pdfRender.js";
 import { DEFAULT_DOC_TEMPLATES, getDefaultDoc } from "./defaultDocs/index.js";
 import { PERIOD_DEFS, TEACH_PERIOD_NAMES, TEMPLATE_SUBJECTS, JUNIOR_GRID, SENIOR_GRID } from "./timetableTemplate.js";
 import { createStrugglesRouter } from "./learnerStruggles.js";

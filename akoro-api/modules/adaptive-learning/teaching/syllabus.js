@@ -17,17 +17,14 @@ import pdfParse from "pdf-parse/lib/pdf-parse.js";
 import db from "../../../db.js";
 import { openai, llmComplete } from "../../../lib/aiModel.js";
 import { requireRole } from "../../auth/routes.js";
-import { renderPdfToImages } from "../grounding/pdfRender.js";
+import { renderPdfToImages } from "../../../lib/pdfRender.js";
 import { contentKey, extractOnce, makePgCache } from "../../../lib/extractionCache.js";
 import { modelRegistry } from "../../../lib/modelRegistry.js";
+import { embed } from "../../../lib/embed.js";
+export { embed };
 
 
 const slugify = (s) => String(s || "").toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-
-export async function embed(text) {
-  const res = await openai.embeddings.create({ model: "text-embedding-3-small", input: String(text).slice(0, 8000) });
-  return res.data[0].embedding;
-}
 
 /**
  * Ingest one subject. Idempotent per (exam, slug): re-ingesting replaces the

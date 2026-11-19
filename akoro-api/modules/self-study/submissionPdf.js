@@ -22,122 +22,19 @@
  * pdf-lib can't join or reorder them, and reversed, disconnected letters
  * would misquote the learner.
  */
-import { createRequire } from "node:module";
-import { readFileSync } from "node:fs";
-import path from "node:path";
-import { PDFDocument, rgb } from "pdf-lib";
-import fontkit from "@pdf-lib/fontkit";
+import { PDFDocument } from "pdf-lib";
 import { docxToPages } from "../records/officeText.js";
 import { paperBlocks, passageRange, figurePng } from "./paperLayout.js";
 import { readChoice } from "./submissionView.js";
-
-const require = createRequire(import.meta.url);
-const FONT_DIR = path.join(path.dirname(require.resolve("dejavu-fonts-ttf/package.json")), "ttf");
-let FONTS = null;
-const fonts = () => (FONTS ||= {
-  regular: readFileSync(path.join(FONT_DIR, "DejaVuSans.ttf")),
-  bold: readFileSync(path.join(FONT_DIR, "DejaVuSans-Bold.ttf")),
-});
-/** Right-to-left scripts need shaping pdf-lib doesn't do. */
-const isRtl = (cp) => (cp >= 0x590 && cp <= 0x8ff) || (cp >= 0xfb1d && cp <= 0xfdff) || (cp >= 0xfe70 && cp <= 0xfeff);
+import { A4, M, INK, MUTED, ACCENT, newPdf, letterOf, fmtDate } from "../../lib/pdf.js";
 
 export const SUBMISSION_PDF_LIMITS = Object.freeze({
   MAX_ATTACHMENT_PAGES: 150,   // merged pages across all attached PDFs
   MAX_TEXT_CHARS: 200_000,     // per attachment's text
 });
 
-const A4 = [595.28, 841.89];
-const M = 50;                  // margin
-const INK = rgb(0.11, 0.1, 0.09), MUTED = rgb(0.45, 0.43, 0.41), ACCENT = rgb(0.42, 0.23, 1), RULE = rgb(0.9, 0.89, 0.88);
-
-const letterOf = (i) => "ABCDEFGHIJKLMNOPQRSTUVWXYZ"[Number(i)] ?? "?";
 const qText = (q) => (typeof q === "object" && q !== null ? String(q.q ?? "") : String(q ?? ""));
-const fmtDate = (iso) => {
-  const d = new Date(iso || "");
-  return Number.isNaN(d.getTime()) ? "" : d.toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "UTC" }) + " UTC";
-};
 const fmtSize = (n) => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round((n || 0) / 1024))} KB`);
-
-/** A writer that flows wrapped text down A4 pages, adding pages as needed. */
-export class Flow {
-  constructor(doc, regular, bold, glyphs) {
-    Object.assign(this, { doc, regular, bold, glyphs, page: null, y: 0, replaced: 0 });
-  }
-  newPage() { this.page = this.doc.addPage(A4); this.y = A4[1] - M; return this.page; }
-  ensure(h) { if (!this.page || this.y - h < M + 24) this.newPage(); }
-  /** Characters the font can't draw become "?" (counted for the note). */
-  clean(text) {
-    let out = "";
-    for (const ch of String(text ?? "").normalize("NFC").replace(/\r\n?/g, "\n").replace(/\t/g, "    ")) {
-      const cp = ch.codePointAt(0);
-      if (ch === "\n" || this.glyphs(cp)) out += ch;
-      else if (cp >= 0x300 && cp <= 0x36f) continue;    // an unsupported combining mark — drop it
-      else { out += "?"; this.replaced += 1; }
-    }
-    return out;
-  }
-  lines(text, size, font, width) {
-    const out = [];
-    for (const para of this.clean(text).split("\n")) {
-      if (!para.trim()) { out.push(""); continue; }
-      let line = "";
-      for (const word of para.split(/(\s+)/)) {
-        const next = line + word;
-        if (font.widthOfTextAtSize(next, size) <= width || !line.trim()) {
-          // A single word wider than the line is broken by characters.
-          if (!line.trim() && font.widthOfTextAtSize(next, size) > width) {
-            let chunk = "";
-            for (const ch of next) {
-              if (font.widthOfTextAtSize(chunk + ch, size) > width && chunk) { out.push(chunk); chunk = ""; }
-              chunk += ch;
-            }
-            line = chunk;
-          } else line = next;
-        } else { out.push(line.trimEnd()); line = word.trimStart(); }
-      }
-      out.push(line.trimEnd());
-    }
-    return out;
-  }
-  text(text, { size = 10.5, bold = false, color = INK, indent = 0, gap = 4, lineGap = 1.38 } = {}) {
-    const font = bold ? this.bold : this.regular;
-    const width = A4[0] - M * 2 - indent;
-    for (const l of this.lines(text, size, font, width)) {
-      this.ensure(size * lineGap);
-      this.y -= size * lineGap;
-      if (l) this.page.drawText(l, { x: M + indent, y: this.y, size, font, color });
-    }
-    this.y -= gap;
-  }
-  rule(gap = 10) {
-    this.ensure(gap * 2);
-    this.y -= gap;
-    this.page.drawLine({ start: { x: M, y: this.y }, end: { x: A4[0] - M, y: this.y }, thickness: 0.6, color: RULE });
-    this.y -= gap;
-  }
-  heading(text) { this.ensure(40); this.y -= 8; this.text(text, { size: 13, bold: true, color: ACCENT, gap: 6 }); }
-  /** An embedded image, scaled to fit the column (never upscaled past 1×). */
-  image(img, { indent = 0, maxH = 220, gap = 8 } = {}) {
-    const maxW = A4[0] - M * 2 - indent;
-    const s = Math.min(maxW / img.width, maxH / img.height, 1);
-    const w = img.width * s, h = img.height * s;
-    this.ensure(h + gap);
-    this.y -= h;
-    this.page.drawImage(img, { x: M + indent, y: this.y, width: w, height: h });
-    this.y -= gap;
-  }
-}
-
-/** A new A4 document with the DejaVu fonts embedded and a Flow over it (battle/questionsPdf.js too). */
-export async function newPdf() {
-  const doc = await PDFDocument.create();
-  doc.registerFontkit(fontkit);
-  const regular = await doc.embedFont(fonts().regular, { subset: true });
-  const bold = await doc.embedFont(fonts().bold, { subset: true });
-  const probe = fontkit.create(fonts().regular);
-  return { doc, flow: new Flow(doc, regular, bold, (cp) => !isRtl(cp) && probe.hasGlyphForCodePoint(cp)), regular };
-}
-export const PDF_STYLE = Object.freeze({ A4, M, INK, MUTED, ACCENT, letterOf, fmtDate });
 
 /**
  * The same submission as markdown text — what machines read (AI grading,
@@ -196,12 +93,7 @@ export function submissionMarkdown({ assignment = {}, learner = {}, submission =
  *   files       [{ name, size, kind, bytes }] — the attachments, in order
  */
 export async function buildSubmissionPdf({ assignment = {}, learner = {}, submission = {}, files = [] }) {
-  const doc = await PDFDocument.create();
-  doc.registerFontkit(fontkit);
-  const regular = await doc.embedFont(fonts().regular, { subset: true });
-  const bold = await doc.embedFont(fonts().bold, { subset: true });
-  const probe = fontkit.create(fonts().regular);
-  const flow = new Flow(doc, regular, bold, (cp) => !isRtl(cp) && probe.hasGlyphForCodePoint(cp));
+  const { doc, flow, regular } = await newPdf();
   const notes = [];
   const title = String(assignment.title || "Activity");
   const who = String(learner.name || learner.username || "Learner");

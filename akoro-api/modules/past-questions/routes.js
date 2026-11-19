@@ -23,9 +23,9 @@ import multer from "multer";
 import db from "../../db.js";
 import { openai } from "../../lib/aiModel.js";
 import { authenticateToken, requireRole } from "../auth/routes.js";
-import { embed } from "../adaptive-learning/teaching/syllabus.js";
+import { embed } from "../../lib/embed.js";
 import { embedForSearch } from "../../lib/searchEmbedding.js";
-import { renderPdfToImages } from "../adaptive-learning/grounding/pdfRender.js";
+import { renderPdfToImages } from "../../lib/pdfRender.js";
 import { serverError } from "../../lib/httpError.js";
 
 const router = Router();
