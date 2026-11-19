@@ -393,7 +393,13 @@ test("console-facing notification composers carry no emoji", async () => {
   // bodies are out of scope.
   const files = [
     "modules/notifications/events.js",
-    "modules/battle/routes.js",
+    "modules/battle/service-core.js",
+    "modules/battle/service-create.js",
+    "modules/battle/service-class.js",
+    "modules/battle/service-course.js",
+    "modules/battle/service-listings.js",
+    "modules/battle/service-challenge.js",
+    "modules/battle/service-battle.js",
     "modules/battle/networkBattle.js",
     "modules/battle/worker.js",
     "modules/courses/scheduler.js",

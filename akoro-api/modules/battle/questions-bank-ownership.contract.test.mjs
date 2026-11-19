@@ -8,6 +8,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 const src = readFileSync(new URL("./routes.js", import.meta.url), "utf8");
+const store = readFileSync(new URL("./store-questions.js", import.meta.url), "utf8");
 
 test("the bank guard asks canRunCourseBattles for the course's teacher", () => {
   assert.match(src, /const requireBankOwner = asyncHandler\(async \(req, res, next\) => \{\s*const \{ isInstructor \} = await canRunCourseBattles\(req\.user\.id, req\.user\.role, req\.params\.courseId\);\s*if \(!isInstructor\) return res403/);
@@ -20,6 +21,6 @@ test("every :courseId bank route runs the guard", () => {
 });
 
 test("editing or retiring one question stays scoped to its author", () => {
-  assert.match(src, /update\(updates\)\.eq\("id", req\.params\.questionId\)\.eq\("created_by", req\.user\.id\)/);
-  assert.match(src, /update\(\{ is_active: false \}\)\.eq\("id", req\.params\.questionId\)\.eq\("created_by", req\.user\.id\)/);
+  assert.match(store, /update\(updates\)\.eq\("id", questionId\)\.eq\("created_by", userId\)/);
+  assert.match(store, /update\(\{ is_active: false \}\)\.eq\("id", questionId\)\.eq\("created_by", userId\)/);
 });

@@ -5,7 +5,7 @@ import test from "node:test";
 const auth = await readFile(new URL("./routes.js", import.meta.url), "utf8");
 const adminSource = await readFile(new URL("../admin/routes.js", import.meta.url), "utf8");
 const schoolMgmt = await readFile(new URL("../school/mgmt.js", import.meta.url), "utf8");
-const schoolRoutes = await readFile(new URL("../school/routes.js", import.meta.url), "utf8");
+const schoolService = await readFile(new URL("../school/service.js", import.meta.url), "utf8");
 const profiles = await readFile(new URL("../profiles/routes.js", import.meta.url), "utf8");
 const appJs = await readFile(new URL("../../app.js", import.meta.url), "utf8");
 const layout = await readFile(
@@ -37,7 +37,7 @@ test("security-field changes bust the user cache immediately", () => {
     [admin, /invalidateCachedUser\(req\.params\.id\)/],
     [schoolMgmt, /invalidateCachedUser\(user\.id\)/],
     [profiles, /invalidateCachedUser\(existingUser\.id\)/],
-    [schoolRoutes, /invalidateCachedUser\(existing\.id\)/],
+    [schoolService, /invalidateCachedUser\(existing\.id\)/],
   ];
   for (const [src, re] of busts) assert.match(src, re);
 });

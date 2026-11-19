@@ -29,7 +29,8 @@ test("buildQuestionsPdf: a real PDF, titled, Yoruba letters and all", async () =
 });
 
 test("the route: finished battles only, sent as an attachment", () => {
-  const src = readFileSync(new URL("./routes.js", import.meta.url), "utf8");
+  const src = readFileSync(new URL("./routes.js", import.meta.url), "utf8")
+    + readFileSync(new URL("./service-battle.js", import.meta.url), "utf8");
   assert.match(src, /router\.get\("\/battles\/:battleId\/questions\.pdf"/);
   assert.match(src, /if \(battle\.status !== "completed"\) return res\.status\(409\)/);
   assert.match(src, /Content-Disposition", `attachment; filename=/);

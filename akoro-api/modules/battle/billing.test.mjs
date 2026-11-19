@@ -9,6 +9,10 @@ const read = (f) => readFile(new URL(f, import.meta.url), "utf8");
 const [judge, source, recall, worker, ai] = await Promise.all([
   read("./judge.js"), read("./questionSource.js"), read("./agentRecall.js"), read("./worker.js"), read("../../lib/aiModel.js"),
 ]);
+// The creation/accept handlers moved out of routes.js in the Phase 19 split;
+// the assertions follow the code, not the file name.
+const serviceFiles = ["./service-create.js", "./service-class.js", "./service-course.js", "./service-challenge.js"];
+const serviceSource = (await Promise.all(serviceFiles.map(read))).join("\n");
 
 test("__payer: 'platform' bills nobody, whoever's request the call runs in", () => {
   assert.equal((ai.match(/const platform = params\.__payer === "platform";/g) || []).length, 3);   // chat, responses, embeddings
@@ -75,8 +79,7 @@ test("the creator sets HP per miss; every miss costs exactly that, and invitees 
   assert.equal(missesToKnockout(0), null);
   assert.match(worker, /hp: Math\.max\(0, \(p\.hp \?\? 100\) - hpPerMiss\)/);
   assert.doesNotMatch(worker, /- 8\)/);
-  const routes = await read("./routes.js");
-  assert.equal((routes.match(/hp_per_miss: cleanHpPerMiss\(req\.body\?\.hp_per_miss\),/g) || []).length, 4);   // every creation path (the old course challenge/classroom routes were removed)
+  assert.equal((serviceSource.match(/hp_per_miss: cleanHpPerMiss\(req\.body\?\.hp_per_miss\),/g) || []).length, 4);   // every creation path (the old course challenge/classroom routes were removed)
   assert.match(await read("./card.js"), /hpPerMiss:     b\.hp_per_miss \?\? HP_PER_MISS_DEFAULT,/);       // on every card / challenge
 });
 
@@ -89,7 +92,7 @@ test("entry: enough coins for your agent's answers and the creator's minimum XP 
   assert.equal(requirementsOf({ battle_type: "classroom", total_questions: 5, min_xp: 500 }).minXp, 500);
   assert.match(entry, /throw Object\.assign\(new Error\(r\.message\), \{ status: 402, code: "ENTRY_REQUIREMENTS"/);
   const routes = await read("./routes.js");
-  assert.equal((routes.match(/code: "ENTRY_REQUIREMENTS"/g) || []).length, 5);   // accept, join, 3 creator checks
+  assert.equal((serviceSource.match(/code: "ENTRY_REQUIREMENTS"/g) || []).length, 5);   // accept, join, 3 creator checks
   assert.match(routes, /router\.get\("\/battles\/:battleId\/entry"/);
   // A teacher's study review pays the coin; an Agent Check does not (D45: the check was paid for by Study Prep).
   assert.match(worker, /if \(isReview && !isCheck && REVIEW_REWARD_COINS > 0\) \{[\s\S]*?grantCoins\(\{ userId: p\.user_id, coins: REVIEW_REWARD_COINS, feature: "review_participation"/);
