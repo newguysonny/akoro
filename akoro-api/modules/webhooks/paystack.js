@@ -26,12 +26,12 @@
 
 import { Router } from "express";
 import crypto from "crypto";
-import { fulfillPaymentsCharge } from "../courses/payments.js";
+import { fulfillPaymentsCharge } from "../courses/index.js";
 import { fulfillMarketplaceEvent } from "../adaptive-learning/index.js";
-import { fulfillTransferEvent } from "../courses/payouts.js";
-import { fulfillCoinTopup } from "../wallet/routes.js";
+import { fulfillTransferEvent } from "../courses/index.js";
+import { fulfillCoinTopup } from "../wallet/index.js";
 import { fulfillVoucherWalletTopup } from "../vouchers/index.js";
-import { fulfillVoucherTransferEvent } from "../vouchers/transferEvents.js";
+import { fulfillVoucherTransferEvent } from "../vouchers/index.js";
 import { logPaymentEvent } from "../../lib/paymentAudit.js";
 import { paystackSignatureValid } from "../../lib/safeCompare.js";
 

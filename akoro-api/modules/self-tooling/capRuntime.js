@@ -71,7 +71,7 @@ const deleteTask = async (learnerId, ref) => {
   if (!task) return { ok: false, error: "not found or already deleted" };
   if (task.status === "running") return { ok: false, error: "it's running right now" };
   try {
-    const { cancelTask } = await import("../tasks/scheduler.js");
+    const { cancelTask } = (await import("../../lib/jobQueues.js")).taskScheduler();
     await cancelTask(task.bull_job_id, task.id);
   } catch { /* nothing scheduled to cancel */ }
   const { error: delErr } = await db.from("tasks").delete().eq("id", task.id).eq("creator_id", learnerId);
@@ -98,7 +98,7 @@ const rescheduleTask = async (learnerId, ref, { args } = {}) => {
   if (error) return { ok: false, error };
   const time = task.due_at ? new Date(task.due_at).toLocaleTimeString("en-GB", { timeZone: "Africa/Lagos", hour: "2-digit", minute: "2-digit", hour12: false }) : "17:00";
   const dueAt = new Date(`${args.date}T${time}:00+01:00`).toISOString();   // Africa/Lagos is UTC+1 all year
-  try { const { cancelTask } = await import("../tasks/scheduler.js"); await cancelTask(task.bull_job_id, task.id); } catch { /* nothing scheduled */ }
+  try { const { cancelTask } = (await import("../../lib/jobQueues.js")).taskScheduler(); await cancelTask(task.bull_job_id, task.id); } catch { /* nothing scheduled */ }
   const { data: updated, error: upErr } = await db.from("tasks").update({ due_at: dueAt, status: "pending", bull_job_id: null, updated_at: new Date().toISOString() })
     .eq("id", task.id).eq("creator_id", learnerId).select("*").maybeSingle();
   if (upErr || !updated) return { ok: false, error: "couldn't move the task" };

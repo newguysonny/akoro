@@ -155,11 +155,11 @@ export const activityReviewPlay = {
 
     // The review time, brought forward: the day-away start moves to now.
     const { cancelLater, addLater } = await import("../../../lib/deferredJobs.js");
-    const { battleQueue } = await import("../../battle/worker.js");
-    await cancelLater(battleQueue, `start-${battleId}`);
+    const { battleQueue } = await import("../../../lib/jobQueues.js");
+    await cancelLater(battleQueue(), `start-${battleId}`);
     const nowIso = new Date().toISOString();
     await db.from("battles").update({ scheduled_start: nowIso, expires_at: nowIso }).eq("id", battleId);
-    await addLater(battleQueue, "start-battle", { action: "start-battle", battleId }, { delay: 2000, jobId: `start-${battleId}` });
+    await addLater(battleQueue(), "start-battle", { action: "start-battle", battleId }, { delay: 2000, jobId: `start-${battleId}` });
 
     const live = await ctx.until(async () => {
       const [b] = await ctx.db.rows("battles", { id: battleId }, { columns: "status" });

@@ -14,7 +14,7 @@
  *  - kill switch: AKORO_TOOL_AREA_SELECTION=false restores the full list
  *    for every turn.
  */
-import { AREAS, TOOL_EXAMPLES } from "../../agent-capabilities/examples.js";
+import { AREAS, TOOL_EXAMPLES } from "../../agent-capabilities/index.js";
 
 export { AREAS };
 

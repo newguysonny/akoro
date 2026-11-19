@@ -17,8 +17,8 @@ import { nextLedger, renderDraftPlan } from "../../../lib/taskLedger.js";
 import { renderIntent } from "../intent/intentStep.js";
 import { createEpisodeRecorder } from "../../agent-contract/index.js";
 import { recordsRealTraffic, saveEpisode } from "../../agent-contract/index.js";
-import { labelKeyFor } from "../../agent-ratings/ratings.js";
-import { noteChatTurn } from "../../agent-memory/quietLearning.js";
+import { labelKeyFor } from "../../agent-ratings/index.js";
+import { noteChatTurn } from "../../agent-memory/index.js";
 import {
   isSideEffecting, applyMergedDomain, applyChatsMerge, applyLibraryMerge,
   openAiChatTools, learnerToolDefsWithAreas, lastAgentText, shouldPlanFirst,

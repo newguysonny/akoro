@@ -466,7 +466,7 @@ router.post("/debug-token", guard, asyncHandler(async (req, res) => {
 /* Hash older PHARM.D topics and move their cached parses to the versioned
    key. Batched: pass { limit } and call again until checked < limit. */
 router.post("/pharmd-hash-backfill", guard, asyncHandler(async (req, res) => {
-  const { runPharmdHashBackfill } = await import("../pharmd/hashBackfill.js");
+  const { runPharmdHashBackfill } = await import("../pharmd/index.js");
   const limit = Math.max(1, Math.min(50, Number(req.body?.limit) || 10));
   const lines = [];
   const course = req.body?.course ? String(req.body.course) : null;

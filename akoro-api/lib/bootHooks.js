@@ -35,3 +35,7 @@ installAgentDeps();
 setAgentNetworkHooks({ dailyRanking, postChallengeRequest });
 registerBattleJobHandler("activity-review", runActivityReview);
 setTeachingToolRunner(runTeachingTool);
+
+// app.js installs the live queues here after it starts each worker, so enqueue
+// and cancel paths never import another module's worker.
+export { setBattleQueue, setTaskScheduler } from "./jobQueues.js";

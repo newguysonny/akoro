@@ -194,7 +194,7 @@ export async function publish(id, userId) {
   if (!row) throw Object.assign(new Error("Import not found"), { status: 404 });
   if (row.status !== "draft") throw Object.assign(new Error(`Only a draft can be published (this one is ${row.status})`), { status: 409 });
   if (row.doc?.kind === "curriculum") {
-    const { publishCurriculumDoc } = await import("../../curriculum/importDoc.js");
+    const { publishCurriculumDoc } = await import("../../curriculum/index.js");
     const result = await publishCurriculumDoc(row.doc, { source: row.source_file, pageCount: row.stats?.pages || null });
     await T().update({ status: "published", published_by: userId || null, published_at: now(), updated_at: now() }).eq("id", id);
     return { ...result, kind: "curriculum" };

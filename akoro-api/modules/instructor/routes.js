@@ -31,7 +31,7 @@ import { DEFAULT_DOC_TEMPLATES, getDefaultDoc } from "../school/index.js";
 import { openai, OPENAI_MODEL }            from "../../lib/aiModel.js";
 import { parseJsonLoose }                  from "../tasks/index.js";
 import { ensureBucket, uploadPublicFile } from "../school/index.js";
-import { linkUnlinked }                    from "../course-builder/link.js";
+import { linkUnlinked }                    from "../course-builder/index.js";
 
 // In-memory multer for course cover uploads (8 MB cap, images only).
 const upload = multerLib({ storage: multerLib.memoryStorage(), limits: { fileSize: 8 * 1024 * 1024 } });

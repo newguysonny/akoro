@@ -25,9 +25,12 @@ Rules:
    (purpose, entry point, how to extend, known limits). Existing modules are
    grandfathered in the baseline; a new module without one fails.
 
-The baseline may only shrink. Never add an entry to make the test pass — fix
-the code, then regenerate. Stale entries are failures on purpose, so a cleanup
-and its baseline update land together.
+The import and cycle lists are now EMPTY and locked by a positive test in
+`structure.contract.test.mjs`: a new cross-module internal import or a new
+cycle fails even if someone regenerates the baseline. The baseline may only
+shrink for the remaining lists (size, READMEs). Never add an entry to make the
+test pass — fix the code, then regenerate. Stale entries are failures on
+purpose, so a cleanup and its baseline update land together.
 
 Tests (`*.test.mjs`) count for the size ratchet but are exempt from the
 import/cycle rules, since a contract test legitimately reaches into the module

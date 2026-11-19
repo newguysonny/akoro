@@ -40,7 +40,7 @@ export function reviewInstruction(at, tz = "Africa/Lagos") {
   return `After you submit, teach your agent this topic: your class review battle is on ${when}. Accept it in your Challenges before it starts.`;
 }
 
-async function queue() { return (await import("../battle/worker.js")).battleQueue; }
+async function queue() { return (await import("../../lib/jobQueues.js")).battleQueue(); }
 
 /** On assign: keep the choice, send the review (the worker makes it now). → the kept review, or null */
 export async function scheduleActivityReview(assignment, review) {

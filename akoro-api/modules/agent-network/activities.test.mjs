@@ -36,7 +36,7 @@ test("the daily battle: a real battle every day at 7 PM Lagos, seats roll over t
   assert.equal(DAILY_SEATS, 30);
   // Played in the normal arena: a battles row the worker starts, not a separate quiz.
   assert.match(src, /db\.from\("battles"\)\.insert\(\{[\s\S]*?recurring_key: key/);
-  assert.match(src, /addLater\(battleQueue, "start-battle"/);   // a 7 PM start waits in Postgres (lib/deferredJobs.js)
+  assert.match(src, /addLater\(battleQueue\(\), "start-battle"/);   // a 7 PM start waits in Postgres (lib/deferredJobs.js)
   assert.doesNotMatch(src, /daily_challenge_attempts/);
   // An automatic join never undoes a skip.
   assert.match(src, /if \(seat\.declined_at && !auto\)/);

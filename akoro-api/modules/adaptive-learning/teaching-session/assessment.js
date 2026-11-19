@@ -19,7 +19,7 @@
  *   protegeLine(result)                                       PURE → string
  *   runTeachingAssessment({ orchestrator, concepts, modelPick, complete })  → result
  */
-import { closeJson } from "../../teaching/jsonRepair.js";
+import { closeJson } from "../../teaching/index.js";
 
 export const MAX_ASSESSMENT_CONCEPTS = 3;
 

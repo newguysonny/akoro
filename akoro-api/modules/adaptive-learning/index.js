@@ -33,7 +33,7 @@ import teachingSessionRouter     from "./teaching/teachingSession.js";
 import examPrepConfidenceRouter  from "./exam-prep/exam-prep-confidence.js";
 import studyPrepRouter         from "./study-prep/routes.js";
 import decayReviewRouter       from "./decay-review/routes.js";
-import agentRatingsRouter      from "../agent-ratings/routes.js";
+import agentRatingsRouter      from "../agent-ratings/index.js";
 // Side-effect import: schedules the off-peak lesson-ladder pre-warm so the
 // first learner on a scheme-of-work topic never waits for generation.
 import "./teaching/ladderPrewarm.js";

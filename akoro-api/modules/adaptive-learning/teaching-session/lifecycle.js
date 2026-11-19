@@ -186,7 +186,7 @@ export async function completeSessionRecord(orchestrator) {
 
     if (flipped?.length && prior && prior.status !== "complete" && prior.student_id) {
       try {
-        const { awardXP, XP } = await import("../../ranking/routes.js");
+        const { awardXP, XP } = await import("../../ranking/index.js");
         awardXP({ userId: prior.student_id, reason: "teaching_session", amount: XP.SESSION_ATTEND, subject: prior.subject || null }).catch(() => {});
       } catch { /* ranking module unavailable — non-fatal */ }
     }

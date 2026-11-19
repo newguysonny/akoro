@@ -27,7 +27,7 @@ import {
 } from "../../agent-network/index.js";
 import { resolveMaterialsFolder } from "../../materials/index.js";
 import { recurringTopics } from "../../materials/index.js";
-import { createLearnerToolRequest } from "../../agent-tool-requests/service.js";
+import { createLearnerToolRequest } from "../../agent-tool-requests/index.js";
 import {
   getAgentPreferenceSummary,
   getAutonomyStatus,

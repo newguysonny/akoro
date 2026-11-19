@@ -74,8 +74,8 @@ export const taskTick = {
     if (String(process.env.TASKS_TICK ?? "on").trim().toLowerCase() === "off") ctx.expect.blocked("TASKS_TICK=off (legacy scheduling)");
     const me = await ctx.as(p.learner);
     const { default: db } = await import("../../../db.js");
-    const sched = await import("../../tasks/scheduler.js");
-    const work = await import("../../tasks/worker.js");
+    const { taskScheduler } = await import("../../../lib/jobQueues.js");
+    const sched = taskScheduler();
 
     const created = await ctx.agent.tool({ as: p.learner, tool: "create_task", mode: "live", input: { title: `${ctx.marker} tick probe`, priority: "low", dueInMinutes: 120 } });
     const taskId = created?.taskId;
@@ -95,7 +95,7 @@ export const taskTick = {
     ctx.expect.eq("queued via the tick marker", mark, "tick");
 
     // The tick drains due tasks — but a learner-owned task is excluded (no re-fire loop).
-    const r = await work.runDueTasks({ ids: [taskId] });
+    const r = await sched.runDueTasks({ ids: [taskId] });
     ctx.expect.eq("learner task is excluded from execution", r.ran, 0);
     const still = (await ctx.db.rows("tasks", { id: taskId }, { columns: "status" }))[0];
     ctx.expect.eq("learner task was not executed", still?.status, "queued");

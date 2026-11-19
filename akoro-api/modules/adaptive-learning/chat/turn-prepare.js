@@ -21,8 +21,8 @@ import {
 import { protegeDeps } from "./handlers-social.js";
 import { loadTaughtKnowledge, renderTaughtContext } from "../social/protege.js";
 import { getSyllabusGrounding } from "../teaching/syllabus.js";
-import { getPastQuestionGrounding } from "../../past-questions/routes.js";
-import { getCurriculumGrounding } from "../../curriculum/routes.js";
+import { getPastQuestionGrounding } from "../../past-questions/index.js";
+import { getCurriculumGrounding } from "../../curriculum/index.js";
 import {
   completedLearnerAgentConversationTurn,
   loadLearnerAgentConversationContext,

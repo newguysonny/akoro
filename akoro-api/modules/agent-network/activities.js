@@ -236,8 +236,8 @@ async function createDailyHeat(day, subject, heat, copyFrom = null) {
     await db.from("battles").delete().eq("id", b.id);
     throw e;
   }
-  const { battleQueue } = await import("../battle/worker.js");
-  await addLater(battleQueue, "start-battle", { action: "start-battle", battleId: b.id },
+  const { battleQueue } = await import("../../lib/jobQueues.js");
+  await addLater(battleQueue(), "start-battle", { action: "start-battle", battleId: b.id },
     { delay: Math.max(0, Date.parse(startsAt) - Date.now()), jobId: `start-${b.id}` });
   return b;
 }

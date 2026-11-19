@@ -18,7 +18,7 @@
  */
 import db from "../../db.js";
 import { agentDeps } from "../../lib/agentDeps.js";
-import { createGoal } from "../learner-goals/service.js";
+import { createGoal } from "../learner-goals/index.js";
 import { markPostedDecision, reportFor, reportInChat } from "../autonomy/index.js";
 import { spreadDue } from "../autonomy/index.js";
 

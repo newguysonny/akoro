@@ -66,3 +66,5 @@ router.use(bundlesRouter);       // /courses/search, /user/wishlist, /bundles
 router.use(cartRouter);          // /cart, /cart/checkout
 
 export default router;
+export { fulfillPaymentsCharge } from "./payments.js";
+export { fulfillTransferEvent } from "./payouts.js";

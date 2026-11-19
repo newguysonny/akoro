@@ -14,7 +14,7 @@ import { teachRequest, loadTaughtKnowledge, buildGuideMessages, shapeGuideAnswer
 import { getSyllabusGrounding } from "../teaching/syllabus.js";
 import { akoroMaterialFor } from "../../materials/index.js";
 import { searchBlogPosts, readBlogPost } from "../../../lib/blogResearch.js";
-import { listMyBlogs, createBlogPost, updateBlogPost } from "../../blogs/service.js";
+import { listMyBlogs, createBlogPost, updateBlogPost } from "../../blogs/index.js";
 import { scheduleChatFollowUp, listChatFollowUps, cancelChatFollowUp } from "./chat-follow-ups.js";
 import { listChats, readChat, searchChats, postToChat, ownedChatId } from "./chat-history-tools.js";
 import { getLearnerProfileContext } from "../../../lib/learnerProfileContext.js";

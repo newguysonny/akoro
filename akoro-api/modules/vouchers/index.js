@@ -23,3 +23,4 @@ router.use("/", agentRouter);   // /marketplace, /wallet*, /purchase, /my-codes,
 
 export default router;
 export { fulfillVoucherWalletTopup } from "./fulfillment.js";
+export { fulfillVoucherTransferEvent } from "./transferEvents.js";

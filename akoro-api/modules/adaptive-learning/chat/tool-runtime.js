@@ -15,7 +15,7 @@ import { learnerInsightsEnabled, conceptTrackerEnabled, examPrepConfidenceEnable
 import { TALK_AFTER_TOOLS } from "./chat-trace.js";
 import { UPDATE_PLAN_TOOL } from "../../../lib/taskLedger.js";
 import { subjectMastery } from "../agents/student/knowledge.js";
-import { TOOLS as TEACHING_TOOLS, ToolError as TeachingToolError } from "../../teaching/tools.js";
+import { TOOLS as TEACHING_TOOLS, ToolError as TeachingToolError } from "../../teaching/index.js";
 import { createToolDraft } from "../../self-study/index.js";
 import { activityOutcomeSummary, listRecentActivities } from "../../self-study/index.js";
 import { listRoutines, createRoutine, updateRoutine, deleteRoutine } from "../../self-study/index.js";
@@ -26,7 +26,7 @@ import { mergedChatsEnabled, mergedChatsDef, chatsDeltaActions, CHATS_BASE_ACTIO
 import { MERGED_DOMAINS, MERGED_DOMAIN_LIST } from "../../self-tooling/index.js";
 import { selfToolingEnabled, selfToolingAllowedFor } from "../../self-tooling/index.js";
 import { createActivityDraft, listActivityDrafts, getActivityDraft, discardActivityDraft, reviseDraftPayload, instructorClassrooms } from "../../self-study/index.js";
-import { listGoals, createGoal, updateGoal } from "../../learner-goals/service.js";
+import { listGoals, createGoal, updateGoal } from "../../learner-goals/index.js";
 import { searchRecordChunks } from "../../records/index.js";
 import { createHandlers } from "./handlers-instructor-learner.js";
 import { createHandlers as createSocialHandlers } from "./handlers-social.js";
