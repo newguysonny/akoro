@@ -16,6 +16,7 @@
 import { Router } from "express";
 
 import db from "../../db.js";
+import { workflowWiring } from "../../lib/workflowWiring.js";
 import { authenticateToken, requireRole } from "../auth/routes.js";
 import { createWorkflowEngine } from "./engine.js";
 import { makeSupabaseWorkflowStore } from "./store.js";
@@ -44,7 +45,7 @@ const listFor = (instance) => async (after) => (await engine().events(instance.i
 router.get("/study-prep/:sessionId", authenticateToken, async (req, res, next) => {
   try {
     if (!UUID.test(req.params.sessionId)) return res.status(422).json({ success: false, error: "id is invalid" });
-    const { ensureStudyPrepWorkflow } = await import("../adaptive-learning/study-prep/wiring.js");
+    const { ensureStudyPrepWorkflow } = workflowWiring();
     const workflowId = await ensureStudyPrepWorkflow(req.params.sessionId, req.user.id);
     if (!workflowId) return res.status(404).json({ success: false, error: "That session was not found" });
     return res.json({ success: true, workflowId });
@@ -74,7 +75,7 @@ router.get("/needs-you", authenticateToken, async (req, res, next) => {
 
 router.post("/admin/backfill-study-prep", authenticateToken, requireRole(["admin"]), async (req, res, next) => {
   try {
-    const { backfillStudyPrepWorkflows } = await import("../adaptive-learning/study-prep/wiring.js");
+    const { backfillStudyPrepWorkflows } = workflowWiring();
     return res.json({ success: true, ...await backfillStudyPrepWorkflows({ limit: req.query.limit }) });
   } catch (e) { return next(e); }
 });

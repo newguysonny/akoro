@@ -9,6 +9,7 @@
  */
 import db from "../../db.js";
 import { openai } from "../../lib/aiModel.js";
+import { studyPrepHooks } from "../../lib/studyPrepHooks.js";
 import { getExtraction } from "../records/extractLib.js";
 import { indexRecord } from "../records/searchLib.js";
 import { assertTransition, TransitionError } from "../workflows/definition.js";
@@ -234,7 +235,7 @@ export async function fileIngestFromDecision({ userId, row, subject, kind, guess
   }
   // §8.8: the files join the learner's open Study Prep session in the
   // decision's subject (best effort).
-  const { attachUploadsToStudyPrep } = await import("../adaptive-learning/study-prep/materials-source.js");
+  const { attachUploadsToStudyPrep } = studyPrepHooks();
   const studyPrep = await attachUploadsToStudyPrep({ learnerId: userId, subject, recordIds: row.record_ids || [] }).catch(() => null);
   return { row, studyPrep };
 }

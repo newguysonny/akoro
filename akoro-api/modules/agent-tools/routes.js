@@ -8,7 +8,7 @@
 import { Router } from "express";
 
 import db from "../../db.js";
-import { executeChatTool, getLearnerChatTools, INSTRUCTOR_TOOLS } from "../adaptive-learning/chat.js";
+import { chatBridge } from "../../lib/chatBridge.js";
 import { getLearnerProfileContext } from "../../lib/learnerProfileContext.js";
 import { isIanaTimeZone, localiseInstant } from "../../lib/learnerTime.js";
 import { getToolsForTask } from "../tasks/tools/index.js";
@@ -390,12 +390,12 @@ async function catalogueFor(claims, principal) {
   if (claims.scope === "student") {
     // A student capability always operates on its signed principal, even when
     // that principal happens to have an instructor account too.
-    return getLearnerChatTools().map((tool) => publicTool(tool, STUDENT_WRITE_TOOLS.has(tool.name)));
+    return chatBridge().getLearnerChatTools().map((tool) => publicTool(tool, STUDENT_WRITE_TOOLS.has(tool.name)));
   }
 
   const { task } = await teacherTaskContext(claims, principal);
   const tools = await entitledTeacherTools(task);
-  const taskTools = tools.slice(0, MAX_CATALOGUE - INSTRUCTOR_TOOLS.length).map(({ definition }) =>
+  const taskTools = tools.slice(0, MAX_CATALOGUE - chatBridge().INSTRUCTOR_TOOLS.length).map(({ definition }) =>
     publicTool(definition, true), // task tools persist outputs or change platform state
   );
   // The instructor's activity-creation tools ride every teacher task context:
@@ -407,7 +407,7 @@ async function catalogueFor(claims, principal) {
   }
   // run_teaching_tool is also a task-engine tool: keep one copy (the task engine's).
   const taken = new Set(taskTools.map((t) => t.name));
-  const draftTools = INSTRUCTOR_TOOLS.filter((tool) => !taken.has(tool.name)).map((tool) =>
+  const draftTools = chatBridge().INSTRUCTOR_TOOLS.filter((tool) => !taken.has(tool.name)).map((tool) =>
     publicTool(tool, true), // prepare_activity writes a draft row; the others manage drafts
   );
   return [...taskTools, ...draftTools];
@@ -617,18 +617,18 @@ async function executeInvocation({ claims, principal, name, arguments_, idempote
     return claim.existing.response;
   }
 
-  let response;
+  let response; const chat = chatBridge();
   try {
     let outcome;
     if (claims.scope === "student") {
-      outcome = await executeChatTool(name, arguments_, principal.id);
+      outcome = await chat.executeChatTool(name, arguments_, principal.id);
     } else if (TEACHER_DRAFT_TOOLS.has(name)) {
       // Instructor activity drafts: executed against the principal's own
       // account under the instructor role. No task registration and no
       // course scoping — a draft reaches nobody until a human assigns it.
       // channel: task_run — a draft prepared outside live chat nudges the
       // instructor (bell), since there is no Preview button in a conversation.
-      outcome = await executeChatTool(name, arguments_, principal.id, { role: "instructor", channel: "task_run" });
+      outcome = await chat.executeChatTool(name, arguments_, principal.id, { role: "instructor", channel: "task_run" });
     } else {
       const teacherTool = await registeredTeacherTool(claims, principal, name);
       const courseId = await assertCourseScopedArguments(arguments_, teacherTool.context, principal);

@@ -12,7 +12,7 @@
 import { Router } from "express";
 
 import db from "../../db.js";
-import { recordLearningEvent, refreshConceptRetention } from "../adaptive-learning/learner/learning-events.js";
+import { learningRecordBridge } from "../../lib/learningRecordBridge.js";
 import {
   requireAgentToolsCredential,
   verifyAgentToolsCapability,
@@ -135,6 +135,7 @@ router.post("/snapshot", requireAgentToolsCredential, async (req, res) => {
     // Match canonical retention to the existing decay curve before handing a
     // bounded condition to Python. This is time-based state refresh only; it
     // cannot create tasks, notifications, or learner-side actions.
+    const { refreshConceptRetention } = learningRecordBridge();
     const refreshed = await refreshConceptRetention({ learnerId: principal.id, conceptIds: request.conceptIds });
     if (!refreshed.ok) throw new ConceptStateGatewayError(503, "Concept retention refresh is unavailable");
     const { data, error } = await db.schema("edu").from("learner_concept_state")
@@ -189,6 +190,7 @@ router.post("/observations", requireAgentToolsCredential, async (req, res) => {
  * aren't configured — the HTTP route above stays the only way in from outside.
  */
 export async function recordGatewayObservations(principalId, request) {
+    const { recordLearningEvent } = learningRecordBridge();
     const principal = { id: principalId };
     const states = [];
     for (const observation of request.observations) {

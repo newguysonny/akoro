@@ -170,7 +170,10 @@ test("the no-guess rule is universal: every tool asks before it guesses", () => 
 
 test("the python agent inherits the activities tools through the gateway", () => {
   // teacher_task scope: task tools first (with room reserved), then the drafts.
-  assert.match(gateway, /import \{ executeChatTool, getLearnerChatTools, INSTRUCTOR_TOOLS \} from "\.\.\/adaptive-learning\/chat\.js";/);
+  assert.match(gateway, /import \{ chatBridge \} from "\.\.\/\.\.\/lib\/chatBridge\.js";/);
+  assert.match(gateway, /chatBridge\(\)\.getLearnerChatTools\(\)/);
+  assert.match(gateway, /let response; const chat = chatBridge\(\);/);
+  assert.match(gateway, /chat\.executeChatTool\(/);
   const teacherSet = gateway.slice(
     gateway.indexOf("TEACHER_DRAFT_TOOLS"),
     gateway.indexOf("]);", gateway.indexOf("TEACHER_DRAFT_TOOLS")),
@@ -178,14 +181,14 @@ test("the python agent inherits the activities tools through the gateway", () =>
   for (const tool of ["prepare_activity", "list_activity_drafts", "get_activity_draft", "revise_activity_draft", "discard_activity_draft", "check_activity_outcomes", "schedule_activity_routine", "list_activity_routines", "cancel_activity_routine"]) {
     assert.ok(teacherSet.includes(`"${tool}"`), `gateway serves ${tool}`);
   }
-  assert.match(gateway, /MAX_CATALOGUE - INSTRUCTOR_TOOLS\.length/);
+  assert.match(gateway, /MAX_CATALOGUE - chatBridge\(\)\.INSTRUCTOR_TOOLS\.length/);
   assert.match(gateway, /\.\.\.taskTools, \.\.\.draftTools/);
   // Invocation routes draft tools to the instructor role — drafts touch the
   // principal's own account, never the task's course scope.
   assert.match(gateway, /TEACHER_DRAFT_TOOLS\.has\(name\)/);
   assert.match(gateway, /executeChatTool\(name, arguments_, principal\.id, \{ role: "instructor", channel: "task_run" \}\)/);
   // The student branch is untouched — learner capabilities never widen.
-  assert.match(gateway, /outcome = await executeChatTool\(name, arguments_, principal\.id\);/);
+  assert.match(gateway, /outcome = await chat\.executeChatTool\(name, arguments_, principal\.id\);/);
   const studentWrites = gateway.slice(
     gateway.indexOf("STUDENT_WRITE_TOOLS"),
     gateway.indexOf("]);", gateway.indexOf("STUDENT_WRITE_TOOLS")),

@@ -13,6 +13,7 @@
  * when each key was first seen, for "New".
  */
 import db from "../../db.js";
+import { chatBridge } from "../../lib/chatBridge.js";
 import { AREAS, TOOL_EXAMPLES } from "./examples.js";
 import { AGENT_FEATURES } from "./features.js";
 
@@ -73,7 +74,7 @@ const withNew = (rows, seen) => {
 };
 
 export async function agentToolsCatalogue() {
-  const chat = await import("../adaptive-learning/chat.js");
+  const chat = chatBridge();
   const rows = builtInRows({
     learnerTools: chat.CHAT_TOOLS,
     learnerOn: chat.getLearnerChatTools({ allowToolRequest: true, selfTooling: true }),

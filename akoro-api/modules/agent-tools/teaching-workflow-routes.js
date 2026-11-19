@@ -19,13 +19,7 @@
 import { Router } from "express";
 
 import db from "../../db.js";
-import { TEACHING_TURN_WORKFLOW } from "../adaptive-learning/teaching-workflow/runner.js";
-import { prepareTeachingSession, TEACHING_MODES } from "../adaptive-learning/teaching-session/start.js";
-import {
-  createSessionRecord, ensureSessionRecord, appendSessionBlocks, completeSessionRecord,
-} from "../adaptive-learning/teaching-session/lifecycle.js";
-import { carryForward } from "../adaptive-learning/teaching-session/context.js";
-import { resultToTypedBlocks } from "../adaptive-learning/teaching-session/blocks.js";
+import { teachingWorkflowBridge } from "../../lib/teachingWorkflowBridge.js";
 import { clearStateCache } from "../learner-state/index.js";
 import {
   requireAgentToolsCredential,
@@ -38,7 +32,7 @@ const MAX_TURNS_PER_SESSION = 32;
 const MAX_MESSAGE_CHARS = 12_000;
 const SESSION_ID = /^[A-Za-z0-9_-]{1,180}$/;
 const TURN_ID = /^[A-Za-z0-9_-]{8,180}$/;
-const MODES = new Set(TEACHING_MODES);
+const MODES = () => new Set(teachingWorkflowBridge().TEACHING_MODES);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 class WorkflowGatewayError extends Error {
@@ -106,6 +100,7 @@ async function activeLearner(claims) {
 }
 
 function publicWorkflow() {
+  const { TEACHING_TURN_WORKFLOW } = teachingWorkflowBridge();
   return {
     type: TEACHING_TURN_WORKFLOW.type,
     policyVersion: TEACHING_TURN_WORKFLOW.policyVersion,
@@ -190,7 +185,7 @@ async function startSession(claims, sessionId, body) {
   const previousSessionId = text(body?.previousSessionId, 40) || null;
   const notificationId = text(body?.notificationId, 40) || null;
   if (!topic) throw new WorkflowGatewayError(422, "topic is required");
-  if (!MODES.has(mode)) throw new WorkflowGatewayError(422, "mode is invalid");
+  if (!MODES().has(mode)) throw new WorkflowGatewayError(422, "mode is invalid");
   if (mode === "continuation" && !UUID.test(previousSessionId || "")) {
     throw new WorkflowGatewayError(422, "previousSessionId (the earlier session's recordId) is required to continue");
   }
@@ -198,6 +193,7 @@ async function startSession(claims, sessionId, body) {
 
   // The learner is the capability's subject — never a body field.
   const learnerId = String(claims.sub);
+  const { prepareTeachingSession, createSessionRecord, carryForward } = teachingWorkflowBridge();
   let prepared;
   try {
     prepared = await prepareTeachingSession({
@@ -240,6 +236,7 @@ async function runTurn(claims, sessionId, body) {
 
   entry.running = true;
   try {
+    const { appendSessionBlocks, resultToTypedBlocks } = teachingWorkflowBridge();
     const result = await entry.orchestrator.processTeachingMessage(message);
     // Saved like the app's turns: the learner's message, then the typed blocks.
     await appendSessionBlocks(entry.orchestrator, [{ type: "user", text: message }, ...resultToTypedBlocks(result, "student-session")]);
@@ -264,6 +261,7 @@ async function endSession(claims, sessionId) {
   if (entry.running) throw new WorkflowGatewayError(409, "A teaching workflow turn is already running");
   entry.running = true;
   try {
+    const { ensureSessionRecord, completeSessionRecord } = teachingWorkflowBridge();
     const summary = await entry.orchestrator.endSession();
     await ensureSessionRecord(entry.orchestrator);
     await completeSessionRecord(entry.orchestrator);   // the row is complete; XP once

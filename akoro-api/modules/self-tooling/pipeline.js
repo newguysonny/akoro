@@ -14,7 +14,7 @@ import { DATA_VIEWS } from "./views.js";
 import { validateDefinition, runDefinition } from "./interpreters.js";
 import { validateParams, coerceInput, paramProps, wellFormedParams } from "./bind.js";
 import { buildDefinition, registrySlice } from "./builder.js";
-import { createExpect, repeatVerdict } from "../verify/assertions.js";
+import { verificationAssertions } from "../../lib/verificationAssertions.js";
 import { escalate, rowsText } from "./escalation.js";
 import { proposeWrite, proposePermission, proposeBuild } from "./confirmations.js";
 import { codeEnabled } from "./sandbox/index.js";
@@ -271,7 +271,7 @@ async function tryRun(def, params, input, ctx) {
  */
 async function verifyTool(def, params, samples, ctx) {
   const sink = [];
-  const expect = createExpect(sink);
+  const expect = verificationAssertions().createExpect(sink);
   const inputs = samples.length ? samples : [{}];
   const runs = [];
   for (const [i, s] of inputs.entries()) {
@@ -298,7 +298,7 @@ async function verifyTool(def, params, samples, ctx) {
       }
     }
   }
-  return { verdict: repeatVerdict({ assertions: sink }), assertions: sink, runs, emptyEverywhere: runs.every((r) => r.ok && !r.rows.length) };
+  return { verdict: verificationAssertions().repeatVerdict({ assertions: sink }), assertions: sink, runs, emptyEverywhere: runs.every((r) => r.ok && !r.rows.length) };
 }
 
 /** PURE: which of the learner's tools a free-form `replace` value means, or

@@ -14,10 +14,19 @@
  */
 
 import db from "../../db.js";
-import { NaNaEsumai } from "../adaptive-learning/agents/nana-esumai/guide.js";
+import { agentDeps } from "../../lib/agentDeps.js";
 import { cleanPaperDetails } from "./paperLayout.js";
 
-export const nana = new NaNaEsumai();
+// The persona is installed at boot (lib/agentDeps.js) and built on first use,
+// so this module no longer imports adaptive-learning's guide directly.
+let nanaInstance = null;
+const nanaPersona = () => (nanaInstance ||= new (agentDeps().NaNaEsumai)());
+export const nana = new Proxy({}, {
+  get(_target, property) {
+    const value = nanaPersona()[property];
+    return typeof value === "function" ? value.bind(nanaPersona()) : value;
+  },
+});
 export const edu = () => db.schema("edu");
 
 /** The activity kinds the bench (and therefore this service) can assign. */

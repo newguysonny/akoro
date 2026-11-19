@@ -20,7 +20,7 @@ import { coinsAvailable, schoolBillTo, InsufficientCoins, grantCoins } from "../
 import { REVIEW_REWARD_COINS, minPlayersFor, isMarkSheet } from "./entry.js";
 import { prepareRuling, ruling, verdict, JUDGE } from "./judge.js";
 import { HP_PER_MISS_DEFAULT } from "./hp.js";
-import { guardWorker } from "../../lib/redisQuotaGuard.js"; import { battleJobHandler } from "../../lib/battleJobHandlers.js";
+import { guardWorker } from "../../lib/redisQuotaGuard.js"; import { battleJobHandler } from "../../lib/battleJobHandlers.js"; import { workflowWiring } from "../../lib/workflowWiring.js";
 
 import { registerDeferredQueue } from "../../lib/deferredJobs.js";
 // Agents already told they are out of coins this battle (one log line each, not one per question).
@@ -578,8 +578,8 @@ async function revealQuestion(battleId, questionOrder) {
     const ans = (answers ?? [])[0] || null;
     const guessedIt = ans?.answer_basis === "unknown";
     const outcome = !ans ? "unknown" : ans.is_correct ? (guessedIt ? "guessed_right" : "correct") : (guessedIt ? "guessed" : "wrong");
-    import("../adaptive-learning/study-prep/wiring.js")
-      .then((w) => w.reportCheckQuestion({ battleId, order: questionOrder, total: battleInfo?.total_questions ?? null, outcome, note: ans?.recalled_topic || null, gap: q.topic || null }))
+    Promise.resolve()
+      .then(() => workflowWiring().reportCheckQuestion({ battleId, order: questionOrder, total: battleInfo?.total_questions ?? null, outcome, note: ans?.recalled_topic || null, gap: q.topic || null }))
       .catch((e) => console.warn("[battle-worker] check question report:", e?.message || e));
   }
 
@@ -833,12 +833,12 @@ async function endBattle(battleId) {
   // topic moves on (or offers a retest), and the protégé reports in chat.
   if (isCheck) {
     try {
-      const { completeAgentCheckBattle } = await import("../adaptive-learning/study-prep/wiring.js");
+      const { completeAgentCheckBattle } = workflowWiring();
       await completeAgentCheckBattle(battleId);
     } catch (e) { console.warn("[battle-worker] agent check result:", e.message); }
     // A Decay Review's check or retest (Phase 8): retained / decayed / passed, decided in code.
     try {
-      const { decayReview } = await import("../adaptive-learning/decay-review/wiring.js");
+      const { decayReview } = workflowWiring();
       await decayReview().onCheckEnded(battleId);
     } catch (e) { console.warn("[battle-worker] decay review check:", e.message); }
     // Question tags, timings and confusion pairs (§7.15.1) — never fails the battle's end.
