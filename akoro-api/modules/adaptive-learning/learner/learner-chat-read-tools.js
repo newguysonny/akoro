@@ -15,7 +15,7 @@ import {
 import { getAgentPairProfile } from "../agents/registry.js";
 import { getAgentPreferences } from "./student-state.js";
 import { getLearnerAutonomy } from "./learner-autonomy.js";
-import { publicMemory } from "../../agent-tools/conversation-context-validation.js";
+import { publicMemory } from "../../../lib/conversationContextValidation.js";
 
 const isEnabled = (key) => String(process.env[key] || "").toLowerCase() === "true";
 // Default-ON kill-switch keys (peer-consult pattern): absent env means enabled.

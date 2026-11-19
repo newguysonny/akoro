@@ -35,7 +35,7 @@ test("the character budget drops the OLDEST messages, never the latest", () => {
 });
 
 test("scratchpad fits the table: a long progress summary and a long plan are trimmed, not refused", async () => {
-  const { normaliseScratchpad } = await import("./conversation-context-validation.js");
+  const { normaliseScratchpad } = await import("../../lib/conversationContextValidation.js");
   const plan = Array.from({ length: 8 }, (_, i) => ({ step: `step ${i + 1}`, status: "pending" }));
   const s = normaliseScratchpad({ goal: "Daily revision", progressSummary: `old ${"x".repeat(3000)} latest progress`, completed: [], nextSteps: [], openQuestions: [], plan, toolState: [] });
   assert.ok(s.progressSummary.length <= 1200, `progress_summary ${s.progressSummary.length} > 1200`);

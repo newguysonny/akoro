@@ -45,7 +45,7 @@ test("every search embeds its question through the limit, and the vector-only se
   const read = (p) => readFile(new URL(p, import.meta.url), "utf8");
   const [pq, cur, syl, rec, mem, recall, know, sql, manifest] = await Promise.all([
     read("../modules/past-questions/routes.js"), read("../modules/curriculum/routes.js"), read("../modules/adaptive-learning/teaching/syllabus.js"),
-    read("../modules/records/searchLib.js"), read("../modules/agent-tools/conversation-context-routes.js"), read("../modules/battle/agentRecall.js"),
+    read("../modules/records/searchLib.js"), read("../lib/conversationContextStore.js"), read("../modules/battle/agentRecall.js"),
     read("../modules/adaptive-learning/agents/student/knowledge.js"), read("../migrations/2026-search-text-fallback.sql"), read("../migrations/manifest.json"),
   ]);
   // curriculum: 2 — its /search/topics endpoint had no caller and was removed

@@ -3,7 +3,7 @@ import { Router } from "express";
 
 import db from "../../db.js";
 import { authenticateToken } from "../auth/routes.js";
-import { CONVERSATION_ID, publicMemory } from "./conversation-context-validation.js";
+import { CONVERSATION_ID, publicMemory } from "../../lib/conversationContextValidation.js";
 
 const router = Router();
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;

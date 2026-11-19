@@ -9,7 +9,7 @@ import {
   publicMemory,
   publicRelevantMemory,
   publicScratchpad,
-} from "./conversation-context-validation.js";
+} from "../../lib/conversationContextValidation.js";
 
 const conversationId = "8ca0532e-20be-49c2-b4df-566d87f0e0e4";
 

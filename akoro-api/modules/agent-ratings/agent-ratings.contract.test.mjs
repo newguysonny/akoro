@@ -219,7 +219,7 @@ test("a saved rating is absent from the next chat prompt", async () => {
 
 test("nothing that builds a prompt reads the ratings", () => {
   const promptSources = [
-    "../adaptive-learning/chat.js", "../agent-tools/conversation-context-routes.js", "../agent-context/chat-doctrine.js",
+    "../adaptive-learning/chat.js", "../../lib/conversationContextStore.js", "../agent-context/chat-doctrine.js",
     "../agent-context/context-manager.js", "../agent-context/template.js", "../agent-runtime/loop.js", "../agent-runtime/harness.js",
     "../adaptive-learning/grounding/contextBudget.js", "../adaptive-learning/intent/intentStep.js", "../tasks/lib/agentLoop.js",
   ];
@@ -232,7 +232,7 @@ test("nothing that builds a prompt reads the ratings", () => {
   assert.deepEqual([...chat.matchAll(/from "\.\.\/agent-ratings\/([^"]+)"/g)].map((m) => m[1]), ["ratings.js"]);
   assert.match(chat, /import \{ labelKeyFor \} from "\.\.\/agent-ratings\/ratings\.js";/);
   // The durable loader selects the transcript's role and text, nothing else.
-  assert.match(read("../agent-tools/conversation-context-routes.js"), /db\.from\("chat_messages"\)\s*\n\s*\.select\("role, text, created_at"\)/);
+  assert.match(read("../../lib/conversationContextStore.js"), /db\.from\("chat_messages"\)\s*\n\s*\.select\("role, text, created_at"\)/);
 });
 
 test("admin evals reads are admin-only and carry no learner identity", () => {

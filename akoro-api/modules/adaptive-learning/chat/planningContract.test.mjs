@@ -6,7 +6,7 @@ import test from "node:test";
 import { applyPlanUpdate, doneWhenOf, meetDoneWhen, nextLedger, renderDraftPlan, renderLedger, UPDATE_PLAN_TOOL } from "./taskLedger.js";
 import { parseIntent, renderIntent, NEXT_STEPS } from "../intent/intentStep.js";
 import { turnCorrections } from "./turnCheck.js";
-import { normaliseScratchpad } from "../../agent-tools/conversation-context-validation.js";
+import { normaliseScratchpad } from "../../../lib/conversationContextValidation.js";
 
 const plan = { goal: "Revise for Friday", steps: [{ step: "Create the Friday task", status: "pending" }, { step: "Schedule a battle", status: "pending" }],
   done_when: [{ condition: "A revision task exists for Friday", tool: "create_task" }, { condition: "A battle is scheduled", tool: "challenge_agent" }] };

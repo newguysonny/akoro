@@ -12,7 +12,7 @@ import { actionClaims, actionClaimCorrection, ledgerLeftCorrection, turnCorrecti
 import { TOOL_FALLBACKS, failed, shouldRetry, recoveryHint } from "./toolRecovery.js";
 import { fitDialogue, unsummarised, markOf, summariseEarlier, CONTEXT_LIMITS } from "../grounding/contextBudget.js";
 import { needsIntentStep, parseIntent, renderIntent, runIntentStep } from "../intent/intentStep.js";
-import { normaliseScratchpad } from "../../agent-tools/conversation-context-validation.js";
+import { normaliseScratchpad } from "../../../lib/conversationContextValidation.js";
 
 /* ── 1. The task ledger ─────────────────────────────────────────────────── */
 

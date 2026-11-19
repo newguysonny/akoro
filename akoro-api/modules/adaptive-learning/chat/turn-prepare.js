@@ -30,7 +30,7 @@ import {
   persistLearnerAgentUserTurnMessage,
   retrieveLearnerAgentMemory,
   savedTurnReplyId,
-} from "../../agent-tools/conversation-context-routes.js";
+} from "../../../lib/conversationContextStore.js";
 import { fitDialogue, summariseEarlier } from "../grounding/contextBudget.js";
 import { runIntentStep } from "../intent/intentStep.js";
 import { renderLedger, summaryMarkOf } from "./taskLedger.js";

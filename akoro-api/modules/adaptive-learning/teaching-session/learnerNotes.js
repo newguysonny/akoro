@@ -19,7 +19,7 @@
  * the same test for everyone.
  */
 import db from "../../../db.js";
-import { retrieveLearnerAgentMemory } from "../../agent-tools/conversation-context-routes.js";
+import { retrieveLearnerAgentMemory } from "../../../lib/conversationContextStore.js";
 
 import { NOTE_LIMITS, pickNotes } from "./learnerNotesCore.js";
 
