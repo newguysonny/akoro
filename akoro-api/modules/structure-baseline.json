@@ -43,20 +43,5 @@
   },
   "crossModuleImports": [],
   "cyclicModules": [],
-  "missingReadmes": [
-    "admin",
-    "agentConsole",
-    "capability-requests",
-    "communities",
-    "contact",
-    "content",
-    "courses",
-    "hfmirror",
-    "instructor",
-    "pilot-applications",
-    "profiles",
-    "programmes",
-    "vouchers",
-    "webhooks"
-  ]
+  "missingReadmes": []
 }
