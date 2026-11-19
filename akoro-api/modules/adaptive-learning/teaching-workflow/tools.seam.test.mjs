@@ -19,7 +19,7 @@ const { installFakeDb } = await import("../../../lib/testing/fakeDb.mjs");
 async function setupTeachingSeam() {
   delete process.env.REDIS_URL;
   const { default: db } = await import("../../../db.js");
-  const studentState = await import("../student-state.js");
+  const studentState = await import("../learner/student-state.js");
 
   // student-state.js always constructs an ioredis client (defaulting to
   // localhost:6379, retrying with maxRetriesPerRequest:null → commands would

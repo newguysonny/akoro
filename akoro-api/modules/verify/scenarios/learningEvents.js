@@ -148,7 +148,7 @@ export const strategyOutcome = {
       const probe = await E().from(table).select("id").limit(1);
       if (probe.error) ctx.expect.blocked(`edu.${table} not there yet: ${probe.error.message}`);
     }
-    const { recordLearningEvent } = await import("../../adaptive-learning/learning-events.js");
+    const { recordLearningEvent } = await import("../../adaptive-learning/learner/learning-events.js");
     const { recordStrategyOutcome } = await import("../../adaptive-learning/strategies/outcomes.js");
     const base = { learnerId: me.id, conceptId: concept.id, source: "teaching", sessionRef };
 
@@ -211,7 +211,7 @@ export const backfillIdempotent = {
     const probe = await E().from("learning_struggles").select("id").limit(1);
     if (probe.error) ctx.expect.blocked(`edu.learning_struggles not there yet: ${probe.error.message}`);
 
-    const { backfillLearningEvidence } = await import("../../adaptive-learning/learning-backfill.js");
+    const { backfillLearningEvidence } = await import("../../adaptive-learning/learner/learning-backfill.js");
     const counts = async () => ({
       evidence: await ctx.db.rows("edu.learner_concept_evidence", { learner_id: me.id, concept_id: concept.id }, { columns: "observation_kind, provenance, source_session_id" }),
       struggles: await ctx.db.rows("edu.learning_struggles", { learner_id: me.id, concept_id: concept.id }, { columns: "id, attempts_before, status" }),

@@ -8,16 +8,16 @@
  * boundary; queued jobs remain harmless and exit after their authority check.
  */
 import { randomUUID } from "node:crypto";
-import { reportAgentActivity, clearAgentActivity } from "../../lib/agentActivity.js";
-import { backgroundQueue, handleBackground } from "../../lib/backgroundQueue.js";
-import { addLater } from "../../lib/deferredJobs.js";
+import { reportAgentActivity, clearAgentActivity } from "../../../lib/agentActivity.js";
+import { backgroundQueue, handleBackground } from "../../../lib/backgroundQueue.js";
+import { addLater } from "../../../lib/deferredJobs.js";
 
-import db from "../../db.js";
-import { notifyUser } from "../notify.js";
-import { workerJob } from "../../lib/workerLog.js";
+import db from "../../../db.js";
+import { notifyUser } from "../../notify.js";
+import { workerJob } from "../../../lib/workerLog.js";
 import { buildAutonomyTaskMessage } from "./learner-autonomy-policy.js";
-import { assertQueueCapacity } from "../../lib/queueGuard.js";
-import { appLink } from "../../lib/urls.js";
+import { assertQueueCapacity } from "../../../lib/queueGuard.js";
+import { appLink } from "../../../lib/urls.js";
 
 const STALE_DELIVERY_MS = 5 * 60 * 1000;
 

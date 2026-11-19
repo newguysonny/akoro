@@ -14,7 +14,7 @@ import {
   getStudentState,
   getAgentPreferences,
   userOwnsAgent,
-} from "./student-state.js";
+} from "./learner/student-state.js";
 import {
   getOrCreateStudentAgent,
   getAgentKnowledgeBySubject,
@@ -24,7 +24,7 @@ import { decayEngine } from "./agents/student/decayEngine.js";
 import { provenanceLabel } from "./lessonLadder.js";
 import { normalizeSessionReference } from "./sessionReference.js";
 import { groundTurn, citationsForReply } from "./documentGrounding.js";
-import { serialiseTeachingEvidence } from "./teaching-evidence.js";
+import { serialiseTeachingEvidence } from "./learner/teaching-evidence.js";
 import {
   createSessionRecord, ensureSessionRecord, appendSessionBlocks, completeSessionRecord,
   readSessionBlocks,

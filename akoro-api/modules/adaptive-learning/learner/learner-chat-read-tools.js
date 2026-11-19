@@ -6,16 +6,16 @@
  * unrestricted database records. They are projections for the authenticated
  * learner, not generic data-export helpers.
  */
-import db from "../../db.js";
+import db from "../../../db.js";
 import {
   getAgentKnowledgeBySubject,
   getTopicsBySubject,
   retrieveStudentKnowledge,
-} from "./agents/student/knowledge.js";
-import { getAgentPairProfile } from "./agents/registry.js";
+} from "../agents/student/knowledge.js";
+import { getAgentPairProfile } from "../agents/registry.js";
 import { getAgentPreferences } from "./student-state.js";
 import { getLearnerAutonomy } from "./learner-autonomy.js";
-import { publicMemory } from "../agent-tools/conversation-context-validation.js";
+import { publicMemory } from "../../agent-tools/conversation-context-validation.js";
 
 const isEnabled = (key) => String(process.env[key] || "").toLowerCase() === "true";
 // Default-ON kill-switch keys (peer-consult pattern): absent env means enabled.

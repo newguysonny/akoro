@@ -56,7 +56,7 @@ const markTaskDone = async (learnerId, ref) => {
   if (!data) return { ok: false, error: "not found or already done" };
   try {
     const [{ cancelAutonomyReviewForTask }, { emitAutonomyEvent }] = await Promise.all([
-      import("../adaptive-learning/learner-autonomy.js"), import("../autonomy/triggers.js"),
+      import("../adaptive-learning/learner/learner-autonomy.js"), import("../autonomy/triggers.js"),
     ]);
     await cancelAutonomyReviewForTask({ taskId: data.id, userId: learnerId }).catch(() => {});
     emitAutonomyEvent(learnerId, "task_done").catch(() => {});
@@ -76,7 +76,7 @@ const deleteTask = async (learnerId, ref) => {
   const { error: delErr } = await db.from("tasks").delete().eq("id", task.id).eq("creator_id", learnerId);
   if (delErr) return { ok: false, error: "couldn't delete the task" };
   try {
-    const { cancelAutonomyReviewForTask } = await import("../adaptive-learning/learner-autonomy.js");
+    const { cancelAutonomyReviewForTask } = await import("../adaptive-learning/learner/learner-autonomy.js");
     await cancelAutonomyReviewForTask({ taskId: task.id, userId: learnerId }).catch(() => {});
   } catch { /* best effort, as for mark done */ }
   return { ok: true };
@@ -101,7 +101,7 @@ const rescheduleTask = async (learnerId, ref, { args } = {}) => {
   const { data: updated, error: upErr } = await db.from("tasks").update({ due_at: dueAt, status: "pending", bull_job_id: null, updated_at: new Date().toISOString() })
     .eq("id", task.id).eq("creator_id", learnerId).select("*").maybeSingle();
   if (upErr || !updated) return { ok: false, error: "couldn't move the task" };
-  try { const { scheduleAutonomyReviewForTask } = await import("../adaptive-learning/learner-autonomy.js"); await scheduleAutonomyReviewForTask(updated); } catch { /* best effort, as in the route */ }
+  try { const { scheduleAutonomyReviewForTask } = await import("../adaptive-learning/learner/learner-autonomy.js"); await scheduleAutonomyReviewForTask(updated); } catch { /* best effort, as in the route */ }
   return { ok: true };
 };
 

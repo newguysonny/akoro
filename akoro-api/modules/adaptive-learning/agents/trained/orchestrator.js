@@ -17,7 +17,7 @@ import {
   loadTeacherChunks,
   buildStudentAgentPrompt,
 } from "../../training/agentPromptBuilder.js";
-import { getStudentState, updateStudentState } from "../../student-state.js";
+import { getStudentState, updateStudentState } from "../../learner/student-state.js";
 
 export class TrainedOrchestrator extends BaseOrchestrator {
 

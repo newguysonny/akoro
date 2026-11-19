@@ -20,7 +20,7 @@
  */
 import db from "../../../db.js";
 import { LIBRARY_VERSION, STRATEGY_OUTCOMES, STRATEGY_WORKFLOWS, getStrategy } from "./library.js";
-import { struggleType as struggleTypeDef } from "../struggleTypes.js";
+import { struggleType as struggleTypeDef } from "../learner/struggleTypes.js";
 
 const E = () => db.schema("edu");
 const clip = (s, n) => { const t = String(s ?? "").replace(/\s+/g, " ").trim(); return t ? t.slice(0, n) : null; };
@@ -51,7 +51,7 @@ export async function recordStrategyOutcome({
   try {
     let concept = conceptId;
     if (!concept && topic) {
-      const { resolveConceptId } = await import("../learning-events.js");
+      const { resolveConceptId } = await import("../learner/learning-events.js");
       concept = await resolveConceptId({ subject, topic });
     }
     const row = {

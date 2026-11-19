@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
 import { validateFollowUpInput } from "./chat-follow-up-validation.js";
-import { validateLearnerTaskInput } from "../learner-task-validation.js";
+import { validateLearnerTaskInput } from "../learner/learner-task-validation.js";
 
 const social = readFileSync(new URL("./handlers-social.js", import.meta.url), "utf8");
 const toolRuntime = readFileSync(new URL("./tool-runtime.js", import.meta.url), "utf8");

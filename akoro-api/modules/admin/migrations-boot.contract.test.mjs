@@ -57,7 +57,7 @@ test("boot migrations complete before any background worker starts", () => {
 });
 
 test("boot failures name the real database cause — never a bare generic message", async () => {
-  const autonomy = await readFile(new URL("../adaptive-learning/learner-autonomy.js", import.meta.url), "utf8");
+  const autonomy = await readFile(new URL("../adaptive-learning/learner/learner-autonomy.js", import.meta.url), "utf8");
   assert.doesNotMatch(autonomy, /throw new Error\("Could not recover learner autonomy schedules"\)/,
     "schedule recovery must surface the underlying error, not swallow it");
   assert.match(autonomy, /Could not recover learner autonomy schedules — \$\{reason\}/);

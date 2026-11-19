@@ -72,7 +72,7 @@ async function setAutonomy(ctx, as, enabled) {
 /** A concept B got past (a resolved, non-sensitive struggle seeded for this run, removed after). */
 async function masteredByB(ctx, b, a) {
   const { data: cs } = await edu().from("concept_catalog").select("id, title").eq("status", "approved").limit(40);
-  const { struggleType } = await import("../../adaptive-learning/struggleTypes.js");
+  const { struggleType } = await import("../../adaptive-learning/learner/struggleTypes.js");
   const def = struggleType("misconception");
   const c = (cs || [])[0];
   if (!c || !def) return null;

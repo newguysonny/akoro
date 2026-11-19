@@ -118,7 +118,7 @@ export async function recordQuestionSignals({ learnerId, source, sessionRef, sub
   if (!clip(sessionRef, 180)) return { recorded: 0, reason: "no_reference" };
   try {
     let concept = conceptId;
-    if (!concept && topic) concept = await (await import("./learning-events.js")).resolveConceptId({ subject, topic });
+    if (!concept && topic) concept = await (await import("./learner/learning-events.js")).resolveConceptId({ subject, topic });
     const rows = (questions || []).slice(0, 60).map((q) => questionSignalRow({ learnerId, source, sessionRef, subject, topic, conceptId: concept }, q)).filter(Boolean);
     if (!rows.length) return { recorded: 0, reason: "no_questions" };
     const { error } = await db.schema("edu").from("learning_question_signals")

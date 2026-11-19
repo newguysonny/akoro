@@ -15,7 +15,7 @@ import { dirname, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
-const API = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
+const API = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 const REPO = existsSync(join(API, "..", "akoro-api")) ? join(API, "..") : API;
 const rel = (file) => relative(REPO, file).split(sep).join("/");
 const API_PREFIX = REPO === API ? "" : "akoro-api/";
@@ -37,7 +37,7 @@ const ALLOW = [
   // The one recorder (and its retention refresh). The Python agent's
   // concept-state gateway goes through it too, passing the curriculum
   // guardian's validated claim (recordLearningEvent({ claim })).
-  { path: `${API_PREFIX}modules/adaptive-learning/learning-events.js`, rpc: ["record_learner_concept_evidence", "refresh_learner_concept_retention"], why: "the recorder (Phase 4a, D37)" },
+  { path: `${API_PREFIX}modules/adaptive-learning/learner/learning-events.js`, rpc: ["record_learner_concept_evidence", "refresh_learner_concept_retention"], why: "the recorder (Phase 4a, D37)" },
   // Gate cleanup may remove what a scenario wrote (delete only).
   { path: new RegExp(`^${API_PREFIX}modules/verify/`), deleteOnly: true, why: "verify cleanup" },
 ];
@@ -146,6 +146,6 @@ test("the allowlist is small, explicit and not stale", () => {
     if (typeof rule.path === "string") assert.ok(existsSync(join(REPO, rule.path)), `allowlisted file is gone: ${rule.path}`);
   }
   // The recorder really is the one that writes.
-  const recorder = readFileSync(join(API, "modules/adaptive-learning/learning-events.js"), "utf8");
+  const recorder = readFileSync(join(API, "modules/adaptive-learning/learner/learning-events.js"), "utf8");
   assert.match(recorder, /rpc\("record_learner_concept_evidence"/);
 });

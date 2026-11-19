@@ -172,7 +172,7 @@ export const supabaseStore = {
     // Through the ONE recorder (Phase 4a, learning-events.js). Same row as
     // before: an approved concept for subject + topic or nothing, and
     // "not_checked" — the ledger keeps it, the learner state doesn't move.
-    const { recordLearningEvent } = await import("../learning-events.js");
+    const { recordLearningEvent } = await import("../learner/learning-events.js");
     const turnRef = source === "agent_recall" ? `${sessionRef}:check` : `${sessionRef}:attempt`;
     // Scale guard (Phase 10): the score must already be 0–1. A 0–100 value is
     // refused (logged, recorded with the kind's default quality) — the

@@ -5,12 +5,12 @@
  * tool has one bounded responsibility and shares one private in-memory context;
  * only the runner's public step labels may cross the WebSocket boundary.
  */
-import { getStudentState, updateStudentState } from "../student-state.js";
+import { getStudentState, updateStudentState } from "../learner/student-state.js";
 import {
   applyTeachingObservation,
   capProtegeAnalysis,
   createTeachingEvidenceState,
-} from "../teaching-evidence.js";
+} from "../learner/teaching-evidence.js";
 import { TEACHING_TURN_TOOL_CATALOG } from "./catalog.js";
 import { applyTeachingProgress } from "../teaching-session/state-machine.js";
 import { normaliseMode } from "../teaching-session/policy.js";
@@ -35,7 +35,7 @@ export async function recordTeachingEvidence(orchestrator, context) {
   const update = context?.evidenceUpdate;
   const learnerId = orchestrator?.sessionMeta?.studentId || orchestrator?.studentId;
   if (!update || !learnerId || update.observation?.notChecked) return [];
-  const { recordLearningEvent } = await import("../learning-events.js");
+  const { recordLearningEvent } = await import("../learner/learning-events.js");
   const part = String(activeConcept(context) || "").trim();
   const topic = orchestrator?.sessionMeta?.topic || context.topic;
   const subject = orchestrator?.sessionMeta?.subject || orchestrator?.subject || null;

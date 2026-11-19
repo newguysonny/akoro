@@ -1,7 +1,7 @@
 // Phase 11 UI backends: the school's view of its learners' struggles (D39) and
 // the chat's model picker (§7.11.5). Read-only: GETs and evidence reads; the
 // support flag is never opened here (that writes the access log).
-import { SENSITIVE_TYPES } from "../../adaptive-learning/struggleTypes.js";
+import { SENSITIVE_TYPES } from "../../adaptive-learning/learner/struggleTypes.js";
 import { modelRegistry } from "../../../lib/modelRegistry.js";
 
 const PATH = "/api/school/mgmt/learning/struggles";

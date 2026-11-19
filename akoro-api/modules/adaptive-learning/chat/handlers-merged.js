@@ -14,7 +14,7 @@
 import { schemaLookup } from "../../self-tooling/registry.js";
 import { awaitDecision, listConfirmedDecisions } from "../../self-tooling/confirmations.js";
 import { listChats, searchChats } from "./chat-history-tools.js";
-import { searchMyStudyKnowledge } from "../learner-chat-read-tools.js";
+import { searchMyStudyKnowledge } from "../learner/learner-chat-read-tools.js";
 
 // chat.js re-exports this from here, so the decisions module keeps one importer.
 export { listConfirmedDecisions };

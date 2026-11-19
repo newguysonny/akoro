@@ -10,7 +10,7 @@ process.env.SUPABASE_SERVICE_KEY ||= "test";
 const { default: db } = await import("../../db.js");
 const { installFakeDb } = await import("../../lib/testing/fakeDb.mjs");
 const qs = await import("./question-signals.js");
-const { readQuestionSignals } = await import("./learner-model.js");
+const { readQuestionSignals } = await import("./learner/learner-model.js");
 const { makePracticeRun } = await import("./practice/service.js");
 
 const C = "22222222-2222-4222-8222-222222222222";

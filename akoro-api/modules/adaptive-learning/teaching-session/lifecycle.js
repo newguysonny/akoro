@@ -9,7 +9,7 @@
  * on the orchestrator as `dbSessionId`.
  */
 import db from "../../../db.js";
-import { serialiseTeachingEvidence } from "../teaching-evidence.js";
+import { serialiseTeachingEvidence } from "../learner/teaching-evidence.js";
 
 // Rolling deploys can briefly run this code against a database that has not
 // received the compact-evidence migration yet. Retry without the optional

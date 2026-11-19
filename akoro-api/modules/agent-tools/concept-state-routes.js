@@ -12,7 +12,7 @@
 import { Router } from "express";
 
 import db from "../../db.js";
-import { recordLearningEvent, refreshConceptRetention } from "../adaptive-learning/learning-events.js";
+import { recordLearningEvent, refreshConceptRetention } from "../adaptive-learning/learner/learning-events.js";
 import {
   requireAgentToolsCredential,
   verifyAgentToolsCapability,

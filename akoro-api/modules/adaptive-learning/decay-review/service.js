@@ -185,7 +185,7 @@ export function makeDecayReview({ engine, decay, checks, recall, agentOf, findBy
  * as for Study Prep's Agent Check).
  */
 async function recordDecayEvidence({ learnerId, workflowId, subject, topic, outcomes = {}, recalls = [], strategy = null, retained = null }) {
-  const { recordLearningEvent } = await import("../learning-events.js");
+  const { recordLearningEvent } = await import("../learner/learning-events.js");
   const asked = new Set(recalls.map((r) => String(r.concept || "").toLowerCase()));
   const out = [];
   for (const [concept, result] of Object.entries(outcomes)) {

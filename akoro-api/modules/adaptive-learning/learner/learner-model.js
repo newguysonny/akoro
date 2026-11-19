@@ -1,5 +1,5 @@
 /**
- * adaptive-learning/learner-model.js — the READ side of the learner model
+ * adaptive-learning/learner/learner-model.js — the READ side of the learner model
  * (Grand Plan §7.8, Phase 10). Where a workflow needs "does this learner hold
  * a misconception about X?" or "what should happen next on X?", it asks here,
  * and the answer comes from the central state the one recorder writes
@@ -11,9 +11,9 @@
  * Every function degrades to "no central answer" (null / []) on failure: a
  * lesson never fails because the learner model could not be read.
  */
-import db from "../../db.js";
+import db from "../../../db.js";
 import { resolveConceptId } from "./learning-events.js";
-import { recommendNextAction } from "./adaptive-engine.js";
+import { recommendNextAction } from "../adaptive-engine.js";
 
 const E = () => db.schema("edu");
 const STATE_COLUMNS = "concept_id, mastery, retention, misconception_active, evidence_count, last_evidence_at, next_review_due";
@@ -86,7 +86,7 @@ export async function recommendForLearner({ learnerId, conceptId, cognitive = nu
  * byFormat, confusions, rows } — empty on failure.
  */
 export async function readQuestionSignals({ learnerId, subject = null, topic = null, conceptId = null, limit = 200 } = {}) {
-  const { summariseQuestionSignals } = await import("./question-signals.js");
+  const { summariseQuestionSignals } = await import("../question-signals.js");
   if (!learnerId) return { ...summariseQuestionSignals([]), rows: [] };
   try {
     let q = E().from("learning_question_signals")

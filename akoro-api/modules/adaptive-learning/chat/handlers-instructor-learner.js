@@ -11,10 +11,10 @@ import db from "../../../db.js";
 import { AREAS, toolArea } from "./toolSelection.js";
 import { stickyAreasFor, durableAgentChatContextEnabled } from "./runtime-state.js";
 import { agentNetworkEnabled } from "./tool-catalogue-rest.js";
-import { getLearnerProfileContext } from "../learner-profile-context.js";
-import { validateLearnerTaskInput } from "../learner-task-validation.js";
-import { localiseInstant } from "../learner-time-context.js";
-import { scheduleAutonomyReviewForTask } from "../learner-autonomy.js";
+import { getLearnerProfileContext } from "../learner/learner-profile-context.js";
+import { validateLearnerTaskInput } from "../learner/learner-task-validation.js";
+import { localiseInstant } from "../learner/learner-time-context.js";
+import { scheduleAutonomyReviewForTask } from "../learner/learner-autonomy.js";
 
 /**
  * Build the tool-name → handler map. `deps` carries the dispatcher's helpers

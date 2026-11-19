@@ -1,5 +1,5 @@
 /**
- * adaptive-learning/learning-events.js — Phase 4a (D37): the ONE recorder
+ * adaptive-learning/learner/learning-events.js — Phase 4a (D37): the ONE recorder
  * every workflow uses to put learning evidence into the learner model.
  *
  *   recordLearningEvent({ learnerId, conceptId? | subject+topic, kind, source,
@@ -25,7 +25,7 @@
  *     not be written. Listeners (struggle + breakthrough detection) run after
  *     a successful write and cannot fail it either.
  */
-import db from "../../db.js";
+import db from "../../../db.js";
 
 export const LEARNING_SOURCES = Object.freeze(["teaching", "agent_recall", "learner_recall", "proctored", "study_prep", "chat", "backfill", "python_agent"]);
 export const LEARNING_KINDS = Object.freeze([
@@ -104,7 +104,7 @@ export async function recordLearningEvent({
       // No approved concept: nothing goes into the learner model, but an accepted strategy
       // waiting on this topic is still judged by the attempt (matched by topic name).
       let strategyOutcomes = [];
-      try { strategyOutcomes = await (await import("./strategies/outcomes.js")).settlePendingStrategyOutcomes({ learnerId, conceptId: null, kind, source, subject, topic, sessionRef, turnRef, quality: shape.response_quality }); } catch (e) { console.warn("[learning-events] strategy outcomes:", e?.message || e); }
+      try { strategyOutcomes = await (await import("../strategies/outcomes.js")).settlePendingStrategyOutcomes({ learnerId, conceptId: null, kind, source, subject, topic, sessionRef, turnRef, quality: shape.response_quality }); } catch (e) { console.warn("[learning-events] strategy outcomes:", e?.message || e); }
       return { recorded: false, reason: "no_approved_concept", ...(strategyOutcomes.length ? { strategyOutcomes } : {}) };
     }
     const { data, error } = await db.schema("edu").rpc("record_learner_concept_evidence", {
@@ -124,7 +124,7 @@ export async function recordLearningEvent({
     // An accepted Study Prep strategy waiting for its result is judged by this attempt (before
     // struggles, so a breakthrough here can credit it).
     let strategyOutcomes = [];
-    try { strategyOutcomes = await (await import("./strategies/outcomes.js")).settlePendingStrategyOutcomes(event); } catch (e) { console.warn("[learning-events] strategy outcomes:", e?.message || e); }
+    try { strategyOutcomes = await (await import("../strategies/outcomes.js")).settlePendingStrategyOutcomes(event); } catch (e) { console.warn("[learning-events] strategy outcomes:", e?.message || e); }
     // Struggles open / become breakthroughs (slice 2). Never fails the write.
     let struggles = [];
     try { struggles = await (await import("./struggles.js")).afterLearningEvent(event); } catch (e) { console.warn("[learning-events] struggles:", e?.message || e); }

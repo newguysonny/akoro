@@ -9,7 +9,7 @@ const appSource = await readFile(new URL("../../app.js", import.meta.url), "utf8
 const adminSource = await readFile(new URL("./routes.js", import.meta.url), "utf8");
 const workerJs = await readFile(new URL("../../worker.js", import.meta.url), "utf8");
 const followUpsJs = await readFile(new URL("../adaptive-learning/chat/chat-follow-ups.js", import.meta.url), "utf8");
-const autonomyJs = await readFile(new URL("../adaptive-learning/learner-autonomy.js", import.meta.url), "utf8");
+const autonomyJs = await readFile(new URL("../adaptive-learning/learner/learner-autonomy.js", import.meta.url), "utf8");
 const evalJs = await readFile(new URL("../../lib/evalWorker.js", import.meta.url), "utf8");
 const backgroundJs = await readFile(new URL("../../lib/backgroundQueue.js", import.meta.url), "utf8");
 

@@ -5,7 +5,7 @@
  * data to an LLM. The tool is intended to adapt study language and safely turn
  * a human time request into an account-local instant—not to expose a profile.
  */
-import db from "../../db.js";
+import db from "../../../db.js";
 import { localiseInstant, resolveLearnerTimeZone } from "./learner-time-context.js";
 
 const PROFILE_FIELDS = "full_name, username, city, country, language, school_name, year_group, study_level, subjects, created_at";

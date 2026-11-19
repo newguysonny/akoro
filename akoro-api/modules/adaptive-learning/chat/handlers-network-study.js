@@ -38,7 +38,7 @@ import {
   getLearningInsightsSummary,
   getLearningOverview,
   searchMyStudyKnowledge,
-} from "../learner-chat-read-tools.js";
+} from "../learner/learner-chat-read-tools.js";
 
 // chat.js re-exports these two from here, so the messaging module keeps one importer.
 export { inboxBrief, buddyBrief };

@@ -9,7 +9,7 @@
 import db from "../../../db.js";
 import { resolveTopics, prerequisiteEdges } from "./syllabus-resolver.js";
 import { toUnitScore } from "./education-engine.js";
-import { misconceptionTitles } from "../learner-model.js";
+import { misconceptionTitles } from "../learner/learner-model.js";
 
 const text = (value, maximum) => String(value || "").replace(/[\r\n\x00]+/g, " ").trim().slice(0, maximum);
 const round4 = (value) => Math.round(Number(value || 0) * 10_000) / 10_000;

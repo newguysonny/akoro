@@ -38,7 +38,7 @@ test("recordStruggle refuses before touching the database", async () => {
 
 test("wiring: the recorder runs struggle detection after a write; sensitive rows keep no words", async () => {
   const [rec, src, sql, manifest] = await Promise.all([read("./learning-events.js"), read("./struggles.js"),
-    read("../../migrations/2026-learning-struggles.sql"), read("../../migrations/manifest.json")]);
+    read("../../../migrations/2026-learning-struggles.sql"), read("../../../migrations/manifest.json")]);
   assert.match(rec, /afterLearningEvent\(event\)/);
   assert.match(src, /struggle_summary: def\.sensitive \? null/);
   assert.match(src, /what_worked: row\.sensitive \? null/);

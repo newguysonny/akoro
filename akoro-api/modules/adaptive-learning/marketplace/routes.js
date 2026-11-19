@@ -30,7 +30,7 @@
 import express from "express";
 import db from "../../../db.js";
 import { authenticateToken, requireRole } from "../../auth/routes.js";
-import { addPurchasedAgent } from "../student-state.js";
+import { addPurchasedAgent } from "../learner/student-state.js";
 import { notify } from "../../notifications/events.js";
 import { v4 as uuid } from "uuid";
 import {

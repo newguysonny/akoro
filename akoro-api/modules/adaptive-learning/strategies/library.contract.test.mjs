@@ -13,7 +13,7 @@ import {
   GUIDE_FILES, LEGACY_ALIASES, LIBRARY_VERSION, STRATEGIES, STRATEGY_EXECUTORS, STRATEGY_IDS, STRATEGY_WORKFLOWS,
   getStrategy, isPermittedStrategy, normaliseStrategyId, strategiesFor, strategiesForStruggle, strategyRefusal,
 } from "./library.js";
-import { STRUGGLE_TYPES } from "../struggleTypes.js";
+import { STRUGGLE_TYPES } from "../learner/struggleTypes.js";
 import { SETS } from "../../agent-context/manifest.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));

@@ -17,9 +17,9 @@ import {
 } from "./knowledge.js";
 import { decayEngine } from "./decayEngine.js";
 import { outcomeForEvidence } from "./retention.js";
-import { getStudentState } from "../../student-state.js";
-import { createTeachingEvidenceState, publicTeachingEvidence, applyCentralMisconceptions } from "../../teaching-evidence.js";
-import { createPublicLearningState } from "../../public-learning-state.js";
+import { getStudentState } from "../../learner/student-state.js";
+import { createTeachingEvidenceState, publicTeachingEvidence, applyCentralMisconceptions } from "../../learner/teaching-evidence.js";
+import { createPublicLearningState } from "../../learner/public-learning-state.js";
 import { executeTeachingTurnWorkflow } from "../../teaching-workflow/runner.js";
 import { executeAgentTeachingTurn } from "../../teaching-session/controller.js";
 import { normaliseMode } from "../../teaching-session/policy.js";
@@ -229,7 +229,7 @@ export class StudentSessionOrchestrator extends BaseOrchestrator {
     // misconception repaired (or found) elsewhere since is honoured here.
     if (this.resumeTeachingEvidence) {
       try {
-        const { centralMisconceptionFlags } = await import("../../learner-model.js");
+        const { centralMisconceptionFlags } = await import("../../learner/learner-model.js");
         const flags = await centralMisconceptionFlags({ learnerId: this.studentId, subject: this.subject, topic, parts: mustKnow });
         applyCentralMisconceptions(this.teachingEvidence, flags);
       } catch (error) {

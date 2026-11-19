@@ -189,7 +189,7 @@ export async function conceptIdFor(concept, subject = null) {
  * → { struggleType, consulted, stories, pattern } | { error }
  */
 export async function consultBreakthroughs({ userId, struggleType: type, conceptId = null, concept = null, subject = null, misconception = null, classLevel = null }) {
-  const { struggleType: typeOf } = await import("./struggleTypes.js");
+  const { struggleType: typeOf } = await import("./learner/struggleTypes.js");
   const def = typeOf(type);
   if (!def) return { error: "Name the struggle with a type from the struggle list (e.g. misconception, procrastination, overload)." };
   let concept_id = def.concept ? (conceptId || (concept ? await conceptIdFor(concept, subject) : null)) : null;

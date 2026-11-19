@@ -1,5 +1,5 @@
 // =============================================================
-// modules/adaptive-learning/student-state.js  v3.2
+// modules/adaptive-learning/learner/student-state.js  v3.2
 // Adapted for akoro-api:
 //   • Uses ioredis (not node-redis) — matches our existing Redis client
 //   • Uses Supabase JS client from ../../db.js (not raw pg Pool)
@@ -8,9 +8,9 @@
 // =============================================================
 
 import Redis  from "ioredis";
-import db     from "../../db.js";
-import { traceRedis } from "../../lib/redisTrace.js";
-import { redisConnectionOptions } from "../../lib/redisOptions.js";
+import db     from "../../../db.js";
+import { traceRedis } from "../../../lib/redisTrace.js";
+import { redisConnectionOptions } from "../../../lib/redisOptions.js";
 
 // ── ioredis singleton (reuses the same Redis URL as the rest of akoro) ────────
 let _redis = null;

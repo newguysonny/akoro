@@ -1,5 +1,5 @@
 /**
- * adaptive-learning/struggles.js — Phase 4a slice 2 (§7.13.1, §7.15, D38):
+ * adaptive-learning/learner/struggles.js — Phase 4a slice 2 (§7.13.1, §7.15, D38):
  * struggles are recorded when detected and become BREAKTHROUGHS when they
  * resolve. One table, edu.learning_struggles.
  *
@@ -20,10 +20,10 @@
  * health_energy expires after 30 days. One OPEN struggle per learner + type
  * + concept: a repeat adds its evidence and an attempt instead of a duplicate.
  */
-import db from "../../db.js";
+import db from "../../../db.js";
 import { struggleType, DETECTED_BY, STRUGGLE_TYPES_VERSION, HEALTH_EXPIRY_DAYS } from "./struggleTypes.js";
-import { strategyLabel } from "./strategies/library.js";
-import { strategyThatWorked } from "./strategies/outcomes.js";
+import { strategyLabel } from "../strategies/library.js";
+import { strategyThatWorked } from "../strategies/outcomes.js";
 
 const E = () => db.schema("edu");
 const clip = (s, n) => { const t = String(s ?? "").replace(/\s+/g, " ").trim(); return t ? t.slice(0, n) : null; };
@@ -136,7 +136,7 @@ export async function afterLearningEvent(event) {
       // ask a friend's (or an opted-in learner's) agent what worked. Fire-and-forget.
       const opened = out[out.length - 1];
       if (opened?.status === "opened" && event.conceptId && !struggleType(fx.type)?.sensitive) {
-        import("../agent-network/outreach.js").then((o) => o.reachOut({ learnerId: event.learnerId, trigger: "struggle", purpose: "study_question",
+        import("../../agent-network/outreach.js").then((o) => o.reachOut({ learnerId: event.learnerId, trigger: "struggle", purpose: "study_question",
           conceptId: event.conceptId, subject: event.subject || null, topic: event.details?.concept || event.topic || event.details?.part || null,
           gaps: [event.details?.part].filter(Boolean) })).catch(() => {});
       }

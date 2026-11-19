@@ -33,7 +33,7 @@ const {
   readSessionBlocks, appendSessionBlocks, completeSessionRecord,
 } = await import("./lifecycle.js");
 const { carryForward } = await import("./context.js");
-const { createTeachingEvidenceState } = await import("../teaching-evidence.js");
+const { createTeachingEvidenceState } = await import("../learner/teaching-evidence.js");
 
 const T = "edu.adaptive_sessions";
 const quiet = () => {

@@ -9,8 +9,8 @@ import { Router } from "express";
 
 import db from "../../db.js";
 import { executeChatTool, getLearnerChatTools, INSTRUCTOR_TOOLS } from "../adaptive-learning/chat.js";
-import { getLearnerProfileContext } from "../adaptive-learning/learner-profile-context.js";
-import { isIanaTimeZone, localiseInstant } from "../adaptive-learning/learner-time-context.js";
+import { getLearnerProfileContext } from "../adaptive-learning/learner/learner-profile-context.js";
+import { isIanaTimeZone, localiseInstant } from "../adaptive-learning/learner/learner-time-context.js";
 import { getToolsForTask } from "../tasks/tools/index.js";
 import {
   isTeacherRole,

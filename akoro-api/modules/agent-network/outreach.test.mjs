@@ -50,7 +50,7 @@ test("wiring: messages record origin/trigger/purpose; answers come back; Allow s
   assert.match(await read("./friends.js"), /m\.origin === "agent"\) await import\("\.\/outreach\.js"\)/);
   assert.match(await read("../agent-proposals/inbox.js"), /kind === "agent_outreach"[\s\S]{0,200}approveOutreach\(userId, payload\)/);
   assert.match(await read("../autonomy/deliver.js"), /case "agent_outreach"/);
-  assert.match(await read("../adaptive-learning/struggles.js"), /opened\?\.status === "opened" && event\.conceptId && !struggleType\(fx\.type\)\?\.sensitive/);
+  assert.match(await read("../adaptive-learning/learner/struggles.js"), /opened\?\.status === "opened" && event\.conceptId && !struggleType\(fx\.type\)\?\.sensitive/);
   assert.match(await read("../adaptive-learning/study-prep/wiring.js"), /trigger: "topic_start", purpose: "study_question"[^\n]*friendsOnly: true/);
   const sql = await read("../../migrations/2026-agent-outreach.sql");
   assert.match(sql, /'agent_outreach'/);

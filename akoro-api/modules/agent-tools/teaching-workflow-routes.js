@@ -26,7 +26,7 @@ import {
 } from "../adaptive-learning/teaching-session/lifecycle.js";
 import { carryForward } from "../adaptive-learning/teaching-session/context.js";
 import { resultToTypedBlocks } from "../adaptive-learning/teaching-session/blocks.js";
-import { clearStateCache } from "../adaptive-learning/student-state.js";
+import { clearStateCache } from "../adaptive-learning/learner/student-state.js";
 import {
   requireAgentToolsCredential,
   verifyAgentToolsCapability,

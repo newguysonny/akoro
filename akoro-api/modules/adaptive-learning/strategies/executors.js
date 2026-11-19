@@ -238,7 +238,7 @@ export function defaultExecutorDeps({ learnerId, store, now = () => new Date().t
     prerequisites: async ({ subject }) => (await import("../study-prep/syllabus-resolver.js")).prerequisiteEdges({ subject }),
     scheduleFollowUp: async (input) => (await import("../chat/chat-follow-ups.js")).scheduleChatFollowUp({ userId: learnerId, input }),
     evidenceNotes: async ({ subject, topic }) => {
-      const { resolveConceptId } = await import("../learning-events.js");
+      const { resolveConceptId } = await import("../learner/learning-events.js");
       const concept = await resolveConceptId({ subject, topic });
       if (!concept) return [];
       const { default: db } = await import("../../../db.js");
@@ -268,7 +268,7 @@ export function defaultExecutorDeps({ learnerId, store, now = () => new Date().t
       return !error;
     },
     openStruggleType: async ({ subject, topic }) => {
-      const { resolveConceptId } = await import("../learning-events.js");
+      const { resolveConceptId } = await import("../learner/learning-events.js");
       const concept = await resolveConceptId({ subject, topic });
       const { default: db } = await import("../../../db.js");
       let q = db.schema("edu").from("learning_struggles").select("struggle_type").eq("learner_id", learnerId).eq("status", "open").eq("sensitive", false);

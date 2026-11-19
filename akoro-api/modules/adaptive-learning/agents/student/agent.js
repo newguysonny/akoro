@@ -27,7 +27,7 @@ import {
   buildStudentAgentExtractPrompt,
   studentPersonality,
 } from "../../../agent-context/personas/student.js";
-import { normaliseTeachingObservation } from "../../teaching-evidence.js";
+import { normaliseTeachingObservation } from "../../learner/teaching-evidence.js";
 import { learnerNotesBlock } from "../../teaching-session/learnerNotesCore.js";
 
 export class StudentAgent {

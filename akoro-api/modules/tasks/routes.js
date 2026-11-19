@@ -10,7 +10,7 @@ import { Router }                         from "express";
 import db                                 from "../../db.js";
 import { TaskDB, TaskFileDB, TaskRunDB, TaskOutputDB, TaskScheduleDB, DynamicToolDB } from "./lib/db.js";
 import { scheduleTask, cancelTask, triggerNow, getQueueHealth, taskQueue } from "./scheduler.js";
-import { cancelAutonomyReviewForTask, scheduleAutonomyReviewForTask } from "../adaptive-learning/learner-autonomy.js";
+import { cancelAutonomyReviewForTask, scheduleAutonomyReviewForTask } from "../adaptive-learning/learner/learner-autonomy.js";
 import { extractIntent }                  from "./lib/context.js";
 import { createPresignedUpload }          from "./lib/storage.js";
 import { extractTextFromUrl }             from "./lib/ocr.js";

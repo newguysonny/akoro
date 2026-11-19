@@ -41,7 +41,7 @@ test("the write is idempotent and versioned (source contract)", async () => {
 });
 
 test("a resolved struggle credits the strategy that worked (struggles.afterLearningEvent reads it)", async () => {
-  const src = await readFile(new URL("../struggles.js", import.meta.url), "utf8");
+  const src = await readFile(new URL("../learner/struggles.js", import.meta.url), "utf8");
   assert.match(src, /event\.details\?\.strategy \|\| await strategyThatWorked\(/);
   assert.match(src, /whatWorkedStrategy: strategy \|\| null/);
 });

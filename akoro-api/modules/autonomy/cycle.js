@@ -11,7 +11,7 @@ import { OPENAI_MODEL, openai } from "../../lib/aiModel.js";
 import { reportAgentActivity, clearAgentActivity } from "../../lib/agentActivity.js";
 import { notifyUser } from "../notify.js";
 import { untrusted, UNTRUSTED_SYSTEM_RULE } from "../../lib/untrusted.js";
-import { resolveLearnerTimeZone } from "../adaptive-learning/learner-time-context.js";
+import { resolveLearnerTimeZone } from "../adaptive-learning/learner/learner-time-context.js";
 import { isSensitive } from "../agent-memory/quietLearningCore.js";
 import { deliverProactive } from "./deliver.js";
 import { autonomyCadence, minCycleMs, weeklyRunsCap } from "./cadence.js";

@@ -13,7 +13,7 @@ import test from "node:test";
 const read = (name) => readFile(new URL(name, import.meta.url), "utf8");
 const [lib, autonomy, followUps, worker, chat, dashboard, tab] = await Promise.all([
   read("../../akoro-api/lib/agentActivity.js"),
-  read("../../akoro-api/modules/adaptive-learning/learner-autonomy.js"),
+  read("../../akoro-api/modules/adaptive-learning/learner/learner-autonomy.js"),
   read("../../akoro-api/modules/adaptive-learning/chat/chat-follow-ups.js"),
   read("../../akoro-api/modules/tasks/worker.js"),
   read("../../akoro-api/modules/adaptive-learning/chat.js"),

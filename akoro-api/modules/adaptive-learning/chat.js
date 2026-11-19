@@ -34,7 +34,7 @@ import { activeSessions } from "./websocket.js";
 import {
   getLearnerAutonomy,
   setLearnerAutonomy,
-} from "./learner-autonomy.js";
+} from "./learner/learner-autonomy.js";
 import { prepareTurn, modelPicks, supabaseThreads, tutorSystemPrompt, assembleChatDoctrine } from "./chat/turn-prepare.js";
 import { answerTurn, setDecisionContinuationScheduler } from "./chat/turn-answer.js";
 import { reportAgentActivity } from "../../lib/agentActivity.js";

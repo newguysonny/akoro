@@ -8,7 +8,7 @@ import { Worker }   from "bullmq";
 import Redis        from "ioredis";
 import { TaskDB, TaskRunDB, AgentDB, TaskScheduleDB } from "./lib/db.js";
 import db from "../../db.js";
-import { scheduleAutonomyReviewForTask } from "../adaptive-learning/learner-autonomy.js";
+import { scheduleAutonomyReviewForTask } from "../adaptive-learning/learner/learner-autonomy.js";
 import { buildContext }               from "./lib/context.js";
 import { deliver, deliverError, deliverProgress } from "./lib/deliver.js";
 import { getToolsForTask }                        from "./tools/index.js";

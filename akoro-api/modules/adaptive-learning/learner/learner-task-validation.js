@@ -1,4 +1,4 @@
-import { intervalSeconds, MIN_INTERVAL_SECONDS, MAX_INTERVAL_SECONDS } from "../../lib/scheduleInterval.js";
+import { intervalSeconds, MIN_INTERVAL_SECONDS, MAX_INTERVAL_SECONDS } from "../../../lib/scheduleInterval.js";
 /**
  * Validation and normalisation shared by learner task creation paths.
  *

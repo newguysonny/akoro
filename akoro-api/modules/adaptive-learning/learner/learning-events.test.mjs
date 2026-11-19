@@ -27,7 +27,7 @@ test("the recorder refuses what it can't stand behind (never throws)", async () 
 
 test("wiring: Teaching, Study Prep, Practice and Decay Review all record through the one recorder", async () => {
   const [tools, store, practice, decay] = await Promise.all([
-    read("./teaching-workflow/tools.js"), read("./study-prep/store.js"), read("./practice/service.js"), read("./decay-review/service.js"),
+    read("../teaching-workflow/tools.js"), read("../study-prep/store.js"), read("../practice/service.js"), read("../decay-review/service.js"),
   ]);
   assert.match(tools, /void recordTeachingEvidence\(orchestrator, context\);/);
   assert.match(tools, /kinds\.push\("misconception_detected"\)/);

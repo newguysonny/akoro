@@ -19,7 +19,7 @@
  *
  * Pure data + pure functions; no database, no model.
  */
-import { STRUGGLE_TYPES } from "../struggleTypes.js";
+import { STRUGGLE_TYPES } from "../learner/struggleTypes.js";
 
 export const LIBRARY_VERSION = 3;
 

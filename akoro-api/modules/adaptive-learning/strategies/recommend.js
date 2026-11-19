@@ -129,7 +129,7 @@ async function openStruggleTypes({ learnerId, conceptId, topic }) {
 async function conceptFor({ conceptId, subject, topic }) {
   if (conceptId) return UUID.test(conceptId) ? conceptId : null;
   if (!topic) return null;
-  const { resolveConceptId } = await import("../learning-events.js");
+  const { resolveConceptId } = await import("../learner/learning-events.js");
   return resolveConceptId({ subject, topic });
 }
 

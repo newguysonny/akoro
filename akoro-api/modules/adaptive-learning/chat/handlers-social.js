@@ -17,8 +17,8 @@ import { searchBlogPosts, readBlogPost } from "../blogResearch.js";
 import { listMyBlogs, createBlogPost, updateBlogPost } from "../../blogs/service.js";
 import { scheduleChatFollowUp, listChatFollowUps, cancelChatFollowUp } from "./chat-follow-ups.js";
 import { listChats, readChat, searchChats, postToChat, ownedChatId } from "./chat-history-tools.js";
-import { getLearnerProfileContext } from "../learner-profile-context.js";
-import { localiseInstant } from "../learner-time-context.js";
+import { getLearnerProfileContext } from "../learner/learner-profile-context.js";
+import { localiseInstant } from "../learner/learner-time-context.js";
 import { sendNotificationEmail } from "../../auth/emails.js";
 import { retrieveAgentKnowledge } from "../agents/student/knowledge.js";
 

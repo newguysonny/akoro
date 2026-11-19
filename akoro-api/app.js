@@ -63,7 +63,7 @@ import profilesModule             from "./modules/profiles/routes.js";
 import adaptiveModule, {
   setupAdaptiveWebSocket }        from "./modules/adaptive-learning/index.js";
 import { startChatFollowUpWorker } from "./modules/adaptive-learning/chat/chat-follow-ups.js";
-import { startLearnerAutonomyWorker, recoverLearnerAutonomySchedules } from "./modules/adaptive-learning/learner-autonomy.js";
+import { startLearnerAutonomyWorker, recoverLearnerAutonomySchedules } from "./modules/adaptive-learning/learner/learner-autonomy.js";
 import battleModule               from "./modules/battle/routes.js";
 import tasksModule                from "./modules/tasks/routes.js";
 import selfStudyModule            from "./modules/self-study/routes.js";

@@ -1,5 +1,5 @@
 /**
- * adaptive-learning/learning-backfill.js — Phase 4a slice 4 (§7.8.1, D37):
+ * adaptive-learning/learner/learning-backfill.js — Phase 4a slice 4 (§7.8.1, D37):
  * the one-off backfill. History that lived only in teaching sessions' JSON
  * (adaptive_sessions.teaching_evidence) and in exam-prep runs goes through
  * the ONE recorder (recordLearningEvent, source "backfill"), so breakthroughs
@@ -27,7 +27,7 @@
  * `before` (default: when live recording started) keeps rows the live
  * recorder already covers out of the backfill.
  */
-import db from "../../db.js";
+import db from "../../../db.js";
 
 /** Live recording (slice 1) began here; rows updated later were recorded as they happened. */
 export const LIVE_RECORDING_SINCE = "2026-11-06T00:00:00Z";

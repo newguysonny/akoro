@@ -11,7 +11,7 @@ import { TrainedOrchestrator }        from "./trained/orchestrator.js";
 import { StudentSessionOrchestrator } from "./student/orchestrator.js";
 import { loadOrchestrationConfig }    from "../training/agentOrchestration.js";
 import { loadTeacherProfile }         from "../training/agentPromptBuilder.js";
-import { getAgentPreferences, userOwnsAgent } from "../student-state.js";
+import { getAgentPreferences, userOwnsAgent } from "../learner/student-state.js";
 import db                             from "../../../db.js";
 
 // NaNa Esumai is the default platform guide pair

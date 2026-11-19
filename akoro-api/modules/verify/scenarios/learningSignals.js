@@ -134,7 +134,7 @@ export const questionTimings = {
       await E().from("concept_catalog").delete().eq("id", concept.id);
     });
     const { recordQuestionSignals, checkQuestionSignals, proctoredQuestionSignals } = await import("../../adaptive-learning/question-signals.js");
-    const { readQuestionSignals } = await import("../../adaptive-learning/learner-model.js");
+    const { readQuestionSignals } = await import("../../adaptive-learning/learner/learner-model.js");
     const check = checkQuestionSignals({
       battle: { topic: title },
       questions: [
