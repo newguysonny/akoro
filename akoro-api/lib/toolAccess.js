@@ -1,12 +1,12 @@
 /**
- * instructor/toolAccess.js — enforcement layer for purchased platform tools.
+ * lib/toolAccess.js — enforcement layer for purchased platform tools.
  *
  * Maps agent tool names → the catalog key (edu.platform_tools.key) an
  * instructor must have UNLOCKED (paid for) before the agent may use them.
  * Tools not listed in TOOL_GATES are ungated (always available).
  */
 
-import db from "../../db.js";
+import db from "../db.js";
 
 // Every instructor agent tool is open to every instructor: nothing is gated any more
 // (they used to need the matching catalogue item bought in Tools & Assets — generate_quiz,

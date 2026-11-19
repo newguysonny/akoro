@@ -45,7 +45,7 @@ export function createHandlers(deps) {
       const { tool, ...body } = input || {};
       try {
         // A draft first: the instructor previews it, asks for changes (each becomes the next
-        // version) and saves it to the Library when they are happy — see teaching/toolDrafts.js.
+        // version) and saves it to the Library when they are happy — see self-study/toolDrafts.js.
         const { draft, tool: def } = await createToolDraft({ instructor: { id: studentId, role }, key: tool, body, sessionId: conversationId, channel });
         return {
           prepared: true, draftId: draft.id, title: draft.title, type: "teaching_tool", tool: def.key, name: def.name,

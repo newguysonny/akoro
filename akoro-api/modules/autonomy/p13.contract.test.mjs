@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { afterQuiet, inQuiet, quietOf, validTimeZone } from "./quietHours.js";
-import { budgetFrom, weekStartFor, weeklyBudgetUsd } from "./budgetCore.js";
+import { budgetFrom, weekStartFor, weeklyBudgetUsd } from "../../lib/budgetCore.js";
 import { fixIts, progressLine, READY, shapeIdeas, shapeReady, spreadDue } from "./readyKinds.js";
 import { instructorProposals, nextTopicAfter } from "./instructorCore.js";
 

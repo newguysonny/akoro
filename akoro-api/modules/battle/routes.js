@@ -57,7 +57,7 @@ import { cleanHpPerMiss } from "./hp.js";
 import { entryCheck, minPlayersFor, isMarkSheet } from "./entry.js";
 import { toCard } from "./card.js";
 import { buildQuestions, perQuestionSeconds } from "./questionSource.js";
-import { InsufficientCoins } from "../../lib/coins.js";
+import { InsufficientCoins } from "../../lib/coins.js"; import { agentNetworkHooks } from "../../lib/agentNetworkHooks.js";
 
 import { addLater } from "../../lib/deferredJobs.js";
 import { requestGuideReview } from "./guideReview.js";
@@ -910,7 +910,7 @@ router.get("/my-battles", authenticateToken, asyncHandler(async (req, res) => {
   const dailyPlaceOf = new Map();
   const dailyDone = (data ?? []).filter((b) => b.status === "completed" && String(b.recurring_key || "").startsWith("daily:"));
   if (dailyDone.length) {
-    const { dailyRanking } = await import("../agent-network/activities.js");
+    const { dailyRanking } = agentNetworkHooks();
     const seen = new Map();
     for (const b of dailyDone.slice(0, 14)) {
       const [, day, , ] = String(b.recurring_key).split(":");

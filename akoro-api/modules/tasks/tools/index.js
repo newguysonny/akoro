@@ -108,7 +108,7 @@ export const getToolsForTask = async (task) => {
   // Enforcement: platform tools the instructor hasn't purchased are removed
   // from the agent's tool set, so the agent simply can't invoke them.
   try {
-    const { TOOL_GATES, getUnlockedToolKeys } = await import("../../instructor/toolAccess.js");
+    const { TOOL_GATES, getUnlockedToolKeys } = await import("../../../lib/toolAccess.js");
     const gatedNames = Object.keys(TOOL_GATES).filter((n) => byName.has(n));
     if (gatedNames.length) {
       const unlocked = await getUnlockedToolKeys(task?.creator_id);

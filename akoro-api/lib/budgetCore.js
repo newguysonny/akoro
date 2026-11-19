@@ -1,8 +1,8 @@
 /**
- * modules/autonomy/budgetCore.js — the weekly agent budget's pure rules
+ * lib/budgetCore.js — the weekly agent budget's pure rules
  * (budget.js reads the spend). Grand Plan §7.16.7, D46.
  */
-import { localMinutes } from "./quietHours.js";
+import { localMinutes } from "../modules/autonomy/quietHours.js";
 
 export const BACKGROUND_FEATURES = Object.freeze(["agent_autonomy", "quiet_learning", "agent_ideas", "agent_prepare"]);
 export const WARN_AT = 0.8;

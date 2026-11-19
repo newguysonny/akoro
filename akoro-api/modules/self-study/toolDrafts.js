@@ -1,5 +1,5 @@
 /**
- * teaching/toolDrafts.js — a teaching tool's result as a DRAFT, versioned like an assignment.
+ * self-study/toolDrafts.js — a teaching tool's result as a DRAFT, versioned like an assignment.
  *
  * Asking the agent for a podcast, lesson hooks, a lesson plan… no longer saves straight to the
  * Library. It files a draft (the same activity_drafts row the activities use, type
@@ -13,11 +13,11 @@
  *                            summary, error, result (the template), coinsCharged }] }
  */
 import db from "../../db.js";
-import { mySchool, invalid } from "../self-study/createAssignment.js";
+import { mySchool, invalid } from "./createAssignment.js";
 import {
   updateDraftPayload, newVersion, versionsOf, versionAt, latestReady,
-} from "../self-study/draftVersions.js";
-import { cleanToolInput, generateToolResult, saveToolOutput, toolByKey, toolPayload, ToolError } from "./tools.js";
+} from "./draftVersions.js";
+import { cleanToolInput, generateToolResult, saveToolOutput, toolByKey, toolPayload, ToolError } from "../../lib/teachingTools.js";
 
 const JOB_TIMEOUT_MS = 170_000;   // two bounded model calls and the writes
 

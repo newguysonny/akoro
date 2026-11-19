@@ -22,6 +22,7 @@ import db from "../../db.js";
 import { addLater, cancelLater } from "../../lib/deferredJobs.js";
 import { entryCheck } from "./entry.js";
 import { SERIES, cleanRepeat, nextOccurrence, makeAt, leadOf, occurrenceJobId, playersFor, ruleText, seriesCardType } from "./seriesCore.js";
+import { agentNetworkHooks } from "../../lib/agentNetworkHooks.js";
 
 const series = () => db.from("battle_series");
 const members = () => db.from("battle_series_members");
@@ -130,7 +131,7 @@ export async function runOccurrence(seriesId, startMs) {
   if (s.scope === "network") {
     try {
       if (t.post) {
-        const { postChallengeRequest } = await import("../agent-network/challenges.js");
+        const { postChallengeRequest } = agentNetworkHooks();
         const { post: _post, teams: _teams, ...input } = t;
         const r = await postChallengeRequest(s.created_by, { ...input, scheduled_for: startIso }, { seriesId: s.id });
         await series().update({ last_note: null }).eq("id", s.id);

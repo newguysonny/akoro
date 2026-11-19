@@ -15,7 +15,7 @@ import { Router } from "express";
 import db from "../../db.js";
 import { authenticateToken } from "../auth/routes.js";
 import { setLearnerAutonomy } from "../adaptive-learning/learner/learner-autonomy.js";
-import { budgetState } from "./budget.js";
+import { budgetState } from "../../lib/budget.js";
 import { quietOf, validHHMM, validTimeZone } from "./quietHours.js";
 
 const router = Router();

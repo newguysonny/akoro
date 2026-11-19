@@ -17,7 +17,7 @@
 
 import { z }             from "zod";
 import { TaskOutputDB }  from "../lib/db.js";
-import { TOOLS, runTeachingTool, ToolError } from "../../teaching/tools.js";
+import { TOOLS, ToolError, getTeachingToolRunner } from "../../../lib/teachingTools.js";
 
 const KEYS = TOOLS.map((t) => t.key);
 
@@ -62,7 +62,7 @@ export async function executeTeachingTool(rawInput, ctx) {
 
   let result;
   try {
-    result = await runTeachingTool({ key: tool, body, userId: ctx.teacherId });
+    result = await getTeachingToolRunner()({ key: tool, body, userId: ctx.teacherId });
   } catch (e) {
     if (e instanceof ToolError) {
       // These are the teacher's problem to fix, not a crash: say which, so the

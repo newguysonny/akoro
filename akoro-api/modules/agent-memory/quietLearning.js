@@ -17,7 +17,7 @@
  * is a no-op; sensitive content is never stored and memory never feeds
  * mastery (D50); at most QUIET.MAX_ACTIVE active memories per learner.
  */
-import { budgetState } from "../autonomy/budget.js";
+import { budgetState } from "../../lib/budget.js";
 import { backgroundQueue, handleBackground } from "../../lib/backgroundQueue.js";
 import { addLater } from "../../lib/deferredJobs.js";
 

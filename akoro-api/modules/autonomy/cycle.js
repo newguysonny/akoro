@@ -17,7 +17,7 @@ import { deliverProactive } from "./deliver.js";
 import { autonomyCadence, minCycleMs, weeklyRunsCap } from "./cadence.js";
 import { quietOf, afterQuiet } from "./quietHours.js";
 import { IDEAS, LEARNER_KINDS, shapeIdeas, shapeReady, fixIts, progressLine } from "./readyKinds.js";
-import { budgetState, noteBudget } from "./budget.js";
+import { budgetState, noteBudget } from "../../lib/budget.js";
 import { modesFor, recordObservations } from "./kindModes.js";
 import { allOff, defaultModeFor, LEARNER_PROACTIVE_KINDS, MAX_OBSERVATIONS_PER_RUN, observeOnly, splitByMode } from "./kindModesCore.js";
 import { usdCost } from "../../lib/aiPricing.js";

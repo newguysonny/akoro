@@ -112,7 +112,7 @@ import {
   agentMemoryRouter as agentMemoryModule,
 } from "./modules/agent-tools/index.js";
 import passport                  from "passport";
-
+import "./lib/bootHooks.js";
 const __dirname  = path.dirname(fileURLToPath(import.meta.url));
 const app        = express();
 const httpServer = createServer(app);

@@ -20,7 +20,7 @@ import { coinsAvailable, schoolBillTo, InsufficientCoins, grantCoins } from "../
 import { REVIEW_REWARD_COINS, minPlayersFor, isMarkSheet } from "./entry.js";
 import { prepareRuling, ruling, verdict, JUDGE } from "./judge.js";
 import { HP_PER_MISS_DEFAULT } from "./hp.js";
-import { guardWorker } from "../../lib/redisQuotaGuard.js";
+import { guardWorker } from "../../lib/redisQuotaGuard.js"; import { battleJobHandler } from "../../lib/battleJobHandlers.js";
 
 import { registerDeferredQueue } from "../../lib/deferredJobs.js";
 // Agents already told they are out of coins this battle (one log line each, not one per question).
@@ -49,7 +49,7 @@ export const battleQueue = new Queue("battles", {
 });
 // Far-off expiries, idle cleanups and scheduled starts wait in Postgres (lib/deferredJobs.js).
 registerDeferredQueue(battleQueue);
-
+const runActivityReview = (assignmentId) => battleJobHandler("activity-review")(assignmentId);
 const worker = new Worker("battles", async (job) => {
   const { action, battleId } = job.data;
   switch (action) {
@@ -63,7 +63,7 @@ const worker = new Worker("battles", async (job) => {
     // A recurring series: make the battle that starts at startMs (battle/series.js).
     case "series-occurrence":   return (await import("./series.js")).runOccurrence(job.data.seriesId, job.data.startMs);
     // An activity's review battle: each learner's protégé reviewed (self-study/activityReview.js).
-    case "activity-review":     return (await import("../self-study/activityReview.js")).runActivityReview(job.data.assignmentId);
+    case "activity-review":     return runActivityReview(job.data.assignmentId);
     default: throw new Error(`Unknown action: ${action}`);
   }
 }, {

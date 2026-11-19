@@ -20,7 +20,7 @@
 
 import { withInstructionLine } from "./questionPaper.js";
 import { normalizeStages } from "./journeyStages.js";
-import { saveToolDraft, reviseToolDraft, retryToolVersion } from "../teaching/toolDrafts.js";
+import { saveToolDraft, reviseToolDraft, retryToolVersion } from "./toolDrafts.js";
 import { cleanReview, reviewInstruction, scheduleActivityReview } from "./activityReview.js";
 import { callAsUser } from "../tasks/tools/assign-battle.js";
 import { mergePlanItems, wantsPlanEdit } from "./planEdit.js";

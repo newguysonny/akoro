@@ -60,7 +60,7 @@ export const RULES = [
 
   {
     // Grand Plan §7.16.7: a learner's background agent work (platform-paid)
-    // passed 80% of its weekly USD budget — modules/autonomy/budget.js.
+    // passed 80% of its weekly USD budget — lib/budget.js.
     key: "autonomy_budget",
     severity: "warning",
     title: "Learners near their weekly agent budget",

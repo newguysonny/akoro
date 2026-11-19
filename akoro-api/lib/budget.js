@@ -1,5 +1,5 @@
 /**
- * modules/autonomy/budget.js — the weekly USD budget for a learner's
+ * lib/budget.js — the weekly USD budget for a learner's
  * background agent work (Grand Plan §7.16.7, D46): noticing, preparing,
  * remembering and ideas are paid by the platform, capped per learner per
  * week. At 80% ops hear about it (lib/alerts rule autonomy_budget); at 100%
@@ -13,7 +13,7 @@
  * What counts: the platform-paid background features, which carry the
  * learner's id as their ref in edu.ai_call_log.
  */
-import db from "../../db.js";
+import db from "../db.js";
 import { BACKGROUND_FEATURES, budgetFrom, weekStartFor, weeklyBudgetUsd } from "./budgetCore.js";
 
 export { BACKGROUND_FEATURES, budgetFrom, weekStartFor, weeklyBudgetUsd };

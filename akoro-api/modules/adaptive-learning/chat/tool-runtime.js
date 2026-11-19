@@ -16,7 +16,7 @@ import { TALK_AFTER_TOOLS } from "./chat-trace.js";
 import { UPDATE_PLAN_TOOL } from "./taskLedger.js";
 import { subjectMastery } from "../agents/student/knowledge.js";
 import { TOOLS as TEACHING_TOOLS, ToolError as TeachingToolError } from "../../teaching/tools.js";
-import { createToolDraft } from "../../teaching/toolDrafts.js";
+import { createToolDraft } from "../../self-study/toolDrafts.js";
 import { activityOutcomeSummary, listRecentActivities } from "../../self-study/outcomes.js";
 import { listRoutines, createRoutine, updateRoutine, deleteRoutine } from "../../self-study/routines.js";
 import { actionBasis, basisRefusal, currentActionBasis, withActionBasis } from "../../agent-runtime/actionBasis.js";

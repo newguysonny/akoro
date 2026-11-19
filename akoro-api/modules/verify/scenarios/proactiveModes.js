@@ -12,7 +12,7 @@ import { runAutonomyCycleForUser } from "../../autonomy/cycle.js";
 import { deliverProactive } from "../../autonomy/deliver.js";
 import { forgetKindModes } from "../../autonomy/kindModes.js";
 import { LEARNER_PROACTIVE_KINDS } from "../../autonomy/kindModesCore.js";
-import { budgetState } from "../../autonomy/budget.js";
+import { budgetState } from "../../../lib/budget.js";
 
 const db = async () => (await import("../../../db.js")).default;
 const later = () => new Date(Date.now() + 15 * 60 * 1000);

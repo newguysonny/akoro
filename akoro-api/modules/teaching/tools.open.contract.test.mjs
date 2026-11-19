@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (p) => readFile(new URL(p, import.meta.url), "utf8");
 const [teaching, access, catalogue, taskTool] = await Promise.all([
-  read("./tools.js"), read("../instructor/toolAccess.js"), read("../instructor/tools.js"), read("../tasks/tools/teaching-tool.js"),
+  read("./tools.js"), read("../../lib/toolAccess.js"), read("../instructor/tools.js"), read("../tasks/tools/teaching-tool.js"),
 ]);
 
 test("no tool is locked: the lock check, the gates and the pricing are gone", () => {

@@ -373,7 +373,7 @@ async function entitledTeacherTools(task) {
   // here so an import or entitlement-service failure cannot accidentally turn
   // a paid instructor tool into an unrestricted gateway function.
   try {
-    const { TOOL_GATES, getUnlockedToolKeys } = await import("../instructor/toolAccess.js");
+    const { TOOL_GATES, getUnlockedToolKeys } = await import("../../lib/toolAccess.js");
     const unlocked = await getUnlockedToolKeys(task.creator_id);
     return candidates.filter(({ definition }) => {
       const entitlement = TOOL_GATES[definition.name];
@@ -381,7 +381,7 @@ async function entitledTeacherTools(task) {
     });
   } catch (error) {
     console.error("[agent-tools/entitlements]", error.message);
-    const { TOOL_GATES } = await import("../instructor/toolAccess.js").catch(() => ({ TOOL_GATES: {} }));
+    const { TOOL_GATES } = await import("../../lib/toolAccess.js").catch(() => ({ TOOL_GATES: {} }));
     return candidates.filter(({ definition }) => !TOOL_GATES[definition.name]);
   }
 }
