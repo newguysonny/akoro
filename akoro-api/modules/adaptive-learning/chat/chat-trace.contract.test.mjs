@@ -142,7 +142,7 @@ test("Think mode streams the model's real reasoning into the step's row; it wins
 });
 
 test("tool results reach the reasoning model: native items for decisions, developer notes for the answer", async () => {
-  const { toResponsesInput, toResponsesTools } = await import("../responses-input.js");
+  const { toResponsesInput, toResponsesTools } = await import("../grounding/responses-input.js");
   const transcript = [
     { role: "system", content: "doctrine" },
     { role: "user", content: "What are my goals?" },

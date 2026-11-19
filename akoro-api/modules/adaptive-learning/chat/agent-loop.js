@@ -9,7 +9,7 @@ import { OPENAI_MODEL, openai } from "../../../lib/aiModel.js";
 import { isInspected } from "../../../lib/dryRunContext.js";
 import { agentToolActivity } from "../../../lib/agentActivity.js";
 import { newToolRequestId, toolObservation } from "../../../utils/toolObservation.js";
-import { toResponsesInput, toResponsesTools } from "../responses-input.js";
+import { toResponsesInput, toResponsesTools } from "../grounding/responses-input.js";
 import { hasDsmlMarkup, hasToolCallMarkup } from "./reply-scrub.js";
 import { looksLikeStepNarration, containsDeferral, admitsNonCompletion, looksTruncated, planHasOpenSteps } from "./narration-stall.js";
 import { decisionNarration, TALK_AFTER_TOOLS, talkAfterTool } from "./chat-trace.js";

@@ -10,7 +10,7 @@
  *       Signals phase transitions (1 → 2 → 3 → 4 → assessment).
  */
 
-import { guidePassagesBlock } from "../../documentGrounding.js";
+import { guidePassagesBlock } from "../../grounding/documentGrounding.js";
 import { openai } from "../base-orchestrator.js";
 // P2 (Context Layer Adoption): every prompt below loads VERBATIM from the
 // akoro-agent/ workspace via these builders — byte-identical to the

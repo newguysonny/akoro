@@ -27,7 +27,7 @@ import {
   isSupportedSessionReference,
   normalizeSessionReference,
   readSessionReference,
-} from "../sessionReference.js";
+} from "../grounding/sessionReference.js";
 
 const router = Router();
 const nana   = new NaNaEsumai();

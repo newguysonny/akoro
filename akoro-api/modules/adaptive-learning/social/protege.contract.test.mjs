@@ -5,8 +5,8 @@ import test from "node:test";
 const { loadTaughtKnowledge, renderTaughtContext, buildGuideMessages, shapeGuideAnswer, teachRequest, PROTEGE_LIMITS } = await import("./protege.js");
 const read = (p) => readFile(new URL(p, import.meta.url), "utf8");
 const [chat, social, toolCatalogue, doctrine, manifest, trace, learnerTab, dashboard] = await Promise.all([
-  read("./chat.js"), read("./chat/handlers-social.js"), read("./chat/tool-catalogue-rest.js"), read("../../akoro-agent/policies/PROTEGE.md"), read("../agent-context/manifest.mjs"), read("./chat/chat-trace.js"),
-  read("../../../akoro-learner/src/components/tabs/AgentChatTab.jsx"), read("../../../akoro-learner/src/pages/LearnerDashboard.jsx"),
+  read("../chat.js"), read("../chat/handlers-social.js"), read("../chat/tool-catalogue-rest.js"), read("../../../akoro-agent/policies/PROTEGE.md"), read("../../agent-context/manifest.mjs"), read("../chat/chat-trace.js"),
+  read("../../../../akoro-learner/src/components/tabs/AgentChatTab.jsx"), read("../../../../akoro-learner/src/pages/LearnerDashboard.jsx"),
 ]);
 
 const deps = (chunks, topics = [{ topic: "Photosynthesis", subject: "Biology" }], agent = { id: "a1" }) => ({
@@ -83,7 +83,7 @@ test("wiring: every learner turn carries the taught knowledge; the two tools; th
 });
 
 test("voice: the learner talks to the same protégé", async () => {
-  const voice = await read("../voice/routes.js");
+  const voice = await read("../../voice/routes.js");
   // The mic feeds the same chat (so every protégé rule holds), and a reply to
   // something said aloud is read aloud.
   assert.match(learnerTab, /const mic=useVoiceAnswer\(\{ onTranscript:\(said\)=>\{ voiceTurnRef\.current=true; sendRef\.current\?\.\(said\); \} \}\);/);

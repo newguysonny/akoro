@@ -10,10 +10,10 @@
 import db from "../../../db.js";
 import { openai } from "../../../lib/aiModel.js";
 import { appLink } from "../../../lib/urls.js";
-import { teachRequest, loadTaughtKnowledge, buildGuideMessages, shapeGuideAnswer } from "../protege.js";
+import { teachRequest, loadTaughtKnowledge, buildGuideMessages, shapeGuideAnswer } from "../social/protege.js";
 import { getSyllabusGrounding } from "../teaching/syllabus.js";
 import { akoroMaterialFor } from "../../materials/akoroMaterial.js";
-import { searchBlogPosts, readBlogPost } from "../blogResearch.js";
+import { searchBlogPosts, readBlogPost } from "../grounding/blogResearch.js";
 import { listMyBlogs, createBlogPost, updateBlogPost } from "../../blogs/service.js";
 import { scheduleChatFollowUp, listChatFollowUps, cancelChatFollowUp } from "./chat-follow-ups.js";
 import { listChats, readChat, searchChats, postToChat, ownedChatId } from "./chat-history-tools.js";

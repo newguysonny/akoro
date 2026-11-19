@@ -20,7 +20,7 @@
 import db from "../../db.js";
 import { OPENAI_MODEL, openai } from "../../lib/aiModel.js";
 import { notifyUser } from "../notify.js";
-import { loadTaughtKnowledge } from "../adaptive-learning/protege.js";
+import { loadTaughtKnowledge } from "../adaptive-learning/social/protege.js";
 import { canMessage, presenceOf } from "./filters.js";
 import { relationsOf, blockedWith, getSettings, onlineIds } from "./network.js";
 import { appLink } from "../../lib/urls.js";

@@ -12,7 +12,7 @@
 import db from "../../../db.js";
 import { appLink } from "../../../lib/urls.js";
 import { protegeDeps } from "./handlers-social.js";
-import { consultPeerAgents, consultBreakthroughs, PEER_QUESTION_MIN, PEER_QUESTION_MAX } from "../peerConsult.js";
+import { consultPeerAgents, consultBreakthroughs, PEER_QUESTION_MIN, PEER_QUESTION_MAX } from "../social/peerConsult.js";
 import { agentNetworkEnabled } from "./tool-catalogue-rest.js";
 import { studyPrepEnabled } from "./runtime-state.js";
 import { classForExam } from "../intent/agent-chat-intent.js";

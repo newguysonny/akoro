@@ -50,7 +50,7 @@ test.after(() => {
   setTimeout(() => process.exit(0), 300).unref();
 });
 
-const { runAgentToolLoop } = await import("./chat.js");
+const { runAgentToolLoop } = await import("../chat.js");
 
 const DELAYS = { check_progress: 600, list_my_goals: 200, list_tasks: 400, get_weak_topics: 250, create_task: 150 };
 const defs = (names) => names.map((name) => ({ type: "function", function: { name, description: name, parameters: { type: "object", properties: {} } } }));

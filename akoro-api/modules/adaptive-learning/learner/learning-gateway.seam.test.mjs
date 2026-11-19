@@ -7,10 +7,10 @@ import test from "node:test";
 
 process.env.SUPABASE_URL ||= "http://localhost:1";
 process.env.SUPABASE_SERVICE_KEY ||= "test";
-const { default: db } = await import("../../db.js");
-const { installFakeDb } = await import("../../lib/testing/fakeDb.mjs");
-const { claimShape, recordLearningEvent, refreshConceptRetention } = await import("./learner/learning-events.js");
-const { judgeStrategyOutcome } = await import("./strategies/outcomes.js");
+const { default: db } = await import("../../../db.js");
+const { installFakeDb } = await import("../../../lib/testing/fakeDb.mjs");
+const { claimShape, recordLearningEvent, refreshConceptRetention } = await import("./learning-events.js");
+const { judgeStrategyOutcome } = await import("../strategies/outcomes.js");
 
 const C = "33333333-3333-4333-8333-333333333333";
 const L = "44444444-4444-4444-8444-444444444444";
@@ -51,7 +51,7 @@ test("a gateway misconception goes through the recorder: the claim is stored as 
 });
 
 test("the concept-state gateway writes only through the recorder (no direct SQL calls left)", async () => {
-  const src = await readFile(new URL("../agent-tools/concept-state-routes.js", import.meta.url), "utf8");
+  const src = await readFile(new URL("../../agent-tools/concept-state-routes.js", import.meta.url), "utf8");
   assert.match(src, /recordLearningEvent\(\{/);
   assert.match(src, /claim: \{ status: observation\.claimStatus, validity: observation\.claimValidity, confidence: observation\.modelConfidence \}/);
   assert.match(src, /refreshConceptRetention\(/);
@@ -84,9 +84,9 @@ test("Study Prep offer → outcome: the next attempt on the topic judges the acc
 
 test("the gateway route stays behind its credential; only the post-auth recording path is shared", async () => {
   const { readFile } = await import("node:fs/promises");
-  const src = await readFile(new URL("../agent-tools/concept-state-routes.js", import.meta.url), "utf8");
+  const src = await readFile(new URL("../../agent-tools/concept-state-routes.js", import.meta.url), "utf8");
   assert.match(src, /router\.post\("\/observations", requireAgentToolsCredential,/);
   assert.match(src, /export async function recordGatewayObservations\(principalId, request\)/);
-  const cap = await readFile(new URL("../agent-tools/capability.js", import.meta.url), "utf8");
+  const cap = await readFile(new URL("../../agent-tools/capability.js", import.meta.url), "utf8");
   assert.doesNotMatch(cap, /AKORO_AGENT_TOOLS_(CAPABILITY_)?SECRET \|\| "[^"]+"/, "no built-in default secret");
 });

@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { collectMaterials, materialsFrom } from "./chat-materials.js";
 import { buildCitedLearnSuggestionMessages, buildSuggestionMessages, guideChip, notTaughtFrom, shapeCitedLearnSuggestions } from "./chatSuggestions.js";
-import { guidePassagesBlock } from "../documentGrounding.js";
+import { guidePassagesBlock } from "../grounding/documentGrounding.js";
 import { memoryForPrompt, renderRelevantMemory } from "./chat-memory.js";
 
 const chat = await readFile(new URL("../chat.js", import.meta.url), "utf8");

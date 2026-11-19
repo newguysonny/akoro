@@ -4,7 +4,7 @@
 // All personality, phases, and tips driven from DB config.
 // =============================================================
 
-import { guidePassagesBlock } from "../../documentGrounding.js";
+import { guidePassagesBlock } from "../../grounding/documentGrounding.js";
 import { buildGuidePrompt } from "../../training/agentPromptBuilder.js";
 import { buildTrainedMustKnowPrompt, buildTrainedEvaluateSessionPrompt } from "../../../agent-context/personas/trained.js";
 

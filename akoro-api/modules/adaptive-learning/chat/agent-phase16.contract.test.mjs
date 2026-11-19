@@ -7,12 +7,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { UPDATE_PLAN_TOOL, applyPlanUpdate, nextLedger, renderLedger, planOf, summaryMarkOf } from "./chat/taskLedger.js";
-import { actionClaims, actionClaimCorrection, ledgerLeftCorrection, turnCorrections } from "./chat/turnCheck.js";
-import { TOOL_FALLBACKS, failed, shouldRetry, recoveryHint } from "./chat/toolRecovery.js";
-import { fitDialogue, unsummarised, markOf, summariseEarlier, CONTEXT_LIMITS } from "./contextBudget.js";
-import { needsIntentStep, parseIntent, renderIntent, runIntentStep } from "./intent/intentStep.js";
-import { normaliseScratchpad } from "../agent-tools/conversation-context-validation.js";
+import { UPDATE_PLAN_TOOL, applyPlanUpdate, nextLedger, renderLedger, planOf, summaryMarkOf } from "./taskLedger.js";
+import { actionClaims, actionClaimCorrection, ledgerLeftCorrection, turnCorrections } from "./turnCheck.js";
+import { TOOL_FALLBACKS, failed, shouldRetry, recoveryHint } from "./toolRecovery.js";
+import { fitDialogue, unsummarised, markOf, summariseEarlier, CONTEXT_LIMITS } from "../grounding/contextBudget.js";
+import { needsIntentStep, parseIntent, renderIntent, runIntentStep } from "../intent/intentStep.js";
+import { normaliseScratchpad } from "../../agent-tools/conversation-context-validation.js";
 
 /* ── 1. The task ledger ─────────────────────────────────────────────────── */
 
@@ -105,10 +105,10 @@ test("recovery: the documented alternative, else say it plainly", () => {
 });
 
 test("recovery: every fallback is a real read tool of the chat", () => {
-  const chat = readFileSync(new URL("./chat.js", import.meta.url), "utf8");
-  const toolRuntime = readFileSync(new URL("./chat/tool-runtime.js", import.meta.url), "utf8");
-  const toolCatalogue = readFileSync(new URL("./chat/tool-catalogue-core.js", import.meta.url), "utf8")
-    + readFileSync(new URL("./chat/tool-catalogue-rest.js", import.meta.url), "utf8");
+  const chat = readFileSync(new URL("../chat.js", import.meta.url), "utf8");
+  const toolRuntime = readFileSync(new URL("./tool-runtime.js", import.meta.url), "utf8");
+  const toolCatalogue = readFileSync(new URL("./tool-catalogue-core.js", import.meta.url), "utf8")
+    + readFileSync(new URL("./tool-catalogue-rest.js", import.meta.url), "utf8");
   const side = toolRuntime.slice(toolRuntime.indexOf("export const SIDE_EFFECT_TOOLS"), toolRuntime.indexOf("export const isSideEffectingAction"));
   for (const [from, to] of Object.entries(TOOL_FALLBACKS)) {
     assert.match(toolCatalogue, new RegExp(`name: "${to}"`), `${to} exists`);
@@ -160,7 +160,7 @@ test("intent: read, cleaned, shown; greetings skip the call; failures pass throu
 /* ── Wiring ─────────────────────────────────────────────────────────────── */
 
 test("the chat turn uses all five", () => {
-  const chat = readFileSync(new URL("./chat.js", import.meta.url), "utf8");
+  const chat = readFileSync(new URL("../chat.js", import.meta.url), "utf8");
   assert.match(chat, /if \(tool === UPDATE_PLAN_TOOL\.name\) \{[\s\S]{0,300}applyPlanUpdate\(ledgerNow, input, executions\)/);
   assert.match(chat, /scratchpad: nextLedger\(ledgerIn, prepared\.ledger \|\| null, userMessage, prepared\.toolExecutions\)/);
   assert.match(chat, /for \(const line of turnCorrections\(reply, \{ executions: prepared\.toolExecutions, ledger: prepared\.ledger \|\| ledgerIn \}\)\)/);

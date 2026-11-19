@@ -6,18 +6,18 @@
  * content from the database, retries a failed extraction, looks at the
  * folders, and files from its own decision. The server posts nothing.
  */
-import "../../test-env.mjs";
+import "../../../test-env.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-const chat = readFileSync(new URL("./chat.js", import.meta.url), "utf8");
-const turnPrepare = readFileSync(new URL("./chat/turn-prepare.js", import.meta.url), "utf8");
-const network = readFileSync(new URL("./chat/handlers-network-study.js", import.meta.url), "utf8");
-const toolCatalogue = readFileSync(new URL("./chat/tool-catalogue-rest.js", import.meta.url), "utf8");
-const tools = readFileSync(new URL("../materials/uploadTools.js", import.meta.url), "utf8");
-const examples = readFileSync(new URL("../agent-capabilities/examples.js", import.meta.url), "utf8");
-const selection = readFileSync(new URL("./chat/toolSelection.js", import.meta.url), "utf8");
+const chat = readFileSync(new URL("../chat.js", import.meta.url), "utf8");
+const turnPrepare = readFileSync(new URL("./turn-prepare.js", import.meta.url), "utf8");
+const network = readFileSync(new URL("./handlers-network-study.js", import.meta.url), "utf8");
+const toolCatalogue = readFileSync(new URL("./tool-catalogue-rest.js", import.meta.url), "utf8");
+const tools = readFileSync(new URL("../../materials/uploadTools.js", import.meta.url), "utf8");
+const examples = readFileSync(new URL("../../agent-capabilities/examples.js", import.meta.url), "utf8");
+const selection = readFileSync(new URL("./toolSelection.js", import.meta.url), "utf8");
 
 test("the four upload tools are defined and executed", () => {
   for (const name of ["read_upload", "retry_extraction", "list_folders", "file_upload"]) {
@@ -64,9 +64,9 @@ test("filingDb exports everything its importers name (the 2026-11-16 deploy cras
   // left it unexported (an arrow const, missed by the function pass) — the
   // API crashed at boot and the deploy never flipped. Pin every named
   // import from filingDb against its real exports.
-  const filingDb = readFileSync(new URL("../materials/filingDb.js", import.meta.url), "utf8");
+  const filingDb = readFileSync(new URL("../../materials/filingDb.js", import.meta.url), "utf8");
   const exported = new Set([...filingDb.matchAll(/export (?:async function|function|const) (\w+)/g)].map((m) => m[1]));
-  const routes = readFileSync(new URL("../materials/routes.js", import.meta.url), "utf8");
+  const routes = readFileSync(new URL("../../materials/routes.js", import.meta.url), "utf8");
   const imported = [...routes.matchAll(/import \{([^}]+)\} from "\.\/filingDb\.js"/g)]
     .flatMap((m) => m[1].split(",").map((n) => n.trim().split(" as ")[0]).filter(Boolean));
   assert.ok(imported.length >= 10, "routes imports the filing machinery");
@@ -83,7 +83,7 @@ test("the turn: waiting uploads are listed, the first call is forced, nothing is
 });
 
 test("the upload tools carry their own trace display — the turn tells the file story", () => {
-  const trace = readFileSync(new URL("./chat/chat-trace.js", import.meta.url), "utf8");
+  const trace = readFileSync(new URL("./chat-trace.js", import.meta.url), "utf8");
   for (const [name, headline] of [["read_upload", "Reading your file"], ["retry_extraction", "Re-reading your file"], ["list_folders", "Checking your folders"], ["file_upload", "Filing your file"]]) {
     assert.match(trace, new RegExp(`${name}:\\s+\\{[^}]*headline: "${headline}"`), `${name} has its own headline, not the fallback`);
   }

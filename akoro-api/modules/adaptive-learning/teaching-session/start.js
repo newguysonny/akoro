@@ -19,7 +19,7 @@ import { getOrCreateStudentAgent } from "../agents/student/knowledge.js";
 import { decayEngine } from "../agents/student/decayEngine.js";
 import { resolveLadder } from "../teaching/lessonLadder.js";
 import { NaNaEsumai } from "../agents/nana-esumai/guide.js";
-import { resolveSessionDocument } from "../documentGrounding.js";
+import { resolveSessionDocument } from "../grounding/documentGrounding.js";
 import { loadContinuationContext, loadDecayPriorLesson } from "./context.js";
 import { loadLearnerNotes } from "./learnerNotes.js";
 

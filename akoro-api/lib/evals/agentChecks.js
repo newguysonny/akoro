@@ -17,7 +17,7 @@ import { openai } from "../aiModel.js";
 import { actionClaimCorrection, ledgerLeftCorrection } from "../../modules/adaptive-learning/chat/turnCheck.js";
 import { applyPlanUpdate } from "../../modules/adaptive-learning/chat/taskLedger.js";
 import { shouldRetry, recoveryHint } from "../../modules/adaptive-learning/chat/toolRecovery.js";
-import { fitDialogue } from "../../modules/adaptive-learning/contextBudget.js";
+import { fitDialogue } from "../../modules/adaptive-learning/grounding/contextBudget.js";
 import { runIntentStep } from "../../modules/adaptive-learning/intent/intentStep.js";
 
 const load = (f) => JSON.parse(readFileSync(fileURLToPath(new URL(`./data/${f}`, import.meta.url)), "utf8"));

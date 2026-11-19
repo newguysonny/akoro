@@ -7,8 +7,8 @@
  * Read-only, published-only — drafts and archived posts are invisible to
  * the agent, exactly as to the public site.
  */
-import { contentDb } from "../../db.js";
-import { flattenBlogBody, sanitizeBlogQuery, blogBlockToLines, BLOG_QUERY_MAX_CHARS } from "../../lib/blogBody.js";
+import { contentDb } from "../../../db.js";
+import { flattenBlogBody, sanitizeBlogQuery, blogBlockToLines, BLOG_QUERY_MAX_CHARS } from "../../../lib/blogBody.js";
 
 export const BLOG_SEARCH_MAX_RESULTS = 8;
 
@@ -124,8 +124,8 @@ export async function searchBlogPassages({ query, category, limit } = {}, deps =
   if (!sanitized.ok) return { error: sanitized.reason === "too_long" ? `Keep the search under ${BLOG_QUERY_MAX_CHARS} characters.` : "Give the search a word or two to look for." };
   const capped = Math.min(Math.max(Number.parseInt(limit, 10) || BLOG_PASSAGE_LIMIT, 1), BLOG_SEARCH_MAX_RESULTS);
   const cat = category && String(category).trim() && String(category) !== "All" ? String(category).trim().slice(0, 60) : null;
-  const rpc = deps.rpc || (async (args) => (await import("../../db.js")).default.rpc("match_blog_chunks", args));
-  const embed = deps.embed || (async (text) => (await import("../../lib/searchEmbedding.js")).embedForSearch(text, { payer: "platform", feature: "blog_search" }));
+  const rpc = deps.rpc || (async (args) => (await import("../../../db.js")).default.rpc("match_blog_chunks", args));
+  const embed = deps.embed || (async (text) => (await import("../../../lib/searchEmbedding.js")).embedForSearch(text, { payer: "platform", feature: "blog_search" }));
   let index = "chunks";
   let passages = [];
   try {

@@ -6,9 +6,9 @@ process.env.SUPABASE_URL ||= "http://localhost:59999";
 process.env.SUPABASE_SERVICE_KEY ||= "test-service-key";
 
 const { resolveSessionDocument, groundTurn, passagesAsReference, citationsForReply } = await import("./documentGrounding.js");
-const ws = await readFile(new URL("./realtime/websocket.js", import.meta.url), "utf8");
-const sessionStart = await readFile(new URL("./teaching-session/start.js", import.meta.url), "utf8");
-const agent = await readFile(new URL("./agents/student/agent.js", import.meta.url), "utf8");
+const ws = await readFile(new URL("../realtime/websocket.js", import.meta.url), "utf8");
+const sessionStart = await readFile(new URL("../teaching-session/start.js", import.meta.url), "utf8");
+const agent = await readFile(new URL("../agents/student/agent.js", import.meta.url), "utf8");
 
 const passages = [
   { n: 1, kind: "block", pageNumber: 3, bbox: [50, 100, 950, 300], startMs: null, endMs: null, text: "Photosynthesis converts light energy into chemical energy." },

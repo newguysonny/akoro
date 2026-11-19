@@ -22,8 +22,8 @@ import {
 } from "../agents/student/knowledge.js";
 import { decayEngine } from "../agents/student/decayEngine.js";
 import { provenanceLabel } from "../teaching/lessonLadder.js";
-import { normalizeSessionReference } from "../sessionReference.js";
-import { groundTurn, citationsForReply } from "../documentGrounding.js";
+import { normalizeSessionReference } from "../grounding/sessionReference.js";
+import { groundTurn, citationsForReply } from "../grounding/documentGrounding.js";
 import { serialiseTeachingEvidence } from "../learner/teaching-evidence.js";
 import {
   createSessionRecord, ensureSessionRecord, appendSessionBlocks, completeSessionRecord,

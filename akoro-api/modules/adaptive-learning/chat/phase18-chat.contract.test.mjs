@@ -46,14 +46,14 @@ server.unref();
 process.env.FAKE_AGENT_KEY = "test";
 process.env.AI_MODELS = JSON.stringify([{ id: "p18-fake", provider: "openai_compatible", apiModel: "p18-fake", baseURL: `http://127.0.0.1:${server.address().port}/v1`, apiKeyEnv: "FAKE_AGENT_KEY", price: { in: 0, out: 0 }, caps: { tools: true, stream: true } }]);
 
-const chat = await import("./chat.js");
-const { chatToolTimeLimit, runWithinLimit, timeoutResult, CHAT_TOOL_FAMILY_LIMITS_MS } = await import("./chat/toolLimits.js");
-const { shouldRetry, recoveryHint } = await import("./chat/toolRecovery.js");
-const { toolObservation } = await import("../../utils/toolObservation.js");
-const { runDry } = await import("../../lib/dryRunContext.js");
-const { withActionBasis, NO_RULE_CODE } = await import("../agent-runtime/actionBasis.js");
-const { scoreRun, longestRepeat } = await import("../../lib/evals/benchmark.js");
-const { benchmarkScenarios } = await import("../../lib/evals/benchmark/scenarios.js");
+const chat = await import("../chat.js");
+const { chatToolTimeLimit, runWithinLimit, timeoutResult, CHAT_TOOL_FAMILY_LIMITS_MS } = await import("./toolLimits.js");
+const { shouldRetry, recoveryHint } = await import("./toolRecovery.js");
+const { toolObservation } = await import("../../../utils/toolObservation.js");
+const { runDry } = await import("../../../lib/dryRunContext.js");
+const { withActionBasis, NO_RULE_CODE } = await import("../../agent-runtime/actionBasis.js");
+const { scoreRun, longestRepeat } = await import("../../../lib/evals/benchmark.js");
+const { benchmarkScenarios } = await import("../../../lib/evals/benchmark/scenarios.js");
 
 const LEARNER = "00000000-0000-4000-8000-0000000018aa";
 const tools = chat.getLearnerChatTools().map((t) => ({ type: "function", function: { name: t.name, description: t.description, parameters: t.input_schema } }));
@@ -194,34 +194,34 @@ test("executeChatTool: explicit by default, inherits the work's basis, refuses a
 });
 
 test("the rows: self-tooling builds and change cards, proactive proposals, V4 runs carry the basis", async () => {
-  assert.match(read("../self-tooling/pipeline.js"), /insert\(\{ \.\.\.row, \.\.\.basisColumns\(currentActionBasis\(\) \|\| \{ basis: "explicit" \}\) \}\)/);
-  assert.equal((read("../self-tooling/confirmations.js").match(/\.\.\.basisColumns\(currentActionBasis\(\) \|\| \{ basis: "explicit" \}\)/g) || []).length, 2);
-  assert.match(read("../self-tooling/escalation.js"), /withActionBasis\(\{ basis: "inferred", rule: RULES\.request\(claimed\.id\) \}, \(\) => createTool\(/);
-  for (const f of ["../autonomy/cycle.js", "../autonomy/instructorCycle.js"]) assert.match(read(f), /basisColumns\(\{ basis: "inferred", rule: RULES\.proactive\(p\.kind\) \}\)/, f);
-  assert.match(read("../verify/realUser.js"), /\.\.\.basisColumns\(\{ basis: "explicit" \}\)/);
-  assert.match(read("../verify/realUser.js"), /\.\.\.basisOfRow\(r, \{ basis: "explicit" \}\)/);
-  const sql = read("../../migrations/2026-agent-action-basis.sql");
+  assert.match(read("../../self-tooling/pipeline.js"), /insert\(\{ \.\.\.row, \.\.\.basisColumns\(currentActionBasis\(\) \|\| \{ basis: "explicit" \}\) \}\)/);
+  assert.equal((read("../../self-tooling/confirmations.js").match(/\.\.\.basisColumns\(currentActionBasis\(\) \|\| \{ basis: "explicit" \}\)/g) || []).length, 2);
+  assert.match(read("../../self-tooling/escalation.js"), /withActionBasis\(\{ basis: "inferred", rule: RULES\.request\(claimed\.id\) \}, \(\) => createTool\(/);
+  for (const f of ["../../autonomy/cycle.js", "../../autonomy/instructorCycle.js"]) assert.match(read(f), /basisColumns\(\{ basis: "inferred", rule: RULES\.proactive\(p\.kind\) \}\)/, f);
+  assert.match(read("../../verify/realUser.js"), /\.\.\.basisColumns\(\{ basis: "explicit" \}\)/);
+  assert.match(read("../../verify/realUser.js"), /\.\.\.basisOfRow\(r, \{ basis: "explicit" \}\)/);
+  const sql = read("../../../migrations/2026-agent-action-basis.sql");
   for (const t of ["self_tool_events", "agent_tool_write_confirmations", "agent_proposals", "verify_real_user_runs"]) assert.match(sql, new RegExp(`ALTER TABLE edu\\.${t}\\s+ADD COLUMN IF NOT EXISTS basis`), t);
-  const manifest = JSON.parse(read("../../migrations/manifest.json"));
+  const manifest = JSON.parse(read("../../../migrations/manifest.json"));
   assert.ok(manifest.schema.includes("2026-agent-action-basis.sql"));
 
-  const { auditRow } = await import("../self-tooling/library.js");
+  const { auditRow } = await import("../../self-tooling/library.js");
   assert.deepEqual(auditRow({ id: "e", user_id: "u", goal: "g", outcome: "created", created_at: "t", basis: "inferred", basis_rule: "approved_request:r" }, "build"),
     { kind: "build", id: "e", userId: "u", goal: "g", outcome: "created", toolId: null, reason: null, createdAt: "t", basis: "inferred", rule: "approved_request:r" });
   assert.equal(auditRow({ id: "c", principal_id: "u", tool_name: "selftool:tasks.delete", status: "pending", created_at: "t", basis: "explicit" }, "change").tool, "tasks.delete");
 
-  const { proposalMeta, proposalBasis } = await import("../autonomy/deliver.js");
+  const { proposalMeta, proposalBasis } = await import("../../autonomy/deliver.js");
   assert.deepEqual(proposalBasis({ kind: "task" }), { basis: "inferred", rule: "proactive:task" });
   assert.equal(proposalBasis({}).rule, null, "no kind, no rule: never delivered");
   assert.equal(proposalMeta({ id: "p", kind: "goal", title: "T" }).rule, "proactive:goal");
-  assert.match(read("../autonomy/deliver.js"), /const refused = basisRefusal\(proposalBasis\(p\), \{ action: "proactive delivery" \}\);/);
-  const { mergeInbox } = await import("../agent-proposals/inboxCore.js");
+  assert.match(read("../../autonomy/deliver.js"), /const refused = basisRefusal\(proposalBasis\(p\), \{ action: "proactive delivery" \}\);/);
+  const { mergeInbox } = await import("../../agent-proposals/inboxCore.js");
   const [item] = mergeInbox({ proposals: [{ id: "p", kind: "task", title: "Revise", created_at: "t" }] });
   assert.deepEqual([item.basis, item.rule], ["inferred", "proactive:task"]);
 });
 
 test("the admin API: the self-tooling audit route", () => {
-  assert.match(read("../admin/agent-tools.js"), /router\.get\("\/self-tooling\/audit", adminOnly,/);
+  assert.match(read("../../admin/agent-tools.js"), /router\.get\("\/self-tooling\/audit", adminOnly,/);
 });
 
 /* ── item 3: the benchmark's repeating stub ──────────────────────────────── */
@@ -241,7 +241,7 @@ test("benchmark: a repeat_guard case per subject, scored on back-to-back repeats
 });
 
 test("benchmark end to end: the repeating stub, the guard's reminder, and a pass", async () => {
-  const { benchmarkSuite } = await import("../../lib/evals/benchmark.js");
+  const { benchmarkSuite } = await import("../../../lib/evals/benchmark.js");
   const sc = benchmarkSuite.cases.find((c) => c.key.includes("repeat_guard") && c.key.endsWith("biology"));
   script = [
     { tool_calls: [{ name: "get_running_work", arguments: {} }] },

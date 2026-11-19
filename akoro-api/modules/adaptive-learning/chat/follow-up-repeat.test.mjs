@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { validateFollowUpInput, nextOccurrence } from "./chat/chat-follow-up-validation.js";
+import { validateFollowUpInput, nextOccurrence } from "./chat-follow-up-validation.js";
 
 process.env.SUPABASE_URL ||= "http://localhost:1";
 process.env.SUPABASE_SERVICE_KEY ||= "test";
 process.env.OPENAI_API_KEY ||= "test";
-const { formatToolRows } = await import("./chat/chat-follow-ups.js");
+const { formatToolRows } = await import("./chat-follow-ups.js");
 
 const inHours = (h) => new Date(Date.now() + h * 3_600_000).toISOString();
 
@@ -56,10 +56,10 @@ test("formatToolRows: a short plain list, capped", () => {
 });
 
 test("wiring: the agent's tool offers repeat + runTool, and runTool must be the learner's own active tool", async () => {
-  const chat = await readFile(new URL("./chat.js", import.meta.url), "utf8");
+  const chat = await readFile(new URL("../chat.js", import.meta.url), "utf8");
   assert.match(chat, /repeat: \{ type: "string", enum: \["daily", "weekdays", "hourly"\]/);
   assert.match(chat, /isn't one of the learner's active tools/);
-  const fu = await readFile(new URL("./chat/chat-follow-ups.js", import.meta.url), "utf8");
+  const fu = await readFile(new URL("./chat-follow-ups.js", import.meta.url), "utf8");
   assert.match(fu, /One pending occurrence per series/);
   assert.match(fu, /if \(out\.status \|\| out\.action\) return null;   \/\/ a change tool never runs from a schedule/);
 });

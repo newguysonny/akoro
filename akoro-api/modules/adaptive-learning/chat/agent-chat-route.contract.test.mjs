@@ -3,29 +3,29 @@ import { readFile } from "node:fs/promises";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-const source = await readFile(new URL("./chat.js", import.meta.url), "utf8");
-const turnPrepare = await readFile(new URL("./chat/turn-prepare.js", import.meta.url), "utf8");
-const turnAnswer = await readFile(new URL("./chat/turn-answer.js", import.meta.url), "utf8");
+const source = await readFile(new URL("../chat.js", import.meta.url), "utf8");
+const turnPrepare = await readFile(new URL("./turn-prepare.js", import.meta.url), "utf8");
+const turnAnswer = await readFile(new URL("./turn-answer.js", import.meta.url), "utf8");
 const turn = `${turnPrepare}\n${turnAnswer}`;
-const networkStudyHandlers = await readFile(new URL("./chat/handlers-network-study.js", import.meta.url), "utf8");
-const turnStore = await readFile(new URL("./chat/turn-store.js", import.meta.url), "utf8");
-const handlers = await readFile(new URL("./chat/handlers-instructor-learner.js", import.meta.url), "utf8");
-const toolRuntime = await readFile(new URL("./chat/tool-runtime.js", import.meta.url), "utf8");
-const toolCatalogueCore = await readFile(new URL("./chat/tool-catalogue-core.js", import.meta.url), "utf8");
-const toolCatalogueRest = await readFile(new URL("./chat/tool-catalogue-rest.js", import.meta.url), "utf8");
+const networkStudyHandlers = await readFile(new URL("./handlers-network-study.js", import.meta.url), "utf8");
+const turnStore = await readFile(new URL("./turn-store.js", import.meta.url), "utf8");
+const handlers = await readFile(new URL("./handlers-instructor-learner.js", import.meta.url), "utf8");
+const toolRuntime = await readFile(new URL("./tool-runtime.js", import.meta.url), "utf8");
+const toolCatalogueCore = await readFile(new URL("./tool-catalogue-core.js", import.meta.url), "utf8");
+const toolCatalogueRest = await readFile(new URL("./tool-catalogue-rest.js", import.meta.url), "utf8");
 const toolCatalogue = `${toolCatalogueCore}\n${toolCatalogueRest}`;
 const agentChatDoctrine = await readFile(
-  new URL("../../akoro-agent/policies/AGENT_CHAT.md", import.meta.url), "utf8");
+  new URL("../../../akoro-agent/policies/AGENT_CHAT.md", import.meta.url), "utf8");
 const instructorChatPage = await readFile(
-  new URL("../../../akoro-instructor/src/pages/ChatPage.jsx", import.meta.url), "utf8",
+  new URL("../../../../akoro-instructor/src/pages/ChatPage.jsx", import.meta.url), "utf8",
 );
 const learnerChatTab = await readFile(
-  new URL("../../../akoro-learner/src/components/tabs/AgentChatTab.jsx", import.meta.url), "utf8",
+  new URL("../../../../akoro-learner/src/components/tabs/AgentChatTab.jsx", import.meta.url), "utf8",
 );
 const toolObservationsDoctrine = await readFile(
-  new URL("../../akoro-agent/policies/TOOL_OBSERVATIONS.md", import.meta.url), "utf8");
+  new URL("../../../akoro-agent/policies/TOOL_OBSERVATIONS.md", import.meta.url), "utf8");
 const studyPrepDoctrine = await readFile(
-  new URL("../../akoro-agent/channels/STUDY_PREP.md", import.meta.url), "utf8");
+  new URL("../../../akoro-agent/channels/STUDY_PREP.md", import.meta.url), "utf8");
 
 test("the sole Agent Chat response authority is the unified /agent route", () => {
   // Phase 19 step 3 (6/7): the route is a thin registration. The turn itself
@@ -242,10 +242,10 @@ test("learning-session history is its own tool — never answered with the schoo
 test("draft cards survive a reload — tool previews ride the persisted message meta", async () => {
   // The migration exists and ships in the schema group (applies at boot).
   const manifest = JSON.parse(
-    await readFile(new URL("../../migrations/manifest.json", import.meta.url), "utf8"),
+    await readFile(new URL("../../../migrations/manifest.json", import.meta.url), "utf8"),
   );
   assert.ok(manifest.schema.includes("2026-chat-message-meta.sql"), "meta migration must be in the schema group");
-  const migration = await readFile(new URL("../../migrations/2026-chat-message-meta.sql", import.meta.url), "utf8");
+  const migration = await readFile(new URL("../../../migrations/2026-chat-message-meta.sql", import.meta.url), "utf8");
   assert.match(migration, /ADD COLUMN IF NOT EXISTS meta jsonb/);
   // The server derives preview meta from the turn's tool executions …
   assert.match(turnStore, /function previewMetaFrom\(/);
@@ -264,13 +264,13 @@ test("draft cards survive a reload — tool previews ride the persisted message 
 test("the instructor chat opts out of the mobile TopBar — the conversation gets the room", () => {
   // The console frame: a `bare` page owns the content area and the header hides on phones (ui/Shell.jsx).
   assert.match(instructorChatPage, /<PageLayout bare>/);
-  const shell = readFileSync(new URL("../../../akoro-instructor/src/ui/Shell.jsx", import.meta.url), "utf8");
+  const shell = readFileSync(new URL("../../../../akoro-instructor/src/ui/Shell.jsx", import.meta.url), "utf8");
   assert.match(shell, /mobileHide=\{bare\}/);
 });
 
 test("the instructor composer is the learner composer, exactly — stop, menu, semantics", async () => {
   const composer = await readFile(
-    new URL("../../../akoro-instructor/src/components/common/FortizoChatComposer.jsx", import.meta.url), "utf8",
+    new URL("../../../../akoro-instructor/src/components/common/FortizoChatComposer.jsx", import.meta.url), "utf8",
   );
   // the learner's running→stop affordance: send arrow becomes a ■ stop button
   assert.match(composer, /running = false,\s*\n\s*onStop,/);

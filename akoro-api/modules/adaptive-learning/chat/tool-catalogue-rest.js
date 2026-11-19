@@ -1,6 +1,6 @@
 // Second half of the Agent Chat catalogue + instructor tools.
 import { REPEAT_SCHEMA } from "./tool-catalogue-core.js";
-import { BLOG_SEARCH_MAX_RESULTS } from "../blogResearch.js";
+import { BLOG_SEARCH_MAX_RESULTS } from "../grounding/blogResearch.js";
 
 export const CHAT_TOOLS_REST = [
 

@@ -9,7 +9,7 @@ import { runtimeFeatureModel } from "../../../lib/modelRuntime.js";
 import { ensureNotTaughtOpener, promisedTeachTopic, scrubInternalIds, stripDsmlMarkup, stripToolCallMarkup } from "./reply-scrub.js";
 import { looksTruncated } from "./narration-stall.js";
 import { akoroMaterialFor } from "./handlers-social.js";
-import { teachRequest } from "../protege.js";
+import { teachRequest } from "../social/protege.js";
 import { materialsFrom, collectMaterials } from "./chat-materials.js";
 import { requestClaimCorrection } from "./requestClaims.js";
 import { turnCorrections } from "./turnCheck.js";

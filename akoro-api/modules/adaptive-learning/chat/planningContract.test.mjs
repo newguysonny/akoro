@@ -3,10 +3,10 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { applyPlanUpdate, doneWhenOf, meetDoneWhen, nextLedger, renderDraftPlan, renderLedger, UPDATE_PLAN_TOOL } from "./chat/taskLedger.js";
-import { parseIntent, renderIntent, NEXT_STEPS } from "./intent/intentStep.js";
-import { turnCorrections } from "./chat/turnCheck.js";
-import { normaliseScratchpad } from "../agent-tools/conversation-context-validation.js";
+import { applyPlanUpdate, doneWhenOf, meetDoneWhen, nextLedger, renderDraftPlan, renderLedger, UPDATE_PLAN_TOOL } from "./taskLedger.js";
+import { parseIntent, renderIntent, NEXT_STEPS } from "../intent/intentStep.js";
+import { turnCorrections } from "./turnCheck.js";
+import { normaliseScratchpad } from "../../agent-tools/conversation-context-validation.js";
 
 const plan = { goal: "Revise for Friday", steps: [{ step: "Create the Friday task", status: "pending" }, { step: "Schedule a battle", status: "pending" }],
   done_when: [{ condition: "A revision task exists for Friday", tool: "create_task" }, { condition: "A battle is scheduled", tool: "challenge_agent" }] };
@@ -64,17 +64,17 @@ test("a multi-step request gets a starting plan to adopt; never over an open pla
 });
 
 test("wiring: the chat turn shows the starting plan for multi-step requests; the intent call has room for the steps", async () => {
-  const chat = await readFile(new URL("./chat/turn-answer.js", import.meta.url), "utf8");
-  const intent = await readFile(new URL("./intent/intentStep.js", import.meta.url), "utf8");
+  const chat = await readFile(new URL("./turn-answer.js", import.meta.url), "utf8");
+  const intent = await readFile(new URL("../intent/intentStep.js", import.meta.url), "utf8");
   assert.match(chat, /\+ \(intent\?\.multiStep \? renderDraftPlan\(intent\.steps, conversation\?\.scratchpad \|\| null\) : ""\)/);
   assert.match(intent, /max_tokens: 320/);
 });
 
 test("plan first is enforced on the first step of a multi-step action turn — not when asking, stopping or with an open plan", async () => {
-  const chat = await readFile(new URL("./chat.js", import.meta.url), "utf8");
-  const loop = await readFile(new URL("./chat/agent-loop.js", import.meta.url), "utf8");
-  const toolRuntime = await readFile(new URL("./chat/tool-runtime.js", import.meta.url), "utf8");
-  const bench = await readFile(new URL("../../lib/evals/benchmark.js", import.meta.url), "utf8");
+  const chat = await readFile(new URL("../chat.js", import.meta.url), "utf8");
+  const loop = await readFile(new URL("./agent-loop.js", import.meta.url), "utf8");
+  const toolRuntime = await readFile(new URL("./tool-runtime.js", import.meta.url), "utf8");
+  const bench = await readFile(new URL("../../../lib/evals/benchmark.js", import.meta.url), "utf8");
   assert.match(toolRuntime, /export const shouldPlanFirst = \(intent\) => !!\(intent\?\.multiStep && intent\.next === "proceed" && \["action", "change"\]\.includes\(intent\.kind\)\);/);
   assert.match(loop, /const planStep = iteration === 0 && !requiredTool && planFirst && !\(Array\.isArray\(ledgerNow\?\.plan\)/);
   assert.match(loop, /planStep \? \{ type: "function", function: \{ name: UPDATE_PLAN_TOOL\.name \} \} : "auto"/);

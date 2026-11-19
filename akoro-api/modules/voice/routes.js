@@ -17,7 +17,7 @@ import { authenticateToken } from "../auth/routes.js";
 import { transcribeBufferDeepgram, hasDeepgram, grantAgentToken } from "./deepgram.js";
 import { speakBuffer } from "./tts.js";
 import { tutorSystemPrompt, protegeDeps } from "../adaptive-learning/chat.js";
-import { loadTaughtKnowledge, renderTaughtContext } from "../adaptive-learning/protege.js";
+import { loadTaughtKnowledge, renderTaughtContext } from "../adaptive-learning/social/protege.js";
 import { loadDoctrine } from "../agent-context/context-manager.js";
 import { coinsAvailable, debitCoins, InsufficientCoins } from "../../lib/coins.js";
 import { getAiBillTo } from "../../lib/aiContext.js";
