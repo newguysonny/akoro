@@ -271,8 +271,7 @@
     "2026-pharmd-unified.sql",
     "2026-pharmd-material-filemeta.sql",
     "2026-profile-discipline.sql",
-    "2026-record-previews.sql",
-    "2026-seed-community-notes.sql"
+    "2026-record-previews.sql"
   ],
   "demo": [
     "2026-seed-school-passwords.sql",
