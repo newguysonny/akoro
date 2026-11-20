@@ -24,13 +24,13 @@
  * the current DiscoveryTab feed directly.
  */
 import { useEffect, useState } from 'react';
-import { BRAND, GOLD } from '../../constants.js';
+import { BRAND, GREEN, GOLD } from '../../constants.js';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 import { Icon } from '../common/Icons.jsx';
 import Toast from '../common/Toast.jsx';
 import DiscoverSearchPage from './DiscoverSearchPage.jsx';
 import { TYPES, matchTypes, FONT } from './dhubTypes.js';
-import { fetchProgrammeCatalogue } from '../../services/programmesApi.js';
+import { programmeForDiscipline, PHARMD_SLUG } from '../../lib/disciplineProgrammes.js';
 
 /* Gradient washes for programme cards without a cover image — the same
    colour-block energy as the type cards, cycled per programme. */
@@ -59,42 +59,38 @@ function CornerArt({ cover, icon }) {
   );
 }
 
-export default function DiscoverHub({ onOpenCourses, onOpenCourse, onOpenRecord, onOpenBattles, onOpenPharmd, onOpenProgramme, onOpenRail, onOpenContents, onOpenCommunity, onOpenFolder, onOpenAgent, onOpenPharmdCourse, userId, initialQuery = '' }) {
+export default function DiscoverHub({ onOpenCourses, onOpenCourse, onOpenRecord, onOpenBattles, onOpenDiscipline, onOpenMore, onOpenRail, onOpenContents, onOpenCommunity, onOpenFolder, onOpenAgent, onOpenPharmdCourse, discipline, userId, initialQuery = '' }) {
   const { t } = useLang();
   const [query, setQuery] = useState(initialQuery);
   const [searchOpen, setSearchOpen] = useState(false);
   const [toast, setToast] = useState(null);
 
-  /* The published programme catalogue (admin's Program Courses).
-     Best-effort: the hub renders its type cards either way. */
-  const [programmes, setProgrammes] = useState([]);
-  useEffect(() => {
-    let on = true;
-    fetchProgrammeCatalogue().then((rows) => { if (on) setProgrammes(rows); }).catch(() => {});
-    return () => { on = false; };
-  }, []);
 
-  /* The Pharm.D catalogue entry rides the existing Pharm D card (same
-     special experience); every other published programme gets its own
-     card in the same layout, opening the generic programme page. */
-  const pharmdEntry = programmes.find((p) => p.source === 'pharmd') || null;
-  const q = query.trim().toLowerCase();
-  const progCards = programmes
-    .filter((p) => p.source !== 'pharmd')
-    .filter((p) => !q || `${p.name} ${p.code || ''} ${p.description || ''} programme program materials`.toLowerCase().includes(q));
-
-  const all = TYPES(t);
-  const visible = matchTypes(t, query).map((ty) => (ty.key === 'pharmd' && pharmdEntry
-    ? { ...ty,
-        label: pharmdEntry.name,
-        desc: `${pharmdEntry.course_count} ${pharmdEntry.course_count === 1 ? 'course' : 'courses'} · ${ty.desc}`,
-        cover: pharmdEntry.cover_url || null }
-    : ty));
+  /* Programme cards are STATIC (lib/disciplineProgrammes.js): the learner's
+     own discipline gets its card, and a second card lists the rest. Nothing
+     is fetched on this page. */
+  const mine = programmeForDiscipline(discipline);
+  const T = TYPES(t);
+  const byKey = (k) => T.find((ty) => ty.key === k);
+  const moreTile = { key: 'more', icon: 'ti-grid-dots', grad: 'linear-gradient(140deg,#7C5CE6,#5B3FD1)', label: t('dhub.card_more'), desc: t('dhub.card_more_desc'), kw: 'more programmes disciplines law engineering medicine', accent: '#8B5CF6' };
+  // Explicit order — one programme card for the learner, then one for the rest.
+  const base = [
+    byKey('contents'),
+    byKey('courses'),
+    mine && { key: 'discipline', icon: mine.icon, grad: mine.grad, label: mine.name, desc: mine.desc, kw: 'programme program discipline materials', accent: GREEN },
+    moreTile,
+    byKey('guide'),
+    byKey('live'),
+  ].filter(Boolean);
+  const all = base;
+  const qq = query.trim().toLowerCase();
+  const visible = base.filter((ty) => !qq || `${ty.label} ${ty.desc} ${ty.kw || ''}`.toLowerCase().includes(qq));
 
   const activate = (ty, qOverride) => {
     const q = qOverride ?? query.trim();
     if (ty.key === 'courses') onOpenCourses?.(q);
-    else if (ty.key === 'pharmd') onOpenPharmd?.();
+    else if (ty.key === 'discipline') onOpenDiscipline?.(mine?.slug || PHARMD_SLUG);
+    else if (ty.key === 'more') onOpenMore?.();
     // The focused discovery feeds — same courses-feed UI, one rail.
     else if (ty.key === 'guide') onOpenRail?.('guides', q);
     else if (ty.key === 'live') onOpenRail?.('live', q);
@@ -172,7 +168,7 @@ export default function DiscoverHub({ onOpenCourses, onOpenCourse, onOpenRecord,
       {/* Type cards grid — colour-block tiles. Published programmes ride
           the SAME layout: name as the title, description as "… program
           materials", cover image in the corner tile (book icon fallback). */}
-      {(visible.length + progCards.length) > 0 ? (
+      {visible.length > 0 ? (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12, padding: '12px 16px 0' }}>
           <style>{`.dhub-card{transition:transform .15s ease,box-shadow .15s ease}.dhub-card:hover{transform:translateY(-2px)}.dhub-card:active{transform:scale(.97)}`}</style>
           {visible.map((ty) => (
@@ -204,26 +200,6 @@ export default function DiscoverHub({ onOpenCourses, onOpenCourse, onOpenRecord,
                   <svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
                 </span>
               )}
-            </div>
-          ))}
-          {progCards.map((p, i) => (
-            <div key={p.id} onClick={() => onOpenProgramme?.(p)} role="button" aria-label={p.name} className="dhub-card"
-              style={{ position: 'relative', cursor: 'pointer', borderRadius: 20, padding: '13px 14px',
-                background: PROG_GRADS[i % PROG_GRADS.length], color: '#fff', overflow: 'hidden', minHeight: 122,
-                boxShadow: '0 4px 14px rgba(15,23,42,.16)', display: 'flex', flexDirection: 'column' }}>
-              {/* Depth arc */}
-              <span aria-hidden="true" style={{ position: 'absolute', right: -26, bottom: -32, width: 112, height: 112,
-                borderRadius: '50%', border: '1.5px solid rgba(255,255,255,.16)', pointerEvents: 'none' }} />
-              <CornerArt cover={p.cover_url} icon="ti-book" />
-              <p style={{ fontSize: 14.5, fontWeight: 900, margin: 0, lineHeight: 1.2, maxWidth: '76%',
-                textShadow: '0 1px 2px rgba(0,0,0,.12)' }}>{p.name}</p>
-              <p style={{ fontSize: 10.5, fontWeight: 700, margin: '4px 0 0', lineHeight: 1.35,
-                color: 'rgba(255,255,255,.78)', maxWidth: '82%' }}>{(p.description || p.name)} program materials</p>
-              <span style={{ marginTop: 'auto', display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10,
-                fontWeight: 900, padding: '4px 10px', borderRadius: 99, background: 'rgba(255,255,255,.22)',
-                color: '#fff', alignSelf: 'flex-start' }}>
-                {p.course_count} {p.course_count === 1 ? 'course' : 'courses'}{p.duration_label ? ` · ${p.duration_label}` : ''}
-              </span>
             </div>
           ))}
         </div>

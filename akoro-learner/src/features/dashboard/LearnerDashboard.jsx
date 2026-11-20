@@ -44,6 +44,9 @@ import { ZapIcon, MicIcon, Icon } from '../../components/common/Icons.jsx';
 import NowStudyingBar from '../../components/dashboard/NowStudyingBar.jsx';
 import PharmDProgram from '../../features/pharmd/index.js';
 import ProgrammePage from '../../components/programmes/ProgrammePage.jsx';
+import MoreProgrammesPage from '../../features/programmes/MoreProgrammesPage.jsx';
+import ProgrammeSoonPage from '../../features/programmes/ProgrammeSoonPage.jsx';
+import { programmeBySlug } from '../../lib/disciplineProgrammes.js';
 import ContentsDiscoveryTab from '../../components/tabs/ContentsDiscoveryTab.jsx';
 import { AppShell, SidebarToggle } from '../../components/AppShell.jsx';
 import { NavIcon } from '../../components/common/NavIcons.jsx';
@@ -88,10 +91,12 @@ export default function LearnerDashboard() {
   // feed and the Pharm D browse/folder chain like they do between tabs.
   const discoverViewFromUrl = () => {
     const v = new URLSearchParams(location.search).get("view");
-    return v === "courses" || v === "pharmd" || v === "contents" || v === "programme" ? v : "hub";
+    return v === "courses" || v === "pharmd" || v === "contents" || v === "programme" || v === "more" || v === "discipline" ? v : "hub";
   };
   const discoverQFromUrl    = () => new URLSearchParams(location.search).get("q") || "";
   const pharmdCourseFromUrl = () => new URLSearchParams(location.search).get("course") || null;
+  // The static discipline programme page (?view=discipline&slug=engineering).
+  const programmeSlugFromUrl = () => new URLSearchParams(location.search).get("slug") || null;
   // The generic published-programme page (?view=programme&programme=ID,
   // ?pcourse=ID for its open course) — the hub's programme cards.
   const programmeIdFromUrl     = () => new URLSearchParams(location.search).get("programme") || null;
@@ -1303,6 +1308,16 @@ export default function LearnerDashboard() {
               // browser Back/Forward follow it.
               // The Contents/Materials feed — the community's shared
               // uploads (videos, audio, notes, PDFs), Udemy-style.
+              : discoverView==="more"
+              ? <MoreProgrammesPage
+                  currentSlug={programmeBySlug(programmeSlugFromUrl())?.slug}
+                  onBack={()=>navigate(`${APP_HOME}?tab=discovery`)}
+                  onOpen={(slug)=>navigate(`${APP_HOME}?tab=discovery&view=discipline&slug=${encodeURIComponent(slug)}`)}/>
+              : discoverView==="discipline"
+              ? <ProgrammeSoonPage
+                  programme={programmeBySlug(programmeSlugFromUrl())}
+                  onBack={()=>navigate(`${APP_HOME}?tab=discovery&view=more`)}
+                  onMoreProgrammes={()=>navigate(`${APP_HOME}?tab=discovery&view=more`)}/>
               : discoverView==="contents"
               ? <ContentsDiscoveryTab initialQuery={discoverQuery}/>
               : discoverView==="pharmd"
@@ -1322,7 +1337,11 @@ export default function LearnerDashboard() {
                   onCourseRoute={(c)=>navigate(`${APP_HOME}?tab=discovery&view=programme&programme=${encodeURIComponent(programmeIdFromUrl())}${c?`&pcourse=${encodeURIComponent(c)}`:""}`)}/>
               : <DiscoverHub
                   userId={userProfile?.id}
-                  onOpenPharmd={()=>navigate(`${APP_HOME}?tab=discovery&view=pharmd`)}
+                  discipline={userProfile?.discipline}
+                  onOpenDiscipline={(slug)=>navigate(slug === 'pharmd'
+                    ? `${APP_HOME}?tab=discovery&view=pharmd`
+                    : `${APP_HOME}?tab=discovery&view=discipline&slug=${encodeURIComponent(slug)}`)}
+                  onOpenMore={()=>navigate(`${APP_HOME}?tab=discovery&view=more`)}
                   onOpenProgramme={(p)=>p?.id&&navigate(`${APP_HOME}?tab=discovery&view=programme&programme=${encodeURIComponent(p.id)}`)}
                   onOpenContents={(q)=>navigate(`${APP_HOME}?tab=discovery&view=contents${q?`&q=${encodeURIComponent(q)}`:""}`)}
                   onOpenRail={(rail,q)=>navigate(`${APP_HOME}?tab=discovery&view=courses&focus=${rail}${q?`&q=${encodeURIComponent(q)}`:""}`)}

@@ -967,6 +967,8 @@ export const EN = {
   'discovery.contents_you':    'You',
   'discovery.contents_empty':  'Nothing shared yet — uploads from the community will appear here',
   'discovery.contents_open_fail': 'Could not open that — try again.',
+  'dhub.card_more':                'More programmes',
+  'dhub.card_more_desc':           'Every discipline\'s program materials, in one place',
   'dhub.card_courses':       'Courses',
   'dhub.card_courses_desc':  'Video & live courses, curated for you',
   'dhub.card_pharmd':        'Pharm D',
