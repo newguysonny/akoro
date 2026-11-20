@@ -2,10 +2,11 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-const src = await readFile(new URL("./studyMaterial.js", import.meta.url), "utf8");
-// The pure helpers, without loading the db: evaluated from the source.
-const { toReaderCite, toReaderContent } = await import("data:text/javascript," + encodeURIComponent(
-  src.slice(src.indexOf("/** A server citation"), src.indexOf("/** Start a two-voice episode")).replace(/^export /gm, "export ")));
+const entry = await readFile(new URL("./studyMaterial.js", import.meta.url), "utf8");
+const store = await readFile(new URL("./study-material-store.js", import.meta.url), "utf8");
+const src = entry + "\n" + store;
+// The pure helpers, without loading the db.
+const { toReaderCite, toReaderContent } = await import("./study-material-shape.js");
 
 test("citations take the reader's jump shape (0-based page, box, moment, quote)", () => {
   assert.deepEqual(toReaderCite({ pageNumber: 3, bbox: [1, 2, 3, 4], quote: "q" }), { page: 2, bbox: [1, 2, 3, 4], quote: "q" });

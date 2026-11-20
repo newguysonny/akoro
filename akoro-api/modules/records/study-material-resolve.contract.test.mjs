@@ -3,7 +3,9 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { escapeLike, rankContentHits, pickContentWinner, findDuplicateArtifact, passagesFromExtraction, rankChatRecords, pickChatRecord, platformTerms, platformChunkScore, platformHelpfulSet, platformTopicName, SOURCE_ACTIONS, SOURCE_CHAIN, nextSource, sourceMiss, taughtRecordName, taughtNotesText } from "./studyMaterialCore.js";
 
-const studyMaterial = await readFile(new URL("./studyMaterial.js", import.meta.url), "utf8");
+const studyMaterial = await readFile(new URL("./studyMaterial.js", import.meta.url), "utf8")
+  + await readFile(new URL("./study-material-store.js", import.meta.url), "utf8")
+  + await readFile(new URL("./study-material-generate.js", import.meta.url), "utf8");
 const searchLib = await readFile(new URL("./searchLib.js", import.meta.url), "utf8");
 const materialsRoutes = await readFile(new URL("../materials/routes.js", import.meta.url), "utf8");
 const chat = await readFile(new URL("../adaptive-learning/chat.js", import.meta.url), "utf8");

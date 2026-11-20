@@ -11,8 +11,8 @@ const {
 } = await import("./podcastLib.js");
 const routes = await readFile(new URL("./routes.js", import.meta.url), "utf8")
   + await readFile(new URL("./service-artifacts.js", import.meta.url), "utf8");
-// The episode itself is made in studyMaterial.js (shared with Agent Chat).
-const shared = await readFile(new URL("./studyMaterial.js", import.meta.url), "utf8");
+// The episode itself is made in study-material-generate.js (shared with Agent Chat).
+const shared = await readFile(new URL("./study-material-generate.js", import.meta.url), "utf8");
 const artifacts = await readFile(new URL("./artifactsLib.js", import.meta.url), "utf8");
 
 const passages = [

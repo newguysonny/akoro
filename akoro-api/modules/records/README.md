@@ -19,7 +19,10 @@ To extend: add the function in the owning file (or a new sibling), export it,
 then add the name to `index.js`. Cross-module dependencies go through the other
 module's `index.js`.
 
-Known limits: `studyMaterial.js` is over the 600-line ratchet and stays in the
-size baseline. Two default routers exist (`routes.js`, `parseConsole.js`) and
-are exposed as named aliases `recordsModule` / `parseConsoleModule`. Importing
-the barrel eagerly loads every re-exported file, including the router.
+Known limits: the study-material entry (`studyMaterial.js`) is now a thin
+orchestrator — the model calls live in `study-material-generate.js`, the
+source queries in `study-material-store.js`, and the pure shapes in
+`study-material-shape.js`, so none is over the 600-line ratchet. Two default
+routers exist (`routes.js`, `parseConsole.js`) and are exposed as named
+aliases `recordsModule` / `parseConsoleModule`. Importing the barrel eagerly
+loads every re-exported file, including the router.
