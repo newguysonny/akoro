@@ -112,6 +112,9 @@ export async function listRecordsMissingPreview(limit = 100) {
     .select("id, user_id, kind, name, mime, file_key")
     .eq("kind", "upload").not("file_key", "is", null)
     .is("preview_key", null).is("deleted_at", null)
+    // Previews are page images: only PDFs qualify. Filtering here keeps the
+    // remaining count honest (text/image uploads would never clear it).
+    .or("mime.ilike.%pdf%,name.ilike.%.pdf%")
     .order("created_at", { ascending: true }).limit(limit);
   if (error) throw new Error(error.message);
   return data || [];
@@ -121,6 +124,7 @@ export const countRecordsMissingPreview = async () => {
   const { count } = await edu().from("records")
     .select("id", { count: "exact", head: true })
     .eq("kind", "upload").not("file_key", "is", null)
-    .is("preview_key", null).is("deleted_at", null);
+    .is("preview_key", null).is("deleted_at", null)
+    .or("mime.ilike.%pdf%,name.ilike.%.pdf%");
   return count || 0;
 };
