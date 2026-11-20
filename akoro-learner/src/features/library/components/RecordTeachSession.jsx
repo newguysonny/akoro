@@ -116,7 +116,7 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
           <p style={{ fontSize: 14.5, fontWeight: 900, color: 'var(--ak-text)', margin: '0 0 6px' }}>{record?.name}</p>
           <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--ak-text-sub)', margin: 0, display: 'flex', alignItems: 'center', gap: 7 }}>
             <span className="ti ti-loader-2" style={{ fontSize: 14, color: BRAND, animation: 'rteach-spin 1s linear infinite' }}/>
-            Preparing your teaching session…
+            Preparing your document…
           </p>
           <style>{'@keyframes rteach-spin{to{transform:rotate(360deg)}}'}</style>
         </>) : (<>
