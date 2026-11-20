@@ -5,7 +5,7 @@ import test from 'node:test';
 const read = name => readFile(new URL(name, import.meta.url), 'utf8');
 const composer = await read('../src/components/common/FortizoChatComposer.jsx');
 const session = await read('../src/components/teaching/SessionChatView.jsx');
-const agent = await read('../src/components/tabs/AgentChatTab.jsx');
+const agent = await read('../src/features/agent-chat/AgentChatTab.jsx');
 const reference = await read('../reference/FortizoApp.jsx');
 const reader = await read('../src/components/teaching/SessionReaderModal.jsx');
 const teach = await read('../src/components/teaching/TeachAgentModal.jsx');

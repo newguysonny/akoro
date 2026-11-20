@@ -3,10 +3,10 @@ import { BRAND, RED, GREEN, GOLD, STUDENT_ID } from '../../constants.js';
 import { API, apiGet, apiPost, apiPatch, apiDelete, streamPost } from '../../services/api.js';
 import { socketOptions } from '../../client/socket';
 import { useLang } from '../../contexts/LanguageContext.jsx';
-import { ZapIcon, BrainIcon, SparkleIcon, XIcon, Icon } from '../common/Icons.jsx';
-import { AgentAvatar } from '../common/AgentAvatar.jsx';
-import FortizoChatComposer, { ModelSwitch } from '../common/FortizoChatComposer.jsx';
-import { chatPicker, applyModelPick, applyModePick } from '../../lib/chatModels.js';
+import { ZapIcon, BrainIcon, SparkleIcon, XIcon, Icon } from '../../components/common/Icons.jsx';
+import { AgentAvatar } from '../../components/common/AgentAvatar.jsx';
+import FortizoChatComposer, { ModelSwitch } from '../../components/common/FortizoChatComposer.jsx';
+import { chatPicker, applyModelPick, applyModePick } from './lib/chatModels.js';
 import { useSentinel, pagedStatusText } from '../../lib/usePagedList.js';
 
 /* One gutter for the conversation and the composer, so messages line up with the input box. */
@@ -15,38 +15,38 @@ const CHAT_GUTTER = 16;
 const HISTORY_PAGE = 10;
 /* Agent replies have no bubble, so they sit a little further in than the gutter. */
 const REPLY_INSET = 12;   // 28px from the edge — the Claude app's reading margin
-import RichText from '../common/RichText.jsx';
-import CopyMessageButton from '../common/CopyMessageButton.jsx';
-import { copyTextFrom } from '../common/CopyMessageButton.jsx';
+import RichText from '../../components/common/RichText.jsx';
+import CopyMessageButton from '../../components/common/CopyMessageButton.jsx';
+import { copyTextFrom } from '../../components/common/CopyMessageButton.jsx';
 import { useTaskAPI } from '../../hooks/useTaskAPI.js';
-import NoAgentSheet, { isNoAgentError } from '../battles/NoAgentSheet.jsx';
-import { confirmDialog } from '../common/ConfirmHost.jsx';
-import AgentStatsTab from './AgentStatsTab.jsx';
-import { AGENT_CHAT_STOP_ENDPOINT, agentChatEndpoint, createAgentChatTurnId } from '../../lib/agentChatEndpoint.js';
-import StreamCaret from '../common/StreamCaret.jsx';
-import Spinner from '../common/Spinner.jsx';
+import NoAgentSheet, { isNoAgentError } from '../../components/battles/NoAgentSheet.jsx';
+import { confirmDialog } from '../../components/common/ConfirmHost.jsx';
+import AgentStatsTab from '../../components/tabs/AgentStatsTab.jsx';
+import { AGENT_CHAT_STOP_ENDPOINT, agentChatEndpoint, createAgentChatTurnId } from './lib/agentChatEndpoint.js';
+import StreamCaret from '../../components/common/StreamCaret.jsx';
+import Spinner from '../../components/common/Spinner.jsx';
 import { useInFlight } from '../../hooks/useInFlight.js';
-import StudyPrepChatCard from './studyPrep/StudyPrepChatCard.jsx';
-import PlannerNotes from './agentChat/PlannerNotes.jsx';
-import AgentCheckCard from './agentChat/AgentCheckCard.jsx';
-import TraceBlocks from './agentChat/TraceBlocks.jsx';
+import StudyPrepChatCard from '../../components/tabs/studyPrep/StudyPrepChatCard.jsx';
+import PlannerNotes from './components/PlannerNotes.jsx';
+import AgentCheckCard from './components/AgentCheckCard.jsx';
+import TraceBlocks from './components/TraceBlocks.jsx';
 import { applyTraceEvent, blocksFromSavedTrace, promoteActivity, settleRunning, splitWakes, studyPrepEventBlocks, workflowRunBlocks } from '../../lib/agentChatTrace.js';
-import { CHAT_STARTERS, cleanIdeas, cleanMaterials, protegeMoves } from '../../lib/chatIdeas.js';
+import { CHAT_STARTERS, cleanIdeas, cleanMaterials, protegeMoves } from './lib/chatIdeas.js';
 import { useNavigate, useLocation } from 'react-router-dom';
-import NeedsYouList, { useNeedsYou } from './agentChat/NeedsYouList.jsx';
-import ReplyRating, { ratableId, useReplyRatings } from './agentChat/ReplyRating.jsx';
-import AgentCards from '../network/AgentCards.jsx';
-import ChallengeRequestCards from '../network/ChallengeRequestCards.jsx';
-import ConfirmChangeCard from './agentChat/ConfirmChangeCard.jsx';
-import IngestCard from './agentChat/IngestCard.jsx';
-import ChatFilesStrip from './agentChat/ChatFilesStrip.jsx';
-import ApprovalButtons from './agentChat/ApprovalButtons.jsx';
-import ProposalPreview from './agentChat/ProposalPreview.jsx';
+import NeedsYouList, { useNeedsYou } from './components/NeedsYouList.jsx';
+import ReplyRating, { ratableId, useReplyRatings } from './components/ReplyRating.jsx';
+import AgentCards from '../../components/network/AgentCards.jsx';
+import ChallengeRequestCards from '../../components/network/ChallengeRequestCards.jsx';
+import ConfirmChangeCard from './components/ConfirmChangeCard.jsx';
+import IngestCard from './components/IngestCard.jsx';
+import ChatFilesStrip from './components/ChatFilesStrip.jsx';
+import ApprovalButtons from './components/ApprovalButtons.jsx';
+import ProposalPreview from './components/ProposalPreview.jsx';
 import { addSimilar, attachIngestRecords, chatFiles, chooseFolder, chooseSubject, dismissSimilar, filesOf, getIngest, isLibraryFile, readChatRecord, readIngestRecords, restoreIngest, similarFor, startIngest, undoIngest, uploadChatFile } from '../../lib/chatUploads.js';
 import { deleteRecord } from '../../services/recordsApi.js';
-import SimilarPicker from './agentChat/SimilarPicker.jsx';
+import SimilarPicker from './components/SimilarPicker.jsx';
 import { useVoiceAnswer } from '../../hooks/useVoiceAnswer.js';
-import { useSpeakReply } from '../../hooks/useSpeakReply.js';
+import { useSpeakReply } from './hooks/useSpeakReply.js';
 
 const QUICK_PROMPTS = [
   { text:"Create a task for me", key:"agent.qp_create" },

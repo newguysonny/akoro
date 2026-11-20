@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-const source = await readFile(new URL("../components/tabs/AgentChatTab.jsx", import.meta.url), "utf8");
+const source = await readFile(new URL("../features/agent-chat/AgentChatTab.jsx", import.meta.url), "utf8");
 const teachSource = await readFile(new URL("../components/teaching/TeachAgentModal.jsx", import.meta.url), "utf8");
 const decaySource = await readFile(new URL("../components/teaching/DecaySessionModal.jsx", import.meta.url), "utf8");
 

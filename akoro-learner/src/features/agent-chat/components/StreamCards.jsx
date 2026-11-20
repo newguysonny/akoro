@@ -11,7 +11,7 @@
  *
  * Approvals use ApprovalButtons (Allow / Reject / Later) — never a card's own.
  */
-import { Icon } from '../../common/Icons.jsx';
+import { Icon } from '../../../components/common/Icons.jsx';
 
 const NUNITO = "'Nunito',sans-serif";
 export const BADGE_TONES = Object.freeze({

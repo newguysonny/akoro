@@ -2,10 +2,10 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
-const tab = await readFile(new URL('../components/tabs/AgentChatTab.jsx', import.meta.url), 'utf8');
+const tab = await readFile(new URL('../features/agent-chat/AgentChatTab.jsx', import.meta.url), 'utf8');
 const api = await readFile(new URL('../services/api.js', import.meta.url), 'utf8');
 const composer = await readFile(new URL('../components/common/FortizoChatComposer.jsx', import.meta.url), 'utf8');
-const blocks = await readFile(new URL('../components/tabs/agentChat/TraceBlocks.jsx', import.meta.url), 'utf8');
+const blocks = await readFile(new URL('../features/agent-chat/components/TraceBlocks.jsx', import.meta.url), 'utf8');
 
 const between = (text, start, end) => text.slice(text.indexOf(start), text.indexOf(end, text.indexOf(start)));
 

@@ -12,7 +12,7 @@
  */
 import { useState } from 'react';
 import { BRAND } from '../../../constants.js';
-import { Icon } from '../../common/Icons.jsx';
+import { Icon } from '../../../components/common/Icons.jsx';
 
 const NUNITO = "'Nunito',sans-serif";
 const base = { display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 20, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: NUNITO };

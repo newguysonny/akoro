@@ -11,7 +11,7 @@ test('shared stream cards: one badge, score ring, red refused row, dev line', as
 });
 
 test('the Study Prep plan uses Allow / Reject / Later; Reject ends the session before anything is spent', async () => {
-  const card = await read('../studyPrep/StudyPrepChatCard.jsx');
+  const card = await read('../../../components/tabs/studyPrep/StudyPrepChatCard.jsx');
   assert.match(card, /<ApprovalButtons onAllow=\{confirmPlan\} onReject=\{rejectPlan\}/);
   assert.match(card, /cancelStudyPrepSession\(session\.id\)/);
   assert.doesNotMatch(card, />Approve & Start</);

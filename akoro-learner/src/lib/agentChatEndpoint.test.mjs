@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { AGENT_CHAT_ENDPOINT, AGENT_CHAT_STOP_ENDPOINT, agentChatEndpoint, createAgentChatTurnId } from "./agentChatEndpoint.js";
+import { AGENT_CHAT_ENDPOINT, AGENT_CHAT_STOP_ENDPOINT, agentChatEndpoint, createAgentChatTurnId } from "../features/agent-chat/lib/agentChatEndpoint.js";
 
 test("all learner Agent Chat turns use the single /agent response endpoint", () => {
   assert.equal(AGENT_CHAT_ENDPOINT, "/api/adaptive/chat/agent");

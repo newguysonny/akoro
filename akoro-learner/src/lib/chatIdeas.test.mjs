@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { CHAT_STARTERS, cleanIdeas, cleanMaterials, protegeMoves } from './chatIdeas.js';
+import { CHAT_STARTERS, cleanIdeas, cleanMaterials, protegeMoves } from '../features/agent-chat/lib/chatIdeas.js';
 
 test('starters show what the agent can do, each with a ready-to-send example', () => {
   assert.equal(CHAT_STARTERS.length, 6);

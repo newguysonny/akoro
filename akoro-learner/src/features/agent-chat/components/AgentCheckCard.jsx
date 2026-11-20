@@ -6,7 +6,7 @@
  * each question, the agent's report — is the run itself, in the chat.
  */
 import { RED, GREEN } from '../../../constants.js';
-import { Icon } from '../../common/Icons.jsx';
+import { Icon } from '../../../components/common/Icons.jsx';
 import { agentCheckCard } from '../../../lib/agentChatTrace.js';
 
 const BADGE = {

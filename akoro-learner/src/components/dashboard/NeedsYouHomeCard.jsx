@@ -8,7 +8,7 @@
 import { useNavigate } from 'react-router-dom';
 import { BRAND } from '../../constants.js';
 import { Icon } from '../common/Icons.jsx';
-import { useNeedsYou } from '../tabs/agentChat/NeedsYouList.jsx';
+import { useNeedsYou } from '../../features/agent-chat/index.js';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 import { homeNeedsYou, homeHref, NEEDS_YOU_HREF } from '../../lib/needsYouHome.js';
 

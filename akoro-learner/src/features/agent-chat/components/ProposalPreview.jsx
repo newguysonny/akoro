@@ -4,7 +4,7 @@
  * preview, which code wrote from their real records, goals and topics —
  * never invented questions or numbers.
  */
-import { Icon } from '../../common/Icons.jsx';
+import { Icon } from '../../../components/common/Icons.jsx';
 import { BRAND } from '../../../constants.js';
 
 const Line = ({ icon, children }) => (

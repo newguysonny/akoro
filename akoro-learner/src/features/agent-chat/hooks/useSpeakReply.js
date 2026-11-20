@@ -4,8 +4,8 @@
  * Voice costs coins: a 402 says so instead of failing silently.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { API } from '../services/api.js';
-import { speakableText } from '../lib/speech.js';
+import { API } from '../../../services/api.js';
+import { speakableText } from '../../../lib/speech.js';
 
 export function useSpeakReply({ voice = 'nova' } = {}) {
   const [speakingId, setSpeakingId] = useState(null);   // the message being read

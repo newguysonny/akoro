@@ -13,7 +13,7 @@ import test from "node:test";
 const read = (name) => readFile(new URL(name, import.meta.url), "utf8");
 const [library, dashboard, modal] = await Promise.all([
   read("../src/pages/LibraryPage.jsx"),
-  read("../src/pages/LearnerDashboard.jsx"),
+  read("../src/features/dashboard/LearnerDashboard.jsx"),
   read("../src/components/dashboard/AddRecordModal.jsx"),
 ]);
 

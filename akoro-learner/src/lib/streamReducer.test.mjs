@@ -1,7 +1,7 @@
 // node --test src/lib/streamReducer.test.mjs — the shared stream reducer (Grand Plan §13.2).
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { streamReducer, reduceStream, initialStreamState, settle } from './streamReducer.js';
+import { streamReducer, reduceStream, initialStreamState, settle } from '../features/agent-chat/lib/streamReducer.js';
 import { groupTraceBlocks } from './agentChatTrace.js';
 
 let seq = 0;

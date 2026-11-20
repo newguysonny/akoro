@@ -7,7 +7,7 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import { BRAND } from '../../../constants.js';
-import { Icon } from '../../common/Icons.jsx';
+import { Icon } from '../../../components/common/Icons.jsx';
 import { apiDelete, apiGet, apiPut } from '../../../services/api.js';
 import { useLang } from '../../../contexts/LanguageContext.jsx';
 

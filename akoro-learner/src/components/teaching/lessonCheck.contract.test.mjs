@@ -15,7 +15,7 @@ test('the short check result card: drawn in the lesson before the protégé line
 });
 
 test('blog passage chips: the post and its section, opening the post', async () => {
-  const [tab, ideas] = await Promise.all([read('../tabs/AgentChatTab.jsx'), read('../../lib/chatIdeas.js')]);
+  const [tab, ideas] = await Promise.all([read('../../features/agent-chat/AgentChatTab.jsx'), read('../../features/agent-chat/lib/chatIdeas.js')]);
   assert.match(tab, /msg\.materials\.map\(\(m\)=>m\.sub\?\(/);
   assert.match(tab, />Blog</);
   assert.match(ideas, /m\.sub \? \{ sub: String\(m\.sub\)\.slice\(0, 90\) \}/);

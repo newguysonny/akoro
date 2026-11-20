@@ -5,8 +5,8 @@
  */
 import { useState } from 'react';
 import { useLang } from '../../../contexts/LanguageContext.jsx';
-import { Icon } from '../../common/Icons.jsx';
-import Spinner from '../../common/Spinner.jsx';
+import { Icon } from '../../../components/common/Icons.jsx';
+import Spinner from '../../../components/common/Spinner.jsx';
 import { BRAND, GREEN } from '../../../constants.js';
 
 const KIND_ICON = { course: 'ti-school', blog: 'ti-article' };

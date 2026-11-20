@@ -12,7 +12,7 @@ const read = (name) => readFile(new URL(name, import.meta.url), "utf8");
 const teach = await read("../src/components/teaching/TeachAgentModal.jsx");
 const decay = await read("../src/components/teaching/DecaySessionModal.jsx");
 const chatView = await read("../src/components/teaching/SessionChatView.jsx");
-const aiChat = await read("../src/components/tabs/AgentChatTab.jsx");
+const aiChat = await read("../src/features/agent-chat/AgentChatTab.jsx");
 const caret = await read("../src/components/common/StreamCaret.jsx");
 
 test("session modals observe protégé and guide token streams", () => {
@@ -47,5 +47,5 @@ test("AI chat ends its streaming answer and thought process with the caret", () 
   assert.match(aiChat, /msg\.phase==="answering"&&<StreamCaret\/>/);
   // The reasoning summary streams into the ThoughtBlock with a caret too.
   assert.match(aiChat, /streaming && expanded && <StreamCaret\/>/);
-  assert.match(aiChat, /import StreamCaret from '\.\.\/common\/StreamCaret\.jsx';/);
+  assert.match(aiChat, /import StreamCaret from '\.\.\/\.\.\/components\/common\/StreamCaret\.jsx';/);
 });

@@ -28,7 +28,7 @@ const SchoolInfoPage = SITE_BUILD ? lazyWithRetry(() => import('./pages/SchoolIn
 const ContentPage = SITE_BUILD ? lazyWithRetry(() => import('./pages/ContentPage.jsx')) : null;
 const StudentInfoPage = SITE_BUILD ? lazyWithRetry(() => import('./pages/StudentInfoPage.jsx')) : null;
 const OnboardingPage = PRODUCT_BUILD ? lazyWithRetry(() => import('./pages/OnboardingPage.jsx')) : null;
-const LearnerDashboard = PRODUCT_BUILD ? lazyWithRetry(() => import('./pages/LearnerDashboard.jsx')) : null;
+const LearnerDashboard = PRODUCT_BUILD ? lazyWithRetry(() => import('./features/dashboard/index.js')) : null;
 const SettingsPage = PRODUCT_BUILD ? lazyWithRetry(() => import('./pages/SettingsPage.jsx')) : null;
 const SigninPage = PRODUCT_BUILD ? lazyWithRetry(() => import('./pages/auth/SigninPage.jsx')) : null;
 const SignupPage = PRODUCT_BUILD ? lazyWithRetry(() => import('./pages/auth/SignupPage.jsx')) : null;

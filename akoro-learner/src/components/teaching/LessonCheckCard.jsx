@@ -7,7 +7,7 @@
  */
 import { BRAND } from '../../constants.js';
 import { Icon } from '../common/Icons.jsx';
-import { ScoreRing } from '../tabs/agentChat/StreamCards.jsx';
+import { ScoreRing } from '../../features/agent-chat/index.js';
 
 const NUNITO = "'Nunito',sans-serif";
 const MARK = {

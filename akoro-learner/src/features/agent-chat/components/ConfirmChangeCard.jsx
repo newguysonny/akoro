@@ -13,7 +13,7 @@
  */
 import { useEffect, useState } from 'react';
 import ApprovalButtons from './ApprovalButtons.jsx';
-import { Icon } from '../../common/Icons.jsx';
+import { Icon } from '../../../components/common/Icons.jsx';
 import { BRAND } from '../../../constants.js';
 import { apiGet, apiPost } from '../../../services/api.js';
 

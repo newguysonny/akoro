@@ -19,7 +19,8 @@
     "build:landing": "VITE_TARGET=landing vite build && VITE_TARGET=landing node scripts/seo-pages.mjs",
     "build:app": "VITE_TARGET=app vite build && VITE_TARGET=app node scripts/seo-pages.mjs",
     "test:split": "node --test src/config/target.test.mjs src/config/urls.test.mjs",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:features": "node --test src/features/features.boundary.test.mjs"
   },
   "dependencies": {
     "@excalidraw/excalidraw": "^0.17.6",

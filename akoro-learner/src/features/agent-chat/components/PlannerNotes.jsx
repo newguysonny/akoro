@@ -7,7 +7,7 @@
  */
 import { useEffect, useState } from 'react';
 import { BRAND, GREEN, RED } from '../../../constants.js';
-import { Icon } from '../../common/Icons.jsx';
+import { Icon } from '../../../components/common/Icons.jsx';
 import { plannerNotes } from '../../../lib/agentChatTrace.js';
 import TraceBlocks from './TraceBlocks.jsx';
 

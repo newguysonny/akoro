@@ -9,7 +9,7 @@
  */
 import { useEffect, useState } from 'react';
 import { BRAND } from '../../../constants.js';
-import { Icon } from '../../common/Icons.jsx';
+import { Icon } from '../../../components/common/Icons.jsx';
 import { apiGet } from '../../../services/api.js';
 import { useLang } from '../../../contexts/LanguageContext.jsx';
 import { WorkflowStateBadge } from './StreamCards.jsx';

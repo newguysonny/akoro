@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { apiGet } from '../services/api.js';
-import { getStudentId } from '../constants.js';
+import { apiGet } from '../../../services/api.js';
+import { getStudentId } from '../../../constants.js';
 
 export function useDecayAlerts() {
   const [decayAlerts, setDecayAlerts] = useState([]);

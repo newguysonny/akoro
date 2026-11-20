@@ -70,7 +70,7 @@ test('wiring: one splat route, invalid group redirects, the old quick-link cards
   assert.match(page, /useState\(isAgentGroup\(group\) \? 'agent' : 'user'\)/);
   const user = await read('./userTab.jsx');
   for (const gone of ['settings.order_history_sub', "navigate('/orders')", "navigate('/gradebook')", "navigate('/library')"]) assert.ok(!user.includes(gone), gone);
-  const dash = await read('../LearnerDashboard.jsx');
+  const dash = await read('../../features/dashboard/LearnerDashboard.jsx');
   assert.match(dash, /matchMedia\?\.\("\(max-width: 768px\)"\)\.matches\) setDrawer\(true\); else navigate\("\/settings"\)/);
   const drawer = await read('../../components/ProfileDrawer.jsx');
   assert.match(drawer, /go\('\/settings\/profile'\)/);

@@ -11,8 +11,8 @@ import {
   concludeStudyPrepSession, deferStudyPrepTopic, fetchStudyPrepSession, generateStudyPrepPractice,
   resumeStudyPrepSession, retryStudyPrepDeferred, submitStudyPrepPractice, cancelStudyPrepSession, answerStudyPrepStrategy,
 } from '../../../services/studyPrepApi.js';
-import ApprovalButtons from '../agentChat/ApprovalButtons.jsx';
-import { DevLine, ScoreRing } from '../agentChat/StreamCards.jsx';
+import ApprovalButtons from '../../../features/agent-chat/index.js';
+import { DevLine, ScoreRing } from '../../../features/agent-chat/index.js';
 
 /**
  * StudyPrepChatCard — the study-prep session rendered INSIDE the Agent Chat

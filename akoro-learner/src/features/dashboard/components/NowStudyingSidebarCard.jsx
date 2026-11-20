@@ -26,10 +26,10 @@
  * The dashboard drives both surfaces from the same visibility flag, so they
  * can never disagree.
  */
-import { BRAND, RED } from '../../constants.js';
-import { useLang } from '../../contexts/LanguageContext.jsx';
-import { progressStage } from '../../utils/nowStudying.js';
-import { Icon } from '../common/Icons.jsx';
+import { BRAND, RED } from '../../../constants.js';
+import { useLang } from '../../../contexts/LanguageContext.jsx';
+import { progressStage } from '../../../utils/nowStudying.js';
+import { Icon } from '../../../components/common/Icons.jsx';
 
 const FONT = "'Nunito', sans-serif";
 

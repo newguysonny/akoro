@@ -16,9 +16,9 @@
 import { useEffect, useState } from 'react';
 import { BRAND, GREEN, RED } from '../../../constants.js';
 import { RejectedRow } from './StreamCards.jsx';
-import { Icon } from '../../common/Icons.jsx';
-import RichText from '../../common/RichText.jsx';
-import StreamCaret from '../../common/StreamCaret.jsx';
+import { Icon } from '../../../components/common/Icons.jsx';
+import RichText from '../../../components/common/RichText.jsx';
+import StreamCaret from '../../../components/common/StreamCaret.jsx';
 import { useLang } from '../../../contexts/LanguageContext.jsx';
 import {
   durationLabel, groupLabel, groupTraceBlocks, thoughtLabel,

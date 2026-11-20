@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { modelDisplayName, chatModelOptions, chatPicker, applyModelPick, applyModePick } from './chatModels.js';
+import { modelDisplayName, chatModelOptions, chatPicker, applyModelPick, applyModePick } from '../features/agent-chat/lib/chatModels.js';
 
 const server = {
   modes: [

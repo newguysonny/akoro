@@ -6,7 +6,7 @@ const read = (f) => readFile(new URL(f, import.meta.url), "utf8");
 
 test("one approval card: every approval row is ApprovalButtons — Allow / Reject / Later", async () => {
   const [btns, tab, confirm] = await Promise.all([
-    read("../components/tabs/agentChat/ApprovalButtons.jsx"), read("../components/tabs/AgentChatTab.jsx"), read("../components/tabs/agentChat/ConfirmChangeCard.jsx"),
+    read("../features/agent-chat/components/ApprovalButtons.jsx"), read("../features/agent-chat/AgentChatTab.jsx"), read("../features/agent-chat/components/ConfirmChangeCard.jsx"),
   ]);
   for (const label of [">Allow<|'Allow'", "Reject", "Later"]) assert.match(btns, new RegExp(label));
   assert.match(btns, /Saved for later — it waits in Tasks → Needs you\./, "Later changes nothing on the server");
@@ -17,7 +17,7 @@ test("one approval card: every approval row is ApprovalButtons — Allow / Rejec
 
 test("cards and chips arrive on the stream: a card when the tool makes it, chips right after the reply", async () => {
   const [api, tab, serverChat] = await Promise.all([
-    read("../services/api.js"), read("../components/tabs/AgentChatTab.jsx"), read("../../../akoro-api/modules/adaptive-learning/chat.js"),
+    read("../services/api.js"), read("../features/agent-chat/AgentChatTab.jsx"), read("../../../akoro-api/modules/adaptive-learning/chat.js"),
   ]);
   assert.match(api, /event === 'card'\) \{ onCard\?\.\(parsed\); \}/);
   assert.match(api, /event === 'suggestions'\) \{ onSuggestions\?\./);

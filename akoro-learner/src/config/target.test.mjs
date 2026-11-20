@@ -75,7 +75,7 @@ test('no page spells "/app" as the learner home any more: they use APP_HOME (the
   const { readdir } = await import('node:fs/promises');
   const path = await import('node:path');
   const root = new URL('../', import.meta.url).pathname;
-  const allowed = new Set(['App.jsx', 'config/target.js', 'components/common/richText.js', 'components/tabs/AgentChatTab.jsx']);
+  const allowed = new Set(['App.jsx', 'config/target.js', 'components/common/richText.js', 'features/agent-chat/AgentChatTab.jsx']);
   const bad = [];
   async function walk(dir) {
     for (const e of await readdir(dir, { withFileTypes: true })) {

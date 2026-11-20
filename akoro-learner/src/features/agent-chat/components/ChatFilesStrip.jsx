@@ -5,7 +5,7 @@
  * what this chat added. Deleted ones drop off.
  */
 import { useLang } from '../../../contexts/LanguageContext.jsx';
-import { Icon } from '../../common/Icons.jsx';
+import { Icon } from '../../../components/common/Icons.jsx';
 import { BRAND } from '../../../constants.js';
 
 const AMBER = '#D97706';
