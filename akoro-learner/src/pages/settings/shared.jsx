@@ -35,6 +35,14 @@ const SUBJ_ICON = {
 const subjIcon = (s) => SUBJ_ICON[s] || 'ti-book';
 
 const STUDY_LEVELS  = ['Primary School','Junior Secondary','Senior Secondary','Sixth Form / A-Level','University','Professional'];
+/* Higher education's programme/department — one choice, not school subjects. */
+const DISCIPLINES = [
+  'Administration and Management', 'Agriculture', 'Allied Health Sciences', 'Architecture',
+  'Arts', 'Basic Medical Sciences', 'Communication and Media Studies', 'Computing',
+  'Education', 'Engineering and Technology', 'Environmental Sciences', 'Law',
+  'Medicine and Dentistry', 'Pharmacy and Pharmaceutical Sciences', 'Sciences',
+  'Social Sciences', 'Veterinary Medicine',
+];
 const EXAM_BOARDS   = ['WAEC','NECO','JAMB','Cambridge IGCSE','Edexcel','AQA','IB','Other'];
 const SCHOOL_TYPES  = ['Primary School','Junior Secondary School','Senior Secondary School','Sixth Form','College','University','Other'];
 const YEARS         = ['Year 7','Year 8','Year 9','Year 10','Year 11','Year 12','Year 13','First Year','Second Year','Final Year'];
@@ -186,7 +194,7 @@ function SubjectsRow({ subjects,onClick,color=BRAND }) {
 
 export {
   BRAND, RED, ORANGE, ALL_SUBJECTS, SUBJ_ICON, subjIcon,
-  STUDY_LEVELS, EXAM_BOARDS, SCHOOL_TYPES, YEARS, LANGUAGES, COUNTRIES, GOALS, GUIDES,
+  STUDY_LEVELS, DISCIPLINES, EXAM_BOARDS, SCHOOL_TYPES, YEARS, LANGUAGES, COUNTRIES, GOALS, GUIDES,
   EMOJI_LIST, AVATAR_LIST, ACCENTS,
   Icon, Toggle, ProgressBar, SubjectChip, Section, Row, AvatarCircle, SubjectsRow,
 };

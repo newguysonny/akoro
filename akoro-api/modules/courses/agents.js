@@ -134,7 +134,7 @@ const handlers = {
     const {
       agent_name, agent_emoji, agent_color, agent_bg,
       system_prompt, personality, photo_url,
-      study_level, year_group, exam_board, subjects, goal,
+      study_level, year_group, exam_board, subjects, goal, discipline,
     } = req.body;
 
     const { data: existing } = await db
@@ -159,6 +159,7 @@ const handlers = {
       if (exam_board    != null) updates.exam_board    = exam_board;
       if (subjects      != null) updates.subjects      = subjects;
       if (goal          != null) updates.goal          = goal;
+      if (discipline    != null) updates.discipline    = discipline ? String(discipline).trim().slice(0, 80) : null;
       updates.updated_at = now();
 
       ({ data, error } = await db
@@ -184,6 +185,7 @@ const handlers = {
           exam_board:    exam_board    ?? null,
           subjects:      subjects      ?? [],
           goal:          goal          ?? null,
+          discipline:    discipline    ?? null,
         })
         .select(AGENT_SELECT)
         .single());

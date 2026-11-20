@@ -35,6 +35,9 @@ export async function getMe(req, res) {
     schoolType:      user.school_type,
     yearGroup:       user.year_group,
     studyLevel:      user.study_level,
+    // Higher education's programme/department. Kept out of subjects so
+    // reporting and matching can tell a discipline from a school subject.
+    discipline:      user.discipline ?? null,
     language:        user.language        || "English",
     // Stored in generic account settings so the users table needs no new
     // column. It is consumed by learner time-aware task/chat tools.
@@ -121,7 +124,7 @@ export async function patchMe(req, res) {
   const userId = req.user.id;
   const {
     fullName, username, phone, avatarEmoji, country, city, schoolName, schoolType,
-    yearGroup, studyLevel, language, timeZone, displayMode, accentColor,
+    yearGroup, studyLevel, discipline, language, timeZone, displayMode, accentColor,
     teachingGuide, guideEmoji, subjects, twoFactorEnabled, onboardingCompleted,
   } = req.body;
 
@@ -142,6 +145,7 @@ export async function patchMe(req, res) {
   if (schoolType     !== undefined) patch.school_type      = schoolType;
   if (yearGroup      !== undefined) patch.year_group       = yearGroup;
   if (studyLevel     !== undefined) patch.study_level      = studyLevel;
+  if (discipline     !== undefined) patch.discipline       = discipline ? String(discipline).trim().slice(0, 80) : null;
   if (language       !== undefined) patch.language         = language;
   if (displayMode    !== undefined) patch.display_mode     = displayMode;
   if (accentColor    !== undefined) patch.accent_color     = accentColor;
@@ -199,6 +203,7 @@ export async function patchMe(req, res) {
     // level control) read `undefined` and treated a SUCCESSFUL save as a
     // failed one. Additive, backward-compatible field.
     studyLevel: updated.study_level ?? null,
+    discipline: updated.discipline ?? null,
     accentColor: updated.accent_color,
     timeZone: timeZone !== undefined ? timeZone.trim() : undefined,
     onboardingCompleted: updated.onboarding_completed ?? false,

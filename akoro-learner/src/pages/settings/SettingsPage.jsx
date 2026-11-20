@@ -174,6 +174,7 @@ export default function SettingsPage() {
             bg:            data.agent.bg       || '#FEF0E6',
             personality:   data.agent.personality,
             studyLevel:    data.agent.studyLevel,
+            discipline:    data.discipline || '',
             yearGroup:     data.agent.yearGroup,
             examBoard:     data.agent.examBoard,
             subjects:      data.agent.subjects || [],

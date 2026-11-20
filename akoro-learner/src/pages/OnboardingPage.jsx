@@ -18,6 +18,7 @@ import AkoroLogo from '../components/common/AkoroLogo.jsx';
 import FortizoChatComposer from '../components/common/FortizoChatComposer.jsx';
 import AkoMascot from './onboarding/AkoMascot.jsx';
 import { TermsCard, AgentCard, TeacherCards, SearchBox, SchoolResults, PrefsCard, SummaryCard } from './onboarding/Cards.jsx';
+import { DISCIPLINES } from './settings/shared.jsx';
 import {
   STEP_IDS, STUDY_LEVELS, classesFor, subjectChoices, emptyAnswers, firstName, answerText, stepError, progressOf,
   profilePayload, agentPayload, applyPrefill, filterTeachers, filterSchools, missingRequired, subjectsDraft, subjectsLabel,
@@ -30,15 +31,6 @@ const ACCENTS = [BRAND, '#3B82F6', '#10B981', '#E8884A', '#EC4899', '#F59E0B', '
 const ACCENT_NAMES = ['Purple', 'Blue', 'Green', 'Orange', 'Pink', 'Amber', 'Red', 'Violet'];
 const SUBJECTS_SHOWN = 9;
 
-/* Higher education collects a programme/discipline, not school subjects.
-   Same list the universities use for admission categories. */
-const DISCIPLINES = [
-  'Administration and Management', 'Agriculture', 'Allied Health Sciences', 'Architecture',
-  'Arts', 'Basic Medical Sciences', 'Communication and Media Studies', 'Computing',
-  'Education', 'Engineering and Technology', 'Environmental Sciences', 'Law',
-  'Medicine and Dentistry', 'Pharmacy and Pharmaceutical Sciences', 'Sciences',
-  'Social Sciences', 'Veterinary Medicine',
-];
 const cap = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 const fill = (text, vars = {}) => String(text).replace(/\{(\w+)\}/g, (m, k) => (vars[k] ?? m));
 
@@ -138,7 +130,8 @@ export default function OnboardingPage() {
     return [
       [tr('chat_sum_class'), a.cls ? `${a.cls} · ${a.level}` : a.level],
       [tr('chat_sum_school'), a.school || tr('chat_sum_own')],
-      [tr(higherEd ? 'chat_sum_discipline' : 'chat_sum_subjects'), a.subjects.length ? tf('chat_sum_picked', { n: a.subjects.length }) : tr('chat_sum_later')],
+      [tr(higherEd ? 'chat_sum_discipline' : 'chat_sum_subjects'),
+        higherEd ? (a.discipline || tr('chat_sum_later')) : (a.subjects.length ? tf('chat_sum_picked', { n: a.subjects.length }) : tr('chat_sum_later'))],
       [tr('chat_sum_agent'), a.agentName],
       [tr(higherEd ? 'chat_sum_lecturer' : 'chat_sum_teacher'), a.teacherId ? tr('chat_sum_requested') : tr('chat_sum_none')],
     ];
@@ -168,7 +161,7 @@ export default function OnboardingPage() {
       // A school record may carry school subjects; they are not disciplines,
       // so higher-ed starts this step clean.
       after = () => {
-        if (higherEd) { patch({ subjects: [] }); setDraft(''); return; }
+        if (higherEd) { setDraft(ansRef.current.discipline || ''); return; }
         setDraft(subjectsDraft(ansRef.current.subjects));
       };
     }
@@ -262,7 +255,9 @@ export default function OnboardingPage() {
 
   const pickLevel = (level) => {
     if (busy) return;
-    patch({ level, cls: '' });
+    // Switching tier must not carry the other tier's answers across:
+    // school subjects are not disciplines, and vice versa.
+    patch({ level, cls: '', subjects: [], discipline: '' });
     tell(level);
     const classes = classesFor(level);
     if (!classes.length) { goNext(); return; }
@@ -277,9 +272,14 @@ export default function OnboardingPage() {
     say([{ text: tf('chat_level_q', { name: firstName(ansRef.current.name) }) }], stepIdx, () => setSub('level'));
   };
   const skipClass = () => { if (busy) return; patch({ cls: '' }); tell(tr('chat_skip')); goNext(); };
-  const skipSubjects = () => { if (busy) return; patch({ subjects: [] }); tell(subjectsLabel([])); goNext(); };
+  const skipSubjects = () => { if (busy) return; patch({ subjects: [], discipline: '' }); tell(subjectsLabel([])); goNext(); };
   const continueWithoutTeacher = () => { if (busy) return; tell(tr('chat_teacher_continue')); goNext(); };
   const skipSchool = () => { if (busy) return; patch({ school: '' }); tell(tr('chat_own')); goNext(); };
+  const toggleDiscipline = (d) => {
+    const same = ansRef.current.discipline === d;
+    patch({ discipline: same ? '' : d, subjects: [] });
+    setDraft(same ? '' : d);
+  };
   const toggleSubject = (s) => {
     const cur = ansRef.current.subjects;
     const next = cur.includes(s) ? cur.filter((x) => x !== s) : [...cur, s];
@@ -349,7 +349,9 @@ export default function OnboardingPage() {
       const shown = moreSubjects ? source : source.slice(0, SUBJECTS_SHOWN);
       const extra = source.length - SUBJECTS_SHOWN;
       return [
-        ...shown.map((s) => chip(s, () => toggleSubject(s), { on: ans.subjects.includes(s) })),
+        ...shown.map((s) => chip(s, () => (higherEd ? toggleDiscipline(s) : toggleSubject(s)), {
+          on: higherEd ? ans.discipline === s : ans.subjects.includes(s),
+        })),
         chip(tr('chat_skip_subjects'), skipSubjects, { skip: true, key: 'skip-subjects' }),
         extra > 0 && chip(moreSubjects ? tr('chat_fewer') : tf('chat_more', { n: extra }), () => setMoreSubjects((m) => !m), { skip: true, key: 'more' }),
       ];

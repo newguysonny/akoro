@@ -1,5 +1,5 @@
 {
-  "//": "Ordered migration manifest for scripts/apply-migrations.mjs. 'schema' runs on every deploy (structural + platform-catalog seeds, all idempotent) \u2014 INCLUDING the agent-tester cohort: 2026-seed-school.sql (Akoro Demo Academy, its admin, demo_teacher1-6 and JSS1-SS3 classrooms) and 2026-seed-agent-testers.sql (tester01-50 with full demo data) boot-seed the backend alongside the schemas, by explicit product decision, so the agent console always has its test learners. Both refresh time-relative rows each run. 'demo' is the remaining opt-in sample data and must never run against production. 2026-run-all.sql is intentionally excluded \u2014 it is a manual copy-paste bundle that duplicates the files below.",
+  "//": "Ordered migration manifest for scripts/apply-migrations.mjs. 'schema' runs on every deploy (structural + platform-catalog seeds, all idempotent) — INCLUDING the agent-tester cohort: 2026-seed-school.sql (Akoro Demo Academy, its admin, demo_teacher1-6 and JSS1-SS3 classrooms) and 2026-seed-agent-testers.sql (tester01-50 with full demo data) boot-seed the backend alongside the schemas, by explicit product decision, so the agent console always has its test learners. Both refresh time-relative rows each run. 'demo' is the remaining opt-in sample data and must never run against production. 2026-run-all.sql is intentionally excluded — it is a manual copy-paste bundle that duplicates the files below.",
   "schema": [
     "2026-base-schema.sql",
     "2026-classrooms-created-by.sql",
@@ -269,7 +269,8 @@
     "2026-record-sources.sql",
     "2026-record-folder-anchors.sql",
     "2026-pharmd-unified.sql",
-    "2026-pharmd-material-filemeta.sql"
+    "2026-pharmd-material-filemeta.sql",
+    "2026-profile-discipline.sql"
   ],
   "demo": [
     "2026-seed-school-passwords.sql",

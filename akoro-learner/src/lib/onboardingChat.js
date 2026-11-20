@@ -43,7 +43,7 @@ export const SUBJECT_OPTIONS = [
 export const GUIDE_EMOJIS = ['🧠', '🤖', '👾', '🦉', '🎓', '⚡', '🌟', '🔮', '🦋', '🎯', '🚀', '💡'];
 
 export const emptyAnswers = () => ({
-  agreed: false, name: '', level: '', cls: '', school: '', subjects: [],
+  agreed: false, name: '', level: '', cls: '', school: '', subjects: [], discipline: '',
   agentName: '', agentEmoji: '🤖', teacherId: '', teacherName: '',
 });
 
@@ -76,7 +76,7 @@ export function answerText(stepId, a, prefs = {}) {
     case 'name':     return a.name.trim();
     case 'level':    return a.cls ? `${a.level} · ${a.cls}` : a.level;
     case 'school':   return a.school.trim() || 'I learn on my own';
-    case 'subjects': return subjectsLabel(a.subjects);
+    case 'subjects': return a.discipline || subjectsLabel(a.subjects);
     case 'agent':    return a.agentName.trim();
     case 'teacher':  return a.teacherName;
     case 'prefs':    return [prefs.language, prefs.theme, prefs.accent].filter(Boolean).join(' · ');
@@ -116,6 +116,7 @@ export function profilePayload(a, { language, displayMode, accentColor }) {
     studyLevel: a.level,
     schoolName: a.school.trim() || undefined,
     subjects: a.subjects,
+    discipline: a.discipline || undefined,
     language,
     displayMode,
     accentColor,
@@ -131,6 +132,7 @@ export function agentPayload(a, username = 'me') {
     study_level: a.level || undefined,
     year_group: a.cls.trim() || undefined,
     subjects: a.subjects.length ? a.subjects : undefined,
+    discipline: a.discipline || undefined,
   };
 }
 

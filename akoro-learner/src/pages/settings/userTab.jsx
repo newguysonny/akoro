@@ -10,7 +10,7 @@ import { LS_DISPLAY } from '../../contexts/ThemeContext.jsx';
 import { changePassword, deactivateAccount, deleteAccount, setDefaultAgent, uploadAvatar } from '../../services/settingsApi.js';
 import {
   BRAND, RED, ORANGE, ALL_SUBJECTS, SUBJ_ICON, rowBase,
-  COUNTRIES, GUIDES, STUDY_LEVELS, YEARS, LANGUAGES,
+  COUNTRIES, GUIDES, STUDY_LEVELS, DISCIPLINES, YEARS, LANGUAGES,
   Icon, Toggle, ProgressBar, SubjectChip, Section, Row, AvatarCircle, SubjectsRow,
 } from './shared.jsx';
 import { AvatarPickerSheet, SubjectsSheet, GenericSheet, TwoFactorSheet, AlarmSoundSheet } from './sheets.jsx';
@@ -398,6 +398,11 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent,
             two fields can never disagree about school vs higher-ed. */}
         <Row icon="ti-school" label={t('settings.study_level')} value={profile.studyLevel||t('settings.not_set')}
           onClick={()=>openSheet('studyLevel',t('settings.study_level'),'select',STUDY_LEVELS)}/>
+        {isHigherEdUI(profile) && (
+          <Row icon="ti-certificate" label="Discipline" value={profile.discipline||t('settings.not_set')}
+            sub="Your programme or department"
+            onClick={()=>openSheet('discipline','Discipline','select',DISCIPLINES)}/>
+        )}
         <Row icon="ti-chalkboard" label={t('settings.teaching_guide')}
           value={`${profile.guideEmoji||'🧠'} ${profile.teachingGuide||'NaNa Esumai'}`}
           onClick={()=>openSheet('teachingGuide',t('settings.teaching_guide'),'select',guides.length ? guides : GUIDES)}/>
