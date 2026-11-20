@@ -1,7 +1,7 @@
 /*
  * wordDoc.js — the document editor's page setup and its Word (.docx) writer.
  *
- * The editor (components/docs/WordEditor.jsx) keeps the document as TipTap
+ * The editor (features/docs/components/WordEditor.jsx) keeps the document as TipTap
  * JSON; wordToDocx() turns that JSON into a real Word document with the
  * `docx` library — headings and the Title style, fonts, sizes, colours,
  * highlight, alignment, indents, line spacing, bullets and numbering,

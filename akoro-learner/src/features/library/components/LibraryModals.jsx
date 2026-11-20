@@ -4,7 +4,7 @@ import AddRecordModal from '../../../components/dashboard/AddRecordModal.jsx';
 import CreateFolderSheet from '../../../components/library/CreateFolderSheet.jsx';
 import AddToFolderPage from '../../../components/library/AddToFolderPage.jsx';
 import AddToTargetSheet from '../../../components/library/AddToTargetSheet.jsx';
-import AddToCommunityPage from '../../../components/communities/AddToCommunityPage.jsx';
+import { AddToCommunityPage } from '../../communities/index.js';
 import NowStudyingBar from '../../../components/dashboard/NowStudyingBar.jsx';
 import { listFolders, renameRecord, deleteRecord } from '../../../services/recordsApi.js';
 import LibraryFolderPage from './LibraryFolderPage.jsx';

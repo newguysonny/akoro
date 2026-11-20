@@ -8,7 +8,7 @@ import AnswerPaper, { FileCard } from '../../components/activity/AnswerPaper.jsx
 import PaperFrame from '../../components/activity/PaperFrame.jsx';
 import { WhiteboardModal } from '../teaching/index.js';
 // The document editor (TipTap + the .docx writer) loads only when opened.
-const WordEditor = lazy(() => import('../../components/docs/WordEditor.jsx'));
+const WordEditor = lazy(() => import('../docs/index.js').then((m) => ({ default: m.WordEditor })));
 import { lastCheck } from '../../lib/questionSteps.js';
 import useActivityDetail from './hooks/useActivityDetail.js';
 import { qText, storeDoc, typeOf } from './components/activityDetailModel.js';

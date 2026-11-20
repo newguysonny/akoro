@@ -37,7 +37,7 @@ import { Icon } from '../common/Icons.jsx';
 import Toast from '../common/Toast.jsx';
 import Spinner from '../common/Spinner.jsx';
 import { useIsMobileView } from '../../hooks/useIsMobileView.js';
-import { AUTHOR } from '../pharmd/pharmdData.js';
+import { AUTHOR } from '../../features/pharmd/index.js';
 import { fetchProgramme, fetchProgrammeCourse } from '../../services/programmesApi.js';
 
 /* The admin console's six course-card gradients — the colour the admin

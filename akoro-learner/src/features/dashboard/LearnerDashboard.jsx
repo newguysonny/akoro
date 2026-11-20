@@ -42,7 +42,7 @@ import Toast         from '../../components/common/Toast.jsx';
 import { ProgressBar, LiveBadge } from '../../components/common/ProgressBar.jsx';
 import { ZapIcon, MicIcon, Icon } from '../../components/common/Icons.jsx';
 import NowStudyingBar from '../../components/dashboard/NowStudyingBar.jsx';
-import PharmDProgram from '../../components/pharmd/PharmDProgram.jsx';
+import PharmDProgram from '../../features/pharmd/index.js';
 import ProgrammePage from '../../components/programmes/ProgrammePage.jsx';
 import ContentsDiscoveryTab from '../../components/tabs/ContentsDiscoveryTab.jsx';
 import { AppShell, SidebarToggle } from '../../components/AppShell.jsx';

@@ -24,10 +24,11 @@ async function walk(dir, out = []) {
 // session modals come from the teaching feature (moved out of
 // components/teaching in the same step), and its Battles tab and challenge
 // sheets come from the battles feature. Agent Chat reuses the battles
-// feature's NoAgentSheet.
+// feature's NoAgentSheet and shows the network feature's agent and
+// challenge cards; Library opens the communities feature's Add to Community.
 // Cross-feature imports are allowed ONLY through the other feature's index.js
 // and must be listed here.
-const ALLOWED = { dashboard: ["agent-chat", "teaching", "battles", "activities"], "agent-chat": ["battles"], teaching: ["agent-chat"], library: ["teaching"], activities: ["teaching"] };
+const ALLOWED = { dashboard: ["agent-chat", "teaching", "battles", "activities", "pharmd"], "agent-chat": ["battles", "network"], teaching: ["agent-chat"], library: ["teaching", "communities"], activities: ["teaching", "docs"], pharmd: ["teaching"], courses: ["battles", "teaching"] };
 
 test("every feature has an index.js; cross-feature imports go through the public index", async () => {
   const features = (await readdir(FEATURES, { withFileTypes: true }))

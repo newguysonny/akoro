@@ -35,8 +35,7 @@ import { CHAT_STARTERS, cleanIdeas, cleanMaterials, protegeMoves } from './lib/c
 import { useNavigate, useLocation } from 'react-router-dom';
 import NeedsYouList, { useNeedsYou } from './components/NeedsYouList.jsx';
 import ReplyRating, { ratableId, useReplyRatings } from './components/ReplyRating.jsx';
-import AgentCards from '../../components/network/AgentCards.jsx';
-import ChallengeRequestCards from '../../components/network/ChallengeRequestCards.jsx';
+import { AgentCards, ChallengeRequestCards } from '../network/index.js';
 import ConfirmChangeCard from './components/ConfirmChangeCard.jsx';
 import IngestCard from './components/IngestCard.jsx';
 import ChatFilesStrip from './components/ChatFilesStrip.jsx';

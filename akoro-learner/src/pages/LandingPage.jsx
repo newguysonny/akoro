@@ -1,6 +1,6 @@
 /**
  * Landing page.
- * Split into a co-located feature folder (./landing/*) — this file just
- * re-exports the page component so existing imports keep working.
+ * Lives in the marketing feature (../features/marketing); this file just
+ * re-exports the page component so the lazy route in App.jsx keeps working.
  */
-export { default } from './landing/index.js';
+export { default } from '../features/marketing/index.js';
