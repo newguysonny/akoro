@@ -78,6 +78,7 @@ router.get("/search", authenticateToken, asyncHandler(records.searchShelf));
    appear (their material stays private to them; see access.js). */
 router.get("/discover", authenticateToken, asyncHandler(records.listDiscover));
 router.get("/discover/:id/open", authenticateToken, asyncHandler(records.openDiscover));
+router.get("/discover/:id/file", authenticateToken, asyncHandler(records.openDiscoverFile));
 
 /* ── Folders — the shelf's organization layer ─────────────────────────────
    The create flow ships first ("Add to library" → Create a folder);

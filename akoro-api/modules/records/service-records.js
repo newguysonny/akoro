@@ -301,7 +301,44 @@ export async function openDiscover(req, res) {
       return null;
     });
   if (!url) return res503(res, "Could not sign that file — try again.");
-  res200(res, { url, contentKey: r.file_key });   // the shared AI cache key
+  // The app reads shared files through the API: a direct store URL has no
+  // CORS in the browser on some deployments (R2), so a shared PDF would not
+  // open even though the URL is valid.
+  const base = `${req.protocol}://${req.get("host")}`;
+  res200(res, { url: `${base}/api/records/discover/${r.id}/file?inline=1`, contentKey: r.file_key });
+}
+
+/* Pipe an object's bytes through the API (no storage CORS in the browser).
+   Used by every file route; the store URL is fetched server-side. */
+async function streamFromStore(res, url, { cache = "private, max-age=0, no-store" } = {}) {
+  const upstream = await fetch(url);
+  if (!upstream.ok || !upstream.body) return res.status(502).json({ success: false, error: "Couldn't load the file." });
+  res.setHeader("Content-Type", upstream.headers.get("content-type") || "application/octet-stream");
+  const len = upstream.headers.get("content-length");
+  if (len) res.setHeader("Content-Length", len);
+  res.setHeader("Cache-Control", cache);
+  const { Readable } = await import("node:stream");
+  Readable.fromWeb(upstream.body).pipe(res);
+}
+
+/* GET /api/records/discover/:id/file — the same access rules as open, but
+   the bytes come through the API so a shared document opens on a deployment
+   whose bucket sends no CORS headers. */
+export async function openDiscoverFile(req, res) {
+  const { data: r, error } = await store.getDiscoverRecord(req.params.id);
+  if (error || !r || r.deleted_at || !["upload", "paste"].includes(r.kind)) return res404(res, "Record not found.");
+  if (r.private && r.user_id !== req.user.id) return res404(res, "Record not found.");
+  if (r.kind !== "upload" || !r.file_key) return res404(res, "Record not found.");
+  const premiumIds = await activePremiumUserIds();
+  if (premiumIds.includes(r.user_id)) return res404(res, "Record not found.");
+  const url = await createPresignedDownload(r.file_key, { downloadName: r.name })
+    .catch((err) => {
+      console.error("[records] discover file presign failed:", err?.message || err);
+      return null;
+    });
+  if (!url) return res503(res, "Could not sign that file — try again.");
+  if (req.query.inline === "1") return streamFromStore(res, url, { cache: "public, max-age=600" });
+  return res.redirect(302, url);
 }
 
 // ─── PATCH /api/records/:id — progress / last-opened ────────────────────────
@@ -354,16 +391,6 @@ export async function openFile(req, res) {
   // of the storage URL because R2 presigned URLs send no CORS headers, so a
   // browser fetch there is blocked ("Failed to fetch") — the library PDF never
   // loaded. A server-side fetch has no CORS; we pipe it out same-API.
-  if (req.query.inline === "1") {
-    const upstream = await fetch(url);
-    if (!upstream.ok || !upstream.body) return res.status(502).json({ success: false, error: "Couldn't load the file." });
-    res.setHeader("Content-Type", upstream.headers.get("content-type") || "application/octet-stream");
-    const len = upstream.headers.get("content-length");
-    if (len) res.setHeader("Content-Length", len);
-    res.setHeader("Cache-Control", "private, max-age=0, no-store");
-    const { Readable } = await import("node:stream");
-    Readable.fromWeb(upstream.body).pipe(res);
-    return;
-  }
+  if (req.query.inline === "1") return streamFromStore(res, url);
   res.redirect(302, url);
 }
