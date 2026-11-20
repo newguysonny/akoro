@@ -26,18 +26,22 @@ import test from "node:test";
  */
 const read = (name) => readFile(new URL(name, import.meta.url), "utf8");
 
-const [migration, manifest, routes, socket, appJs, communityApi, readerDiscussion, readerModal, teachModal, recordSession] = await Promise.all([
+const [migration, manifest, routes, service, discussions, store, socket, socketHandlers, communityApi, readerDiscussion, readerModal, teachModal, recordSession] = await Promise.all([
   read("./2026-community-discussions.sql"),
   read("./manifest.json"),
   read("../modules/communities/routes.js"),
+  read("../modules/communities/service.js"),
+  read("../modules/communities/discussions.js"),
+  read("../modules/communities/store.js"),
   read("../modules/communities/discussionSocket.js"),
-  read("../app.js"),
+  read("../lib/socketHandlers.js"),
   read("../../akoro-learner/src/services/communityApi.js"),
   read("../../akoro-learner/src/components/teaching/ReaderDiscussion.jsx"),
   read("../../akoro-learner/src/components/teaching/SessionReaderModal.jsx"),
   read("../../akoro-learner/src/components/teaching/TeachAgentModal.jsx"),
   read("../../akoro-learner/src/components/library/RecordTeachSession.jsx"),
 ]);
+const flows = [service, discussions].join("\n");
 
 test("the discussion is owned by the community, one per community", () => {
   assert.ok(migration.includes("community_id    UUID NOT NULL UNIQUE REFERENCES edu.communities(id) ON DELETE CASCADE"),
@@ -58,9 +62,15 @@ test("/for-item — the connection lookup is membership-scoped", () => {
   const byId = routes.indexOf('router.get("/:id"');
   assert.ok(forItem !== -1 && byId !== -1 && forItem < byId,
     "registered before /:id — \"for-item\" must not be captured as an id");
-  const route = routes.slice(forItem, routes.indexOf("// ─── GET /mine"));
-  assert.ok(route.includes('from("community_members")'), "only MY memberships count");
-  assert.ok(route.includes('from("community_items")') && route.includes('eq("item_type", itemType)') && route.includes('eq("item_ref", itemRef)'),
+  // Phase 19 step 4: the flow is in service.js/discussions.js and its queries
+  // in store.js.
+  const route = flows.slice(flows.indexOf("export async function itemCommunities("),
+                            flows.indexOf("export async function getDiscussionMessages("));
+  assert.ok(route.includes("myCommunityIds(req.user.id)"), "only MY memberships count");
+  assert.ok(store.includes('from("community_members")') && store.includes('eq("user_id", userId)'),
+    "the membership read is scoped to the caller");
+  assert.ok(route.includes("itemsForRef(itemType, itemRef, myIds)") &&
+    store.includes('from("community_items")') && store.includes('eq("item_type", itemType)') && store.includes('eq("item_ref", itemRef)'),
     "…and the item must actually be in one of them");
   assert.ok(route.includes('["record", "pharmd_topic", "lesson", "library"]'),
     "every connected content kind is addressable — record, pharmd topic, lesson, library");
@@ -69,27 +79,29 @@ test("/for-item — the connection lookup is membership-scoped", () => {
 test("the discussion routes are member-only and REST is the write path", () => {
   assert.ok(routes.includes('router.get("/:id/discussion/messages"'), "history");
   assert.ok(routes.includes('router.post("/:id/discussion/messages"'), "posting");
-  const get = routes.slice(routes.indexOf('router.get("/:id/discussion/messages"'),
-                           routes.indexOf('router.post("/:id/discussion/messages"'));
-  assert.ok(get.includes('from("community_members")') && get.includes("denied"),
+  const get = flows.slice(flows.indexOf("export async function getDiscussionMessages("),
+                          flows.indexOf("export async function postDiscussionMessage("));
+  assert.ok(get.includes("discussionReadMembership") && get.includes("denied"),
     "reading requires membership");
-  assert.ok(routes.slice(routes.indexOf('router.post("/:id/discussion/messages"')).includes('from("community_members")'),
+  assert.ok(flows.slice(flows.indexOf("export async function postDiscussionMessage(")).includes("discussionWriteMembership"),
     "posting requires membership");
-  assert.ok(routes.includes('onConflict: "community_id", ignoreDuplicates: true'),
+  assert.ok(store.includes('onConflict: "community_id", ignoreDuplicates: true'),
     "get-or-create — the discussion is born on first use, never duplicated");
-  assert.ok(routes.includes("last_message_at"), "the community's pointer stays warm");
-  assert.ok(routes.includes("const DISCUSSION_MAX_BODY = 2000"), "the body cap matches the migration");
+  assert.ok(store.includes("last_message_at"), "the community's pointer stays warm");
+  assert.ok(flows.includes("const DISCUSSION_MAX_BODY = 2000"), "the body cap matches the migration");
 });
 
 test("messages fan out to the community's socket room", () => {
-  assert.ok(routes.includes('req.app.get("io")'), "the REST route reaches the app's socket server");
-  assert.ok(routes.includes("discussion:message"), "the event is discussion:message");
-  assert.ok(routes.includes("`discussion:${c.id}`"), "the room is the COMMUNITY's, not the content's");
+  assert.ok(flows.includes('req.app.get("io")'), "the REST route reaches the app's socket server");
+  assert.ok(flows.includes("discussion:message"), "the event is discussion:message");
+  assert.ok(flows.includes("`discussion:${c.id}`"), "the room is the COMMUNITY's, not the content's");
 });
 
 test("the socket join re-verifies membership server-side", () => {
-  assert.ok(appJs.includes('setupDiscussionSocket } from "./modules/communities/discussionSocket.js"'), "imported");
-  assert.ok(appJs.includes("setupDiscussionSocket(io);"), "mounted with the other gateways");
+  // Phase 19 step 4l moved the socket wiring out of app.js; the mount is
+  // still installed once, from lib/socketHandlers.js, in the boot path.
+  assert.match(socketHandlers, /setupDiscussionSocket \}\s+from "\.\.\/modules\/communities\/discussionSocket\.js";/, "imported");
+  assert.ok(socketHandlers.includes("setupDiscussionSocket(io);"), "mounted with the other gateways");
   assert.ok(socket.includes('socket.on("join-discussion"'), "rooms are joined by event, not by hand");
   assert.ok(socket.includes('from("community_members")'), "every join checks edu.community_members");
   assert.ok(socket.includes("socket.data.user"), "identity comes from the JWT middleware, not the client");

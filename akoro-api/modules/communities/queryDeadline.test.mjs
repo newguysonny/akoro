@@ -76,10 +76,14 @@ test("a late-settling loser after a timeout leaves no unhandled rejection", asyn
 
 test("default deadline is the documented 20s and stays exported for /health", async () => {
   assert.equal(DEFAULT_QUERY_TIMEOUT_MS, 20_000);
-  const routes = await (await import("node:fs/promises")).readFile(
-    new URL("./routes.js", import.meta.url), "utf8");
+  const { readFile } = await import("node:fs/promises");
+  const routes = await readFile(new URL("./routes.js", import.meta.url), "utf8");
+  const store = await readFile(new URL("./store.js", import.meta.url), "utf8");
   assert.match(routes, /COMMUNITIES_QUERY_TIMEOUT_MS = DEFAULT_QUERY_TIMEOUT_MS/);
+  assert.match(routes, /import \{ DEFAULT_QUERY_TIMEOUT_MS \}\s+from "\.\.\/\.\.\/lib\/queryDeadline\.js";/);
+  // Phase 19 step 4: the queries (and therefore step()) live in store.js.
+  assert.match(store, /import \{ step \}\s+from "\.\.\/\.\.\/lib\/queryDeadline\.js";/);
   // The poisoned pattern must never come back: an UNGUARDED .catch on the
   // raced promise inside the module family.
-  assert.doesNotMatch(routes, /promise\.catch\(/);
+  assert.doesNotMatch([routes, store].join("\n"), /promise\.catch\(/);
 });

@@ -12,7 +12,13 @@ import test from "node:test";
 const read = (name) => readFile(new URL(name, import.meta.url), "utf8");
 const [migration, routes, page] = await Promise.all([
   read("./2026-community-activity-types.sql"),
-  read("../../akoro-api/modules/communities/routes.js"),
+  // Phase 19 step 4: the activity flow lives in service.js now; read the
+  // module's flow + router together so the contract follows the code.
+  Promise.all([
+    read("../../akoro-api/modules/communities/routes.js"),
+    read("../../akoro-api/modules/communities/service.js"),
+    read("../../akoro-api/modules/communities/rules.js"),
+  ]).then((parts) => parts.join("\n")),
   read("../../akoro-learner/src/pages/CommunityActivityPage.jsx"),
 ]);
 

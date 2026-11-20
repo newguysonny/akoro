@@ -1,7 +1,6 @@
 {
   "oversized": {
     "lib/aiModel.js": 745,
-    "modules/adaptive-learning/agents/student/decayEngine.js": 831,
     "modules/adaptive-learning/agents/student/knowledge.js": 628,
     "modules/adaptive-learning/agents/student/orchestrator.js": 630,
     "modules/adaptive-learning/realtime/websocket.js": 813,
@@ -11,7 +10,6 @@
     "modules/agent-tools/routes.js": 760,
     "modules/agentConsole/routes.js": 695,
     "modules/autonomy/cycle.js": 633,
-    "modules/communities/routes.js": 847,
     "modules/courses/cart.js": 821,
     "modules/courses/course-content.js": 709,
     "modules/courses/courses.js": 644,

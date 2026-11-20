@@ -120,7 +120,9 @@ test("GET /:id for a missing community responds 404, not a hang", async () => {
 
 test("the promise-indexing typo can never return (static pin)", async () => {
   const { readFile } = await import("node:fs/promises");
-  const src = await readFile(new URL("./routes.js", import.meta.url), "utf8");
+  // Phase 19 step 4 moved communityOr404 (the helper this bug lived in) to
+  // service.js; the email of the pin is the same.
+  const src = await readFile(new URL("./service.js", import.meta.url), "utf8");
   assert.doesNotMatch(src, /withExtras\(\[c\]\)\[0\]/, "unawaited indexing of an async helper");
   assert.match(src, /const rows = await withExtras\(\[c\]\);/);
   // falsy ⇒ ALWAYS responded: the defensive guard that turns any future

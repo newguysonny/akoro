@@ -4,7 +4,9 @@ import test from "node:test";
 
 const websocket = await readFile(new URL("./websocket.js", import.meta.url), "utf8");
 const teachingSessionContext = await readFile(new URL("../teaching-session/context.js", import.meta.url), "utf8");
-const decayEngine = await readFile(new URL("../agents/student/decayEngine.js", import.meta.url), "utf8");
+const decayApply = await readFile(new URL("../agents/student/decay-apply.js", import.meta.url), "utf8");
+const decayStore = await readFile(new URL("../agents/student/decay-store.js", import.meta.url), "utf8");
+const decayEngine = `${decayApply}\n${decayStore}`;
 const orchestrator = await readFile(new URL("../agents/student/orchestrator.js", import.meta.url), "utf8");
 const decayChatRoutes = await readFile(new URL("../decay-review/routes.js", import.meta.url), "utf8");
 // Session preparation (continuation / decay loading) is shared by every
