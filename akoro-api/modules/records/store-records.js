@@ -99,3 +99,6 @@ export const getLessonWithCourse = (lessonId) =>
 export const getActiveEnrollment = (userId, courseId) =>
   db.from("enrollments")
     .select("id").eq("user_id", userId).eq("course_id", courseId).eq("status", "active").maybeSingle();
+
+export const setPreviewKey = (id, key) =>
+  edu().from("records").update({ preview_key: key }).eq("id", id);

@@ -164,5 +164,8 @@ router.get("/:id/file", authenticateToken, asyncHandler(records.openFile));
 // path wherever the bucket allows it.
 const uploadMem = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 router.post("/upload", authenticateToken, uploadMem.single("file"), asyncHandler(records.uploadFile));
+const previewMem = multer({ storage: multer.memoryStorage(), limits: { fileSize: 512 * 1024 } });
+router.get("/:id/preview", authenticateToken, asyncHandler(records.openPreview));
+router.post("/:id/preview", authenticateToken, previewMem.single("file"), asyncHandler(records.uploadPreview));
 
 export default router;

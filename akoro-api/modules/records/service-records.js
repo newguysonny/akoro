@@ -35,6 +35,7 @@ const toApi = async (r) => ({
   duration: r.duration ?? null,
   progress: r.progress ?? 0,
   fileType: r.kind === "upload" ? detectType(r.mime || "", r.name || "") : null,
+  hasPreview: !!r.preview_key,
   fileMissing: r.kind === "upload" && !r.file_key,
   url: r.url || null,
   content: r.kind === "paste" ? (r.content || "") : undefined,
@@ -50,6 +51,46 @@ const toApi = async (r) => ({
   createdAt: r.created_at,
   lastOpenedAt: r.last_opened_at || null,
 });
+
+/* POST /api/records/:id/preview — one JPEG of page 1.
+   The reader already renders PDF pages with pdf.js, so the client makes the
+   image and sends it here; the store keeps it under previews/. Cards then
+   show the page instead of a file-type icon. */
+export async function uploadPreview(req, res) {
+  const { data: r } = await store.getRecordOwner(req.params.id);
+  if (!r || r.user_id !== req.user.id) return res404(res, "Record not found.");
+  const file = req.file;
+  if (!file?.buffer?.length) return res400(res, "No preview image was uploaded.");
+  if (!/^image\//.test(file.mimetype || "")) return res400(res, "A preview must be an image.");
+  if (file.size > 512 * 1024) return res400(res, "Preview is too large.");
+  try {
+    const key = await putRecordObject({
+      userId: req.user.id, name: `preview-${req.params.id}.jpg`,
+      body: file.buffer, contentType: file.mimetype || "image/jpeg", prefix: "previews",
+    });
+    await store.setPreviewKey(req.params.id, key);
+    return res200(res, { previewKey: key });
+  } catch (error) {
+    return res400(res, error.message || "The preview could not be stored.");
+  }
+}
+
+/* GET /api/records/:id/preview — the stored page image, through the API. */
+export async function openPreview(req, res) {
+  const { data: r } = await store.getRecordOwner(req.params.id);
+  if (!r || r.deleted_at || !r.preview_key) return res404(res, "No preview.");
+  if (r.user_id !== req.user.id) {
+    if (r.private) return res404(res, "Record not found.");
+    const premiumIds = await activePremiumUserIds();
+    if (premiumIds.includes(r.user_id)) return res404(res, "Record not found.");
+  }
+  const url = await createPresignedDownload(r.preview_key).catch((err) => {
+    console.error("[records] preview presign failed:", err?.message || err);
+    return null;
+  });
+  if (!url) return res503(res, "Could not load the preview.");
+  return streamFromStore(res, url, { cache: "public, max-age=600" });
+}
 
 /* POST /api/records/upload — the bytes come to us.
    The browser's normal path is a presigned PUT straight to the store. That
@@ -271,6 +312,7 @@ export async function listDiscover(req, res) {
     size: r.size || 0,
     duration: r.duration ?? null,
     fileType: r.kind === "upload" ? detectType(r.mime || "", r.name || "") : "note",
+    hasPreview: !!r.preview_key,
     contentPreview: r.kind === "paste" ? String(r.content || "").slice(0, 280) : "",
     createdAt: r.created_at,
   }));

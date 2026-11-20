@@ -122,6 +122,20 @@ export async function uploadRecordFile(file, onProgress, { signal, purpose } = {
   }
 }
 
+/** The stored page-1 image for a record (the card's thumbnail). */
+export const recordPreviewUrl = (id) => `${API}/api/records/${id}/preview`;
+
+/** Send the page image the reader rendered. Silently best-effort: a preview
+ *  is a nicety, never a reason for the document to fail. */
+export async function uploadRecordPreview(id, blob) {
+  const form = new FormData();
+  form.append('file', blob, 'preview.jpg');
+  const res = await fetch(`${API}/api/records/${id}/preview`, {
+    method: 'POST', credentials: 'include', headers: { 'X-Akoro-Portal': 'student' }, body: form,
+  });
+  return res.ok;
+}
+
 /** Step 2 — PUT the raw bytes to the presigned URL. XHR (not fetch) so the
  *  sheet can show real upload progress; big files take a while on mobile.
  *  An AbortSignal (the chat composer's tile ✕) cancels the PUT mid-flight. */

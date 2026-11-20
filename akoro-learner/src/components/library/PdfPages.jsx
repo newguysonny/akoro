@@ -145,6 +145,19 @@ export async function loadPdfDocument(src, opts = {}) {
  * immediately. Errors are swallowed — a failed warm-up must never surface;
  * the real open will try again and report its own error.
  */
+/** One JPEG of page 1 (cards show the page, not a file icon). */
+export async function makePdfThumbnail(pdf, width = 360) {
+  const page = await pdf.getPage(1);
+  const base = page.getViewport({ scale: 1 });
+  const scale = Math.min(2, width / base.width);
+  const viewport = page.getViewport({ scale });
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.ceil(viewport.width);
+  canvas.height = Math.ceil(viewport.height);
+  await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+  return await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.72));
+}
+
 export function prefetchPdfDocument(src, opts = {}) {
   if (!src || docCache.has(src)) return;
   loadPdfDocument(src, opts).catch(() => {});

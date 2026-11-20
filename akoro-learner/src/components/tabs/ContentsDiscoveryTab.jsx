@@ -25,7 +25,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Icon } from '../common/Icons.jsx';
 import { BRAND, RED, GREEN, GOLD, STUDENT_ID } from '../../constants.js';
-import { discoverRecordsPage, discoverRecordOpen, listRecords } from '../../services/recordsApi.js';
+import { discoverRecordsPage, discoverRecordOpen, listRecords, recordPreviewUrl } from '../../services/recordsApi.js';
 import { useCursorList, pagedStatusText } from '../../lib/usePagedList.js';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 import Toast from '../common/Toast.jsx';
@@ -79,11 +79,17 @@ function RecordCard({ item, type, wide, opening, onOpen }) {
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         border: `1px solid ${meta.color}33`,
       }}>
-        <span style={{ fontSize: 46 }}>
-          {opening
-            ? <span className="ti ti-loader-2" style={{ fontSize: 40, color: meta.color, animation: 'cfeed-spin 1s linear infinite' }}/>
-            : <Icon name={meta.icon} size={46} color={meta.color}/>}
-        </span>
+        {item.hasPreview && !opening ? (
+          <img src={recordPreviewUrl(item.id)} alt="" loading="lazy"
+            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'top center' }}
+            onError={(e) => { e.currentTarget.style.display = 'none'; }}/>
+        ) : (
+          <span style={{ fontSize: 46 }}>
+            {opening
+              ? <span className="ti ti-loader-2" style={{ fontSize: 40, color: meta.color, animation: 'cfeed-spin 1s linear infinite' }}/>
+              : <Icon name={meta.icon} size={46} color={meta.color}/>}
+          </span>
+        )}
         <span style={{
           position: 'absolute', top: 7, left: 7, fontSize: 9, fontWeight: 900, letterSpacing: .3,
           color: '#fff', background: 'rgba(17,12,40,.72)', padding: '3px 7px', borderRadius: 6,

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { buildSessionReaderPages } from '../../teaching/index.js';
 import { officeReaderPages } from '../../../lib/officePages.js';
-import { recordFileSrc, extractStoredRecordText, getRecordExtraction, getSharedExtraction, getRecordTranscript, getSharedTranscript, startRecordTranscription, getRecordTranscriptionStatus, getAskHistory, askRecord, generateRecordTool, startRecordPodcast, getRecordPodcast, listRecordArtifacts, saveRecordArtifact, updateRecordArtifact, deleteRecordArtifact, discoverRecordOpen } from '../../../services/recordsApi.js';
+import { recordFileSrc, uploadRecordPreview, extractStoredRecordText, getRecordExtraction, getSharedExtraction, getRecordTranscript, getSharedTranscript, startRecordTranscription, getRecordTranscriptionStatus, getAskHistory, askRecord, generateRecordTool, startRecordPodcast, getRecordPodcast, listRecordArtifacts, saveRecordArtifact, updateRecordArtifact, deleteRecordArtifact, discoverRecordOpen } from '../../../services/recordsApi.js';
 import { rasterizePdfPages, rasterizeImageFile, runRecordExtraction } from '../../../components/library/extractPages.js';
 import { fetchFileWithRetry } from '../../../lib/fetchFile.js';
 import { fetchItemCommunities } from '../../../services/communityApi.js';
@@ -242,7 +242,7 @@ export function useRecordSession({ record, onOpened, onProgress }) {
             : getRecordExtraction(record.id)).catch(() => ({ pages: [] }));
 
           // pdf.js is a big dependency — it loads only when a PDF opens.
-          const { openPdfDocument, PdfPage } = await import('../../../components/library/PdfPages.jsx');
+          const { openPdfDocument, PdfPage, makePdfThumbnail } = await import('../../../components/library/PdfPages.jsx');
           const doc = await openPdfDocument(fileSrc, { credentials: 'include' });
           const { pdf, texts } = doc;
 
@@ -250,6 +250,16 @@ export function useRecordSession({ record, onOpened, onProgress }) {
           // parsed, and the text arrives behind it. The first page's canvas is
           // what the learner is waiting for, not page 27's sentences.
           ready(texts.map((tx) => ({ html: '', text: tx })), { pdf, PdfPage }, null);
+          // One page image the cards can show instead of a file icon. Only
+          // when the record has none; failures stay silent.
+          if (!record.hasPreview) {
+            void (async () => {
+              try {
+                const blob = await makePdfThumbnail(pdf);
+                if (blob) await uploadRecordPreview(record.id, blob);
+              } catch { /* preview is a nicety */ }
+            })();
+          }
           void doc.eagerReady.then(() => {
             if (cancelled) return;
             setPages(texts.map((tx) => ({ html: '', text: tx })));

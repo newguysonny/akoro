@@ -1,7 +1,7 @@
 import { Icon } from '../../../components/common/Icons.jsx';
 import { BRAND, RED, GREEN, GOLD } from '../../../constants.js';
 import { CARD_BASE, getMeta, getStatus, recordMeta, fmtDur, fmtSize } from './libraryMeta.js';
-import { recordFileSrc } from '../../../services/recordsApi.js';
+import { recordFileSrc, recordPreviewUrl } from '../../../services/recordsApi.js';
 
 function MoreBtn({ item, onMore }) {
   if (!onMore) return null;
@@ -175,12 +175,18 @@ function RecordCard({ item, onOpen, onMore }) {
   return (
     <button onClick={() => onOpen(item)} onPointerDown={warm} onPointerEnter={warm}
       style={{ ...CARD_BASE, cursor: 'pointer' }}>
+      {item.hasPreview ? (
+        <img src={recordPreviewUrl(item.id)} alt="" loading="lazy"
+          style={{ width: 46, height: 46, borderRadius: 11, flexShrink: 0, objectFit: 'cover', background: 'var(--ak-tag-bg)' }}
+          onError={(e) => { e.currentTarget.style.display = 'none'; }}/>
+      ) : (
       <div style={{
         width: 46, height: 46, borderRadius: 11, flexShrink: 0,
         background: `${meta.color}14`, display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}>
         <Icon name={meta.icon} size={22} color={meta.color}/>
       </div>
+      )}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 13.5, fontWeight: 800, color: done ? 'var(--ak-text-muted)' : 'var(--ak-text)',
           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textDecoration: done ? 'line-through' : 'none' }}>
