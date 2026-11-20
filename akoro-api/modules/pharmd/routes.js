@@ -222,7 +222,7 @@ async function serveUnifiedProgramme(res) {
   return true;
 }
 
-async function serveUnifiedCourse(res, code) {
+async function serveUnifiedCourse(req, res, code) {
   const gp = await unifiedProgrammeRow();
   if (!gp) return false;
   if (gp.status !== "published") { missing(res, "Course not found"); return true; }
@@ -321,7 +321,7 @@ router.get("/programme", asyncHandler(async (_req, res) => {
 
 /* ── One course + its topics — the folder view ────────────────── */
 router.get("/courses/:code", asyncHandler(async (req, res) => {
-  if (!UNIFIED_OFF() && (await serveUnifiedCourse(res, req.params.code))) return;
+  if (!UNIFIED_OFF() && (await serveUnifiedCourse(req, res, req.params.code))) return;
   const { data: course } = await edu().from("pharmd_courses")
     .select("id, code, title, programme_id").eq("code", req.params.code).maybeSingle();
   if (!course) return missing(res, "Course not found");
