@@ -788,6 +788,7 @@ export const EN = {
   'onboarding.chat_ph_school':     'Type to search for your school…',
   'onboarding.chat_skip':          'Skip',
   'onboarding.chat_skip_subjects': 'Skip for now',
+  'onboarding.chat_discipline_later': "I'll add discipline later",
   'onboarding.chat_school_nomatch':"No school called that on Akoro yet — send it as typed and I'll keep it as written.",
   'onboarding.chat_school_listed': 'On Akoro',
   'onboarding.chat_teacher_continue': 'Continue without a teacher',

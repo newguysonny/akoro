@@ -24,7 +24,7 @@ export const TEMP_PASSWORD_LENGTH   = 10;
 
 export const PROFILE_SELECT = [
   "id","email","username","full_name","avatar_url","avatar_emoji","phone","role",
-  "country","city","school_name","school_type","year_group","study_level",
+  "country","city","school_name","school_type","year_group","study_level","discipline",
   "language","display_mode","accent_color","teaching_guide","guide_emoji",
   "subjects","two_factor_enabled","onboarding_completed","created_at",
   "password_hash",   // presence only — surfaced as hasPassword, never returned
@@ -33,7 +33,7 @@ export const PROFILE_SELECT = [
 // Fallback select without columns added by pending migrations
 export const PROFILE_SELECT_BASE = [
   "id","email","username","full_name","avatar_url","phone","role",
-  "country","school_name","school_type","year_group","study_level",
+  "country","school_name","school_type","year_group","study_level","discipline",
   "language","display_mode","accent_color","teaching_guide","guide_emoji",
   "subjects","two_factor_enabled","created_at","password_hash",
 ].join(",");

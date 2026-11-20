@@ -272,7 +272,13 @@ export default function OnboardingPage() {
     say([{ text: tf('chat_level_q', { name: firstName(ansRef.current.name) }) }], stepIdx, () => setSub('level'));
   };
   const skipClass = () => { if (busy) return; patch({ cls: '' }); tell(tr('chat_skip')); goNext(); };
-  const skipSubjects = () => { if (busy) return; patch({ subjects: [], discipline: '' }); tell(subjectsLabel([])); goNext(); };
+  const skipSubjects = () => {
+    if (busy) return;
+    patch({ subjects: [], discipline: '' });
+    // Higher ed is skipping a discipline, not school subjects.
+    tell(higherEd ? tr('chat_discipline_later') : subjectsLabel([]));
+    goNext();
+  };
   const continueWithoutTeacher = () => { if (busy) return; tell(tr('chat_teacher_continue')); goNext(); };
   const skipSchool = () => { if (busy) return; patch({ school: '' }); tell(tr('chat_own')); goNext(); };
   const toggleDiscipline = (d) => {

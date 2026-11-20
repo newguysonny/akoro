@@ -63,6 +63,7 @@ export async function getMe(req, res) {
       bg:           agent.agent_bg,
       personality:  agent.personality,
       studyLevel:   agent.study_level,
+      discipline:   agent.discipline ?? null,
       yearGroup:    agent.year_group,
       examBoard:    agent.exam_board,
       subjects:     agent.subjects       || [],
