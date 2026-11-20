@@ -27,8 +27,8 @@ test("the reply shapes to at most four clean suggestions", () => {
 });
 
 test("the route exists, is bounded and never fails the chat", async () => {
-  const src = await readFile(new URL("../chat.js", import.meta.url), "utf8");
-  const route = src.slice(src.indexOf('router.post("/learn-suggestions"'), src.indexOf('router.post("/agent"'));
+  const src = await readFile(new URL("./routes-decisions.js", import.meta.url), "utf8");
+  const route = src.slice(src.indexOf('router.post("/learn-suggestions"'));
   assert.ok(route.length > 50);
   assert.match(route, /__timeoutMs: 12_000/);
   assert.match(route, /__feature: "learn_suggestions"/);

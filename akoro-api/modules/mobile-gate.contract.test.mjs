@@ -401,7 +401,7 @@ test("console-facing notification composers carry no emoji", async () => {
     "modules/battle/service-challenge.js",
     "modules/battle/service-battle.js",
     "modules/battle/networkBattle.js",
-    "modules/battle/worker.js",
+    "modules/battle/worker-create.js",
     "modules/courses/scheduler.js",
     "modules/courses/live-sessions.js",
     "modules/courses/peer-sessions.js",

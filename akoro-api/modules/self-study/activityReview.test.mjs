@@ -22,8 +22,10 @@ test("the instruction line, and the wiring: assign keeps it and sends it now; on
   const drafts = readFileSync(new URL("./drafts.js", import.meta.url), "utf8");
   assert.match(drafts, /review = cleanReview\(reviewIn, \{ dueAt: payload\.due_at \?\? null \}\)/);
   assert.match(drafts, /await scheduleActivityReview\(result\.assignment, review\)/);
-  const worker = readFileSync(new URL("../battle/worker.js", import.meta.url), "utf8");
-  assert.match(worker, /case "activity-review":.*runActivityReview\(job\.data\.assignmentId\)/);
+  // Phase 19 step 4: the job logic moved out of battle/worker.js; the action
+  // router is where "activity-review" is dispatched now.
+  const workerJobs = readFileSync(new URL("../battle/worker-jobs.js", import.meta.url), "utf8");
+  assert.match(workerJobs, /case "activity-review":.*runActivityReview\(job\.data\.assignmentId\)/);
   const src = readFileSync(new URL("./activityReview.js", import.meta.url), "utf8");
   assert.match(src, /delay: 0, jobId: `activity-review-\$\{assignment\.id\}`/);
   assert.match(src, /learnerIds, startsAt: at,/);

@@ -15,7 +15,7 @@ const sessionChat = await readFile(
 const learnerButton = await readFile(
   new URL("../../../akoro-learner/src/components/common/CopyMessageButton.jsx", import.meta.url), "utf8");
 const apiChat = await readFile(
-  new URL("../adaptive-learning/chat.js", import.meta.url), "utf8");
+  new URL("../adaptive-learning/chat/routes-sessions.js", import.meta.url), "utf8");
 
 test("all three chat surfaces render a per-message copy button", () => {
   assert.match(instructorPage, /<CopyMsgButton text=\{textPart\} \/>/);

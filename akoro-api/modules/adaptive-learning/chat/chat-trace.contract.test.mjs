@@ -5,7 +5,12 @@ import {
   CHAT_TOOL_DISPLAY, TRACE_LIMITS, chatToolDisplay, chatToolResultLine, createChatTrace, decisionNarration,
 } from "./chat-trace.js";
 
-const chatSource = await readFile(new URL("../chat.js", import.meta.url), "utf8");
+const chatSource = (await Promise.all([
+  readFile(new URL("../chat.js", import.meta.url), "utf8"),
+  readFile(new URL("./routes-agent.js", import.meta.url), "utf8"),
+  readFile(new URL("./routes-sessions.js", import.meta.url), "utf8"),
+  readFile(new URL("./routes-decisions.js", import.meta.url), "utf8"),
+])).join("\n");
 const turnPrepare = await readFile(new URL("./turn-prepare.js", import.meta.url), "utf8");
 const turnAnswer = await readFile(new URL("./turn-answer.js", import.meta.url), "utf8");
 const agentLoop = await readFile(new URL("./agent-loop.js", import.meta.url), "utf8");

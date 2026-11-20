@@ -7,7 +7,8 @@ process.env.SUPABASE_SERVICE_KEY ||= "test-service-key";
 process.env.OPENAI_API_KEY ||= "test-openai-key";
 const { cleanBattleOptions, seatsFor, assignTeams, NETWORK_LIMITS } = await import("../battle/index.js");
 const read = (p) => readFile(new URL(p, import.meta.url), "utf8");
-const [worker, challenges, network, toolCatalogue] = await Promise.all([read("../battle/worker.js"), read("./challenges.js"), read("../adaptive-learning/chat/handlers-network-study.js"), read("../adaptive-learning/chat/tool-catalogue-core.js")]);
+// Phase 19 step 4: end-battle scoring lives in battle/worker-end.js.
+const [workerEnd, challenges, network, toolCatalogue] = await Promise.all([read("../battle/worker-end.js"), read("./challenges.js"), read("../adaptive-learning/chat/handlers-network-study.js"), read("../adaptive-learning/chat/tool-catalogue-core.js")]);
 
 test("battle options: subject required, 5–30 questions, schedule in the future and within 30 days", () => {
   assert.throws(() => cleanBattleOptions({}), /Which subject/);
@@ -34,8 +35,8 @@ test("teams: creator on A, a named teammate joins A, the rest balance out", () =
 });
 
 test("team battles are scored by team; requests fill seats with a lock; challenges respect privacy", () => {
-  assert.match(worker, /const isTeam = battleInfo\?\.battle_type === "team";/);
-  assert.match(worker, /is_winner:  r == null \|\| isReview \? false : isTeam \?/);
+  assert.match(workerEnd, /const isTeam = battleInfo\?\.battle_type === "team";/);
+  assert.match(workerEnd, /is_winner:  r == null \|\| isReview \? false : isTeam \?/);
   assert.match(challenges, /\.eq\("accepted_by", `\{\$\{\(r\.accepted_by \|\| \[\]\)\.join\(","\)\}\}`\)/);
   assert.match(challenges, /isn't taking challenges right now/);
   for (const name of ["find_competitors", "challenge_agent", "post_challenge_request", "search_challenge_requests", "accept_challenge_request", "cancel_challenge_request", "rematch_battle"]) {

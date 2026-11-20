@@ -6,9 +6,16 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const read = (f) => readFile(new URL(f, import.meta.url), "utf8");
-const [judge, source, recall, worker, ai] = await Promise.all([
-  read("./judge.js"), read("./questionSource.js"), read("./agentRecall.js"), read("./worker.js"), read("../../lib/aiModel.js"),
+const [judge, source, recall, ai] = await Promise.all([
+  read("./judge.js"), read("./questionSource.js"), read("./agentRecall.js"), read("../../lib/aiModel.js"),
 ]);
+// Phase 19 step 4 split the queue consumer out of worker.js; the assertions
+// follow the job modules, not the file name.
+const workerFiles = [
+  "./worker.js", "./worker-jobs.js", "./worker-create.js", "./worker-start.js",
+  "./worker-battle.js", "./worker-end.js", "./worker-expire.js", "./worker-core.js", "./worker-rules.js",
+];
+const worker = (await Promise.all(workerFiles.map(read))).join("\n");
 // The creation/accept handlers moved out of routes.js in the Phase 19 split;
 // the assertions follow the code, not the file name.
 const serviceFiles = ["./service-create.js", "./service-class.js", "./service-course.js", "./service-challenge.js"];

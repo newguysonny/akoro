@@ -26,7 +26,8 @@ const cadence = read("modules/autonomy/cadence.js");
 const tasks = read("modules/tasks/routes.js");
 const communities = read("modules/communities/routes.js");
 const selfStudy = read("modules/self-study/routes.js");
-const battleWorker = read("modules/battle/worker.js");
+// Phase 19 step 4: the battle-end emit moved to the end-battle job module.
+const battleWorker = read("modules/battle/worker-end.js");
 const chatJs = read("modules/adaptive-learning/chat.js");
 const peerConsult = read("lib/peerConsult.js");
 

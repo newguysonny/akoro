@@ -10,6 +10,26 @@ deliberately not re-exported: importing it constructs the BullMQ queue and
 Redis connection, so queue users import it directly (and the boot path imports
 it only to start the worker).
 
+## Worker
+
+`worker.js` owns the `battles` queue, Redis connection and Worker events. The
+job logic is beside it (Phase 19 step 4):
+
+```
+worker.js        queue + Worker + BullMQ lifecycle
+worker-jobs.js   action → job module router
+worker-create.js start-battle: claim live, drop unclaimed seats, Q1
+worker-start.js  advance-question and the per-agent answer jobs
+worker-battle.js agent-answer and reveal-question
+worker-end.js    end-battle: settle, rank, pay, Agent Check hand-off
+worker-expire.js expire-battle and refresh-leaderboard
+worker-rules.js  pure helpers (no db/queue)
+worker-core.js   queue registry, battle log/XP writes, per-run state
+```
+
+New HTTP behaviour goes in the service/rules/store layers below, not in the
+worker.
+
 ## Extend
 
 Add a file in this directory and export its public names from `index.js`. Route
@@ -41,6 +61,7 @@ New behaviour goes in the service/rules/store layers, not back into
 
 ## Limits
 
-`worker.js` is deliberately large and separate: it is the queue consumer, not a
-route layer. New HTTP behaviour should go into the service/rules/store files
-above instead of growing `routes.js` or importing the worker into them.
+`worker.js` stays small: it is the queue consumer's construction, not a route
+layer. Job behaviour goes into the worker job files above; new HTTP behaviour
+goes into the service/rules/store files instead of growing `routes.js` or
+importing the worker into them.

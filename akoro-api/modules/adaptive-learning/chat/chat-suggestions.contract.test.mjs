@@ -5,7 +5,7 @@ import test from "node:test";
 const { buildSuggestionMessages, shapeSuggestions, SUGGESTION_LIMITS } = await import("./chatSuggestions.js");
 const { chatIdeas, versionIdeas, STARTERS } = await import("../../../../akoro-instructor/src/lib/chatIdeas.js");
 const read = (p) => readFile(new URL(p, import.meta.url), "utf8");
-const [chat, chatPage, draftCard, learnerTab] = await Promise.all([read("../chat.js"), read("../../../../akoro-instructor/src/pages/ChatPage.jsx"), read("../../../../akoro-instructor/src/components/paper/DraftCard.jsx"), read("../../../../akoro-learner/src/components/tabs/AgentChatTab.jsx")]);
+const [chat, chatPage, draftCard, learnerTab] = await Promise.all([read("./routes-decisions.js"), read("../../../../akoro-instructor/src/pages/ChatPage.jsx"), read("../../../../akoro-instructor/src/components/paper/DraftCard.jsx"), read("../../../../akoro-learner/src/components/tabs/AgentChatTab.jsx")]);
 
 test("the suggestion prompt: three short next things, never assigning", () => {
   const [sys, user] = buildSuggestionMessages({ role: "instructor", ask: "5 MCQ on fractions", reply: "Draft ready — preview it to assign." });

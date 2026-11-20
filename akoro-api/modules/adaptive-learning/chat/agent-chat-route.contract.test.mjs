@@ -3,7 +3,12 @@ import { readFile } from "node:fs/promises";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-const source = await readFile(new URL("../chat.js", import.meta.url), "utf8");
+const source = (await Promise.all([
+  readFile(new URL("../chat.js", import.meta.url), "utf8"),
+  readFile(new URL("./routes-agent.js", import.meta.url), "utf8"),
+  readFile(new URL("./routes-sessions.js", import.meta.url), "utf8"),
+  readFile(new URL("./routes-decisions.js", import.meta.url), "utf8"),
+])).join("\n");
 const turnPrepare = await readFile(new URL("./turn-prepare.js", import.meta.url), "utf8");
 const turnAnswer = await readFile(new URL("./turn-answer.js", import.meta.url), "utf8");
 const turn = `${turnPrepare}\n${turnAnswer}`;
