@@ -3,6 +3,7 @@ import "../../test-env.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { readDraftSource } from "./draftSource.mjs";
 
 const { cleanReview, reviewInstruction, reviewStatus, REVIEW_LIMITS } = await import("./activityReview.js");
 const NOW = Date.parse("2026-10-24T10:00:00Z");
@@ -17,9 +18,9 @@ test("cleanReview: off, at the instructor's time, else the due date; questions c
   assert.throws(() => cleanReview({ on: true, at: "2026-10-01T10:00:00Z" }, { now: NOW }), /has passed/);
 });
 
-test("the instruction line, and the wiring: assign keeps it and sends it now; one class battle at the review time", () => {
+test("the instruction line, and the wiring: assign keeps it and sends it now; one class battle at the review time", async () => {
   assert.match(reviewInstruction("2026-10-26T15:00:00Z"), /^After you submit, teach your agent this topic: your class review battle is on Mon,? 26 Oct, 4:00 pm\. Accept it in your Challenges before it starts\.$/);
-  const drafts = readFileSync(new URL("./drafts.js", import.meta.url), "utf8");
+  const drafts = await readDraftSource();
   assert.match(drafts, /review = cleanReview\(reviewIn, \{ dueAt: payload\.due_at \?\? null \}\)/);
   assert.match(drafts, /await scheduleActivityReview\(result\.assignment, review\)/);
   // Phase 19 step 4: the job logic moved out of battle/worker.js; the action

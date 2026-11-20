@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { readRoutesSource } from "./routesSource.mjs";
+import { readDraftSource } from "./draftSource.mjs";
 import test from "node:test";
 
 process.env.SUPABASE_URL ||= "http://localhost:59999";
@@ -10,7 +11,7 @@ const qp = await import("./questionPaper.js");
 const dv = await import("./draftVersions.js");
 const read = (p) => readFile(new URL(p, import.meta.url), "utf8");
 const [chat, toolCatalogue, drafts, routes, guide] = await Promise.all([
-  read("../adaptive-learning/chat.js"), read("../adaptive-learning/chat/tool-catalogue-rest.js"), read("./drafts.js"), readRoutesSource(), read("../adaptive-learning/agents/nana-esumai/guide.js"),
+  read("../adaptive-learning/chat.js"), read("../adaptive-learning/chat/tool-catalogue-rest.js"), readDraftSource(), readRoutesSource(), read("../adaptive-learning/agents/nana-esumai/guide.js"),
 ]);
 
 const TRI = '<svg viewBox="0 0 100 100"><polygon points="0,0 100,0 0,100" stroke="#000" fill="none"/><text x="5" y="50">P</text></svg>';

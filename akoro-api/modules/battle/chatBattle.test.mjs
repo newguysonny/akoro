@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { readDraftSource } from "../self-study/draftSource.mjs";
 
 process.env.SUPABASE_URL ||= "http://localhost:59999";
 process.env.SUPABASE_SERVICE_KEY ||= "test-service-key";
@@ -47,6 +48,6 @@ test("chat: every battle tool takes repeat; class_battle is a side effect and ro
   assert.match(rest, /battle_format: \{ type: "string", enum: \["battle", "review"\]/, "instructor drafts say battle or review");
   const mod = await read("./chatBattle.js");
   assert.match(mod, /occurrenceHandlers\.classInvite/);
-  const drafts = await read("../self-study/drafts.js");
+  const drafts = await readDraftSource();
   assert.match(drafts, /if \(patch\.series_id\) updates\.series_id = patch\.series_id;/, "a recurring battle draft records its series");
 });

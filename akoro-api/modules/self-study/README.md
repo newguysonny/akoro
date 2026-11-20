@@ -24,6 +24,19 @@ handlers. The layers below it are:
 - `service-common.js` / `http.js` — the ownership and target-visibility
   guards plus the response helpers.
 
+Activity drafts are entered through `drafts.js` and split by responsibility:
+
+- `draft-rules.js` — pure rules (types, TTL/cap windows, plan/history shapes).
+- `draft-store.js` — draft Supabase queries (classrooms, TTL sweep, cap).
+- `draft-audience.js` — audience resolution.
+- `draft-plan.js` — plan generation and background enrichment.
+- `draft-model.js` — the model calls and the auto-rubric hook.
+- `draft-questions.js` — battle and review-battle question preparation.
+- `draft-create.js` / `draft-revise.js` — prepare and conversational revision.
+- `draft-records.js` / `draft-history.js` — read/list/edit/discard and restore.
+- `draft-assign.js` — the approval, replayed through `createAssignment`.
+- `draft-edits.js` — version edits/retries, settings and rubrics.
+
 ## Extend
 
 Add a focused file and export its public names from `index.js`. Background
@@ -33,6 +46,7 @@ pure decisions belong in `rules.js` and queries in `store-*.js`.
 
 ## Limits
 
-`drafts.js` and `questionPaper.js` are the large files; new behaviour belongs
-in a smaller module (`paperTemplate.js`, `plan-scaffold.js`). Route bodies do
-not live in `routes.js`.
+`questionPaper.js` is the large file; new behaviour belongs in a smaller
+module (`paperTemplate.js`, `plan-scaffold.js`). Route bodies do not live in
+`routes.js`.
+

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFile } from 'node:fs/promises';
 import { readRoutesSource } from './routesSource.mjs';
+import { readDraftSource } from './draftSource.mjs';
 import { aiGradeSchema, buildAiGradeMessages, shapeAiGrade, schemePrompt, snapLevel, runAiGrade, openQuestions } from './aiGrade.js';
 import { cleanMarkScheme } from './markScheme.js';
 
@@ -99,7 +100,7 @@ test('runAiGrade follows the scheme end to end', async () => {
 });
 
 test('the rubric, settings and assign are wired through the draft flow', async () => {
-  const drafts = await readFile(new URL('./drafts.js', import.meta.url), 'utf8');
+  const drafts = await readDraftSource();
   const routes = await readRoutesSource();
   const versions = await readFile(new URL('./draftVersions.js', import.meta.url), 'utf8');
   assert.match(drafts, /export async function setAssignmentSettings/);
