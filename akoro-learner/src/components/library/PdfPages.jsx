@@ -46,33 +46,70 @@ async function readPageText(pdf, pageNumber, texts) {
   texts[pageNumber - 1] = tc.items.map((it) => it.str).join(' ');
 }
 
-/** Load the document + start extracting page text. `src` is presigned — no auth needed. */
-export async function loadPdfDocument(src, { credentials, eagerTextPages = EAGER_TEXT_PAGES } = {}) {
-  const cached = docCache.get(src);
-  if (cached) {
-    docCache.delete(src);      // refresh recency so the newest stays put
-    docCache.set(src, cached);
-    return cached;
-  }
+/* Bytes cache. docCache is per page-load; Cache Storage survives a reload,
+   so opening the same 1.7 MB course PDF twice does not download it twice on a
+   phone. Keyed by URL + the signed-in learner, so a shared device never serves
+   one learner's file to another. Bounded: the last six documents win. */
+const BYTES_CACHE = 'akoro-pdf-bytes-v1';
+const BYTES_MAX_DOCS = 6;
+
+function cacheKey(src) {
+  let who = 'anon';
+  try { who = JSON.parse(localStorage.getItem('akoro_user') || 'null')?.id || 'anon'; } catch { /* private mode */ }
+  return `${src}${src.includes('?') ? '&' : '?'}__u=${encodeURIComponent(who)}`;
+}
+
+async function fetchBytes(src, credentials) {
+  const key = cacheKey(src);
+  try {
+    const cache = await caches.open(BYTES_CACHE);
+    const hit = await cache.match(key);
+    if (hit) return await hit.arrayBuffer();
+  } catch { /* no Cache Storage (private mode) — go to the network */ }
   const res = await fetch(src, credentials ? { credentials } : undefined);
   if (!res.ok) throw new Error(`Could not load the file (${res.status}).`);
   const buf = await res.arrayBuffer();
+  try {
+    const cache = await caches.open(BYTES_CACHE);
+    await cache.put(key, new Response(buf, { headers: { 'content-type': 'application/pdf' } }));
+    const keys = await cache.keys();
+    for (let i = 0; i < keys.length - BYTES_MAX_DOCS; i++) await cache.delete(keys[i]);
+  } catch { /* quota or private mode — the reader still works from memory */ }
+  return buf;
+}
+
+/**
+ * Open the document and START extracting text. Resolves as soon as the PDF is
+ * parsed (no page text needed to paint the first page); `eagerReady` resolves
+ * when the opening pages have text and `textsReady` when the whole document
+ * does. The reader grounds the session on the pages it has and re-grounds as
+ * more arrive.
+ */
+export async function openPdfDocument(src, { credentials, eagerTextPages = EAGER_TEXT_PAGES } = {}) {
+  const cached = docCache.get(src);
+  if (cached) {
+    docCache.delete(src);
+    docCache.set(src, cached);
+    return cached;
+  }
+  const buf = await fetchBytes(src, credentials);
   const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(buf) }).promise;
   const texts = new Array(pdf.numPages).fill('');
-  let resolveReady = () => {};
-  const textsReady = new Promise((r) => { resolveReady = r; });
-  const doc = { pdf, texts, textsReady, bytes: buf.byteLength };
+  let resolveEager = () => {};
+  let resolveAll = () => {};
+  const eagerReady = new Promise((r) => { resolveEager = r; });
+  const textsReady = new Promise((r) => { resolveAll = r; });
+  const doc = { pdf, texts, eagerReady, textsReady, bytes: buf.byteLength };
 
   const eager = Math.min(pdf.numPages, Math.max(1, eagerTextPages));
-  for (let p = 1; p <= eager; p++) await readPageText(pdf, p, texts).catch(() => {});
-  // The rest, in small batches with a yield between them, so a big document
-  // never blocks paints or the page's own text-layer work.
   (async () => {
+    for (let p = 1; p <= eager; p++) await readPageText(pdf, p, texts).catch(() => {});
+    resolveEager();
     for (let p = eager + 1; p <= pdf.numPages; p++) {
       await readPageText(pdf, p, texts).catch(() => {});
       if (p % 3 === 0) await new Promise((r) => setTimeout(r, 0));
     }
-  })().finally(resolveReady);
+  })().finally(resolveAll);
 
   docCache.set(src, doc);
   let total = 0;
@@ -84,6 +121,13 @@ export async function loadPdfDocument(src, { credentials, eagerTextPages = EAGER
     gone?.pdf.destroy?.().catch(() => {});
     docCache.delete(oldest);
   }
+  return doc;
+}
+
+/** The old contract: the document with its opening pages' text ready. */
+export async function loadPdfDocument(src, opts = {}) {
+  const doc = await openPdfDocument(src, opts);
+  await doc.eagerReady;
   return doc;
 }
 

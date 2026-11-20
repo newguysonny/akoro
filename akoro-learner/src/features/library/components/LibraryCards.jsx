@@ -1,6 +1,7 @@
 import { Icon } from '../../../components/common/Icons.jsx';
 import { BRAND, RED, GREEN, GOLD } from '../../../constants.js';
 import { CARD_BASE, getMeta, getStatus, recordMeta, fmtDur, fmtSize } from './libraryMeta.js';
+import { recordFileSrc } from '../../../services/recordsApi.js';
 
 function MoreBtn({ item, onMore }) {
   if (!onMore) return null;
@@ -155,6 +156,16 @@ function BlogCard({ item, onOpen, onMore }) {
    record as a full study session. */
 function RecordCard({ item, onOpen, onMore }) {
   const meta = recordMeta(item);
+  // Tap-to-open spends its first ~0.7 s downloading and parsing. A press
+  // starts that immediately (the click follows within ~100 ms), so the reader
+  // usually opens on a parsed document. Dynamic: pdf.js stays out of this page.
+  const isPdf = item.type === 'pdf' || /\.pdf$/i.test(item.name || '');
+  const warm = () => {
+    if (!isPdf || !item.id) return;
+    import('../../../components/library/PdfPages.jsx')
+      .then((m) => m.prefetchPdfDocument(recordFileSrc(item.id), { credentials: 'include' }))
+      .catch(() => {});
+  };
   const done = (item.progress || 0) >= 100;
   const bits = [
     fmtDur(item.duration),
@@ -162,7 +173,8 @@ function RecordCard({ item, onOpen, onMore }) {
     item.createdAt ? new Date(item.createdAt).toLocaleDateString([], { month: 'short', day: 'numeric' }) : '',
   ].filter(Boolean).join(' · ');
   return (
-    <button onClick={() => onOpen(item)} style={{ ...CARD_BASE, cursor: 'pointer' }}>
+    <button onClick={() => onOpen(item)} onPointerDown={warm} onPointerEnter={warm}
+      style={{ ...CARD_BASE, cursor: 'pointer' }}>
       <div style={{
         width: 46, height: 46, borderRadius: 11, flexShrink: 0,
         background: `${meta.color}14`, display: 'flex', alignItems: 'center', justifyContent: 'center',

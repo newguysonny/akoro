@@ -242,8 +242,20 @@ export function useRecordSession({ record, onOpened, onProgress }) {
             : getRecordExtraction(record.id)).catch(() => ({ pages: [] }));
 
           // pdf.js is a big dependency — it loads only when a PDF opens.
-          const { loadPdfDocument, PdfPage } = await import('../../../components/library/PdfPages.jsx');
-          const { pdf, texts } = await loadPdfDocument(fileSrc, { credentials: 'include' });
+          const { openPdfDocument, PdfPage } = await import('../../../components/library/PdfPages.jsx');
+          const doc = await openPdfDocument(fileSrc, { credentials: 'include' });
+          const { pdf, texts } = doc;
+
+          // Paint the document NOW: the pages exist as soon as the PDF is
+          // parsed, and the text arrives behind it. The first page's canvas is
+          // what the learner is waiting for, not page 27's sentences.
+          ready(texts.map((tx) => ({ html: '', text: tx })), { pdf, PdfPage }, null);
+          void doc.eagerReady.then(() => {
+            if (cancelled) return;
+            setPages(texts.map((tx) => ({ html: '', text: tx })));
+            const early = texts.join('\n\n').trim();
+            if (early) setReference((prev) => prev || { name: record.name, text: early.slice(0, MAX_REFERENCE_CHARS) });
+          });
           // The pages ARE the PDF's pages — text kept beside each so the
           // Generate tools work on the document's real sentences. The same
           // text grounds the teaching session.

@@ -105,17 +105,21 @@ export default function PharmDTopicSession({ topic, course, onClose, chatState =
       }
       try {
         // pdf.js is a big dependency — it loads only when a PDF opens.
-        const { loadPdfDocument, PdfPage } = await import('../../../components/library/PdfPages.jsx');
-        const { pdf, texts } = await loadPdfDocument(topic.file_url);
+        const { openPdfDocument, PdfPage } = await import('../../../components/library/PdfPages.jsx');
+        const doc = await openPdfDocument(topic.file_url);
         if (cancelled) return;
-        // The pages ARE the PDF's pages — text kept beside each so the
-        // Generate tools work on the document's real sentences. The same
-        // text grounds the teaching session.
-        const joined = texts.join('\n\n');
+        const { pdf, texts } = doc;
+        // Paint as soon as the PDF is parsed; the page text (which only the
+        // Generate tools and the agent's grounding need) arrives behind it.
         setPages(texts.map((tx) => ({ html: '', text: tx })));
         setPdfParts({ pdf, PdfPage });
-        setReference(joined ? { name: topic.title, text: joined.slice(0, MAX_REFERENCE_CHARS) } : null);
         setState('ready');
+        void doc.eagerReady.then(() => {
+          if (cancelled) return;
+          setPages(texts.map((tx) => ({ html: '', text: tx })));
+          const early = texts.join('\n\n').trim();
+          if (early) setReference((prev) => prev || { name: topic.title, text: early.slice(0, MAX_REFERENCE_CHARS) });
+        });
 
         // The catalogue file's extraction is SHARED: whoever opened this topic
         // first paid for the pages; everyone after reads the same markdown.
