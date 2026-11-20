@@ -1,7 +1,7 @@
 export { resolveAskTargetFor, resolveContentAccess } from "./access.js";
 export { gatherPassages, extractCitations, passageWhere, buildAskMessages, cleanModelOutput } from "./askLib.js";
 export { getExtraction, recordsExtractionEnabled, runpodEndpointHealth, parsePageRunAsync, getParseJob } from "./extractLib.js";
-export { removeRecordFile, createPresignedDownload, putRecordObject, ownsRecordFileKey } from "./lib/storage.js";
+export { removeRecordFile, createPresignedDownload, putRecordObject, ownsRecordFileKey, recordsStorageEnabled } from "./lib/storage.js";
 export { searchRecordChunks, indexRecord } from "./searchLib.js";
 export { makeStudyMaterial } from "./studyMaterial.js";
 export { backfillRecordText } from "./textBackfill.js";

@@ -40,7 +40,7 @@ import { authenticateToken }  from "../auth/index.js";
 import { runPharmdUpload }    from "./uploader.js";
 import { safeCompare } from "../../lib/safeCompare.js";
 import { openai, OPENAI_MODEL } from "../../lib/aiModel.js";
-import { buildAskMessages, extractCitations, cleanModelOutput, createPresignedDownload } from "../records/index.js";
+import { buildAskMessages, extractCitations, cleanModelOutput, createPresignedDownload, recordsStorageEnabled } from "../records/index.js";
 import { pharmdContentKey } from "../../lib/contentKey.js";
 
 const edu = () => db.schema("edu");
@@ -74,19 +74,25 @@ function keyFromUrl(u) {
 
 async function resolveFileUrl(bucket, path, storedUrl) {
   const keys = [...new Set([path, storedUrl ? keyFromUrl(storedUrl) : null].filter(Boolean))];
-  for (const key of keys) {
-    try {
-      return await createPresignedDownload(key);
-    } catch (err) {
-      console.error("[pharmd] could not sign file url (r2):", key, err?.message || err);
-    }
-  }
+  // Supabase first: the uploader creates "pharmd-courses" as a public bucket,
+  // and its signer is the one configured wherever R2 is not.
   for (const key of keys) {
     try {
       const { data } = await db.storage.from(bucket || "pharmd-courses").createSignedUrl(key, FILE_URL_TTL);
       if (data?.signedUrl) return data.signedUrl;
     } catch (err) {
       console.error("[pharmd] could not sign file url (supabase):", key, err?.message || err);
+    }
+  }
+  // R2 only when it is actually configured - without a bucket name the SDK
+  // returns a bucket-less URL that 404s, which is worse than the stored one.
+  if (recordsStorageEnabled()) {
+    for (const key of keys) {
+      try {
+        return await createPresignedDownload(key);
+      } catch (err) {
+        console.error("[pharmd] could not sign file url (r2):", key, err?.message || err);
+      }
     }
   }
   return storedUrl || publicFileUrl(bucket, path);
