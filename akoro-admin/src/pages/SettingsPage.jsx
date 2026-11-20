@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Lock, User, Shield, Megaphone, CreditCard, KeyRound, Webhook, Mail, MessageSquare } from 'lucide-react';
+import { Lock, User, Shield, Megaphone, CreditCard, KeyRound, Webhook, Mail, MessageSquare, Image as ImageIcon } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { PageLayout } from '../components/Layout.jsx';
 import { Btn, Inp, Toast, PageSkeleton } from '../components/Primitives.jsx';
@@ -18,6 +18,23 @@ export default function SettingsPage() {
   const [billDraft, setBillDraft] = useState(null);
   const [billBusy,  setBillBusy]  = useState(false);
   const [toast,     setToast]     = useState(null);
+  const [pvBusy,    setPvBusy]    = useState(false);
+  const [pvResult,  setPvResult]  = useState(null);
+
+  /* Document previews: render page 1 for uploads that have none yet. Batched
+     server-side (50 a call); press again until "remaining" is 0. Dry run first
+     is free — it only answers how many rows are missing a preview. */
+  const runPreviewBackfill = async (dryRun) => {
+    setPvBusy(true);
+    try {
+      const r = await apiPost('/api/admin/records/previews/backfill', { limit: 50, dryRun });
+      const d = r?.data ?? r ?? {};
+      setPvResult(d);
+      setToast({ message: dryRun ? `${d.scanned ?? 0} need a preview` : `${d.written ?? 0} preview(s) written`, type: 'success' });
+    } catch (e) {
+      setToast({ message: e?.message || 'Preview backfill failed', type: 'error' });
+    } finally { setPvBusy(false); }
+  };
 
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
@@ -327,6 +344,29 @@ export default function SettingsPage() {
             </form>
           </div>
         </div>
+        </SettingsGroup>
+        {/* Maintenance: host-level jobs without a shell. */}
+        <SettingsGroup title="Maintenance">
+          <div style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 16, padding: '16px 18px', margin: '0 16px 12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ width: 38, height: 38, borderRadius: 11, background: `${AMBER}18`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <ImageIcon size={18} color={AMBER}/>
+              </span>
+              <div style={{ flex: 1 }}>
+                <p style={{ margin: 0, fontSize: 14, fontWeight: 800, color: INK }}>Document previews</p>
+                <p style={{ margin: 0, fontSize: 12, color: MUTED }}>
+                  Render page 1 for uploads that don't have a card image yet.
+                  {pvResult ? ` Last run: ${pvResult.written ?? 0} written, ${pvResult.remaining ?? 0} still missing.` : ''}
+                </p>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+              <Btn type="button" disabled={pvBusy} onClick={() => runPreviewBackfill(true)}>Dry run</Btn>
+              <Btn type="button" disabled={pvBusy} onClick={() => runPreviewBackfill(false)}>
+                {pvBusy ? 'Working…' : 'Backfill previews'}
+              </Btn>
+            </div>
+          </div>
         </SettingsGroup>
       </div>
 

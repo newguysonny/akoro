@@ -106,3 +106,18 @@ export const setPreviewKey = (id, key) =>
 export const getRecordPreviewRow = (id) =>
   edu().from("records")
     .select("id, user_id, private, preview_key, deleted_at").eq("id", id).maybeSingle();
+
+export const listRecordsMissingPreview = (limit = 100) =>
+  edu().from("records")
+    .select("id, user_id, kind, name, mime, file_key")
+    .eq("kind", "upload").not("file_key", "is", null)
+    .is("preview_key", null).is("deleted_at", null)
+    .order("created_at", { ascending: true }).limit(limit);
+
+export const countRecordsMissingPreview = async () => {
+  const { count } = await edu().from("records")
+    .select("id", { count: "exact", head: true })
+    .eq("kind", "upload").not("file_key", "is", null)
+    .is("preview_key", null).is("deleted_at", null);
+  return count || 0;
+};

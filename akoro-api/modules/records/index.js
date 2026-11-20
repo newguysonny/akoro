@@ -1,3 +1,5 @@
+export { listRecordsMissingPreview, countRecordsMissingPreview } from "./store-records.js";
+export { generatePreviewForRecord } from "./service-records.js";
 export { resolveAskTargetFor, resolveContentAccess } from "./access.js";
 export { gatherPassages, extractCitations, passageWhere, buildAskMessages, cleanModelOutput } from "./askLib.js";
 export { getExtraction, recordsExtractionEnabled, runpodEndpointHealth, parsePageRunAsync, getParseJob } from "./extractLib.js";
