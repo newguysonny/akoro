@@ -233,6 +233,14 @@ export function useRecordSession({ record, onOpened, onProgress }) {
 
       try {
         if (type === 'pdf') {
+          // Start the server reads NOW, so the extraction lookup overlaps the
+          // file download and parse instead of adding its round trip after it.
+          const warmTarget = record.contentKey ? { contentKey: record.contentKey } : { recordId: record.id };
+          void extractStoredRecordText(warmTarget).catch(() => {});
+          const cachedP = (record.contentKey
+            ? getSharedExtraction(record.contentKey)
+            : getRecordExtraction(record.id)).catch(() => ({ pages: [] }));
+
           // pdf.js is a big dependency — it loads only when a PDF opens.
           const { loadPdfDocument, PdfPage } = await import('../../../components/library/PdfPages.jsx');
           const { pdf, texts } = await loadPdfDocument(fileSrc, { credentials: 'include' });
@@ -258,9 +266,8 @@ export function useRecordSession({ record, onOpened, onProgress }) {
           // figure sentinels, reading order) a scan would. The pdf.js text
           // still grounds the session until the markdown is ready, and the
           // server's stored-text copy is warmed quietly for Ask/tools citations.
-          void extractStoredRecordText(record.contentKey ? { contentKey: record.contentKey } : { recordId: record.id }).catch(() => {});
-
-          const cached = record.contentKey ? await getSharedExtraction(record.contentKey) : await getRecordExtraction(record.id);
+          // (The lookup itself was started above, in parallel with the parse.)
+          const cached = await cachedP;
           if (cancelled) return;
           const byPage = new Map((cached.pages || [])
             .filter((p) => (p.markdown || '').trim())

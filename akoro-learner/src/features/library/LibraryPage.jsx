@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { AppShell } from '../../components/AppShell.jsx';
 import { useLibraryData } from './hooks/useLibraryData.js';
 import LibraryHeader from './components/LibraryHeader.jsx';
@@ -9,6 +10,20 @@ import RecentlyDeletedPage from './components/RecentlyDeletedPage.jsx';
 
 export default function LibraryPage() {
   const lib = useLibraryData();
+
+  /* Warm the PDF reader in the background: pdf.js is its own chunk (and the
+     parse is the slowest part of opening a document), so a learner who taps a
+     PDF after this page has settled skips that load. Idle-only; failure is
+     silent because the real open reports its own error. */
+  useEffect(() => {
+    const warm = () => { import('../../components/library/PdfPages.jsx').catch(() => {}); };
+    if (typeof window.requestIdleCallback === 'function') {
+      const id = window.requestIdleCallback(warm, { timeout: 2500 });
+      return () => window.cancelIdleCallback?.(id);
+    }
+    const t = setTimeout(warm, 1200);
+    return () => clearTimeout(t);
+  }, []);
   const {
     now, nowActs, records, setFolders, folderPage, setFolderPage, folderReader, setFolderReader,
     deletedOpen, setDeletedCount, closeDeleted, setToast, isMobile,

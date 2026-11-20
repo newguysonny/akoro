@@ -87,6 +87,17 @@ export async function loadPdfDocument(src, { credentials, eagerTextPages = EAGER
   return doc;
 }
 
+/**
+ * Warm the reader before the tap: fetch + parse (and the first pages' text)
+ * in the background, so opening the same PDF finds it in docCache and paints
+ * immediately. Errors are swallowed — a failed warm-up must never surface;
+ * the real open will try again and report its own error.
+ */
+export function prefetchPdfDocument(src, opts = {}) {
+  if (!src || docCache.has(src)) return;
+  loadPdfDocument(src, opts).catch(() => {});
+}
+
 /* One PDF page. Renders lazily (IntersectionObserver from the parent
    viewer scroll container) and re-renders if it becomes visible again
    after the canvas was cleared by the browser.
