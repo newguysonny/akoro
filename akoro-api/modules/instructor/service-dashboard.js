@@ -3,7 +3,7 @@
  * and preferences, and the classroom pickers.
  */
 import { PROFILE_FIELDS, levelFromXp } from "./rules.js";
-import { asyncHandler, ok, err400, err404, err500, now, notify } from "./service-core.js";
+import { asyncHandler, ok, err400, err403, err404, err500, now, notify } from "./service-core.js";
 import {
   profileUser, updateProfileUser, agentSummary, agentXp, upsertAgent,
   notificationPreferences, upsertNotificationPreferences,
