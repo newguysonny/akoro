@@ -29,6 +29,16 @@ const BRAND = '#6C3BFF';
 const ACCENTS = [BRAND, '#3B82F6', '#10B981', '#E8884A', '#EC4899', '#F59E0B', '#EF4444', '#8B5CF6'];
 const ACCENT_NAMES = ['Purple', 'Blue', 'Green', 'Orange', 'Pink', 'Amber', 'Red', 'Violet'];
 const SUBJECTS_SHOWN = 9;
+
+/* Higher education collects a programme/discipline, not school subjects.
+   Same list the universities use for admission categories. */
+const DISCIPLINES = [
+  'Administration and Management', 'Agriculture', 'Allied Health Sciences', 'Architecture',
+  'Arts', 'Basic Medical Sciences', 'Communication and Media Studies', 'Computing',
+  'Education', 'Engineering and Technology', 'Environmental Sciences', 'Law',
+  'Medicine and Dentistry', 'Pharmacy and Pharmaceutical Sciences', 'Sciences',
+  'Social Sciences', 'Veterinary Medicine',
+];
 const cap = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 const fill = (text, vars = {}) => String(text).replace(/\{(\w+)\}/g, (m, k) => (vars[k] ?? m));
 
@@ -107,6 +117,10 @@ export default function OnboardingPage() {
   const nid = () => `m${++seq.current}`;
   const later = (fn, ms) => { const id = setTimeout(fn, ms); timers.current.push(id); };
   const tell = (text) => setLog((l) => [...l, { id: nid(), who: 'me', text }]);
+  // Higher education reads the level as a tier: programme/discipline instead
+  // of school subjects, lecturers instead of teachers. Defined before any
+  // render-time closure that reads it.
+  const higherEd = isHigherEdUI({ studyLevel: ans.level });
   /** Ako types for a moment, then says each line (or shows a card). `step` marks where the stepper should point. */
   const say = useCallback((lines, step, then) => {
     setTyping(true);
@@ -124,9 +138,9 @@ export default function OnboardingPage() {
     return [
       [tr('chat_sum_class'), a.cls ? `${a.cls} · ${a.level}` : a.level],
       [tr('chat_sum_school'), a.school || tr('chat_sum_own')],
-      [tr('chat_sum_subjects'), a.subjects.length ? tf('chat_sum_picked', { n: a.subjects.length }) : tr('chat_sum_later')],
+      [tr(higherEd ? 'chat_sum_discipline' : 'chat_sum_subjects'), a.subjects.length ? tf('chat_sum_picked', { n: a.subjects.length }) : tr('chat_sum_later')],
       [tr('chat_sum_agent'), a.agentName],
-      [tr('chat_sum_teacher'), a.teacherId ? tr('chat_sum_requested') : tr('chat_sum_none')],
+      [tr(higherEd ? 'chat_sum_lecturer' : 'chat_sum_teacher'), a.teacherId ? tr('chat_sum_requested') : tr('chat_sum_none')],
     ];
   };
 
@@ -146,11 +160,22 @@ export default function OnboardingPage() {
       if (a.school) { lines = [{ text: tf('chat_school_prefill', { school: a.school }) }]; after = () => setDraft(a.school); }
       else lines = [{ text: tr('chat_school_q'), dim: tr('chat_school_hint') }];
     }
-    if (id === 'subjects') { lines = [{ text: tr('chat_subjects_q'), dim: tr('chat_subjects_hint') }]; after = () => setDraft(subjectsDraft(ansRef.current.subjects)); }
+    if (id === 'subjects') {
+      const q = higherEd
+        ? { text: tr('chat_discipline_q'), dim: tr('chat_discipline_hint') }
+        : { text: tr('chat_subjects_q'), dim: tr('chat_subjects_hint') };
+      lines = [q];
+      // A school record may carry school subjects; they are not disciplines,
+      // so higher-ed starts this step clean.
+      after = () => {
+        if (higherEd) { patch({ subjects: [] }); setDraft(''); return; }
+        setDraft(subjectsDraft(ansRef.current.subjects));
+      };
+    }
     if (id === 'agent') lines = [{ text: tr('chat_agent_q1') }, { text: tr('chat_agent_q2') }];
     if (id === 'teacher') {
       lines = teachers.length || teachersLoading
-        ? [{ text: tr('chat_teacher_q'), dim: tr('chat_teacher_hint') }]
+        ? [{ text: tr(higherEd ? 'chat_lecturer_q' : 'chat_teacher_q'), dim: tr(higherEd ? 'chat_lecturer_hint' : 'chat_teacher_hint') }]
         : [{ text: t('onboarding.teacher_none') }];
       if (p?.teacherId && a.teacherId === p.teacherId) lines.push({ text: tf('chat_teacher_prefilled', { teacher: p.teacherName || a.teacherName, class: p.className }) });
     }
@@ -158,7 +183,7 @@ export default function OnboardingPage() {
     if (id === 'done') lines = [{ text: tf('chat_done_q', { name: firstName(a.name) }) }, { card: 'summary', rows: summaryRows() }, { text: tr('chat_done_q2') }];
     say(lines, idx, after);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [say, tf]);
+  }, [say, tf, higherEd]);
 
   useEffect(() => {
     alive.current = true;
@@ -293,9 +318,9 @@ export default function OnboardingPage() {
     name: tr('chat_ph_name'),
     level: tr('chat_ph_chip'),
     school: tr('chat_ph_school'),
-    subjects: tr('chat_ph_subjects'),
+    subjects: tr(higherEd ? 'chat_ph_discipline' : 'chat_ph_subjects'),
     agent: tr('chat_ph_agent'),
-    teacher: ans.teacherId ? tr('chat_ph_teacher_pick') : tr('chat_ph_teacher'),
+    teacher: ans.teacherId ? tr('chat_ph_teacher_pick') : tr(higherEd ? 'chat_ph_lecturer' : 'chat_ph_teacher'),
     prefs: tr('chat_ph_prefs'),
     done: tr('chat_ph_done'),
   }[stepId] || tr('chat_ph_default'));
@@ -303,6 +328,7 @@ export default function OnboardingPage() {
   const focusComposer = () => document.querySelector('.ob-composer textarea')?.focus();
   const teacherList = useMemo(() => filterTeachers(teachers, teacherQuery), [teachers, teacherQuery]);
   const subjectList = useMemo(() => subjectChoices(prefillRef.current?.subjects, ans.level), [ans.level, stepIdx]); // eslint-disable-line react-hooks/exhaustive-deps
+  const disciplineList = DISCIPLINES;
 
   /* ── chips above the composer ── */
   const chip = (label, onClick, { on = false, skip = false, go = false, key } = {}) => (
@@ -319,8 +345,9 @@ export default function OnboardingPage() {
     }
     if (stepId === 'school') return chip(tr('chat_own'), skipSchool, { skip: true });
     if (stepId === 'subjects') {
-      const shown = moreSubjects ? subjectList : subjectList.slice(0, SUBJECTS_SHOWN);
-      const extra = subjectList.length - SUBJECTS_SHOWN;
+      const source = higherEd ? disciplineList : subjectList;
+      const shown = moreSubjects ? source : source.slice(0, SUBJECTS_SHOWN);
+      const extra = source.length - SUBJECTS_SHOWN;
       return [
         ...shown.map((s) => chip(s, () => toggleSubject(s), { on: ans.subjects.includes(s) })),
         chip(tr('chat_skip_subjects'), skipSubjects, { skip: true, key: 'skip-subjects' }),
