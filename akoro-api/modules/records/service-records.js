@@ -9,7 +9,7 @@
  */
 import {
   recordsStorageEnabled, createPresignedUpload, createPresignedDownload, removeRecordFile,
-  ownsRecordFileKey, isFallbackFileKey, MAX_FALLBACK_FILE_BYTES,
+  ownsRecordFileKey, isFallbackFileKey, MAX_FALLBACK_FILE_BYTES, putRecordObject,
 } from "./lib/storage.js";
 import { avEnabled, autoTranscribeContent, autoTranscribeEnabled, avKindOf } from "./avTranscribeLib.js";
 import { indexRecord, searchRecordChunks } from "./searchLib.js";
@@ -50,6 +50,31 @@ const toApi = async (r) => ({
   createdAt: r.created_at,
   lastOpenedAt: r.last_opened_at || null,
 });
+
+/* POST /api/records/upload — the bytes come to us.
+   The browser's normal path is a presigned PUT straight to the store. That
+   needs bucket CORS, which R2 does not send by default: the PUT fails with a
+   network error before any code can explain it. This endpoint accepts the
+   same bytes over the API (which the app already reaches, CORS or not) and
+   writes them with the server's own credentials. The client falls back to it
+   only when the direct PUT fails, so production keeps the fast path. */
+export async function uploadFile(req, res) {
+  const file = req.file;
+  if (!file?.buffer?.length) return res400(res, "No file was uploaded.");
+  if (file.size > MAX_FILE_BYTES) return res400(res, "Files are capped at 500 MB.");
+  const name = String(req.body?.name || file.originalname || "file").trim().slice(0, 255);
+  const mime = String(req.body?.mime || file.mimetype || "");
+  if (!detectType(mime, name)) {
+    return res400(res, "Only PDFs, Word or PowerPoint files, text files, images, audio or video can be uploaded.");
+  }
+  const prefix = req.body?.purpose === "folder-cover" ? "covers" : "records";
+  try {
+    const fileKey = await putRecordObject({ userId: req.user.id, name, body: file.buffer, contentType: mime || "application/octet-stream", prefix });
+    return res200(res, { fileKey, size: file.size, store: recordsStorageEnabled() ? "r2" : "supabase" });
+  } catch (error) {
+    return res400(res, error.message || "The file could not be stored.");
+  }
+}
 
 // ─── POST /api/records/upload-url ───────────────────────────────────────────
 //   body.purpose: 'record' (default) | 'folder-cover' — a cover is

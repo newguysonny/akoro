@@ -53,6 +53,7 @@
 import { Router } from "express";
 import { authenticateToken } from "../auth/index.js";
 import { asyncHandler } from "./http.js";
+import multer from "multer";
 import * as records from "./service-records.js";
 import * as folders from "./service-folders.js";
 import * as extract from "./service-extract.js";
@@ -157,5 +158,10 @@ router.get("/transcribe/content/:key", authenticateToken, asyncHandler(transcrib
 // The viewer streams from the list's presigned fileUrl; this endpoint is the
 // friendly "save a copy" link (cookies auth it, the store serves the bytes).
 router.get("/:id/file", authenticateToken, asyncHandler(records.openFile));
+// The fallback when a browser cannot PUT to the store (bucket without CORS).
+// 25 MB in memory is plenty for the fallback; large media uses the presigned
+// path wherever the bucket allows it.
+const uploadMem = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
+router.post("/upload", authenticateToken, uploadMem.single("file"), asyncHandler(records.uploadFile));
 
 export default router;

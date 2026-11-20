@@ -202,10 +202,10 @@ export async function readFileObject(fileKey, { bucket } = {}) {
  * fallback (which refuses anything over its 5 MB cap). `name` is a short
  * label, e.g. "podcasts/<id>.mp3".
  */
-export async function putRecordObject({ userId, name, body, contentType }) {
+export async function putRecordObject({ userId, name, body, contentType, prefix = "records" }) {
   const safe = String(name || "object").replace(/[^a-zA-Z0-9._/-]/g, "_").replace(/\.\.+/g, ".").slice(-160);
   if (recordsStorageEnabled()) {
-    const key = `records/${userId}/${Date.now()}-${safe}`;
+    const key = `${prefix}/${userId}/${Date.now()}-${safe}`;
     await r2Send(s3, new PutObjectCommand({ Bucket: BUCKET, Key: key, Body: body, ContentType: contentType }));
     return key;
   }

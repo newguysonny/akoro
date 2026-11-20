@@ -65,9 +65,61 @@ export async function discoverRecordOpen(id) {
 }
 
 /** Step 1 of an upload — ask the server for a PUT URL. */
-export async function presignRecordUpload({ name, mime, size }) {
-  const d = await apiPost('/api/records/upload-url', { name, mime, size });
+export async function presignRecordUpload({ name, mime, size, purpose }) {
+  const d = await apiPost('/api/records/upload-url', { name, mime, size, ...(purpose ? { purpose } : {}) });
   return d?.data ?? null;
+}
+
+/** POST the bytes to the API instead of the store. Used when the direct
+ *  presigned PUT cannot work — an R2 bucket without CORS rejects it as a
+ *  network error — so uploads still succeed wherever the app can reach the
+ *  API. Same XHR progress/abort contract as putFileTo. */
+export function putFileToServer(file, onProgress, { signal, purpose } = {}) {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) { reject(new Error('Upload cancelled.')); return; }
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `${API}/api/records/upload`, true);
+    xhr.withCredentials = true;
+    xhr.setRequestHeader('X-Akoro-Portal', 'student');
+    if (xhr.upload && onProgress) {
+      xhr.upload.addEventListener('progress', (e) => {
+        if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
+      });
+    }
+    xhr.addEventListener('load', () => {
+      if (xhr.status < 200 || xhr.status >= 300) {
+        let msg = `Upload failed (${xhr.status})`;
+        try { msg = JSON.parse(xhr.responseText)?.error || msg; } catch { /* keep default */ }
+        reject(new Error(msg)); return;
+      }
+      try { resolve(JSON.parse(xhr.responseText)?.data ?? {}); }
+      catch { reject(new Error('Upload failed — unexpected reply.')); }
+    });
+    xhr.addEventListener('error', () => reject(new Error('Upload failed — check your connection.')));
+    xhr.addEventListener('abort', () => reject(new Error('Upload cancelled.')));
+    if (signal) signal.addEventListener('abort', () => { try { xhr.abort(); } catch { /* settled */ } }, { once: true });
+    const form = new FormData();
+    form.append('file', file);
+    form.append('name', file.name || 'file');
+    form.append('mime', file.type || '');
+    if (purpose) form.append('purpose', purpose);
+    xhr.send(form);
+  });
+}
+
+/** Upload one file for a record: the store's presigned PUT first, then the
+ *  API fallback. Returns { fileKey, store }. Cancellation is never retried. */
+export async function uploadRecordFile(file, onProgress, { signal, purpose } = {}) {
+  try {
+    const up = await presignRecordUpload({ name: file.name, mime: file.type || '', size: file.size, purpose });
+    await putFileTo(up.uploadUrl, file, onProgress, { signal });
+    return { fileKey: up.fileKey, store: up.store };
+  } catch (err) {
+    if (/cancel/i.test(String(err?.message || '')) || signal?.aborted) throw err;
+    onProgress?.(0);
+    const out = await putFileToServer(file, onProgress, { signal, purpose });
+    return { fileKey: out.fileKey, store: out.store };
+  }
 }
 
 /** Step 2 — PUT the raw bytes to the presigned URL. XHR (not fetch) so the

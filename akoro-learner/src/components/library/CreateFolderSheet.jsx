@@ -16,7 +16,7 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import { XIcon, Icon } from '../common/Icons.jsx';
-import { presignFolderCoverUpload, putFileTo, createFolder } from '../../services/recordsApi.js';
+import { uploadRecordFile, createFolder } from '../../services/recordsApi.js';
 
 const BRAND = '#6C3BFF';
 const RED   = '#EF4444';
@@ -73,8 +73,7 @@ export default function CreateFolderSheet({ open, onClose, onCreated }) {
       let coverKey = null;
       if (cover?.file) {
         setCoverPct(0);
-        const signed = await presignFolderCoverUpload({ name: cover.file.name, mime: cover.file.type, size: cover.file.size });
-        await putFileTo(signed.uploadUrl, cover.file, setCoverPct);
+        const signed = await uploadRecordFile(cover.file, setCoverPct, { purpose: 'folder-cover' });
         coverKey = signed.fileKey;
       }
       const folder = await createFolder({

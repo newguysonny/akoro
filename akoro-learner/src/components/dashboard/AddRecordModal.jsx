@@ -15,7 +15,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 import { XIcon, Icon } from '../common/Icons.jsx';
 import {
-  listRecords, presignRecordUpload, putFileTo, createRecord,
+  listRecords, uploadRecordFile, createRecord,
 } from '../../services/recordsApi.js';
 import { extractUpload } from '../library/extractPages.js';
 
@@ -161,8 +161,7 @@ export default function AddRecordModal({ open, onClose, user, onOpenRecord, onRe
     setBusy(true); setErr(''); setPct(0);
     try {
       // 1. presign → 2. PUT the bytes straight to R2 (progress!) → 3. register
-      const { uploadUrl, fileKey } = await presignRecordUpload({ name: file.name, mime: file.type || '', size: file.size });
-      await putFileTo(uploadUrl, file, setPct);
+      const { fileKey } = await uploadRecordFile(file, setPct);
       const created = await createRecord({ kind: 'upload', fileKey, name: file.name, mime: file.type || '', size: file.size, duration: dur || undefined });
       setFile(null); setDur(null); setPct(0);
       await reload();

@@ -19,7 +19,7 @@
  *   listDeleted() · purgeIngest(id)                         Recently deleted · Delete forever
  */
 import { apiGet, apiPost } from '../services/api.js';
-import { createRecord, extractStoredRecordText, getRecordExtraction, presignRecordUpload, putFileTo } from '../services/recordsApi.js';
+import { createRecord, extractStoredRecordText, getRecordExtraction, uploadRecordFile } from '../services/recordsApi.js';
 import { extractUpload } from '../components/library/extractPages.js';
 
 const BASE = '/api/agent/materials/ingest';
@@ -73,9 +73,9 @@ export async function uploadChatFile(file, { onProgress, signal } = {}) {
 }
 
 async function uploadChatFileOnce(file, { onProgress, signal } = {}) {
-  const up = await presignRecordUpload({ name: file.name, mime: file.type || '', size: file.size });
+
   if (!up?.uploadUrl) throw new Error('The Library is not taking uploads right now.');
-  await putFileTo(up.uploadUrl, file, onProgress, { signal });
+  const up = await uploadRecordFile(file, onProgress, { signal });
   const created = await createRecord({ kind: 'upload', fileKey: up.fileKey, name: file.name, mime: file.type || '', size: file.size });
   const record = created?.record || created;
   if (!record?.id) throw new Error('Nothing could be saved.');
