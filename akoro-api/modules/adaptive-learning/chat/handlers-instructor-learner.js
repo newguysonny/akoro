@@ -319,30 +319,45 @@ export function createHandlers(deps) {
       return {
         areas: Object.entries(AREAS).map(([id, label]) => ({ id, label })),
         sections: [
-          { title: "Study support", items: ["Explain and quiz you on what you have taught it — it is your protégé", "Tell you honestly what you haven\u2019t taught it yet, point you to sources and ask you to teach it", "Ask NaNa, its teaching guide, when you insist on something it wasn\u2019t taught (and say so)", "Help draft and improve study notes, essays, and revision plans", "Show safe study profile, learning overview, knowledge-map, saved-study-knowledge, guide-preference, and Online/Offline status when asked",
-            // same default-on semantics as the tool's featureGate
-            ...(String(process.env.AKORO_AGENT_PEER_CONSULT_ENABLED ?? "true").toLowerCase() !== "false"
-              ? ["Ask other learners\u2019 study agents for fresh ideas when you\u2019re stuck \u2014 only your question travels, never your data"] : [])] },
-          { title: "School", items: ["Show your school and class, its subjects, and your teachers — and find a teacher by name or subject"] },
-          ...(agentNetworkEnabled ? [{ title: "Battles and other agents", items: [
-            "Find your battles and the daily battle, and show your XP and rank",
-            "Search for other learners' agents (online now, by subject, school, exam…) and their challenge requests",
-            "Challenge agents, post or accept a challenge request, rematch — only when you ask",
-            "Message or consult other agents, check your agent's inbox, and reply — only when you ask",
-            "Study buddies, the daily battle, revision circles and the weekly league",
-          ] }] : []),
-          { title: "Organisation", items: ["Create learner-owned study tasks when explicitly asked", "Schedule a future chat message when explicitly asked", "Show due tasks and recorded learning progress", "Save, update and track study goals when explicitly asked", "Show the suggestions from its background reviews waiting in the inbox", "Draft, save and publish the learner\u2019s blog posts when explicitly asked"] },
-          { title: "Learning tools", items: [
-            ...(enabled("AKORO_STUDY_PREP_ENABLED") ? ["Plan a study-prep session for a test or exam — a plan card you approve before anything starts"] : []),
-            "Show your past and recent learning sessions",
-            ...(enabled("AKORO_EXAM_PREP_CONFIDENCE_ENABLED") ? ["Show generated exam-style practice and workflow status; these are not historical past papers"] : []),
-            ...(enabled("AKORO_CONCEPT_TRACKER_ENABLED") ? ["Show approved-concept progress, resume points, and clearable confusion notes"] : []),
-            ...(enabled("AKORO_LEARNER_INSIGHTS_ENABLED") ? ["Explain a bounded, expiry-aware learning-insights summary"] : []),
-            // Consult the REAL gate (default-on), not a strict env-equality
-            // check — the card must never deny an ability the runtime has.
-            ...(durableAgentChatContextEnabled ? ["Remember across chats — this conversation and the learner\u2019s saved study context are available to you (they can clear it any time)"] : []),
+          // Plain, learner-facing language only: no internal names (persona,
+          // teaching-guide name, tool or field names). What it can do, grouped
+          // by what the learner gets — not by how the runtime is built.
+          { title: "What I can tell you", items: [
+            "Your XP and rank, and how far you are through each course",
+            "Your school, class, subjects and teachers — including finding a teacher by name or subject",
+            "What you have been studying, how it is going, and which topics need work",
+            "Your goals, tasks, saved messages and the suggestions waiting in your inbox",
+            "Where you stand on past-question practice, with the real numbers",
           ] },
-          { title: "Limits", items: ["Asks a clarifying question when a tool needs a detail you did not give — it never guesses values", "Read supported files attached to this chat", "Generated questions are not historical past papers", "Can submit an admin feature request only after you explicitly ask", "Research from Akoro\u2019s own blog (search_blog_posts / read_blog_post) \u2014 do not browse the live web, access private account secrets, or take unrequested actions"] },
+          { title: "What I can help you do", items: [
+            "Explain and quiz you on what you have taught me — that is how I learn",
+            ...(enabled("AKORO_STUDY_PREP_ENABLED") ? ["Plan a study session for a test or exam — you approve the plan before anything starts"] : []),
+            "Write study notes, summaries, essays and revision plans, and improve a draft with you",
+            "Save, update and track study goals, and create study tasks when you ask",
+            "Draft, save and publish your blog posts when you ask",
+          ] },
+          { title: "Your materials", items: [
+            "Read supported files you attach to this chat",
+            "Build a quiz, flashcards, a summary or a podcast from a document in your Library — with page references",
+            "Find a document by name, subject or folder, and search what is inside it",
+            "Remember what you have saved across chats until you clear it",
+          ] },
+          ...(agentNetworkEnabled ? [{ title: "Other learners' agents", items: [
+            "Show your battles and the daily battle, and your XP and rank there",
+            "Find other learners' agents (online now, by subject, school or exam) and their challenge requests",
+            "Challenge an agent, post or accept a request, or rematch — only when you ask",
+            "Message or consult another agent, and reply to your inbox — only when you ask",
+            "Study buddies, revision circles and the weekly league",
+            ...(String(process.env.AKORO_AGENT_PEER_CONSULT_ENABLED ?? "true").toLowerCase() !== "false"
+              ? ["Ask another learner's agent for fresh ideas when you are stuck — only your question travels, never your data"] : []),
+          ] }] : []),
+          { title: "How I work", items: [
+            "If you haven't taught me something, I say so and ask you to teach me instead of guessing",
+            "I ask a question when I need a detail you didn't give — I never invent values",
+            "I read Akoro's own blog for research and don't browse the live web or open private accounts",
+            "Generated practice questions are not historical past papers",
+            "I only take actions you ask for, and I confirm before anything irreversible",
+          ] },
         ].filter((section) => section.items.length),
       };
     },
@@ -575,3 +590,4 @@ export function createHandlers(deps) {
     },
   };
 }
+

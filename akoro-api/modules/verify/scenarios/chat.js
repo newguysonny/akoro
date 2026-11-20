@@ -278,3 +278,24 @@ export const intervalFollowUp = {
     if (out?.followUpId) ctx.cleanup(async () => { try { await ctx.agent.tool({ as: p.learner, tool: "cancel_scheduled_chat_follow_up", mode: "live", input: { followUpId: out.followUpId } }); } catch { /* best effort */ } });
   },
 };
+
+// "What can you do?" must answer in the learner's language: what they get,
+// not the runtime's vocabulary (persona, teaching-guide name, tool/field names).
+export const capabilitiesPlain = {
+  name: "chat.capabilities_plain", area: "agent-chat", risk: "dry", repeats: 2,
+  description: "Asked what it can do, the agent lists learner-facing abilities (study, materials, progress, goals, battles) without internal names such as protégé, NaNa, saved-study-knowledge, guide-preference or tool/field names.",
+  params: { learner: { default: "@tester01" } },
+  async run(ctx, p) {
+    const turn = await ctx.agent.chat({ as: p.learner, model: p.model, prompt: "What can you do for me? Give me a short overview." });
+    ctx.expect.eq("turn answered", turn.status, 200);
+    const reply = String(turn.reply || "");
+    const abilities = [/study|revision|notes/i, /quiz|flashcard|practice/i, /library|document|material/i, /goal|task|remind/i, /progress|xp|rank|course/i, /battle|challenge|league/i];
+    const hits = abilities.filter((re) => re.test(reply)).length;
+    ctx.expect.ok("lists at least four real abilities", hits >= 4, { hits, reply: reply.slice(0, 240) });
+    ctx.expect.ok("no internal vocabulary",
+      !/\b(prot[eé]g[eé]|NaNa|saved-study-knowledge|guide-preference|workflow status|durable context|token budget)\b/i.test(reply),
+      reply.slice(0, 240));
+    ctx.expect.noBackendNames("reply has no backend names", reply);
+    ctx.expect.loopHealthy(turn);
+  },
+};
