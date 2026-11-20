@@ -55,7 +55,7 @@ export const deleteRecord = (id) =>
 
 export const listDiscover = ({ limit, premiumIds, term, paged, cursor }) => {
   let query = edu().from("records")
-    .select("id, user_id, kind, name, mime, size, duration, file_key, content, created_at")
+    .select("id, user_id, kind, name, mime, size, duration, file_key, content, preview_key, created_at")
     .in("kind", ["upload", "paste"]).is("deleted_at", null)
     .order("created_at", { ascending: false }).order("id", { ascending: false })
     .limit(limit);
