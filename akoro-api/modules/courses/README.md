@@ -39,6 +39,11 @@ root, so its route files carry their own path prefixes.
   verifies the signature once and calls the exported fulfil functions. Sales
   write `instructor_earnings` with the commission snapshotted from
   `PLATFORM_COMMISSION_PERCENT`.
+- Cart checkout is layered: `cart.js` (mounted router) → `cart-service.js`
+  (checkout orchestration, Paystack init/verify, webhook fulfilment) →
+  `cart-rules.js` (pure pricing, currency and totals) + `cart-store.js`
+  (Supabase queries). `payments.js` still imports `cartHandlers` from
+  `cart.js`, so that named export stays on the mounted entry.
 - Live teaching: `meeting-integration.js` stores Zoom/Google/Teams OAuth tokens
   in `provider_tokens` with a Redis read cache and refresh lock;
   `live-sessions.js` is the mounted router over `live-sessions-service*.js`
@@ -70,8 +75,8 @@ root, so its route files carry their own path prefixes.
 
 ## Known limits
 
-- Baselined over 600 lines: `cart.js` (821), `meeting-integration.js` (754),
-  `payouts.js` (717), `course-content.js` (709), `courses.js` (644).
+- Baselined over 600 lines: `meeting-integration.js` (754), `payouts.js` (717),
+  `course-content.js` (709), `courses.js` (644).
 - `courses.js` is the legacy in-memory mock, intentionally unmounted: real CRUD
   lives in `/api/instructor/courses`, reads come from `public-catalog.js` and
   `course-content.js`, and mounting it would shadow real routes.

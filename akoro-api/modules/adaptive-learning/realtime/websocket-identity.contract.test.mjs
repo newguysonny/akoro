@@ -2,7 +2,17 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-const websocket = await readFile(new URL("./websocket.js", import.meta.url), "utf8");
+// The entry file is a composition of focused siblings; the contract spans the
+// realtime sources. Keep this order stable — some assertions slice between
+// adjacent handlers.
+const realtimeSources = [
+  "rules.js", "sessions.js", "identity.js", "rooms.js", "format.js", "chat.js",
+  "teachingSession.js", "teachingLifecycle.js", "teachingSwitch.js",
+  "knowledge.js", "presence.js", "websocket.js",
+];
+const websocket = (await Promise.all(
+  realtimeSources.map((file) => readFile(new URL(`./${file}`, import.meta.url), "utf8")),
+)).join("\n");
 const teachingSessionContext = await readFile(new URL("../teaching-session/context.js", import.meta.url), "utf8");
 const decayApply = await readFile(new URL("../agents/student/decay-apply.js", import.meta.url), "utf8");
 const decayStore = await readFile(new URL("../agents/student/decay-store.js", import.meta.url), "utf8");

@@ -39,7 +39,7 @@ test("wiring: no module spells a platform domain any more; the JWT claims are de
   const read = (p) => readFile(new URL(p, import.meta.url), "utf8");
   for (const p of ["../modules/auth/service-links.js", "../modules/auth/service-google.js", "../modules/admin/extended.js", "../modules/admin/pilotSchools.js", "../modules/school/socialOAuth.js",
     "../modules/school/service.js", "../modules/school/service-site.js", "../modules/school/service-billing.js",
-    "../modules/profiles/routes.js", "../modules/instructor/tools.js", "../modules/billing/gateway.js", "../modules/courses/payments.js", "../modules/courses/cart.js",
+    "../modules/profiles/routes.js", "../modules/instructor/tools.js", "../modules/billing/gateway.js", "../modules/courses/payments.js", "../modules/courses/cart-service.js",
     "../modules/courses/meeting-integration.js", "../modules/auth/emails.js"]) {
     const src = (await read(p)).split("\n").filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l) && !/JWT_(ISSUER|AUDIENCE)/.test(l)).join("\n");
     assert.doesNotMatch(src, /process\.env\.(FRONTEND_URL|MAIN_SITE_URL|SCHOOL_FRONTEND_URL|INSTRUCTOR_FRONTEND_URL|ADMIN_FRONTEND_URL)\s*\|\|\s*"https?:/, p);

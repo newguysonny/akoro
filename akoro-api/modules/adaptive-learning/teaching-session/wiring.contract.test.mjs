@@ -6,7 +6,10 @@ import { readFileSync } from "node:fs";
 const read = (p) => readFileSync(new URL(p, import.meta.url), "utf8");
 
 test("the socket: mode, guide stream, the agent's end, open_workflow, the turn audit", () => {
-  const ws = read("../realtime/websocket.js");
+  // Phase 19 step 4 split the websocket into focused files; read the teaching
+  // sources that own these handlers.
+  const ws = ["realtime/teachingSession.js", "realtime/teachingLifecycle.js", "realtime/teachingSwitch.js"]
+    .map((file) => read(`../${file}`)).join("\n");
   assert.match(ws, /socket\.on\("teacher_message", async \(\{ message, mode \} = \{\}\)/);
   assert.match(ws, /onGuideReplyChunk: \(token\) => socket\.emit\("guide_reply_token"/);
   assert.match(ws, /if \(result\.endRequested\) await endLiveSession\(socket, \{ endedBy: result\.endRequested, bounded: result\.boundedEnd \}\)/);

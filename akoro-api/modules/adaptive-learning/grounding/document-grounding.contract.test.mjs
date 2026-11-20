@@ -6,7 +6,12 @@ process.env.SUPABASE_URL ||= "http://localhost:59999";
 process.env.SUPABASE_SERVICE_KEY ||= "test-service-key";
 
 const { resolveSessionDocument, groundTurn, passagesAsReference, citationsForReply } = await import("./documentGrounding.js");
-const ws = await readFile(new URL("../realtime/websocket.js", import.meta.url), "utf8");
+// Phase 19 step 4 split the websocket: the start/turn handler lives in
+// teachingSession.js and the guide switch in teachingSwitch.js.
+const ws = (await Promise.all([
+  readFile(new URL("../realtime/teachingSession.js", import.meta.url), "utf8"),
+  readFile(new URL("../realtime/teachingSwitch.js", import.meta.url), "utf8"),
+])).join("\n");
 const sessionStart = await readFile(new URL("../teaching-session/start.js", import.meta.url), "utf8");
 const agent = await readFile(new URL("../agents/student/agent.js", import.meta.url), "utf8");
 
