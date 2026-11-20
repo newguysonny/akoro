@@ -31,7 +31,7 @@ test("the check's facts come from the learner's notes first (untrusted data, bou
 
 test("wiring: uploads attach on filing; the Agent Check passes the session's notes to question generation", async () => {
   const [routes, harness, check, source] = await Promise.all([
-    read("../../materials/routes.js"), read("./harness.js"), read("../../battle/agentCheck.js"), read("../../battle/questionSource.js"),
+    read("../../materials/routes.js"), read("./harness-run.js"), read("../../battle/agentCheck.js"), read("../../battle/questionSource.js"),
   ]);
   assert.match(routes, /attachUploadsToStudyPrep\(\{ learnerId: req\.user\.id, subject: row\.subject, recordIds: ids \}\)/);
   assert.match(harness, /syllabus\.materials\.search\(\{ learnerId, recordIds: session\.material_record_ids, query: topic\.label/);

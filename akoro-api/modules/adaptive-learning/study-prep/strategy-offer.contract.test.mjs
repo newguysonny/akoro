@@ -36,10 +36,10 @@ test("the files label never passes the outline off as the school's syllabus", ()
 });
 
 test("wiring: the route's Reject records a decline; the card answers with Allow / Reject / Later", async () => {
-  const [routes, harness, card] = await Promise.all([read("./routes.js"), read("./harness.js"), read("../../../../akoro-learner/src/components/tabs/studyPrep/StudyPrepChatCard.jsx")]);
+  const [routes, session, io, card] = await Promise.all([read("./routes.js"), read("./harness-session.js"), read("./harness-io.js"), read("../../../../akoro-learner/src/components/tabs/studyPrep/StudyPrepChatCard.jsx")]);
   assert.match(routes, /req\.body\?\.accepted === false[\s\S]*declineStrategy\(/);
-  assert.match(harness, /decisionNode: "strategy_declined"/);
-  assert.match(harness, /view\.strategyOffer = offer/);
+  assert.match(session, /decisionNode: "strategy_declined"/);
+  assert.match(io, /view\.strategyOffer = offer/);
   assert.match(card, /<ApprovalButtons onAllow=\{\(\) => answerOffer\(true\)\} onReject=\{\(\) => answerOffer\(false\)\}/);
   assert.match(card, /syllabusLabelKind === 'documents' \? 'ti-folder'/);
 });
