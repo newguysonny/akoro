@@ -81,7 +81,7 @@ export async function uploadPreview(req, res) {
 
 /* GET /api/records/:id/preview — the stored page image, through the API. */
 export async function openPreview(req, res) {
-  const { data: r } = await store.getRecordOwner(req.params.id);
+  const { data: r } = await store.getRecordPreviewRow(req.params.id);
   if (!r || r.deleted_at || !r.preview_key) return res404(res, "No preview.");
   if (r.user_id !== req.user.id) {
     if (r.private) return res404(res, "Record not found.");

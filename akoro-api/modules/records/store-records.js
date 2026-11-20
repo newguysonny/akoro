@@ -102,3 +102,7 @@ export const getActiveEnrollment = (userId, courseId) =>
 
 export const setPreviewKey = (id, key) =>
   edu().from("records").update({ preview_key: key }).eq("id", id);
+
+export const getRecordPreviewRow = (id) =>
+  edu().from("records")
+    .select("id, user_id, private, preview_key, deleted_at").eq("id", id).maybeSingle();
