@@ -268,6 +268,36 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent,
       return;
     }
 
+    /* Discipline — higher-ed only, and a boot-derived value: the Discover hub
+       picks the learner's programme card from it. Same staged reload as the
+       study level so the change is visible straight away (no half-updated hub
+       where the old programme card lingers). */
+    if (field === 'discipline') {
+      const previous = profile.discipline || '';
+      const unchanged = val === previous;
+      setProfile(p => ({ ...p, discipline: val }));
+      try {
+        const result = await onSaveProfile({ discipline: val });
+        if (result?.queued || result?._offline) {
+          showToast('Saved on this device — it will sync when you are online');
+          return;
+        }
+        if (result?.success !== true) {
+          throw new Error('The change was not confirmed by Akoro. Please try again.');
+        }
+        showToast('Saved');
+        if (!unchanged) {
+          try { localStorage.setItem('akoro_boot_splash', String(Date.now())); } catch { /* private mode */ }
+          setTimeout(() => window.location.reload(), 650);   // let the toast breathe
+        }
+      } catch (error) {
+        setProfile(p => (p?.discipline === val ? { ...p, discipline: previous } : p));
+        console.warn('[settings] discipline save failed', error);
+        showToast(error?.message || 'Could not save this change. Please try again.');
+      }
+      return;
+    }
+
     /* Current Plan — a DEVICE-LOCAL test switch (utils/planOverride.js),
        the plan sibling of the study-level selector above. The plan is not
        a PATCH-able profile field and billing will own it later, so this
