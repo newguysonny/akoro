@@ -31,6 +31,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
 const DOC_CACHE_MAX = 3;                 // big course PDFs: 3 tabs' worth, not 6
 const DOC_CACHE_BYTES_MAX = 140 * 1024 * 1024;
 const docCache = new Map();   // src -> { pdf, texts, textsReady, bytes }, oldest-first
+const inFlight = new Map();  // src -> Promise<doc>: one fetch+parse per file, even if a prefetch and the tap race
 
 /* Text for the opening pages is extracted before the reader shows (the
    session needs SOMETHING to ground on), the rest is filled quietly. A
@@ -92,6 +93,13 @@ export async function openPdfDocument(src, { credentials, eagerTextPages = EAGER
     docCache.set(src, cached);
     return cached;
   }
+  if (inFlight.has(src)) return inFlight.get(src);
+  const flight = loadDocument(src, { credentials, eagerTextPages }).finally(() => inFlight.delete(src));
+  inFlight.set(src, flight);
+  return flight;
+}
+
+async function loadDocument(src, { credentials, eagerTextPages = EAGER_TEXT_PAGES } = {}) {
   const buf = await fetchBytes(src, credentials);
   const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(buf) }).promise;
   const texts = new Array(pdf.numPages).fill('');
