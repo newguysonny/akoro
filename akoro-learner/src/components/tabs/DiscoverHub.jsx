@@ -30,7 +30,7 @@ import { Icon } from '../common/Icons.jsx';
 import Toast from '../common/Toast.jsx';
 import DiscoverSearchPage from './DiscoverSearchPage.jsx';
 import { TYPES, matchTypes, FONT } from './dhubTypes.js';
-import { programmeForDiscipline, PHARMD_SLUG } from '../../lib/disciplineProgrammes.js';
+import { programmeForDiscipline, programmeBySlug, ALL_PROGRAMMES, PHARMD_SLUG } from '../../lib/disciplineProgrammes.js';
 
 /* Gradient washes for programme cards without a cover image — the same
    colour-block energy as the type cards, cycled per programme. */
@@ -59,7 +59,7 @@ function CornerArt({ cover, icon }) {
   );
 }
 
-export default function DiscoverHub({ onOpenCourses, onOpenCourse, onOpenRecord, onOpenBattles, onOpenDiscipline, onOpenMore, onOpenRail, onOpenContents, onOpenCommunity, onOpenFolder, onOpenAgent, onOpenPharmdCourse, discipline, userId, initialQuery = '' }) {
+export default function DiscoverHub({ onOpenCourses, onOpenCourse, onOpenRecord, onOpenBattles, onOpenDiscipline, onOpenMore, onOpenRail, onOpenContents, onOpenCommunity, onOpenFolder, onOpenAgent, onOpenPharmdCourse, discipline, userId, initialQuery = '', programmeList = false }) {
   const { t } = useLang();
   const [query, setQuery] = useState(initialQuery);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -70,24 +70,32 @@ export default function DiscoverHub({ onOpenCourses, onOpenCourse, onOpenRecord,
      own discipline gets its card, and a second card lists the rest. Nothing
      is fetched on this page. */
   const mine = programmeForDiscipline(discipline);
+  /* "More programmes" is this SAME page with the fixed programme cards in
+     place of the discovery types — one UI, no separate layout. */
   const T = TYPES(t);
   const byKey = (k) => T.find((ty) => ty.key === k);
   const moreTile = { key: 'more', icon: 'ti-grid-dots', grad: 'linear-gradient(140deg,#7C5CE6,#5B3FD1)', label: t('dhub.card_more'), desc: t('dhub.card_more_desc'), kw: 'more programmes disciplines law engineering medicine', accent: '#8B5CF6' };
   // Explicit order — one programme card for the learner, then one for the rest.
-  const base = [
-    byKey('contents'),
-    byKey('courses'),
-    mine && { key: 'discipline', icon: mine.icon, grad: mine.grad, label: mine.name, desc: mine.desc, kw: 'programme program discipline materials', accent: GREEN },
-    moreTile,
-    byKey('guide'),
-    byKey('live'),
-  ].filter(Boolean);
+  const programmeCards = ALL_PROGRAMMES.map((p) => ({
+    key: `p:${p.slug}`, icon: p.icon, grad: p.grad, label: p.name, desc: p.desc, accent: GREEN, programme: p,
+  }));
+  const base = programmeList
+    ? programmeCards
+    : [
+        byKey('contents'),
+        byKey('courses'),
+        mine && { key: 'discipline', icon: mine.icon, grad: mine.grad, label: mine.name, desc: mine.desc, kw: 'programme program discipline materials', accent: GREEN },
+        moreTile,
+        byKey('guide'),
+        byKey('live'),
+      ].filter(Boolean);
   const all = base;
   const qq = query.trim().toLowerCase();
   const visible = base.filter((ty) => !qq || `${ty.label} ${ty.desc} ${ty.kw || ''}`.toLowerCase().includes(qq));
 
   const activate = (ty, qOverride) => {
     const q = qOverride ?? query.trim();
+    if (ty.programme) { onOpenDiscipline?.(ty.programme.slug); return; }
     if (ty.key === 'courses') onOpenCourses?.(q);
     else if (ty.key === 'discipline') onOpenDiscipline?.(mine?.slug || PHARMD_SLUG);
     else if (ty.key === 'more') onOpenMore?.();
@@ -133,10 +141,10 @@ export default function DiscoverHub({ onOpenCourses, onOpenCourse, onOpenRecord,
       {/* Header */}
       <div style={{ padding: '12px 16px 2px' }}>
         <h1 style={{ fontSize: 21, fontWeight: 900, color: 'var(--ak-text)', margin: 0 }}>
-          {t('dhub.title')}
+          {programmeList ? t('dhub.card_more') : t('dhub.title')}
         </h1>
         <p style={{ fontSize: 12.5, color: 'var(--ak-text-sub)', margin: '3px 0 0' }}>
-          {t('dhub.sub')}
+          {programmeList ? t('dhub.card_more_desc') : t('dhub.sub')}
         </p>
       </div>
 

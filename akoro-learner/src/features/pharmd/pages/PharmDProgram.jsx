@@ -54,7 +54,7 @@ import { BrowseView, FolderView } from '../components/PharmDProgramViews.jsx';
 
 import { SHEET_ACTIONS, topicMeta } from '../lib/pharmdUi.js';
 
-export default function PharmDProgram({ onClose, focus, onFocusConsumed,
+export default function PharmDProgram({ onClose, focus, onFocusConsumed, programme = null, comingSoon = false,
   courseRoute = null,   // the course the URL says is open (null = browse view)
   onCourseRoute,        // (code|null) — mirror a course transition into the URL
 }) {
@@ -71,7 +71,7 @@ export default function PharmDProgram({ onClose, focus, onFocusConsumed,
   const [toast, setToast] = useState(null);
 
   /* Real data: the programme tree, the open course, my completion. */
-  const [meta, setMeta] = useState(PROGRAM);      // hero copy; the API confirms it
+  const [meta, setMeta] = useState(programme ? { name: programme.name, sub: programme.desc || '' } : PROGRAM); // hero copy; the API confirms it
   const [years, setYears] = useState(null);       // null = still loading
   const [loadErr, setLoadErr] = useState(false);
   const [courseData, setCourseData] = useState(null); // { course, topics }
@@ -85,6 +85,9 @@ export default function PharmDProgram({ onClose, focus, onFocusConsumed,
   /* Programme + my progress, once per open. Progress is optional —
      the catalogue renders for anyone; only saving needs a session. */
   useEffect(() => {
+    // A discipline whose materials are not published yet: the page is the
+    // pharmacy page's UI with a coming-soon panel — nothing to fetch.
+    if (comingSoon) { setYears([]); return undefined; }
     let alive = true;
     (async () => {
       try {
@@ -102,7 +105,7 @@ export default function PharmDProgram({ onClose, focus, onFocusConsumed,
       } catch { /* not signed in / offline — checks simply start empty */ }
     })();
     return () => { alive = false; };
-  }, []);
+  }, [comingSoon]);
 
   /* Every view change starts at the top (reference window.scrollTo) — the
      phone column's own scroll on mobile, the tab container's when in-tab. */
@@ -267,7 +270,7 @@ export default function PharmDProgram({ onClose, focus, onFocusConsumed,
 
         {/* ── View 1: Browse ── */}
         {view === 'browse' && (
-          <BrowseView meta={meta} years={years} loadErr={loadErr} setYears={setYears} setLoadErr={setLoadErr} openCourse={openCourse} soon={soon} onClose={onClose} />
+          <BrowseView meta={meta} years={years} loadErr={loadErr} setYears={setYears} setLoadErr={setLoadErr} openCourse={openCourse} soon={soon} onClose={onClose} comingSoon={comingSoon} />
         )}
 
         {/* ── View 2: Folder (course) ── */}

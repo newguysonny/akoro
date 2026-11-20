@@ -10,7 +10,7 @@ import Spinner from '../../../components/common/Spinner.jsx';
 import { AUTHOR, accentFor } from '../lib/pharmdData.js';
 import { topicMeta } from '../lib/pharmdUi.js';
 
-export function BrowseView({ meta, years, loadErr, setYears, setLoadErr, openCourse, soon, onClose }) {
+export function BrowseView({ meta, years, loadErr, setYears, setLoadErr, openCourse, soon, onClose, comingSoon = false }) {
   return (
           <div>
             <div className="pd-hero">
@@ -18,10 +18,21 @@ export function BrowseView({ meta, years, loadErr, setYears, setLoadErr, openCou
               <h1>{meta.name}</h1>
               <div className="pd-sub">{meta.sub}</div>
             </div>
-            {years === null && !loadErr && (
+            {comingSoon && (
+              <div className="pd-section">
+                <div style={{ margin: '0 22px', background: 'var(--ak-surface)', border: '1px solid var(--ak-border)', borderRadius: 16, padding: '18px 16px' }}>
+                  <div style={{ fontSize: 14, fontWeight: 900, color: 'var(--ak-text)' }}>Coming soon</div>
+                  <p style={{ margin: '6px 0 0', fontSize: 12.5, lineHeight: 1.55, color: 'var(--ak-text-sub)' }}>
+                    {meta.name} materials are being prepared. Course folders, topics and teaching sessions
+                    will appear here exactly like the pharmacy programme once they are published.
+                  </p>
+                </div>
+              </div>
+            )}
+            {!comingSoon && years === null && !loadErr && (
               <div className="pd-state"><Spinner size={18} color={BRAND}/> Loading the programme…</div>
             )}
-            {loadErr && (
+            {!comingSoon && loadErr && (
               <div className="pd-state">
                 <div>Could not load the programme — check your connection.</div>
                 <button onClick={() => { setYears(null); setLoadErr(false); }}
@@ -30,7 +41,7 @@ export function BrowseView({ meta, years, loadErr, setYears, setLoadErr, openCou
                 </button>
               </div>
             )}
-            {(years ?? []).map((year) => (
+            {!comingSoon && (years ?? []).map((year) => (
               <div className="pd-section" key={year.label}>
                 <h2>{year.label}</h2>
                 {year.courses?.length ? (

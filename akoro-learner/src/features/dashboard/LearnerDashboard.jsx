@@ -44,8 +44,6 @@ import { ZapIcon, MicIcon, Icon } from '../../components/common/Icons.jsx';
 import NowStudyingBar from '../../components/dashboard/NowStudyingBar.jsx';
 import PharmDProgram from '../../features/pharmd/index.js';
 import ProgrammePage from '../../components/programmes/ProgrammePage.jsx';
-import MoreProgrammesPage from '../../features/programmes/MoreProgrammesPage.jsx';
-import ProgrammeSoonPage from '../../features/programmes/ProgrammeSoonPage.jsx';
 import { programmeBySlug } from '../../lib/disciplineProgrammes.js';
 import ContentsDiscoveryTab from '../../components/tabs/ContentsDiscoveryTab.jsx';
 import { AppShell, SidebarToggle } from '../../components/AppShell.jsx';
@@ -97,6 +95,11 @@ export default function LearnerDashboard() {
   const pharmdCourseFromUrl = () => new URLSearchParams(location.search).get("course") || null;
   // The static discipline programme page (?view=discipline&slug=engineering).
   const programmeSlugFromUrl = () => new URLSearchParams(location.search).get("slug") || null;
+  // Every programme card opens the programme page; PHARM.D keeps its catalogue,
+  // the rest render the same page with a coming-soon panel.
+  const openDiscipline = (slug) => navigate(slug === 'pharmd'
+    ? `${APP_HOME}?tab=discovery&view=pharmd`
+    : `${APP_HOME}?tab=discovery&view=discipline&slug=${encodeURIComponent(slug)}`);
   // The generic published-programme page (?view=programme&programme=ID,
   // ?pcourse=ID for its open course) — the hub's programme cards.
   const programmeIdFromUrl     = () => new URLSearchParams(location.search).get("programme") || null;
@@ -1309,15 +1312,27 @@ export default function LearnerDashboard() {
               // The Contents/Materials feed — the community's shared
               // uploads (videos, audio, notes, PDFs), Udemy-style.
               : discoverView==="more"
-              ? <MoreProgrammesPage
-                  currentSlug={programmeBySlug(programmeSlugFromUrl())?.slug}
-                  onBack={()=>navigate(`${APP_HOME}?tab=discovery`)}
-                  onOpen={(slug)=>navigate(`${APP_HOME}?tab=discovery&view=discipline&slug=${encodeURIComponent(slug)}`)}/>
+              ? <DiscoverHub
+                  programmeList
+                  userId={userProfile?.id}
+                  discipline={userProfile?.discipline}
+                  onOpenDiscipline={openDiscipline}
+                  onOpenMore={()=>navigate(`${APP_HOME}?tab=discovery&view=more`)}
+                  onOpenContents={(q)=>navigate(`${APP_HOME}?tab=discovery&view=contents${q?`&q=${encodeURIComponent(q)}`:""}`)}
+                  onOpenRail={(rail,q)=>navigate(`${APP_HOME}?tab=discovery&view=courses&focus=${rail}${q?`&q=${encodeURIComponent(q)}`:""}`)}
+                  onOpenCourses={(q)=>navigate(`${APP_HOME}?tab=discovery&view=courses${q?`&q=${encodeURIComponent(q)}`:""}`)}
+                  onOpenCourse={(c)=>c?.slug&&navigate(`/course/${c.slug}`)}
+                  onOpenRecord={openRecordTracked}
+                  onOpenBattles={()=>goTab('battles')}
+                  onOpenCommunity={(c)=>c?.id&&navigate(`/communities/${c.id}`)}
+                  onOpenFolder={(f)=>navigate(`/library${f?.id?`?folder=${encodeURIComponent(f.id)}`:""}`)}
+                  onOpenAgent={(a)=>a?.id&&navigate(`/agent/${a.id}`)}/>
               : discoverView==="discipline"
-              ? <ProgrammeSoonPage
+              ? <PharmDProgram
                   programme={programmeBySlug(programmeSlugFromUrl())}
-                  onBack={()=>navigate(`${APP_HOME}?tab=discovery&view=more`)}
-                  onMoreProgrammes={()=>navigate(`${APP_HOME}?tab=discovery&view=more`)}/>
+                  comingSoon={programmeSlugFromUrl() !== 'pharmd'}
+                  onClose={()=>navigate(`${APP_HOME}?tab=discovery&view=more`)}
+                  onCourseRoute={()=>{}}/>
               : discoverView==="contents"
               ? <ContentsDiscoveryTab initialQuery={discoverQuery}/>
               : discoverView==="pharmd"
@@ -1338,9 +1353,7 @@ export default function LearnerDashboard() {
               : <DiscoverHub
                   userId={userProfile?.id}
                   discipline={userProfile?.discipline}
-                  onOpenDiscipline={(slug)=>navigate(slug === 'pharmd'
-                    ? `${APP_HOME}?tab=discovery&view=pharmd`
-                    : `${APP_HOME}?tab=discovery&view=discipline&slug=${encodeURIComponent(slug)}`)}
+                  onOpenDiscipline={openDiscipline}
                   onOpenMore={()=>navigate(`${APP_HOME}?tab=discovery&view=more`)}
                   onOpenProgramme={(p)=>p?.id&&navigate(`${APP_HOME}?tab=discovery&view=programme&programme=${encodeURIComponent(p.id)}`)}
                   onOpenContents={(q)=>navigate(`${APP_HOME}?tab=discovery&view=contents${q?`&q=${encodeURIComponent(q)}`:""}`)}
