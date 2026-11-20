@@ -4,7 +4,15 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-const src = await readFile(new URL("./routes.js", import.meta.url), "utf8");
+const read = (name) => readFile(new URL(name, import.meta.url), "utf8");
+const src = (await Promise.all([
+  "./routes.js",
+  "./console-rules.js",
+  "./console-service-chat.js",
+  "./console-service-tools.js",
+  "./console-service-ai.js",
+  "./console-service-runs.js",
+].map(read))).join("\n");
 const chat = await readFile(new URL("../adaptive-learning/chat.js", import.meta.url), "utf8");
 const toolRuntime = await readFile(new URL("../adaptive-learning/chat/tool-runtime.js", import.meta.url), "utf8");
 const app = await readFile(new URL("../../app.js", import.meta.url), "utf8");
@@ -35,7 +43,6 @@ test("a learner must be a learner account, and the allow-list is honoured", () =
 });
 
 test("the console key can arrive as Authorization: Bearer (cloud network secrets)", async () => {
-  const src = await readFile(new URL("./routes.js", import.meta.url), "utf8");
   assert.match(src, /\/\^Bearer\\s\+\(\.\+\)\$\/i\.exec\(req\.get\("authorization"\)/);
   assert.match(src, /const got = req\.get\("x-agent-console-key"\) \|\| bearer \|\| req\.query\.key;/);
 });

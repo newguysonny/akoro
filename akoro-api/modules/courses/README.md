@@ -38,14 +38,18 @@ root, so its route files carry their own path prefixes.
   cart, bundles and gifts initiate/verify payments; the unified webhook router
   verifies the signature once and calls the exported fulfil functions. Sales
   write `instructor_earnings` with the commission snapshotted from
-  `PLATFORM_COMMISSION_PERCENT`.
+  `PLATFORM_COMMISSION_PERCENT`. Earnings reads/aggregates (instructor and
+  admin) live in `payouts-earnings.js`; `payouts.js` keeps the mounted router,
+  bank details and payout requests/webhook.
 - Cart checkout is layered: `cart.js` (mounted router) → `cart-service.js`
   (checkout orchestration, Paystack init/verify, webhook fulfilment) →
   `cart-rules.js` (pure pricing, currency and totals) + `cart-store.js`
   (Supabase queries). `payments.js` still imports `cartHandlers` from
   `cart.js`, so that named export stays on the mounted entry.
 - Live teaching: `meeting-integration.js` stores Zoom/Google/Teams OAuth tokens
-  in `provider_tokens` with a Redis read cache and refresh lock;
+  in `provider_tokens` with a Redis read cache and refresh lock — the token
+  cache/lock, Supabase store, provider OAuth config and `ensureValidToken` are
+  in `meeting-tokens.js`, re-exported by `meeting-integration.js`;
   `live-sessions.js` is the mounted router over `live-sessions-service*.js`
   (request orchestration), `live-sessions-rules.js` (validation + field
   allowlist) and `live-sessions-store.js` (Supabase queries). `peer-sessions.js`
@@ -57,7 +61,9 @@ root, so its route files carry their own path prefixes.
   queue; otherwise it enqueues on `video-encoding`. The container/worker calls
   back through `/api/stream/internal/*` with the shared secret. Certificates use
   `pdf-lib` and R2; subtitles accept VTT/SRT (SRT becomes VTT).
-- Engagement: `course-content.js` owns modules/lessons/progress/quizzes;
+- Engagement: `course-content.js` owns modules/lessons/progress/quizzes (its
+  response/validation helpers are in `course-content-rules.js` and the read-only
+  outline/progress views in `course-content-outline.js`);
   `chat.js` broadcasts class messages over Socket.io; Q&A, announcements,
   reviews, notifications, progress analytics and agent profiles fill out the
   student/instructor views. `notifications.js` also registers Web Push.
@@ -70,13 +76,16 @@ root, so its route files carry their own path prefixes.
   course/module/lesson/session/video id, and put literal paths before `/:id`.
 - Import another module only through its `index.js`; sibling imports inside this
   module are expected (as `scheduler.js` does for its two helpers).
-- New files must stay under 600 lines. Several files here are baselined over the
-  cap, so shape a new feature as its own file instead of growing them.
+- New files must stay under 600 lines. Every file in this directory is now under
+  the cap, so shape a new feature as its own file instead of growing one.
 
 ## Known limits
 
-- Baselined over 600 lines: `meeting-integration.js` (754), `payouts.js` (717),
-  `course-content.js` (709), `courses.js` (644).
+- Phase 19 step 4 split the four formerly oversized files into layers:
+  `meeting-tokens.js` (token cache/lock/store), `payouts-earnings.js` (earnings
+  reads/aggregates), `course-content-rules.js` + `course-content-outline.js`
+  (helpers/validation and read-only views) and `courses-store.js` (legacy mock
+  seed + stores).
 - `courses.js` is the legacy in-memory mock, intentionally unmounted: real CRUD
   lives in `/api/instructor/courses`, reads come from `public-catalog.js` and
   `course-content.js`, and mounting it would shadow real routes.

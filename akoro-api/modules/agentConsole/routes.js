@@ -26,669 +26,80 @@
  * Guard rails: the learner must be a LEARNER account (and on the allow-list
  * when one is set); "live" mode is the only way anything is changed, and it
  * is said so in every response.
+ *
+ * Handlers live in console-service-chat.js, console-service-tools.js,
+ * console-service-ai.js and console-service-runs.js; every route stays behind
+ * the shared-key guard in console-rules.js.
  */
 import express from "express";
-import { randomUUID } from "node:crypto";
-import db from "../../db.js";
-import { openai, fallbackLadder, runWithProviders } from "../../lib/aiModel.js";
-import { readLogs, logSeq } from "../../lib/logTap.js";
-import { runDry } from "../../lib/dryRunContext.js";
-import { signInternalAccess } from "../auth/index.js";
-import { safeCompare } from "../../lib/safeCompare.js";
-import { isDocumentGoal } from "../self-tooling/index.js";
-import { cleanupPlan } from "./cleanup.js";
-import { modelRegistry, availabilityOf, ROLES } from "../../lib/modelRegistry.js";
-import { validateShape, readStructured } from "../../lib/structuredOutput.js";
-import { buildToolMessages, toolSchema, shapeToolResult } from "../records/index.js";
-import { featureModels } from "../../lib/aiFeatureModels.js";
-import { resolveContentAccess } from "../records/index.js";
-import { getExtraction } from "../records/index.js";
-import { makeOpenCodeAdapter } from "../../lib/providers/opencode.js";
+import { asyncHandler, guard } from "./console-rules.js";
+import { chatTurn, logs, pick, runTool, status } from "./console-service-chat.js";
+import {
+  cleanupDomainTools,
+  contentParses,
+  debugToken,
+  learnerTools,
+  pharmdHashBackfill,
+  repairLibraryTools,
+} from "./console-service-tools.js";
+import {
+  aiFailoverTest,
+  aiPing,
+  aiProvider,
+  groundingAb,
+  structuredTest,
+} from "./console-service-ai.js";
+import {
+  consolePage,
+  executionDigests,
+  executionRun,
+  executionRuns,
+  getRun,
+  listRuns,
+} from "./console-service-runs.js";
 
 const router = express.Router();
-const asyncHandler = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
-const API_BASE = process.env.INTERNAL_API_URL || `http://127.0.0.1:${process.env.PORT || 3000}`;
-const MODELS = ["gpt-4o-mini", "gpt-4.1-mini", "gpt-4o", "gpt-4.1"];
 
-let chatMod = null;
-const chat = async () => (chatMod ||= await import("../adaptive-learning/index.js"));
+router.get("/status", guard, asyncHandler(status));
 
-const guard = (req, res, next) => {
-  const want = process.env.AGENT_CONSOLE_KEY;
-  if (!want) return res.status(501).json({ success: false, error: "Agent console not configured — set AGENT_CONSOLE_KEY on the server." });
-  // Bearer too: a cloud environment's network secret can inject
-  // "Authorization: Bearer <key>" but not a custom header.
-  const bearer = /^Bearer\s+(.+)$/i.exec(req.get("authorization") || "")?.[1]?.trim();
-  const got = req.get("x-agent-console-key") || bearer || req.query.key;
-  if (!safeCompare(got, want)) return res.status(401).json({ success: false, error: "Bad console key" });
-  next();
-};
-const bad = (res, msg, code = 400) => res.status(code).json({ success: false, error: msg });
+router.post("/pick", guard, asyncHandler(pick));
 
-/* The last 50 runs, newest first, kept in memory. */
-const runs = [];
-const keepRun = (r) => { runs.unshift(r); if (runs.length > 50) runs.length = 50; return r; };
+router.post("/chat", guard, asyncHandler(chatTurn));
 
-/** @username, email or id of a LEARNER (and on the allow-list when one is set). */
-async function resolveLearner(raw) {
-  const s = String(raw || "").trim();
-  if (!s) throw Object.assign(new Error("Which test learner? Pass learner: @username, email or id."), { status: 400 });
-  const cols = "id, full_name, username, email, role";
-  const q = /^[0-9a-f-]{36}$/i.test(s) ? db.from("users").select(cols).eq("id", s)
-    : s.includes("@") && !s.startsWith("@") ? db.from("users").select(cols).ilike("email", s)
-    : db.from("users").select(cols).ilike("username", s.replace(/^@/, ""));
-  const { data } = await q.limit(1);
-  const u = data?.[0];
-  if (!u) throw Object.assign(new Error(`No account found for "${s}".`), { status: 404 });
-  if (!["student", "learner"].includes(String(u.role || "").toLowerCase())) {
-    throw Object.assign(new Error(`${u.username || u.email} isn't a learner account.`), { status: 400 });
-  }
-  const allow = String(process.env.AGENT_CONSOLE_LEARNERS || "").split(",").map((x) => x.trim().toLowerCase().replace(/^@/, "")).filter(Boolean);
-  if (allow.length && !allow.includes(String(u.username || "").toLowerCase()) && !allow.includes(String(u.email || "").toLowerCase())) {
-    throw Object.assign(new Error(`${u.username || u.email} isn't on AGENT_CONSOLE_LEARNERS — only listed test learners can be used.`), { status: 403 });
-  }
-  return { id: u.id, name: u.full_name || u.username, username: u.username, role: u.role };
-}
-const fail = (res, e) => res.status(e.status || 500).json({ success: false, error: e.message || String(e) });
+router.post("/tool", guard, asyncHandler(runTool));
 
-router.get("/status", guard, asyncHandler(async (_req, res) => {
-  const { getLearnerChatTools, isSideEffecting } = await chat();
-  const tools = getLearnerChatTools().map((t) => ({ name: t.name, changesData: isSideEffecting(t.name, {}), description: t.description }));
-  res.json({
-    success: true,
-    data: {
-      tools, toolCount: tools.length, models: MODELS,
-      liveKey: !!process.env.OPENAI_API_KEY,
-      learnerAllowList: String(process.env.AGENT_CONSOLE_LEARNERS || "").split(",").map((x) => x.trim()).filter(Boolean),
-      modes: { dry: "tools that change data are simulated; read-only tools run (default)", live: "everything runs for real — creates tasks, sends messages, etc." },
-      logSeq: logSeq(),
-    },
-  });
-}));
+router.get("/logs", guard, logs);
 
-/* Which tool would the agent pick? No learner, nothing runs — the cheapest check. */
-router.post("/pick", guard, asyncHandler(async (req, res) => {
-  const prompt = String(req.body?.prompt || "").trim();
-  if (!prompt) return bad(res, "prompt is required");
-  const model = MODELS.includes(req.body?.model) ? req.body.model : MODELS[0];
-  const { getLearnerChatTools } = await chat();
-  const tools = getLearnerChatTools().map((t) => ({ type: "function", function: { name: t.name, description: t.description, parameters: t.input_schema } }));
-  const t0 = Date.now();
-  const resp = await openai.chat.completions.create({
-    model, max_tokens: 500, temperature: 0, __feature: "eval", __payer: "platform", tools, tool_choice: "auto",
-    messages: [
-      { role: "system", content: "You are a learner's personal study agent on Akoro. If a tool fits the learner's request, call it; use only what they said." },
-      { role: "user", content: prompt },
-    ],
-  });
-  const msg = resp.choices?.[0]?.message || {};
-  const calls = (msg.tool_calls || []).map((c) => { let args = {}; try { args = JSON.parse(c.function.arguments || "{}"); } catch { args = { _raw: c.function.arguments }; } return { tool: c.function.name, args }; });
-  const run = keepRun({ id: randomUUID(), kind: "pick", at: new Date().toISOString(), model, prompt, calls, text: msg.content || null, ms: Date.now() - t0 });
-  res.json({ success: true, data: run });
-}));
+router.post("/repair-library-tools", guard, asyncHandler(repairLibraryTools));
 
-/* One real Agent Chat turn as the test learner. */
-router.post("/chat", guard, asyncHandler(async (req, res) => {
-  const prompt = String(req.body?.prompt || "").trim();
-  if (!prompt) return bad(res, "prompt is required");
-  const mode = req.body?.mode === "live" ? "live" : "dry";
-  let learner;
-  try { learner = await resolveLearner(req.body?.learner); } catch (e) { return fail(res, e); }
-  const history = Array.isArray(req.body?.history) ? req.body.history.slice(-20) : [];
-  const fromSeq = logSeq();
-  const t0 = Date.now();
-  const token = signInternalAccess({ id: learner.id, role: learner.role || "student" }, 600);
-  let status = 0, body = null;
-  try {
-    const r = await fetch(`${API_BASE}/api/adaptive/chat/agent`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json", Authorization: `Bearer ${token}`,
-        ...(mode === "dry" ? { "x-agent-console-dry": process.env.AGENT_CONSOLE_KEY } : {}),
-      },
-      body: JSON.stringify({ message: prompt, history, ...(req.body?.think ? { mode: "think" } : {}) }),
-    });
-    status = r.status;
-    body = await r.json().catch(() => null);
-  } catch (e) {
-    body = { error: e.message };
-  }
-  const logs = readLogs({ since: fromSeq, limit: 400 }).lines;
-  const run = keepRun({
-    id: randomUUID(), kind: "chat", at: new Date().toISOString(), mode, learner: { username: learner.username, name: learner.name },
-    prompt, status, ms: Date.now() - t0,
-    reply: body?.reply ?? body?.response ?? null,
-    tools: (body?.toolExecutions || []).map((x) => ({ tool: x.tool, success: x.success, ...(x.agents ? { agents: x.agents.length } : {}), ...(x.requests ? { requests: x.requests.length } : {}) })),
-    trace: body?.trace ?? null,
-    error: status >= 400 ? (body?.error || `HTTP ${status}`) : null,
-    logs,
-    note: mode === "dry" ? "DRY: nothing was changed — tools that change data answered with what they would do." : "LIVE: tools ran for real.",
-  });
-  res.status(status >= 400 ? 502 : 200).json({ success: status < 400, data: run });
-}));
+router.post("/cleanup-domain-tools", guard, asyncHandler(cleanupDomainTools));
 
-/* One tool, directly. */
-router.post("/tool", guard, asyncHandler(async (req, res) => {
-  const tool = String(req.body?.tool || "").trim();
-  if (!tool) return bad(res, "tool is required");
-  const mode = req.body?.mode === "live" ? "live" : "dry";
-  let learner;
-  try { learner = await resolveLearner(req.body?.learner); } catch (e) { return fail(res, e); }
-  const { getLearnerChatTools, executeChatTool } = await chat();
-  if (!getLearnerChatTools().some((t) => t.name === tool)) return bad(res, `"${tool}" isn't a learner chat tool on this server (see /status).`);
-  const input = req.body?.input && typeof req.body.input === "object" ? req.body.input : {};
-  const fromSeq = logSeq();
-  const t0 = Date.now();
-  let result;
-  try {
-    const go = () => executeChatTool(tool, input, learner.id, { role: "student", channel: "agent-console" });
-    result = mode === "dry" ? await runDry(go) : await go();
-  } catch (e) { result = { threw: e.message || String(e) }; }
-  const run = keepRun({
-    id: randomUUID(), kind: "tool", at: new Date().toISOString(), mode, learner: { username: learner.username, name: learner.name },
-    tool, input, result, ms: Date.now() - t0, logs: readLogs({ since: fromSeq, limit: 200 }).lines,
-  });
-  res.json({ success: !(result && (result.error || result.threw)), data: run });
-}));
+router.get("/ai-provider", guard, aiProvider);
 
-router.get("/logs", guard, (req, res) => {
-  res.json({ success: true, data: readLogs({ since: req.query.since, filter: req.query.filter, level: req.query.level, limit: req.query.limit }) });
-});
+router.post("/ai-ping", guard, asyncHandler(aiPing));
 
-/* POST /agent-console/repair-library-tools { learner, build? }
-   Production repair for a learner whose saved "library count" reads a
-   subject-bearing view (sessions/XP) and reports the wrong total. Archives
-   every active document-goal tool that does NOT read my_library, then (unless
-   build:false) builds the correct my_library count tool and returns its total. */
-router.post("/repair-library-tools", guard, asyncHandler(async (req, res) => {
-  let learner;
-  try { learner = await resolveLearner(req.body?.learner); } catch (e) { return fail(res, e); }
-  const { data: tools } = await db.schema("edu").from("agent_tools")
-    .select("id, name, label, goal, views").eq("owner_id", learner.id).eq("status", "active");
-  const wrong = (tools || []).filter((t) => isDocumentGoal(t.goal || t.label || "") && !(t.views || []).includes("my_library"));
-  for (const t of wrong) {
-    await db.schema("edu").from("agent_tools")
-      .update({ status: "archived", updated_at: new Date().toISOString() })
-      .eq("id", t.id).eq("owner_id", learner.id);
-  }
-  let built = null;
-  if (req.body?.build !== false) {
-    const { executeChatTool } = await chat();
-    const b = await executeChatTool("create_tool",
-      { goal: "Count the documents in my library", name: "library_documents_count", label: "Count my library documents" },
-      learner.id, { role: "student", channel: "agent-console" });
-    let total = b?.result?.total ?? null;
-    // A correct tool already existed (reused): run it so the repair reports the real count.
-    if (b?.status === "reused" && b.tool) {
-      try { const r = await executeChatTool(b.tool, {}, learner.id, { role: "student", channel: "agent-console" }); total = r?.total ?? total; } catch { /* best-effort */ }
-    }
-    built = { status: b?.status, tool: b?.tool, mode: b?.mode, total };
-  }
-  res.json({ success: true, data: {
-    learner: learner.username,
-    archived: wrong.map((t) => t.name),
-    built: built ? { status: built.status, tool: built.tool, mode: built.mode, total: built.result?.total ?? null } : null,
-  } });
-}));
+router.post("/ai-failover-test", guard, asyncHandler(aiFailoverTest));
 
-/* POST /agent-console/cleanup-domain-tools { learner, dry? } | { all: true, dry?, confirm? }
-   One tool per DOMAIN (view): keep the best READ tool over a view and archive the
-   rest. Write tools (anything with capabilities) are never touched — the split
-   keeps them separate and Confirm-gated. `all:true` sweeps every learner
-   (dry by default; archiving needs confirm:true). */
-router.post("/cleanup-domain-tools", guard, asyncHandler(async (req, res) => {
-  const dry = req.body?.dry === true;
-  const all = req.body?.all === true;
-  if (!all) {
-    let learner;
-    try { learner = await resolveLearner(req.body?.learner); } catch (e) { return fail(res, e); }
-    const { data: tools } = await db.schema("edu").from("agent_tools")
-      .select("id, name, label, mode, views, domain, params_schema, capabilities, created_at").eq("owner_id", learner.id).eq("status", "active");
-    const plan = cleanupPlan(tools || []);
-    for (const t of plan.archive) {
-      if (!dry) await db.schema("edu").from("agent_tools").update({ status: "archived", updated_at: new Date().toISOString() }).eq("id", t.id).eq("owner_id", learner.id);
-    }
-    return res.json({ success: true, data: { learner: learner.username, dry, kept: plan.kept, archived: plan.archive.map((t) => t.name) } });
-  }
-  if (!dry && req.body?.confirm !== true) {
-    return bad(res, "Sweeping every learner needs confirm:true (or dry:true to preview).");
-  }
-  const { data: tools } = await db.schema("edu").from("agent_tools")
-    .select("id, owner_id, name, label, mode, views, domain, params_schema, capabilities, created_at")
-    .eq("scope", "learner").eq("status", "active").limit(10000);
-  const byOwner = new Map();
-  for (const t of tools || []) {
-    if (!byOwner.has(t.owner_id)) byOwner.set(t.owner_id, []);
-    byOwner.get(t.owner_id).push(t);
-  }
-  const archived = [];
-  for (const [ownerId, list] of byOwner) {
-    const plan = cleanupPlan(list);
-    for (const t of plan.archive) {
-      archived.push({ owner: ownerId, tool: t.name });
-      if (!dry) await db.schema("edu").from("agent_tools").update({ status: "archived", updated_at: new Date().toISOString() }).eq("id", t.id).eq("owner_id", ownerId);
-    }
-  }
-  res.json({ success: true, data: { all: true, dry, owners: byOwner.size, archived: archived.length, tools: archived.slice(0, 200) } });
-}));
+router.get("/content-parses", guard, asyncHandler(contentParses));
 
-/* GET /agent-console/learner-tools?learner=@x&status=active
-   Read-only inspection of a learner's saved tools (name, view/domain, actions,
-   capabilities, params) — the console can otherwise only see built-in tools. */
-/* The OpenCode lane, as configured on THIS server (no secrets) + a 1-token
-   live ping so an env change can be verified without a deploy. */
-router.get("/ai-provider", guard, (_req, res) => {
-  const lane = String(process.env.OPENCODE_LANE || "go");
-  const base = String(process.env.OPENCODE_BASE_URL || "https://opencode.ai/inference").replace(/\/+$/, "");
-  res.json({ success: true, data: {
-    provider: process.env.AI_PROVIDER || null,
-    defaultModel: modelRegistry.defaultId,
-    envDefault: modelRegistry.envDefaultId,
-    fallback: modelRegistry.fallbackId,
-    lane,
-    baseURL: base,
-    keySet: !!process.env.OPENCODE_API_KEY,
-    billProviderCost: process.env.AI_BILL_PROVIDER_COST !== "false",
-    models: modelRegistry.catalogue.filter((e) => e.selectable).map((e) => ({
-      id: e.id, label: e.label, apiModel: e.apiModel, lane: e.lane, provider: e.provider,
-      fallbackModel: e.fallbackModel,
-      ladder: fallbackLadder(e).map((t) => t.id),
-      availability: availabilityOf(e),
-    })),
-    // Hidden failover routes (e.g. DeepSeek's own API behind the public model).
-    targets: modelRegistry.catalogue.filter((e) => !e.selectable && e.enabled)
-      .map((e) => ({ id: e.id, apiModel: e.apiModel, provider: e.provider, availability: availabilityOf(e) })),
-    roles: Object.keys(ROLES).map((role) => {
-      const r = modelRegistry.resolve({ role });
-      return { role, model: r.model.id, source: r.source, locked: !!ROLES[role].locked };
-    }),
-    features: featureModels(process.env, modelRegistry.envDefaultId),
-  } });
-});
+router.post("/debug-token", guard, asyncHandler(debugToken));
 
-router.post("/ai-ping", guard, asyncHandler(async (req, res) => {
-  const id = String(req.body?.model || process.env.AI_MODEL_DEFAULT || modelRegistry.defaultId);
-  const entry = modelRegistry.get(id);
-  if (!entry) return bad(res, `Unknown model id "${id}".`);
-  // A raw Go model can be probed even when this environment's AI_MODELS still
-  // defines the public id on another transport (e.g. legacy direct DeepSeek).
-  const apiModelOverride = String(req.body?.apiModel || "").trim() || null;
-  // viaModel routes through lib/aiModel (the real provider dispatch), so the
-  // direct fallback and OpenCode can be compared on the same request.
-  const viaModel = req.body?.viaModel === true;
-  if (!apiModelOverride && !viaModel && entry.provider !== "opencode") return bad(res, `"${id}" isn't an OpenCode model.`);
-  const started = Date.now();
-  const maxTokens = Math.max(2, Math.min(512, Number(req.body?.maxTokens) || 16));
-  const prompt = String(req.body?.prompt || "ping").slice(0, 200);
-  const probeStream = req.body?.stream === true;
-  const probeReasoning = req.body?.reasoning === true;
-  const probeJson = req.body?.json === true;
-  const probeTools = req.body?.tools === true;
-  const image = typeof req.body?.image === "string" && req.body.image.startsWith("data:image/") ? req.body.image : "";
-  try {
-    if (viaModel) {
-      const out = await openai.chat.completions.create({
-        model: id,
-        messages: [{ role: "user", content: image
-          ? [{ type: "text", text: prompt }, { type: "image_url", image_url: { url: image } }]
-          : prompt }],
-        max_tokens: maxTokens,
-        ...(probeReasoning ? { reasoning_effort: "medium" } : {}),
-        __feature: "vision_probe", __payer: "platform",
-      });
-      const msg = out?.choices?.[0]?.message || {};
-      return res.json({ success: true, data: {
-        model: entry.id, provider: entry.provider, apiModel: out?.model || entry.apiModel,
-        ms: Date.now() - started, usage: out?.usage ?? null,
-        finish: out?.choices?.[0]?.finish_reason ?? null,
-        content: String(msg.content ?? "").slice(0, 800),
-        reasoningChars: String(msg.reasoning_content ?? msg.reasoning ?? "").length,
-      } });
-    }
-    const adapter = makeOpenCodeAdapter();
-    const out = await adapter.create({
-      model: apiModelOverride || entry.apiModel,
-      messages: [{ role: "user", content: image
-        ? [{ type: "text", text: prompt }, { type: "image_url", image_url: { url: image } }]
-        : prompt }],
-      max_tokens: maxTokens,
-      ...(probeReasoning ? { reasoning_effort: "medium" } : {}),
-      ...(probeStream ? { stream: true } : {}),
-      ...(probeJson ? { response_format: { type: "json_schema", json_schema: {
-        name: "ping", strict: true,
-        schema: { type: "object", additionalProperties: false, required: ["value"], properties: { value: { type: "string" } } },
-      } } } : {}),
-      ...(probeTools ? { tools: [{ type: "function", function: {
-        name: "ping", description: "Return a value",
-        parameters: { type: "object", required: ["value"], properties: { value: { type: "string" } } },
-      } }], tool_choice: "required" } : {}),
-    }, { timeout: 60000, maxRetries: 0 }, entry);
-    if (probeStream) {
-      let reasoning = "", content = "", chunks = 0;
-      const keys = new Set();
-      for await (const ch of out) {
-        chunks += 1;
-        const d = ch?.choices?.[0]?.delta || {};
-        Object.keys(d).forEach((k) => keys.add(k));
-        reasoning += String(d.reasoning_content ?? d.reasoning ?? d.thinking ?? "");
-        content += String(d.content ?? "");
-      }
-      return res.json({ success: true, data: {
-        model: entry.id, apiModel: apiModelOverride || entry.apiModel, stream: true, chunks,
-        deltaKeys: [...keys], reasoningChars: reasoning.length, reasoning: reasoning.slice(0, 1200),
-        contentChars: content.length, content: content.slice(0, 300),
-      } });
-    }
-    const msg = out?.choices?.[0]?.message || {};
-    return res.json({ success: true, data: {
-      model: entry.id, apiModel: apiModelOverride || entry.apiModel,
-      ms: Date.now() - started, usage: out?.usage ?? null,
-      messageKeys: Object.keys(msg),
-      reasoning: String(msg.reasoning_content ?? msg.reasoning ?? msg.thinking ?? "").slice(0, 1200),
-      content: String(msg.content ?? "").slice(0, 600),
-      parsed: probeJson ? (() => { try { return JSON.parse(String(msg.content || "")); } catch { return null; } })() : null,
-      toolCalls: probeTools ? (msg.tool_calls || []).map((c) => ({ name: c?.function?.name, args: String(c?.function?.arguments || "").slice(0, 120) })) : null,
-    } });
-  } catch (e) {
-    res.status(502).json({ success: false, error: String(e?.message || e).slice(0, 300), status: e?.status ?? null,
-      model: entry.id, apiModel: entry.apiModel, ms: Date.now() - started });
-  }
-}));
+router.post("/pharmd-hash-backfill", guard, asyncHandler(pharmdHashBackfill));
 
-/* Simulate a 429 on the OpenCode transport and let the REAL next hop answer.
-   Proves the failover ladder end-to-end without spending the gateway: the
-   primary/hop calls are stubbed, the direct transport is a live call. */
-router.post("/ai-failover-test", guard, asyncHandler(async (req, res) => {
-  const model = String(req.body?.model || process.env.AI_MODEL_DEFAULT || "deepseek");
-  const maxTokens = Math.max(2, Math.min(64, Number(req.body?.maxTokens) || 16));
-  const prompt = String(req.body?.prompt || "ping").slice(0, 200);
-  const failing = {
-    async create() {
-      throw Object.assign(new Error("simulated 429 on the OpenCode transport"), { status: 429 });
-    },
-  };
-  const started = Date.now();
-  try {
-    const out = await runWithProviders({ opencode: failing }, () => openai.chat.completions.create({
-      model,
-      messages: [{ role: "user", content: prompt }],
-      max_tokens: maxTokens,
-      __feature: "failover_test",
-      __payer: "platform",
-    }));
-    res.json({ success: true, data: {
-      model,
-      ms: Date.now() - started,
-      content: out?.choices?.[0]?.message?.content ?? null,
-      fallback: out?.model_fallback ?? null,
-      usage: out?.usage ?? null,
-    } });
-  } catch (e) {
-    res.status(502).json({ success: false, error: String(e?.message || e).slice(0, 300),
-      status: e?.status ?? null, model, ms: Date.now() - started });
-  }
-}));
+router.post("/structured-test", guard, asyncHandler(structuredTest));
 
-/* Read-only: what the shared parse cache holds for a content key. */
-router.get("/content-parses", guard, asyncHandler(async (req, res) => {
-  const key = String(req.query?.key || "");
-  if (!key) return bad(res, "A key is required.");
-  const { data, error } = await db.schema("edu").from("content_parses")
-    .select("page_number, model, markdown, updated_at")
-    .eq("content_key", key).order("page_number", { ascending: true });
-  if (error) return bad(res, error.message, 500);
-  const pages = (data || []).map((p) => ({ page: p.page_number, model: p.model, chars: String(p.markdown || "").length, updatedAt: p.updated_at }));
-  // Mirror the reader's path: access resolution + what the cached GET returns.
-  let access = null;
-  if (req.query?.learner) {
-    try {
-      const learner = await resolveLearner(req.query.learner);
-      const a = await resolveContentAccess({ userId: learner.id, contentKey: key });
-      if (a.status) access = { status: a.status, message: a.message };
-      else {
-        const got = await getExtraction(a.contentKey);
-        access = { status: 200, contentKey: a.contentKey, name: a.name, pages: (got.pages || []).length };
-      }
-    } catch (e) { access = { error: String(e?.message || e) }; }
-  }
-  res.json({ success: true, data: { key, count: pages.length, pages, access } });
-}));
+router.post("/grounding-ab", guard, asyncHandler(groundingAb));
 
-/* A short internal token for an allow-listed learner, so an operator can
-   call a learner-scoped endpoint exactly as the app does. Console-key only. */
-router.post("/debug-token", guard, asyncHandler(async (req, res) => {
-  let learner;
-  try { learner = await resolveLearner(req.body?.learner); } catch (e) { return fail(res, e); }
-  const token = signInternalAccess({ id: learner.id, role: learner.role || "student" }, 120);
-  res.json({ success: true, data: { learner: learner.username, token } });
-}));
+router.get("/learner-tools", guard, asyncHandler(learnerTools));
 
-/* Hash older PHARM.D topics and move their cached parses to the versioned
-   key. Batched: pass { limit } and call again until checked < limit. */
-router.post("/pharmd-hash-backfill", guard, asyncHandler(async (req, res) => {
-  const { runPharmdHashBackfill } = await import("../pharmd/index.js");
-  const limit = Math.max(1, Math.min(50, Number(req.body?.limit) || 10));
-  const lines = [];
-  const course = req.body?.course ? String(req.body.course) : null;
-  const out = await runPharmdHashBackfill({ limit, course, onLog: (line) => lines.push(line) });
-  res.json({ success: true, data: { ...out, limit, log: lines } });
-}));
+router.get("/runs", guard, listRuns);
+router.get("/runs/:id", guard, getRun);
 
-/* Side-by-side structured-output check: same schema + prompt through the
-   real aiModel path on two models (default: OpenCode DeepSeek vs DeepSeek
-   direct). Reports retries, validation, latency and usage — no learner data. */
-router.post("/structured-test", guard, asyncHandler(async (req, res) => {
-  const text = String(req.body?.text || "The cell membrane is a selectively permeable phospholipid bilayer. The nucleus holds DNA. Mitochondria make ATP. Ribosomes build proteins. The cell wall gives plant cells support.").slice(0, 3000);
-  const schema = req.body?.schema || {
-    type: "object", additionalProperties: false, required: ["title", "items"],
-    properties: {
-      title: { type: "string" },
-      items: { type: "array", minItems: 1, items: {
-        type: "object", additionalProperties: false, required: ["term", "definition", "score"],
-        properties: { term: { type: "string" }, definition: { type: "string" }, score: { type: "integer" } },
-      } },
-    },
-  };
-  const prompt = String(req.body?.prompt || "From the text below, return JSON with a title and 3 items. Each item has term, a one-sentence definition, and an integer score from 1 to 10.\n\nTEXT:\n" + text);
-  const models = Array.isArray(req.body?.models) && req.body.models.length ? req.body.models : ["deepseek", "deepseek-direct"];
-  const maxTokens = Math.max(64, Math.min(1200, Number(req.body?.maxTokens) || 600));
-  const runs = [];
-  for (const id of models) {
-    const entry = modelRegistry.get(id);
-    if (!entry) { runs.push({ id, error: "unknown model" }); continue; }
-    const fromSeq = logSeq();
-    const t0 = Date.now();
-    try {
-      const out = await openai.chat.completions.create({
-        model: id,
-        messages: [{ role: "user", content: prompt }],
-        max_tokens: maxTokens,
-        response_format: { type: "json_schema", json_schema: { name: "compare", strict: true, schema } },
-        __feature: "structured_compare",
-        __payer: "platform",
-      });
-      const content = String(out?.choices?.[0]?.message?.content || "");
-      let parsed = null;
-      try { parsed = JSON.parse(content); } catch { parsed = null; }
-      const errors = parsed ? validateShape(parsed, schema) : ["unparseable JSON"];
-      const logs = readLogs({ since: fromSeq, limit: 200 }).lines
-        .map((l) => (typeof l === "string" ? l : l?.msg || JSON.stringify(l)))
-        .filter((l) => /\[ai:json\]|\[ai\].*failed/.test(l));
-      runs.push({
-        id, provider: entry.provider, lane: entry.lane || null, apiModel: entry.apiModel,
-        ms: Date.now() - t0, ok: errors.length === 0, errors: errors.slice(0, 4),
-        retries: logs.length, retryLog: logs.slice(0, 3),
-        contentChars: content.length, content: content.slice(0, 400),
-        parsedOk: !!parsed,
-        parsedSummary: parsed && typeof parsed === "object"
-          ? Object.fromEntries(Object.entries(parsed).map(([k, v]) => [k, Array.isArray(v) ? v.length : typeof v === "string" ? v.length : typeof v]))
-          : null,
-        usage: out?.usage ?? null,
-      });
-    } catch (e) {
-      runs.push({ id, provider: entry.provider, lane: entry.lane || null, apiModel: entry.apiModel,
-        ms: Date.now() - t0, ok: false, error: String(e?.message || e).slice(0, 300), status: e?.status ?? null });
-    }
-  }
-  res.json({ success: true, data: { schema, promptChars: prompt.length, maxTokens, runs } });
-}));
-
-/* Grounding A/B: the SAME question/quiz, two passage sets (pdf text vs
-   extracted markdown), then a model judge. Passages are supplied by the
-   caller: {n, pageNumber, text, bbox|null}. No learner data is read here. */
-router.post("/grounding-ab", guard, asyncHandler(async (req, res) => {
-  const question = String(req.body?.question || "").slice(0, 800);
-  const count = Math.max(2, Math.min(6, Number(req.body?.quizCount) || 4));
-  const clean = (list) => (Array.isArray(list) ? list : [])
-    .map((p, i) => ({ n: i + 1, pageNumber: Number.isInteger(p?.pageNumber) ? p.pageNumber : null,
-      text: String(p?.text || "").slice(0, 2200), bbox: Array.isArray(p?.bbox) ? p.bbox : null }))
-    .filter((p) => p.text.trim()).slice(0, 18);
-  const variants = {
-    pdf_text: clean(req.body?.passagesA),
-    markdown: clean(req.body?.passagesB),
-  };
-  const passageText = (ps) => ps.map((p) => `[${p.n}] (${p.pageNumber ? `page ${p.pageNumber}` : "part"})\n${p.text}`).join("\n\n");
-  const citeStats = (answer, ps) => {
-    const nums = [...new Set((String(answer).match(/\[(\d+)\]/g) || []).map((x) => Number(x.slice(1, -1))))];
-    const found = nums.map((n) => ps.find((p) => p.n === n)).filter(Boolean);
-    return { cited: found.length, withBbox: found.filter((p) => p.bbox).length,
-      bboxRate: found.length ? Math.round((found.filter((p) => p.bbox).length / found.length) * 100) : null,
-      pages: [...new Set(found.map((p) => p.pageNumber).filter(Boolean))] };
-  };
-  const ask = async (ps, label) => {
-    const t0 = Date.now();
-    const out = await openai.chat.completions.create({
-      __role: "chat", __feature: "grounding_ab", __payer: "platform",
-      temperature: 0.2, max_tokens: 700,
-      messages: [
-        { role: "system", content: "Answer the learner's question using ONLY the numbered passages. Cite every claim with [n]. If the passages do not contain the answer, say so plainly." },
-        { role: "user", content: `PASSAGES:\n${passageText(ps)}\n\nQUESTION: ${question}` },
-      ],
-    });
-    const answer = String(out?.choices?.[0]?.message?.content || "");
-    return { variant: label, ms: Date.now() - t0, answer, usage: out?.usage ?? null, cites: citeStats(answer, ps) };
-  };
-  const quiz = async (ps, label) => {
-    const t0 = Date.now();
-    const values = { count: String(count), difficulty: "Medium", focus: "" };
-    const out = await openai.chat.completions.create({
-      __role: "background", __feature: "grounding_ab_quiz", __payer: "platform",
-      temperature: 0.3, max_tokens: 1800,
-      messages: buildToolMessages({ tool: "quiz", docName: "the document", passages: ps, values }),
-      response_format: { type: "json_schema", json_schema: { name: "reader_quiz", strict: true, schema: toolSchema("quiz") } },
-    });
-    let json = {}; try { json = JSON.parse(out?.choices?.[0]?.message?.content || "{}"); } catch { json = {}; }
-    const shaped = shapeToolResult("quiz", json, ps, values);
-    const questions = shaped.quizQuestions || [];
-    const cites = questions.map((q) => q.cite).filter(Boolean);
-    return { variant: label, ms: Date.now() - t0, count: questions.length,
-      withBbox: cites.filter((c) => c?.bbox).length,
-      bboxRate: cites.length ? Math.round((cites.filter((c) => c?.bbox).length / cites.length) * 100) : null,
-      pages: [...new Set(cites.map((c) => c?.pageNumber).filter(Boolean))],
-      sample: questions.slice(0, 2).map((q) => ({ prompt: q.prompt, options: q.options.map((o) => o.text), cite: q.cite })),
-      usage: out?.usage ?? null };
-  };
-  const judge = async (reference, kind, payload) => {
-    const out = await openai.chat.completions.create({
-      __role: "background", __feature: "grounding_ab_judge", __payer: "platform",
-      temperature: 0, max_tokens: 300,
-      messages: [
-        { role: "system", content: "You grade a study assistant against the reference passages (the truth). Be strict and concise. Return JSON only." },
-        { role: "user", content: `TASK: judge the ${kind}. Score 1-10 for correctness, grounding, and completeness (for a quiz: correctness, answerability, distractor quality). List concrete issues.\n\nREFERENCE:\n${reference.slice(0, 5000)}\n\nCANDIDATE:\n${JSON.stringify(payload).slice(0, 5000)}\n\nReturn {"score": int, "grounding": int, "completeness": int, "issues": [string]}` },
-      ],
-      response_format: { type: "json_schema", json_schema: { name: "judge", strict: true,
-        schema: { type: "object", additionalProperties: false, required: ["score", "grounding", "completeness", "issues"],
-          properties: { score: { type: "integer" }, grounding: { type: "integer" }, completeness: { type: "integer" },
-            issues: { type: "array", items: { type: "string" } } } } } },
-    });
-    const parsed = readStructured(out?.choices?.[0]?.message?.content, { type: "object", required: ["score"], properties: { score: { type: "integer" } } });
-    return parsed.value || { score: null, issues: ["judge unparseable"] };
-  };
-
-  try {
-    const reference = variants.markdown.map((p) => p.text).join("\n\n");
-    const results = {};
-    for (const [key, ps] of Object.entries(variants)) {
-      try {
-        const a = await ask(ps, key);
-        const q = await quiz(ps, key);
-        const ja = await judge(reference, "answer", { answer: a.answer });
-        const jq = await judge(reference, "quiz", q.sample);
-        results[key] = { passages: ps.length, ask: { ...a, judge: ja }, quiz: { ...q, judge: jq } };
-      } catch (e) {
-        results[key] = { error: String(e?.message || e).slice(0, 300), status: e?.status ?? null };
-      }
-    }
-    res.json({ success: true, data: { question, count, results } });
-  } catch (e) {
-    res.status(502).json({ success: false, error: String(e?.message || e).slice(0, 400) });
-  }
-}));
-
-router.get("/learner-tools", guard, asyncHandler(async (req, res) => {
-  let learner;
-  try { learner = await resolveLearner(req.query?.learner); } catch (e) { return fail(res, e); }
-  const status = String(req.query?.status || "active");
-  const q = db.schema("edu").from("agent_tools")
-    .select("name, label, goal, mode, status, views, domain, actions, capabilities, params_schema, verification, created_at, last_used_at, usage_count")
-    .eq("owner_id", learner.id).order("created_at", { ascending: true });
-  if (["active", "disabled", "archived"].includes(status)) q.eq("status", status);
-  const { data: tools, error } = await q;
-  if (error) return bad(res, error.message, 500);
-  res.json({ success: true, data: { learner: learner.username, status, count: (tools || []).length,
-    tools: (tools || []).map((t) => ({ name: t.name, label: t.label, goal: t.goal, mode: t.mode, status: t.status,
-      view: t.domain || (t.views || [])[0] || null, actions: t.actions || t.params_schema?.action?.enum || null,
-      capabilities: t.capabilities || [], params: Object.keys(t.params_schema || {}),
-      verification: t.verification ? { verdict: t.verification.verdict, at: t.verification.at, assertions: t.verification.assertions || [] } : null,
-      createdAt: t.created_at, lastUsedAt: t.last_used_at, uses: t.usage_count })) } });
-}));
-
-router.get("/runs", guard, (_req, res) => {
-  res.json({ success: true, data: runs.map((r) => ({ id: r.id, kind: r.kind, at: r.at, mode: r.mode, prompt: r.prompt, tool: r.tool, ms: r.ms, ok: !r.error && !(r.result?.error || r.result?.threw) })) });
-});
-router.get("/runs/:id", guard, (req, res) => {
-  const r = runs.find((x) => x.id === req.params.id);
-  return r ? res.json({ success: true, data: r }) : bad(res, "No such run (runs live in memory and reset on restart).", 404);
-});
-
-/* Phase 22: the DURABLE execution trace (edu.agent_runs / agent_run_steps). */
-router.get("/execution/runs", guard, asyncHandler(async (req, res) => {
-  const { listRuns } = await import("../adaptive-learning/index.js");
-  res.json({ success: true, data: await listRuns({ limit: req.query.limit }) });
-}));
-router.get("/execution/runs/:id", guard, asyncHandler(async (req, res) => {
-  const { getAgentRun } = await import("../adaptive-learning/index.js");
-  const run = await getAgentRun(req.params.id);
-  return run ? res.json({ success: true, data: run }) : bad(res, "No such run.", 404);
-}));
-router.get("/execution/digests", guard, asyncHandler(async (req, res) => {
-  const { listFailureDigests } = await import("../adaptive-learning/index.js");
-  res.json({ success: true, data: await listFailureDigests({ limit: req.query.limit }) });
-}));
+router.get("/execution/runs", guard, asyncHandler(executionRuns));
+router.get("/execution/runs/:id", guard, asyncHandler(executionRun));
+router.get("/execution/digests", guard, asyncHandler(executionDigests));
 
 /* The console page. */
-router.get("/", guard, (req, res) => {
-  const key = String(req.query.key || "").replace(/[^\w.-]/g, "");
-  res.type("html").send(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Agent console</title><style>
-body{font-family:system-ui,sans-serif;margin:0;padding:16px;background:#f7f7fb;color:#1a1a2e}h1{font-size:18px}
-.card{background:#fff;border:1px solid #e3e3ee;border-radius:12px;padding:14px;margin:0 0 12px}
-input,textarea,select{width:100%;box-sizing:border-box;padding:9px;border:1px solid #d5d5e3;border-radius:8px;font:inherit;margin:4px 0 8px}
-button{padding:9px 14px;border:0;border-radius:8px;background:#6C3BFF;color:#fff;font-weight:600;cursor:pointer;margin-right:6px}
-button.alt{background:#eee;color:#1a1a2e}pre{white-space:pre-wrap;word-break:break-word;font-size:12px;background:#11111b;color:#e4e4ef;padding:10px;border-radius:8px;max-height:420px;overflow:auto}
-.row{display:flex;gap:8px}.row>*{flex:1}
-</style></head><body><h1>Agent console — learner Agent Chat</h1>
-<div class="card"><div class="row"><div><label>Test learner</label><input id="learner" placeholder="@testlearner"></div>
-<div><label>Mode</label><select id="mode"><option value="dry">dry — nothing changes</option><option value="live">live — tools run for real</option></select></div></div>
-<label>Prompt</label><textarea id="prompt" rows="3" placeholder="Are there any battles I can join?"></textarea>
-<button onclick="go('chat')">Send to agent</button><button class="alt" onclick="go('pick')">Which tool? (pick only)</button><button class="alt" onclick="logs()">Logs</button></div>
-<div class="card"><pre id="out">Ready.</pre></div>
-<script>const K=${JSON.stringify(key)};const H={'Content-Type':'application/json','x-agent-console-key':K};
-async function go(kind){const out=document.getElementById('out');out.textContent='Running…';
-const body={prompt:document.getElementById('prompt').value,learner:document.getElementById('learner').value,mode:document.getElementById('mode').value};
-const r=await fetch('/api/agent-console/'+kind,{method:'POST',headers:H,body:JSON.stringify(body)});out.textContent=JSON.stringify(await r.json(),null,2);}
-async function logs(){const r=await fetch('/api/agent-console/logs?filter=agent-chat',{headers:H});document.getElementById('out').textContent=JSON.stringify(await r.json(),null,2);}
-</script></body></html>`);
-});
+router.get("/", guard, consolePage);
 
 export default router;

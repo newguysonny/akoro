@@ -46,8 +46,10 @@ test("structure: the baseline itself is minimal and well formed", async () => {
 
 // Phase 19 step 2's exit criteria, locked positively: the baseline can no
 // longer legitimise either list, even if someone regenerates it.
-test("structure: no cross-module internal imports and no cycles — ever", async () => {
+test("structure: no internal imports, no cycles, no oversized files, no module without a README", async () => {
   const scan = await scanStructure(API_ROOT);
   assert.deepEqual(scan.crossModuleImports, [], "a module is entered through its index.js, never another module's files");
   assert.deepEqual(scan.cyclicModules, [], "modules must not import each other in a cycle");
+  assert.deepEqual(Object.keys(scan.oversized), [], `no file over ${SIZE_LIMIT} lines`);
+  assert.deepEqual(scan.missingReadmes, [], "every module has a README.md");
 });

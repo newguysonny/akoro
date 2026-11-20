@@ -38,7 +38,7 @@ const [migration, manifest, service, drafts, routes, chat, chatDoctrine, hitlDoc
   read("../../akoro-instructor/src/pages/ChatPage.jsx"),
   read("../../akoro-api/migrations/2026-classrooms-created-by.sql"),
   read("../../akoro-api/modules/adaptive-learning/agents/nana-esumai/guide.js"),
-  read("../../akoro-api/lib/aiModel.js"),
+  Promise.all([read("../../akoro-api/lib/aiBilling.js"), read("../../akoro-api/lib/aiBreakers.js")]).then((parts) => parts.join("\n")),
 ]);
 
 test("the migration keeps drafts private and provenance-carrying", () => {

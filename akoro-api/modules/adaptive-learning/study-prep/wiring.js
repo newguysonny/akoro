@@ -27,27 +27,26 @@ import { planReadyMessage } from "./planReady.js";
 
 export { planReadyMessage };
 import db from "../../../db.js";
-import { outsideAction, undoOutsideAction } from "../../../lib/outbox.js";
 import { createWorkflowEngine } from "../../workflows/index.js";
 import { makeSupabaseWorkflowStore } from "../../workflows/index.js";
 import { publishLiveDeveloper } from "../../workflows/index.js";
 import { keepFactual } from "../../agent-runtime/index.js";
 import { aiContext } from "../../../lib/aiContext.js";
 import { makeWorkflowMirror, studyPrepWorkflow, workflowEngineEnabled } from "./workflow.js";
-import { TOPIC_STARTABLE_STATES } from "./state-machine.js";
 import { registerWorkflow } from "../../workflows/index.js";
 import { makeTeachingHandoff } from "./teaching-handoff.js";
-import { makeAgentCheckRun } from "./agent-check-run.js";
-import { HANDOFF_AUTO_APPROVE_MS, teachingView } from "../teaching-session/workflow.js";
-import { AUTO_START_MS, WAKE_DECISIONS, WAKE_FINAL_ACTIONS, WAKE_LABELS, autoStartFor, settleStep, spentOnChecks, wakeGoal } from "./wake.js";
+import { HANDOFF_AUTO_APPROVE_MS } from "../teaching-session/workflow.js";
+import { WAKE_DECISIONS, WAKE_FINAL_ACTIONS, WAKE_LABELS, settleStep, wakeGoal } from "./wake.js";
 import { TERMINAL_ACTIONS } from "./agent-loop.js";
-import { appLink } from "../../../lib/urls.js";
+import { agentCheck, agentCheckRun, checkRunOrNull, makeAgentCheck, protege, steps } from "./wiring-agent-check.js";
+export { completeAgentCheckBattle, reportCheckQuestion, runningWork, stopAgentCheck, teachingForTopic } from "./wiring-agent-check.js";
+export { autoStartDueChecks, sayNothingToCheck, startStudyPrepAutoStart } from "./wiring-autostart.js";
 
 // Default-on kill switch: study-prep ships enabled; =false removes every surface.
 export const studyPrepEnabled = () => String(process.env.AKORO_STUDY_PREP_ENABLED ?? "true").toLowerCase() !== "false";
 
 /** The topic workflow: the extracted exam-prep service, harness-driven. */
-const topicWorkflow = {
+export const topicWorkflow = {
   policyFor: async ({ examBoard, subject }) => examPrepPolicyFor(examBoard, subject),
   // prepaid: the harness charged the flat practice price first (and refunds it
   // if generation fails), so generation tokens are not billed again.
@@ -61,7 +60,7 @@ const topicWorkflow = {
 // generateOutline / generatedTopics: the AI-drafted outline fallback (§8.7).
 // materialTopics / materialQuestions: a learner's own materials folder as the syllabus (§7.17.3).
 // materials (§8.8): the learner's files as agent tools; a documents session's topics fall back to its drawn outline.
-const syllabus = { resolveTopics, prerequisiteEdges, generateOutline, generatedTopics, resolveSyllabusChain, topicsForSource, materialTopics: documentTopics, materialQuestions, materials: studyPrepMaterials };
+export const syllabus = { resolveTopics, prerequisiteEdges, generateOutline, generatedTopics, resolveSyllabusChain, topicsForSource, materialTopics: documentTopics, materialQuestions, materials: studyPrepMaterials };
 
 /**
  * D45: practice as an Agent Check battle — ON by default, no env needed.
@@ -70,57 +69,11 @@ const syllabus = { resolveTopics, prerequisiteEdges, generateOutline, generatedT
  */
 export const agentCheckEnabled = () => String(process.env.AKORO_STUDY_PREP_AGENT_CHECK ?? "true").toLowerCase() !== "false";
 
-/** The Agent Check behind the harness (battle/agentCheck.js + the learner's notes). */
-const makeAgentCheck = ({ questions, secondsPerQuestion } = {}) => ({
-  async coverage({ learnerId, topic, subject }) {
-    const { embedQuestion, recall } = await import("../../battle/index.js");
-    const embedding = await embedQuestion(topic);
-    // Deciding whether there is anything to check is the platform's, not a charge.
-    const notes = await recall({ studentId: learnerId, embedding, topic, queryText: topic, subject, limit: 4, payer: "platform" });
-    const n = notes?.length || 0;
-    return { notes: n, strength: n === 0 ? "none" : n < 3 ? "thin" : "good" };
-  },
-  async start({ learnerId, subject, topic, studyPrepTopicId, mode, basedOn = [], fromNotes = [] }) {
-    const { createCheckBattle } = await import("../../battle/index.js");
-    return createCheckBattle({ learnerId, subject, topic, studyPrepTopicId, mode, basedOn, fromNotes,
-      ...(questions ? { total: questions } : {}), ...(secondsPerQuestion ? { secondsPerQuestion } : {}) });
-  },
-  async results(battleId) {
-    const { checkResults } = await import("../../battle/index.js");
-    return checkResults(battleId);
-  },
-  /** Recovery (Phase 18 item 5): the check battle an interrupted start already made for this topic. */
-  async find({ studyPrepTopicId, since }) {
-    const { data } = await db.from("battles").select("id, total_questions, title").eq("study_prep_topic_id", studyPrepTopicId)
-      .eq("battle_type", "check").gte("created_at", since).neq("status", "cancelled").order("created_at", { ascending: false }).limit(1);
-    const b = data?.[0];
-    return b ? { battleId: b.id, placed: b.total_questions, title: b.title } : null;
-  },
-});
-/** Outside steps journaled in the outbox (lib/outbox.js): done once, resumed after a restart. */
-const steps = {
-  once: (spec) => outsideAction(spec),
-  undo: (key) => undoOutsideAction(key),
-};
-const agentCheck = makeAgentCheck();
-
-/** The protégé's messages: one chat thread per Study Prep session, carrying the battle to watch. */
-const protege = {
-  async say({ learnerId, session, text, battle }) {
-    const { postIntoChat } = await import("../../self-tooling/index.js");
-    return postIntoChat({
-      userId: learnerId, conversationId: null, createId: session.id,
-      title: `Study Prep: ${session.goal || session.subject || "your plan"}`.slice(0, 80),
-      text, kind: "agent_check", meta: { battle },
-    });
-  },
-};
-
 // Phase 1: the generic workflow engine, dual-written behind WORKFLOW_ENGINE_ENABLED.
 let _engine = null;
-const workflowEngine = () => (_engine ||= createWorkflowEngine({ store: makeSupabaseWorkflowStore(db) }));
+export const workflowEngine = () => (_engine ||= createWorkflowEngine({ store: makeSupabaseWorkflowStore(db) }));
 let _mirror = null;
-const workflowMirror = () => (_mirror ||= makeWorkflowMirror(workflowEngine(), {
+export const workflowMirror = () => (_mirror ||= makeWorkflowMirror(workflowEngine(), {
   // A topic or a plan that moves on closes its open teaching session (Phase 6).
   hooks: {
     topicLeft: (parentId, topic) => teachingHandoff().cancelFor({ parentId, topicId: topic.id }),
@@ -130,10 +83,10 @@ const workflowMirror = () => (_mirror ||= makeWorkflowMirror(workflowEngine(), {
 
 // ── Study Prep → Teaching → Study Prep (Phase 6, 2026-10-20) ────────────────
 const OPEN_STATUSES = ["created", "active", "waiting_learner", "waiting_child", "paused"];
-const workflowRows = () => db.schema("edu").from("workflow_instances");
+export const workflowRows = () => db.schema("edu").from("workflow_instances");
 
 /** The open teaching session a Study Prep topic handed over, if any. */
-async function findOpenTeaching(parentId, topicId) {
+export async function findOpenTeaching(parentId, topicId) {
   const { data, error } = await workflowRows().select("*").eq("workflow_type", "teaching")
     .eq("source_workflow_id", parentId).eq("source_topic_id", topicId).in("status", OPEN_STATUSES)
     .order("created_at", { ascending: false }).limit(1);
@@ -203,10 +156,10 @@ const teachingPort = {
     return teachingHandoff().propose({ session: row, topic, outcome: "retest_offered", gaps, strategy, peerExplanations });
   },
 };
-const teachingFor = (on) => (on ? { teaching: teachingPort } : {});
+export const teachingFor = (on) => (on ? { teaching: teachingPort } : {});
 
 /** A code-written run's own message in the chat the plan lives in (like a wake's); extraMeta rides along (a check's card). */
-async function openRunMessage({ sessionId, learnerId, wakeId, trigger, label, extraMeta = null, createThread = null }) {
+export async function openRunMessage({ sessionId, learnerId, wakeId, trigger, label, extraMeta = null, createThread = null }) {
   const meta = { studyPrepWake: { sessionId, wakeId, trigger, label }, ...(extraMeta || {}) };
   const conversationId = await conversationOf(sessionId, learnerId).catch(() => null);
   if (conversationId) return postToConversation({ learnerId, conversationId, text: label, meta });
@@ -214,119 +167,6 @@ async function openRunMessage({ sessionId, learnerId, wakeId, trigger, label, ex
   if (!createThread) return null;
   const { postIntoChat } = await import("../../self-tooling/index.js");
   return postIntoChat({ userId: learnerId, conversationId: null, createId: sessionId, title: createThread.slice(0, 80), text: label, kind: "agent_check", meta: { ...meta, studyPrepSessionId: sessionId } });
-}
-
-// ── The Agent Check's own workflow and run (2026-10-20) ─────────────────────
-let _checkRun = null;
-export const agentCheckRun = () => (_checkRun ||= makeAgentCheckRun({
-  engine: workflowEngine(),
-  findByBattle: (battleId) => findCheckByBattle(battleId),
-  studyPrep: { openWake: (m) => openRunMessage({ ...m, createThread: m.threadTitle || "Study Prep" }) },
-}));
-const checkRunOrNull = () => (workflowEngineEnabled() ? agentCheckRun() : null);
-
-async function findCheckByBattle(battleId) {
-  const { data, error } = await workflowRows().select("*").eq("workflow_type", "practice").eq("metadata->>battleId", String(battleId))
-    .order("created_at", { ascending: false }).limit(1);
-  if (error) throw error;
-  return data?.[0] || null;
-}
-
-/** The learner's live Study Prep session row (one at a time), if any. */
-async function liveStudyPrepSession(learnerId) {
-  const { data } = await db.schema("edu").from("study_prep_sessions").select("*").eq("learner_id", learnerId)
-    .in("status", ["topic_active", "awaiting_confirmation", "planning", "replanning", "paused"]).order("created_at", { ascending: false }).limit(1);
-  return data?.[0] || null;
-}
-
-/**
- * Stop the running Agent Check (the learner asked — in the chat, through the agent): the
- * battle is cancelled (the worker stops at its next step; a cancelled battle is never marked),
- * its coins are refunded, the try isn't counted, and the topic waits — a stopped check never
- * restarts by itself. restart: a new check right away (a new battle, its own card; charged).
- */
-export async function stopAgentCheck({ learnerId, restart = false }) {
-  const row = await liveStudyPrepSession(learnerId);
-  if (!row) return { stopped: false, reason: "no_study_plan_running" };
-  const harness = getHarness();
-  const view = await harness.getSessionView({ sessionId: row.id, learnerId, eventLimit: 1 });
-  const topic = view.topics.find((t) => t.status === "active" && t.checkBattleId && !t.checkScoredAt);
-  if (!topic) return { stopped: false, reason: "no_check_running", topic: view.topics.find((t) => t.status === "active")?.label || null };
-  const battleId = topic.checkBattleId;
-  const { data: halted } = await db.from("battles").update({ status: "cancelled" }).eq("id", battleId).in("status", ["lobby", "scheduled", "live"]).select("id");
-  if (!halted?.length) return { stopped: false, reason: "already_finished", topic: topic.label };
-  try { global.io?.to(`battle:${battleId}`).emit("battle:cancelled", { battleId, reason: "stopped_by_learner" }); } catch { /* the modal sees the status on its next read */ }
-  const check = await findCheckByBattle(battleId).catch(() => null);
-  const charge = check?.metadata?.charge;
-  const refundFailed = charge?.length ? await store.refundCoins({ charge: { applied: charge }, feature: "study_prep_practice", ref: `study_prep:${row.id}` }).catch(() => 1) : 0;
-  const coins = charge?.length && !refundFailed ? Number(check?.metadata?.coins) || STUDY_PREP_COST.COINS_PER_PRACTICE : 0;
-  const wasRetest = topic.checkMode === "retest";
-  // §8.3: a stopped check goes back to ready (diagnostic → diagnostic_ready, retest → retest_ready).
-  await store.updateTopicConditional(topic.id, topic.state, {
-    status: wasRetest ? "retest_ready" : "diagnostic_ready",
-    check_battle_id: null, check_mode: "stopped", check_scored_at: null, check_result: null,
-    attempts_used: Math.max(0, Number(topic.attemptsUsed || 0) - 1),
-    // A stopped retest keeps the teach-back it used, so it can start again.
-    ...(wasRetest ? { learner_confirmed_ready: true } : {}),
-    updated_at: new Date().toISOString(),
-  });
-  await agentCheckRun().stopped({ battleId }).catch(() => null);
-  await harness.log(row.id, topic.id, {
-    eventType: "human_gate", origin: "harness", decisionNode: "agent_check_stopped",
-    facts: { topic: topic.label, battleId, refunded: coins, restart },
-    narrative: `The learner stopped the Agent Check on ${topic.label}${coins ? ` — ${coins} coins refunded` : ""}.`,
-  }).catch(() => null);
-  let restarted = null;
-  if (restart) {
-    restarted = await harness.startTopicPractice({ sessionId: row.id, learnerId, topicId: topic.id, mode: wasRetest ? "retest" : "diagnostic" })
-      .then((r) => (r?.check ? { battleId: r.check.battleId, mode: r.check.mode, questions: r.check.questions } : { skipped: r?.skipped || null }))
-      .catch((e) => ({ error: e?.message || String(e) }));
-  }
-  return { stopped: true, topic: topic.label, battleId, refunded: coins, wasRetest, restarted };
-}
-
-/** What's running for a learner right now: their plan, its Agent Check (with the battle's link), its teaching sessions. */
-export async function runningWork(learnerId) {
-  const row = await liveStudyPrepSession(learnerId);
-  const out = { studyPlan: null, agentChecks: [], teachingSessions: [] };
-  if (row) {
-    const view = await getHarness().getSessionView({ sessionId: row.id, learnerId, eventLimit: 1 }).catch(() => null);
-    const active = view?.topics?.find((t) => t.status === "active") || null;
-    out.studyPlan = view ? {
-      sessionId: row.id, subject: view.session.subject, status: view.session.status, goal: view.session.goal,
-      activeTopic: active?.label || null, topicsUnderstood: view.topics.filter((t) => t.status === "understood").length, topics: view.topics.length,
-      nextCheck: view.nextCheck || null, link: appLink("tab=agent"),
-    } : null;
-    if (active?.checkBattleId && !active.checkScoredAt) {
-      const check = await findCheckByBattle(active.checkBattleId).catch(() => null);
-      out.agentChecks.push({
-        topic: active.label, mode: active.checkMode, battleId: active.checkBattleId,
-        answered: Number(check?.metadata?.answered) || 0, total: Number(check?.metadata?.total) || null,
-        link: appLink(`tab=battles&battle=${active.checkBattleId}`),
-        markdown: `[Watch in Battles](${appLink(`tab=battles&battle=${active.checkBattleId}`)})`,
-      });
-    }
-  }
-  // Only the live plan's: a teaching session whose plan has ended (or was removed) isn't running.
-  out.teachingSessions = row ? (await teachingHandoff().listOpen(learnerId).catch(() => []))
-    .filter((t) => t.from?.sessionId === row.id)
-    .map((t) => ({
-      topic: t.topic, state: t.state, focus: t.focus, progress: t.progress, link: appLink("tab=sessions"),
-      markdown: `[Open your sessions](${appLink("tab=sessions")})`,
-    })) : [];
-  return out;
-}
-
-/** The battle worker: Sergeant marked a question of an Agent Check. */
-export function reportCheckQuestion(args) {
-  if (!workflowEngineEnabled()) return Promise.resolve(null);
-  return agentCheckRun().question(args);
-}
-
-/** The teaching session on a topic (offered, waiting or under way) — for the card. */
-export async function teachingForTopic(workflowId, topicId) {
-  if (!workflowId || !topicId) return null;
-  return teachingView(await findOpenTeaching(workflowId, topicId).catch(() => null));
 }
 
 /** The session's workflow id, made (and its events backfilled) on first ask — owner only. */
@@ -377,24 +217,6 @@ export function getAgentCheckHarness({ questions, secondsPerQuestion } = {}) {
 export function getPracticeHarness({ teaching = false } = {}) {
   // teaching: with the workflow engine and Teaching (D15) — the human-answered practice on the full topic machine (gate only).
   return createHarness({ store, topicWorkflow, syllabus, ...(teaching ? { workflowMirror: workflowMirror(), ...teachingFor(true) } : {}) });
-}
-
-/** The battle worker's hook when an Agent Check ends. Scores even if the switch was turned off meanwhile. */
-export async function completeAgentCheckBattle(battleId) {
-  const harness = createHarness({ store, topicWorkflow, syllabus, agentCheck, protege, checkRun: checkRunOrNull(),
-    ...(workflowEngineEnabled() ? { workflowMirror: workflowMirror(), ...teachingFor(true) } : {}) });
-  const done = await harness.completeAgentCheck({ battleId, teachingHandoff: workflowEngineEnabled() });
-  // Below the mark with tries left (intervention_required): D15 — the intervention is a teaching
-  // session on what it missed, offered at once (teach_back until the agent picks another strategy
-  // with request_teaching), so the wake can talk about it. Teaching off: the inline path.
-  if (done?.outcome === "retest_offered" && workflowEngineEnabled()) {
-    const row = await store.getSession(done.session.id).catch(() => null);
-    const asked = row ? await harness.requestTeaching({ sessionId: row.id, learnerId: row.learner_id, topicId: done.topic.id, strategy: "teach_back", focusGaps: done.result?.gaps || [], origin: "harness" }).catch(() => null) : null;
-    if (asked) { done.teaching = asked.teaching; done.topic = asked.topic; }
-  }
-  // The agent wakes on the result: explains it, and moves on, sets the topic aside or points to the teaching session.
-  if (done?.session?.id) wakeStudyPrep({ sessionId: done.session.id, learnerId: done.session.learnerId || null, trigger: "check_scored", facts: { topic: done.topic?.label } });
-  return done;
 }
 
 const readTools = {
@@ -686,69 +508,3 @@ export function outreachOnTopicStart({ learnerId, topic, conceptId = null, subje
     .catch(() => null);
 }
 
-/**
- * The 1-minute auto-start (2026-10-19): every few seconds, an active topic
- * whose next Agent Check is due (a first check a minute after the topic
- * started, a retest a minute after the teach-back) starts it — inside the
- * approved estimate only. Past the estimate the agent asks, once.
- */
-const asked = new Set();
-const failedAt = new Map();
-export async function autoStartDueChecks({ nowMs = Date.now(), sessionId = null } = {}) {
-  if (!studyPrepEnabled() || !agentCheckEnabled()) return { started: 0, skipped: 0 };
-  const cutoff = new Date(nowMs - AUTO_START_MS).toISOString();
-  // sessionId: one session only (the gate's, run with a later clock).
-  let query = db.schema("edu").from("study_prep_topics").select("id, session_id")
-    .in("status", TOPIC_STARTABLE_STATES).lte("updated_at", cutoff);
-  if (sessionId) query = query.eq("session_id", sessionId);
-  const { data: rows, error } = await query.order("updated_at", { ascending: true }).limit(25);
-  if (error) throw error;
-  let started = 0;
-  let skipped = 0;
-  for (const row of rows || []) {
-    if (nowMs - (failedAt.get(row.id) || 0) < 10 * 60_000) continue;
-    const session = await store.getSession(row.session_id).catch(() => null);
-    if (!session || session.status !== "topic_active" || wakeRunning(session.id)) continue;
-    const harness = getHarness();
-    const view = await harness.getSessionView({ sessionId: session.id, learnerId: session.learner_id, eventLimit: 500 }).catch(() => null);
-    const topic = view?.topics?.find((t) => t.id === row.id);
-    if (!topic) continue;
-    const policy = await topicWorkflow.policyFor({ examBoard: session.exam_board, subject: session.subject }).catch(() => null);
-    const due = autoStartFor(topic, view.session, { spent: spentOnChecks(view.events), maxAttempts: policy?.max_attempts ?? Infinity });
-    if (!due) continue;
-    if (due.blocked === "over_estimate") {
-      const key = `${topic.id}:${topic.attemptsUsed}`;
-      if (!asked.has(key)) { asked.add(key); wakeStudyPrep({ sessionId: session.id, learnerId: session.learner_id, trigger: "over_estimate", facts: { topic: topic.label } }); }
-      continue;
-    }
-    if (Date.parse(due.at) > nowMs) continue;
-    try {
-      const done = await harness.startTopicPractice({ sessionId: session.id, learnerId: session.learner_id, topicId: topic.id, mode: due.mode, withinEstimateOnly: true });
-      if (done?.skipped) { skipped += 1; if (!done.skipped.already) await sayNothingToCheck(session.id, topic.label); } else started += 1;
-    } catch (error) {
-      failedAt.set(row.id, nowMs);
-      console.warn(`[study-prep] auto-start failed for topic ${row.id}: ${error?.message || error}`);
-    }
-  }
-  return { started, skipped };
-}
-
-/** An Agent Check found no notes to check: the agent says so in the chat (code-written, no model call). */
-export async function sayNothingToCheck(sessionId, topicLabel) {
-  if (!workflowEngineEnabled()) return;
-  await workflowMirror().agentMessage(sessionId, store, {
-    text: `I went to start the Agent Check on ${topicLabel || "this topic"}, but you haven't taught me anything on it yet — so there's nothing to check, and nothing was charged. Teach me about it here, then tap Start Agent Check on the card.`,
-  }).catch(() => null);
-}
-
-let autoStartTimer = null;
-export function startStudyPrepAutoStart({ everyMs = 15_000 } = {}) {
-  if (autoStartTimer) return autoStartTimer;
-  autoStartTimer = setInterval(() => {
-    autoStartDueChecks().catch((e) => console.warn(`[study-prep] auto-start sweep: ${e?.message || e}`));
-    // A teaching session nobody confirmed for a minute is set up by itself.
-    if (studyPrepEnabled() && workflowEngineEnabled()) teachingHandoff().autoApproveDue().catch((e) => console.warn(`[study-prep] teaching auto-approve: ${e?.message || e}`));
-  }, everyMs);
-  autoStartTimer.unref?.();
-  return autoStartTimer;
-}

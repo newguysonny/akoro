@@ -21,6 +21,7 @@ const read = (...p) => readFileSync(path.join(ROOT, ...p), "utf8");
 
 const triggers = read("modules/autonomy/triggers.js");
 const cycle = read("modules/autonomy/cycle.js");
+const cycleTime = read("modules/autonomy/cycleTime.js");
 const autonomyIndex = read("modules/autonomy/index.js");
 const cadence = read("modules/autonomy/cadence.js");
 const tasks = read("modules/tasks/routes.js");
@@ -72,7 +73,7 @@ test("event pacing · events run sooner than nightly but never frenzied", () => 
 test("richer signals · streak, chat topics, battles, class work — DB-only, best-effort", () => {
   // the honest streak algorithm (same as /api/self-study/streak)
   assert.match(cycle, /export function computeStreak/);
-  assert.match(cycle, /cursor\.setUTCDate\(cursor\.getUTCDate\(\) - 1\); \/\/ grace/);
+  assert.match(cycleTime, /cursor\.setUTCDate\(cursor\.getUTCDate\(\) - 1\); \/\/ grace/);
   assert.match(cycle, /from\("self_study_targets"\)\.select\("completed_at"\)/);
   // new sources, all capped and .catch-quiet
   assert.match(cycle, /from\("chat_sessions"\)\.select\("title"\)[\s\S]*?order\("last_message_at", \{ ascending: false \}\)\.limit\(5\)/);

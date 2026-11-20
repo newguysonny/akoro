@@ -55,7 +55,11 @@ test("a worker error is an error — never an empty or partial result", async ()
 });
 
 test("the seam: one breaker, either provider, never a fallback between them; billed under the model that answered", async () => {
-  const src = await readFile(new URL("./aiModel.js", import.meta.url), "utf8");
+  const [aiModelSrc, breakersSrc] = await Promise.all([
+    readFile(new URL("./aiModel.js", import.meta.url), "utf8"),
+    readFile(new URL("./aiBreakers.js", import.meta.url), "utf8"),
+  ]);
+  const src = `${aiModelSrc}\n${breakersSrc}`;
   assert.match(src, /embeddingsProvider\(\) === "runpod" \? runpodEmbeddings\(params\) : rawClient\.embeddings\.create\(params\)/);
   assert.match(src, /isSelfHostedModel\(res\.model\) \? res\.model/);
 });

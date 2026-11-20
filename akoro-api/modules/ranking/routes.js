@@ -26,6 +26,8 @@ import { query, validationResult }        from "express-validator";
 import db                                 from "../../db.js";
 import { authenticateToken, requireRole } from "../auth/index.js";
 import cron                               from "node-cron";
+import { awardXP, XP }                     from "./rules.js";
+import { refreshLeaderboard }              from "./store.js";
 
 const asyncHandler = (fn) => (req, res, next) =>
   Promise.resolve(fn(req, res, next)).catch(next);
@@ -35,128 +37,6 @@ const res201 = (res, data)            => res.status(201).json({ success: true,  
 const res400 = (res, msg)             => res.status(400).json({ success: false, message: msg });
 
 const now = () => new Date().toISOString();
-
-// ─── XP award amounts ─────────────────────────────────────────────────────────
-// Centralised so they can be tuned without touching logic
-
-const XP = {
-  LESSON_COMPLETE:   10,
-  QUIZ_PASS:         20,
-  QUIZ_PERFECT:      35,   // 100% score
-  SESSION_ATTEND:    15,
-  COURSE_COMPLETE:   50,
-  AGENT_REPLY:       10,
-  PEER_SESSION_HOST: 25,
-};
-
-// ─── XP transaction helper ────────────────────────────────────────────────────
-
-/**
- * awardXP
- * Creates an xp_transactions record and updates user_agents.total_xp.
- * Called by other modules (course-content, live-sessions, agents) via import.
- */
-export const awardXP = async ({ userId, courseId = null, classroomId = null, reason, amount, metadata = {}, subject = null }) => {
-  try {
-    // Subject powers the per-subject leaderboards. Callers that know it pass
-    // it; for course XP we can always derive it, so the caller doesn't have to.
-    let subj = subject || metadata?.subject || null;
-    if (!subj && courseId) {
-      const { data: c } = await db.from("courses").select("subject").eq("id", courseId).maybeSingle();
-      subj = c?.subject || null;
-    }
-
-    await db.from("xp_transactions").insert({
-      user_id:      userId,
-      course_id:    courseId,
-      classroom_id: classroomId,
-      reason,
-      amount,
-      metadata,
-      subject:      subj,
-    });
-
-    // Update agent XP
-    const { error: xpErr } = await db.rpc("increment_agent_xp", { user_id_input: userId, xp_amount: amount });
-    if (xpErr) {
-      // Fallback if RPC not set up — read-modify-write the XP total.
-      const { data: agentRow } = await db.from("user_agents")
-        .select("total_xp").eq("user_id", userId).maybeSingle();
-      if (agentRow) {
-        await db.from("user_agents")
-          .update({ total_xp: (agentRow.total_xp ?? 0) + amount })
-          .eq("user_id", userId);
-      }
-    }
-  } catch (e) {
-    console.warn("[ranking] awardXP failed:", e.message);
-  }
-};
-
-// ─── Leaderboard refresh ──────────────────────────────────────────────────────
-
-/**
- * refreshLeaderboard
- * Aggregates xp_transactions into xp_leaderboard.
- * Runs every 15 minutes via cron + can be triggered manually.
- */
-const refreshLeaderboard = async () => {
-  console.log("[ranking] 🔄 Refreshing leaderboard...");
-
-  // ── Aggregate all XP ──────────────────────────────────────────────────────
-  const { data: txns } = await db.from("xp_transactions").select("user_id, course_id, amount");
-
-  const globalMap = {};   // user_id -> total xp (ALL sources, so global is complete)
-  const courseMap = {};   // `${user}:${course}` -> { user_id, course_id, total_xp }
-  for (const t of (txns ?? [])) {
-    globalMap[t.user_id] = (globalMap[t.user_id] ?? 0) + (t.amount ?? 0);
-    if (t.course_id) {
-      const k = `${t.user_id}:${t.course_id}`;
-      courseMap[k] = courseMap[k] ?? { user_id: t.user_id, course_id: t.course_id, total_xp: 0 };
-      courseMap[k].total_xp += (t.amount ?? 0);
-    }
-  }
-
-  // Classroom scope = each active member's total XP credited to their classroom
-  // (transactions rarely carry classroom_id, so derive it from membership).
-  const { data: members } = await db.from("classroom_students").select("user_id, classroom_id").eq("status", "active");
-  const classroomMap = {};
-  for (const m of (members ?? [])) {
-    const k = `${m.user_id}:${m.classroom_id}`;
-    classroomMap[k] = { user_id: m.user_id, classroom_id: m.classroom_id, total_xp: globalMap[m.user_id] ?? 0 };
-  }
-
-  // ── Build rows + compute rank within each scope group ─────────────────────
-  const globalRows    = Object.entries(globalMap).map(([uid, xp]) => ({ user_id: uid, scope: "global",    course_id: null, classroom_id: null, scope_ref_id: null, total_xp: xp }));
-  const courseRows    = Object.values(courseMap).map((r)          => ({ user_id: r.user_id, scope: "course",    course_id: r.course_id, classroom_id: null, scope_ref_id: r.course_id, total_xp: r.total_xp }));
-  const classroomRows = Object.values(classroomMap).map((r)       => ({ user_id: r.user_id, scope: "classroom", course_id: null, classroom_id: r.classroom_id, scope_ref_id: r.classroom_id, total_xp: r.total_xp }));
-
-  const assignRanks = (rows, groupOf) => {
-    const groups = {};
-    for (const r of rows) { const g = groupOf(r); (groups[g] ??= []).push(r); }
-    for (const g of Object.values(groups)) {
-      g.sort((a, b) => b.total_xp - a.total_xp);
-      g.forEach((r, i) => { r.rank = i + 1; r.updated_at = now(); });
-    }
-  };
-  assignRanks(globalRows,    () => "g");
-  assignRanks(courseRows,    (r) => r.course_id);
-  assignRanks(classroomRows, (r) => r.classroom_id);
-
-  const all = [...globalRows, ...courseRows, ...classroomRows];
-
-  // ── Clean rebuild (avoids the NULL-in-UNIQUE upsert duplicate bug). Only the
-  // app-managed scopes are rebuilt; battle_course is left to the battle worker.
-  try {
-    await db.from("xp_leaderboard").delete().in("scope", ["global", "course", "classroom"]);
-    for (let i = 0; i < all.length; i += 500) {
-      const chunk = all.slice(i, i + 500);
-      if (chunk.length) await db.from("xp_leaderboard").insert(chunk);
-    }
-  } catch (e) { console.warn("[ranking] leaderboard rebuild error:", e.message); }
-
-  console.log(`[ranking] ✅ Leaderboard refreshed  entries=${all.length}`);
-};
 
 // Run every 15 minutes — behind the shared jobs gate (full xp_transactions
 // read + leaderboard rewrite per run; not something to run with everything
@@ -634,5 +514,5 @@ router.get ("/me",                      authenticateToken, handlers.me);
 router.post("/award",                   authenticateToken, requireRole(["admin"]), handlers.awardManual);
 router.post("/refresh",                 authenticateToken, requireRole(["admin"]), handlers.refresh);
 
-export { XP };
+export { awardXP, XP };
 export default router;

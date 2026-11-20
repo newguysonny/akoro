@@ -25,7 +25,7 @@ import { executeAgentTeachingTurn } from "../../teaching-session/controller.js";
 import { normaliseMode } from "../../teaching-session/policy.js";
 import { blocksToConversationHistory } from "./continuation-history.js";
 import { STUDENT_PHASES, ACTION_FOR_DIALOGUE_MOVE } from "../../teaching-session/state-machine.js";
-import { openingIdeas } from "../../teaching-session/guideIdeas.js";
+import { buildOpening } from "./opening.js";
 import { createClient } from "@supabase/supabase-js";
 
 // Lazy: a barrel re-export must not build the client (or throw) in a test env.
@@ -248,51 +248,18 @@ export class StudentSessionOrchestrator extends BaseOrchestrator {
     // ── Build opening prompt ──────────────────────────────────
     const isDecaySession = this.sessionType === "decay_review";
 
-    // This remains as a textual fallback for older clients. Keep it learner
-    // facing: the technical workflow phase, cognitive percentages, and private
-    // boundary/control instructions are represented only in server state.
-    const openingPrompt = isDecaySession
-      ? `Let's reinforce ${topic}. Re-teach the current idea to your agent and build on what you already know.`
-      : `Let's teach ${topic}. Start with the current idea and explain it in your own words.`;
-
     // ── Structured opening blocks (same typed shape the UI renders per turn) ──
-    // The must-know parts are this engine's "objectives" checklist; the first
-    // part is the opening subtopic. Built from real data — no fabricated content.
     const guideEmoji = this.guideOrchestrator.guide?.emoji || "🧠";
-    const activeObjectiveIndex = this.session.mustKnowIndex;
-    const openGuideText = isDecaySession
-      ? `Let's reinforce ${topic}. Re-teach the current idea to your agent and I'll guide you one step at a time.`
-      : `Let's teach ${topic} to your agent. Start by explaining the current idea in your own words.`;
-
-    const openingBlocks = [
-      {
-        // The must-know parts ride ON the header now.
-        //
-        // They used to be rendered twice: once as the header's progress bar and
-        // again, in full, as a separate "Objectives" checklist directly beneath
-        // it. Same array, same order, same length — the checklist was the bar
-        // spelled out. The header can page through them instead.
-        type:     "subtopic-hdr",
-        subtopic: mustKnow[activeObjectiveIndex] || topic,
-        items:    mustKnow,
-        // Parallel to items — same order, same length. Empty for a
-        // teacher-authored scheme of work, where the ordering is theirs and
-        // needs no explanation from us.
-        map:      this.session?.knowledgeMap || [],
-        idx:      activeObjectiveIndex,
-        total:    mustKnow.length || 1,
-        topic,
-        subject:  this.subject || "",
-      },
-      {
-        // The guide opens with ideas for the learner's first message (pills), not a message of its own.
-        type:             "guide-ideas",
-        agent:            guideName,
-        emoji:            guideEmoji,
-        hint:             openGuideText,
-        ideas:            openingIdeas(topic, { review: isDecaySession }),   // the topic reads naturally; an objective's label is a sentence
-      },
-    ];
+    const { openingPrompt, openingBlocks } = buildOpening({
+      topic,
+      isDecaySession,
+      mustKnow,
+      index: this.session.mustKnowIndex,
+      knowledgeMap: this.session?.knowledgeMap || [],
+      subject: this.subject || "",
+      guideName,
+      guideEmoji,
+    });
 
     return {
       openingPrompt,

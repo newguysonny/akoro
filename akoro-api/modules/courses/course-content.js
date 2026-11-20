@@ -31,33 +31,20 @@
 // ─── § IMPORTS ────────────────────────────────────────────────────────────────
 
 import { Router }                         from "express";
-import { body, param, validationResult }  from "express-validator";
 import db                                 from "../../db.js";
 import { autoTranscribeContent } from "../records/index.js";
 import { authenticateToken, requireRole } from "../auth/index.js";
 import { awardXP, XP }                     from "../ranking/index.js";
 import { canManageCourse, canUseCourse, courseOfModule, courseOfLesson } from "./courseAccess.js";
+import {
+  asyncHandler, res200, res201, res204, res400, res403, res404,
+  runValidation, now, rules,
+} from "./course-content-rules.js";
+import { getCourseContent, progressHandler } from "./course-content-outline.js";
 
 // ─── § HELPERS ────────────────────────────────────────────────────────────────
-
-const asyncHandler = (fn) => (req, res, next) =>
-  Promise.resolve(fn(req, res, next)).catch(next);
-
-const res200 = (res, data, meta = {}) => res.status(200).json({ success: true,  data, ...meta });
-const res201 = (res, data)            => res.status(201).json({ success: true,  data });
-const res204 = (res)                  => res.status(204).send();
-const res400 = (res, msg)             => res.status(400).json({ success: false, message: msg });
-const res403 = (res, msg)             => res.status(403).json({ success: false, message: msg });
-const res404 = (res, msg)             => res.status(404).json({ success: false, message: msg });
-
-const runValidation = (req, res, next) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty())
-    return res.status(422).json({ success: false, message: "Validation failed", errors: errors.array({ onlyFirstError: true }) });
-  next();
-};
-
-const now = () => new Date().toISOString();
+// Response shorthands, the async wrapper, runValidation, `now` and the
+// express-validator chains now live in course-content-rules.js.
 
 // ─── § ACCESS GUARD ───────────────────────────────────────────────────────────
 
@@ -129,111 +116,14 @@ const fireLessonTranscription = (lesson, userId) => {
 };
 
 // ─── § VALIDATION RULES ───────────────────────────────────────────────────────
-
-const rules = {
-  createModule: [
-    body("title").trim().notEmpty().withMessage("title is required").isLength({ max: 255 }),
-    body("description").optional().trim().isLength({ max: 2000 }),
-    body("order_index").optional().isInt({ min: 0 }),
-  ],
-  createLesson: [
-    body("title").trim().notEmpty().withMessage("title is required").isLength({ max: 255 }),
-    body("description").optional().trim().isLength({ max: 2000 }),
-    body("lesson_type").optional().isIn(["video", "quiz", "assignment", "reading"]),
-    body("order_index").optional().isInt({ min: 0 }),
-    body("is_preview").optional().isBoolean(),
-    body("duration_seconds").optional().isInt({ min: 0 }),
-    body("content_json").optional().isObject(),
-  ],
-  saveProgress: [
-    body("position").isInt({ min: 0 }).withMessage("position (seconds) is required"),
-  ],
-  submitQuiz: [
-    body("answers").isArray({ min: 1 }).withMessage("answers array is required"),
-    body("answers.*.question_id").notEmpty(),
-    body("answers.*.answer").notEmpty(),
-  ],
-};
+// `rules` is imported from course-content-rules.js (unchanged chains).
 
 // ─── § MODULE HANDLERS ────────────────────────────────────────────────────────
 
 const moduleHandlers = {
 
-  /**
-   * GET /api/courses/:courseId/content
-   * Full course outline — all modules with their lessons nested.
-   * Students see only preview lessons if not enrolled.
-   */
-  getCourseContent: asyncHandler(async (req, res) => {
-    const { courseId } = req.params;
-
-    // Check if enrolled (for non-instructors)
-    let isEnrolled = ["instructor", "admin"].includes(req.user?.role);
-    if (!isEnrolled && req.user) {
-      const { data: enrollment } = await db
-        .from("enrollments")
-        .select("id")
-        .eq("user_id", req.user.id)
-        .eq("course_id", courseId)
-        .eq("status", "active")
-        .single();
-      isEnrolled = !!enrollment;
-    }
-
-    const { data: modules, error } = await db
-      .from("course_modules")
-      .select(`
-        id, title, description, order_index,
-        lessons (
-          id, title, description, lesson_type,
-          duration_seconds, order_index, is_preview,
-          video_url, thumbnail_url
-        )
-      `)
-      .eq("course_id", courseId)
-      .order("order_index", { ascending: true });
-
-    if (error) throw new Error(error.message);
-
-    // For unenrolled students: mask non-preview lesson details
-    const outline = (modules ?? []).map((mod) => ({
-      ...mod,
-      lessons: (mod.lessons ?? [])
-        .sort((a, b) => a.order_index - b.order_index)
-        .map((lesson) => {
-          if (!isEnrolled && !lesson.is_preview) {
-            return {
-              id:              lesson.id,
-              title:           lesson.title,
-              lesson_type:     lesson.lesson_type,
-              duration_seconds: lesson.duration_seconds,
-              order_index:     lesson.order_index,
-              is_preview:      false,
-              locked:          true,
-            };
-          }
-          return { ...lesson, locked: false };
-        }),
-    }));
-
-    // If enrolled, attach lesson progress
-    if (isEnrolled && req.user) {
-      const { data: progress } = await db
-        .from("lesson_progress")
-        .select("lesson_id, completed, last_position_seconds, quiz_score")
-        .eq("user_id", req.user.id);
-
-      const progressMap = Object.fromEntries((progress ?? []).map((p) => [p.lesson_id, p]));
-
-      for (const mod of outline) {
-        for (const lesson of mod.lessons) {
-          lesson.progress = progressMap[lesson.id] ?? null;
-        }
-      }
-    }
-
-    res200(res, outline, { total_modules: outline.length });
-  }),
+  // Read-only outline — defined in course-content-outline.js.
+  getCourseContent,
 
   /**
    * GET /api/courses/:courseId/modules
@@ -624,60 +514,7 @@ const lessonHandlers = {
 };
 
 // ─── § PROGRESS HANDLER ───────────────────────────────────────────────────────
-
-const progressHandler = asyncHandler(async (req, res) => {
-  const { courseId } = req.params;
-  const userId       = req.user.id;
-
-  const { data: enrollment } = await db
-    .from("enrollments")
-    .select("progress, enrolled_at")
-    .eq("user_id", userId)
-    .eq("course_id", courseId)
-    .eq("status", "active")
-    .single();
-
-  if (!enrollment) return res404(res, "Not enrolled in this course");
-
-  // Per-module completion counts
-  const { data: modules } = await db
-    .from("course_modules")
-    .select(`
-      id, title, order_index,
-      lessons ( id )
-    `)
-    .eq("course_id", courseId)
-    .order("order_index", { ascending: true });
-
-  const lessonIds = (modules ?? []).flatMap((m) => (m.lessons ?? []).map((l) => l.id));
-
-  const { data: progress } = await db
-    .from("lesson_progress")
-    .select("lesson_id, completed, quiz_score, last_position_seconds")
-    .eq("user_id", userId)
-    .in("lesson_id", lessonIds);
-
-  const progressMap = Object.fromEntries((progress ?? []).map((p) => [p.lesson_id, p]));
-
-  const moduleProgress = (modules ?? []).map((mod) => {
-    const total    = mod.lessons?.length ?? 0;
-    const done     = (mod.lessons ?? []).filter((l) => progressMap[l.id]?.completed).length;
-    return {
-      module_id:   mod.id,
-      title:       mod.title,
-      order_index: mod.order_index,
-      total,
-      completed:   done,
-      percent:     total > 0 ? Math.round((done / total) * 100) : 0,
-    };
-  });
-
-  res200(res, {
-    overall_progress: enrollment.progress,
-    enrolled_at:      enrollment.enrolled_at,
-    modules:          moduleProgress,
-  });
-});
+// `progressHandler` lives in course-content-outline.js (read-only view).
 
 // ─── § ROUTER ─────────────────────────────────────────────────────────────────
 

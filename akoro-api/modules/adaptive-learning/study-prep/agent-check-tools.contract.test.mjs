@@ -71,7 +71,7 @@ test("the Agent Check's call sites name their locked role and pass an env model 
   assert.doesNotMatch(judge, /__learnerChoice/);
   // The metered client: an explicit model is used as given unless the call carries a learner's
   // choice, and that choice only goes through the role resolver (which never moves a locked role).
-  const ai = read("../../../lib/aiModel.js");
+  const ai = read("../../../lib/aiBilling.js");
   assert.match(ai, /const picked = clean\.model && params\.__learnerChoice\s*\n?\s*\? modelRegistry\.resolve\(\{ role: params\.__role/);
   assert.match(ai, /let entry = picked\?\.source === "learner" \? picked\.model : clean\.model\s*\n?\s*\? \(modelRegistry\.get\(clean\.model\)/);
 });

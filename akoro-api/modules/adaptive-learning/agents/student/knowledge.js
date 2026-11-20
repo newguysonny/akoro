@@ -10,18 +10,18 @@
 //   3. Teacher chunks      — teacher's training material (optional)
 // =============================================================
 
-import { createClient } from "@supabase/supabase-js";
-
-// Lazy: a barrel re-export must not build the client (or throw) in a test env.
-let _supabase = null;
-const supabase = new Proxy({}, { get(_, p) {
-  if (!_supabase) _supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.SUPABASE_SERVICE_KEY);
-  const v = _supabase[p];
-  return typeof v === "function" ? v.bind(_supabase) : v;
-} });
+import { supabase } from "./supabase.js";
+import { retrieveAgentKnowledgeByTopic } from "./knowledgeRead.js";
 
 import { openai } from "../../../../lib/aiModel.js";
 import { mergeKnowledge } from "./mergeKnowledge.js";
+
+// The read models live in knowledgeRead.js; re-exported so this file stays
+// the student-agent knowledge surface its callers import.
+export {
+  getAgentGrowthHistory, getAgentIntelligence, getAgentKnowledgeBySubject,
+  getTopicsBySubject, retrieveAgentKnowledgeByTopic, subjectMastery,
+} from "./knowledgeRead.js";
 
 // ── Embed helper ──────────────────────────────────────────────
 export async function embed(text) {
@@ -160,23 +160,6 @@ export async function retrieveAgentKnowledgeBySubject(agentId, subject, query, l
 }
 
 /**
- * Retrieve agent knowledge filtered by subject AND topic.
- * Used in decay review sessions for laser-focused context.
- */
-export async function retrieveAgentKnowledgeByTopic(agentId, subject, topic, limit = 6) {
-  const { data } = await supabase
-    .schema("edu").from("agent_knowledge")
-    .select("id, topic, subject, content, chunk_type, confidence, times_seen, last_seen_at")
-    .eq("agent_id", agentId)
-    .eq("subject", subject)
-    .ilike("topic", `%${topic}%`)
-    .order("last_seen_at", { ascending: true }) // oldest first
-    .limit(limit);
-
-  return data || [];
-}
-
-/**
  * Save new knowledge to agent's knowledge base.
  * v3.1: now includes subject field + confidence + decay fields.
  */
@@ -291,40 +274,6 @@ export async function batchSaveAgentKnowledge(chunks) {
     }
   }
   return saved;
-}
-
-// =============================================================
-// KNOWLEDGE GROUPED BY SUBJECT (for dashboard + decay UI)
-// =============================================================
-
-/**
- * Get all agent knowledge grouped by subject.
- * Returns summary with confidence per subject + topic list.
- */
-export async function getAgentKnowledgeBySubject(agentId) {
-  const { data, error } = await supabase
-    .schema("edu").from("agent_knowledge_by_subject")
-    .select("*")
-    .eq("agent_id", agentId)
-    .order("avg_confidence", { ascending: true });
-
-  if (error) return [];
-  return data || [];
-}
-
-/**
- * Get all topics for a given subject, with health status.
- */
-export async function getTopicsBySubject(agentId, subject) {
-  const { data, error } = await supabase
-    .schema("edu").from("agent_topic_health")
-    .select("*")
-    .eq("agent_id", agentId)
-    .eq("subject", subject)
-    .order("confidence", { ascending: true });
-
-  if (error) return [];
-  return data || [];
 }
 
 // =============================================================
@@ -570,58 +519,3 @@ export async function finalizeSessionDelta({
     .eq("session_id", sessionId);
 }
 
-export async function getAgentGrowthHistory(agentId, limit = 20) {
-  const { data, error } = await supabase
-    .schema("edu").from("session_knowledge_delta")
-    .select("*")
-    .eq("agent_id", agentId)
-    .order("started_at", { ascending: false })
-    .limit(limit);
-
-  if (error) throw error;
-  return data || [];
-}
-
-export async function getAgentIntelligence(agentId) {
-  const { data } = await supabase
-    .schema("edu").from("agent_intelligence_growth")
-    .select("*")
-    .eq("agent_id", agentId)
-    .single();
-
-  return data || null;
-}
-
-/**
- * subjectMastery — how much this agent actually knows in ONE subject.
- * The agent's stored `level` is GLOBAL, so an agent made expert by Biology
- * sessions would otherwise *act* expert in Chemistry it has never been taught.
- * This scopes the expressed intelligence to the subject at hand.
- *
- * Returns { chunks, avgConfidence, topics, level } where level is a 1-10
- * subject-local level derived from breadth (topics), depth (chunks) and
- * confidence.
- */
-export async function subjectMastery(agentId, subject) {
-  const empty = { chunks: 0, avgConfidence: 0, topics: 0, level: 1 };
-  if (!agentId || !subject) return empty;
-  try {
-    const { data } = await supabase.schema("edu").from("agent_knowledge")
-      .select("topic, confidence")
-      .eq("agent_id", agentId)
-      .ilike("subject", subject)
-      .limit(500);
-    if (!data?.length) return empty;
-
-    const topics = new Set(data.map((r) => (r.topic || "").toLowerCase().trim()).filter(Boolean));
-    const avg = data.reduce((s, r) => s + (Number(r.confidence) || 0), 0) / data.length;
-    // Breadth + depth + confidence → a 1-10 subject level.
-    const breadth = Math.min(4, topics.size);                 // up to 4
-    const depth   = Math.min(4, Math.floor(data.length / 6)); // up to 4
-    const conf    = avg >= 0.7 ? 2 : avg >= 0.4 ? 1 : 0;      // up to 2
-    return {
-      chunks: data.length, avgConfidence: Math.round(avg * 100),
-      topics: topics.size, level: Math.max(1, breadth + depth + conf),
-    };
-  } catch { return empty; }
-}

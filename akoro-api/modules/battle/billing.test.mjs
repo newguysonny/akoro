@@ -7,7 +7,8 @@ import test from "node:test";
 
 const read = (f) => readFile(new URL(f, import.meta.url), "utf8");
 const [judge, source, recall, ai] = await Promise.all([
-  read("./judge.js"), read("./questionSource.js"), read("./agentRecall.js"), read("../../lib/aiModel.js"),
+  read("./judge.js"), read("./questionSource.js"), read("./agentRecall.js"),
+  Promise.all([read("../../lib/aiModel.js"), read("../../lib/aiBilling.js")]).then((parts) => parts.join("\n")),
 ]);
 // Phase 19 step 4 split the queue consumer out of worker.js; the assertions
 // follow the job modules, not the file name.
