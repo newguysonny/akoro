@@ -11,10 +11,12 @@ import { readFileSync } from "node:fs";
 import { chatToolChange } from "../adaptive-learning/index.js";
 
 const read = (p) => readFileSync(new URL(p, import.meta.url), "utf8");
+const PIPELINE_PARTS = ["./pipeline.js", "./pipeline-create.js", "./pipeline-dry.js", "./pipeline-io.js", "./pipeline-verify.js", "./rules.js"];
+const readPipeline = () => PIPELINE_PARTS.map(read).join("\n");
 const toolCatalogue = read("../adaptive-learning/chat/tool-catalogue-core.js");
 
 test("a brand-new built tool is drafted OFF behind a card, never saved active", () => {
-  const src = read("./pipeline.js");
+  const src = readPipeline();
   assert.match(src, /if \(audience === "learner" && !resumed && !replaced\) return draftBuildAndAsk\(\{ def, runNow \}\);/);
   assert.match(src, /status: "disabled", verification: \{ \.\.\.def\.verification, awaitingBuild: true \}/);
   assert.match(src, /status: "needs_consent", drafted: true, tool: name, label, mode: def\.mode, confirmation: card\.confirmation/);
@@ -23,7 +25,7 @@ test("a brand-new built tool is drafted OFF behind a card, never saved active", 
 });
 
 test("a brand-new domain tool is drafted too; extending an active one is not re-gated", () => {
-  const src = read("./pipeline.js");
+  const src = readPipeline();
   assert.match(src, /const existingDraft = existing\?\.status === "disabled" && !!existing\?\.verification\?\.awaitingBuild;/);
   assert.match(src, /if \(audience === "learner" && !resumed && \(!existing \|\| existingDraft\)\)/);
   assert.match(src, /samples: \[\], awaitingBuild: true \}/);
@@ -36,7 +38,7 @@ test("the card: proposeBuild stores kind 'build'; an approved Keep activates via
   assert.match(src, /kind === "build" \? await executeBuild\(row, \{ userId, toolDeps, callTool \}\)/);
   assert.match(src, /const activate = toolDeps\?\.activateTool \|\| pipe\.activateBuiltTool;/);
   assert.match(src, /kind === "permission" \|\| row\.tool_arguments\?\.kind === "build"\) \? row\.tool_arguments\.toolId/);
-  const pipe = read("./pipeline.js");
+  const pipe = readPipeline();
   assert.match(pipe, /export async function activateBuiltTool\(learnerId, toolId\)/);
   assert.match(pipe, /if \(!t\?\.verification\?\.awaitingBuild\) return null;/);
 });
@@ -55,7 +57,7 @@ test("the agent is told the new outcome, and the app renders a Keep card for it"
 });
 
 test("a rebuild (replace) is a swap, not a new tool: saved active, old retired only at the save point", () => {
-  const src = read("./pipeline.js");
+  const src = readPipeline();
   // Capture without archiving: the block that resolves `replace` must not retire the old row.
   const cap = src.slice(src.indexOf("const replaceRaw"), src.indexOf("const archiveReplaced"));
   assert.ok(!cap.includes('status: "archived"'), "the replace capture must not archive the old tool");
@@ -69,7 +71,7 @@ test("a rebuild (replace) is a swap, not a new tool: saved active, old retired o
 });
 
 test("a brand-new domain tool is not even drafted until the learner wants their own copy", () => {
-  const pipe = read("./pipeline.js");
+  const pipe = readPipeline();
   // The gate sits in buildDomain, ahead of the draft insert, and only the
   // learner's confirmed ownCopy hint (or an existing/resumed/replaced build) passes it.
   assert.match(pipe, /if \(audience === "learner" && !resumed && !replaced && \(!existing \|\| existingDraft\) && hint\?\.ownCopy !== true && !\(await ownCopyOfferOpen\(learnerId, spec\.view\)\)\) \{\s+await finish\("offer_own_copy", \{\}\);\s+await logEvent\(\{ user_id: learnerId, goal, outcome: "own_copy_offered", detail: \{ view: spec\.view, name: spec\.name \} \}\);/);
@@ -82,7 +84,7 @@ test("a brand-new domain tool is not even drafted until the learner wants their 
 });
 
 test("the own-copy gate is stateful: an open offer lets the follow-up build proceed", () => {
-  const pipe = read("./pipeline.js");
+  const pipe = readPipeline();
   // The offer is remembered per learner + view for a short window, in the
   // events table (the same store the one-off computations use).
   assert.match(pipe, /const OWN_COPY_OFFER_WINDOW_MS = 30 \* 60 \* 1000;/);

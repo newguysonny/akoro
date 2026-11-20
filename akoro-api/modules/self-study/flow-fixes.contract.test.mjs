@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { readRoutesSource } from "./routesSource.mjs";
 
 /**
  * The assignment flow review (create → assign → answer → hand in → grade →
@@ -12,7 +13,7 @@ const { cleanQuestionMarks } = await import("./submissionView.js");
 const { expireStaleVersions, isStaleDrafting, STALE_DRAFTING_MS } = await import("./draftVersions.js");
 const read = (p) => readFile(new URL(p, import.meta.url), "utf8");
 const [routes, drafts, versions, createA, chatCatalogue, chatPage, panel, form, modal, subs, marker, learner, socket, api, answerPaper, answerPaperT] = await Promise.all([
-  read("./routes.js"), read("./drafts.js"), read("./draftVersions.js"), read("./createAssignment.js"), read("../adaptive-learning/chat/tool-catalogue-rest.js"),
+  readRoutesSource(), read("./drafts.js"), read("./draftVersions.js"), read("./createAssignment.js"), read("../adaptive-learning/chat/tool-catalogue-rest.js"),
   read("../../../akoro-instructor/src/pages/ChatPage.jsx"), read("../../../akoro-instructor/src/components/ActivityPreviewPanel.jsx"),
   Promise.all([   // the Activities page and the parts it was split into
     "../../../akoro-instructor/src/pages/ActivitiesPage.jsx", "../../../akoro-instructor/src/components/activities/ActivityForm.jsx",

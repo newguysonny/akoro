@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { readRoutesSource } from "./routesSource.mjs";
 import test from "node:test";
 import { PDFDocument, StandardFonts } from "pdf-lib";
 
@@ -9,7 +10,7 @@ process.env.SUPABASE_SERVICE_KEY ||= "test-service-key";
 const { sniffSubmissionFile, storeSubmissionFile, readSubmissionFile, contentDisposition } = await import("./submissionFiles.js");
 const { buildSubmissionPdf, submissionMarkdown } = await import("./submissionPdf.js");
 const { briefForLearner, pdfIsCurrent, pdfMeta } = await import("./submissionView.js");
-const routes = await readFile(new URL("./routes.js", import.meta.url), "utf8");
+const routes = await readRoutesSource();
 const manifest = await readFile(new URL("../../migrations/manifest.json", import.meta.url), "utf8");
 const migration = await readFile(new URL("../../migrations/2026-submission-storage.sql", import.meta.url), "utf8");
 

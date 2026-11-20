@@ -9,16 +9,18 @@ import { readFileSync } from "node:fs";
 import { chatToolChange } from "../adaptive-learning/index.js";
 
 const read = (p) => readFileSync(new URL(p, import.meta.url), "utf8");
+const PIPELINE_PARTS = ["./pipeline.js", "./pipeline-create.js", "./pipeline-dry.js", "./pipeline-io.js", "./pipeline-verify.js", "./rules.js"];
+const readPipeline = () => PIPELINE_PARTS.map(read).join("\n");
 
 test("no 'shall I build it?' round: a change the learner can allow is drafted with its card at once", () => {
-  const src = read("./pipeline.js");
+  const src = readPipeline();
   assert.doesNotMatch(src, /status: "offer", capability/);
   assert.match(src, /if \(hinted\.length && learnerGrantable\(hinted\[0\]\) && audience === "learner"\) \{ draftCap = hinted\[0\]/);
   assert.match(read("../adaptive-learning/chat.js"), /in this same turn — don't ask 'shall I build it\?' first/);
 });
 
 test("the drafted tool's card carries this request's run values — the tap-time run acts on them (parameterized tools)", () => {
-  const src = read("./pipeline.js");
+  const src = readPipeline();
   // draftAndAsk (permission card for a drafted tool): proposed must include run,
   // or executePermission re-runs the tool with {} and a title param matches nothing.
   assert.match(src, /capability: draftCap, proposed: \{ name, label, goal, run: \{ \.\.\.\(input\?\.run && typeof input\.run === "object" \? input\.run : \{\}\), \.\.\.autoTargetValues \} \}/);
@@ -73,20 +75,20 @@ test("a write capability always asks — locked to build, Confirm to apply", asy
   const writes = Object.entries(CAPABILITIES).filter(([, c]) => c.kind === "write");
   assert.ok(writes.length > 0, "there are write capabilities");
   for (const [name, c] of writes) assert.equal(c.status, "locked", `${name} must be locked so building always asks`);
-  const src = read("./pipeline.js");
+  const src = readPipeline();
   assert.match(src, /if \(r\.write\) return writeOutcome\(/, "every run of a write tool goes through writeOutcome");
   assert.match(src, /await proposeWrite\(\{ learnerId, conversationId, tool, write \}\)/, "a write proposes a Confirm card (never applies directly)");
   assert.match(src, /await proposePermission\(\{ learnerId, conversationId, capability: draftCap/, "building a write tool asks Allow");
 });
 
 test("create_tool reuses an existing tool for the same goal (no flooding)", () => {
-  const src = read("./pipeline.js");
+  const src = readPipeline();
   assert.match(src, /textsOf\(t\)\.some\(\(x\) => similarGoal\(x, goal\)\)/, "checks goal, label and name for a near-duplicate");
   assert.match(src, /status: "reused"/, "returns the existing tool instead of building another");
 });
 
 test("document goals read my_library only, and replace a wrong-view duplicate", () => {
-  const src = read("./pipeline.js");
+  const src = readPipeline();
   assert.match(src, /isDocumentGoal\(goal\)/, "detects document goals");
   assert.match(src, /docGoal\s*=\s*audience === "learner" && isDocumentGoal\(goal\)/);
   assert.match(src, /registrySlice\(\{ views: \[\], capabilities: \[\] \}, \{ views: \["my_library"\] \}/, "offers ONLY my_library (ignoring model hints)");
@@ -95,13 +97,13 @@ test("document goals read my_library only, and replace a wrong-view duplicate", 
 });
 
 test("create_tool can rebuild a saved tool in place (replace)", () => {
-  const src = read("./pipeline.js");
+  const src = readPipeline();
   assert.match(src, /const replaceRaw = String\(input\?\.replace/, "reads the replace target");
   assert.match(src, /status: "archived"[\s\S]{0,140}eq\("id", replaced\.id\)/, "retires the replaced tool at the save point (archiveReplaced)");
 });
 
 test("createTool builds deterministic domain tools and verifies every action", () => {
-  const src = read("./pipeline.js");
+  const src = readPipeline();
   assert.match(src, /domainForGoal\(goal\)/, "routes to curated domains");
   assert.match(src, /verifyDomainActions\(spec2, /, "verifies every action before saving");
   assert.match(src, /status: "archived"[\s\S]{0,120}eq\("id", existing\.id\)/, "retires an older tool for the domain");

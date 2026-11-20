@@ -14,7 +14,8 @@ import { CORE_TOOL_NAMES, areasForMessage, filterDefsByAreas, toolArea } from ".
 const chat = readFileSync(new URL("../chat.js", import.meta.url), "utf8");
 const handlers = readFileSync(new URL("./handlers-instructor-learner.js", import.meta.url), "utf8");
 const runtimeState = readFileSync(new URL("./runtime-state.js", import.meta.url), "utf8");
-const pipeline = readFileSync(new URL("../../self-tooling/pipeline.js", import.meta.url), "utf8");
+const pipeline = ["pipeline.js", "pipeline-create.js", "pipeline-dry.js", "pipeline-io.js", "pipeline-verify.js", "rules.js"]
+  .map((f) => readFileSync(new URL(`../../self-tooling/${f}`, import.meta.url), "utf8")).join("\n");
 const manifest = readFileSync(new URL("../../../migrations/manifest.json", import.meta.url), "utf8");
 
 const def = (name) => ({ type: "function", function: { name } });

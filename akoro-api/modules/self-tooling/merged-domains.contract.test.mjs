@@ -9,6 +9,8 @@ import { MERGED_DOMAINS, MERGED_DOMAIN_LIST } from "./mergedDomains.js";
 import { presentMergedToolRow } from "./pipeline.js";
 
 const read = (rel) => readFileSync(new URL(rel, import.meta.url), "utf8");
+const PIPELINE_PARTS = ["./pipeline.js", "./pipeline-create.js", "./pipeline-dry.js", "./pipeline-io.js", "./pipeline-verify.js", "./rules.js"];
+const readPipeline = () => PIPELINE_PARTS.map(read).join("\n");
 const runtime = read("../adaptive-learning/chat/tool-runtime.js");
 const handlers = read("../adaptive-learning/chat/handlers-instructor-learner.js");
 const merged = read("../adaptive-learning/chat/handlers-merged.js");
@@ -109,7 +111,7 @@ test("weak topics config: list is the platform action", () => {
 });
 
 test("wiring: pipeline guard loop, generic runners, registry", () => {
-  const src = read("./pipeline.js");
+  const src = readPipeline();
   assert.match(src, /MERGED_DOMAIN_LIST\.find\(\(c\) => c\.view === spec\.view && c\.enabled\(\)\)/);
   assert.match(src, /export async function getMergedToolState/);
   assert.match(src, /export async function runMergedViewAction/);

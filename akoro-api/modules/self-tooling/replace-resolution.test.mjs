@@ -26,7 +26,8 @@ test("no match or an ambiguous prefix resolves to nothing", () => {
 
 test("a same-name swap retires the old row BEFORE inserting the new one (live duplicate-key failure, 2026-11-17)", async () => {
   const { readFileSync } = await import("node:fs");
-  const src = readFileSync(new URL("./pipeline.js", import.meta.url), "utf8");
+  const src = ["./pipeline-create.js", "./pipeline-dry.js"]
+    .map((p) => readFileSync(new URL(p, import.meta.url), "utf8")).join("\n");
   // The helper exists and only fires on an exact name collision.
   assert.match(src, /const retireReplacedBeforeInsert = async \(\) => \{\n    if \(!replaced\?\.id \|\| replaced\.name !== name\) return;/);
   // Every register save site calls it ahead of its insert: domain saves,

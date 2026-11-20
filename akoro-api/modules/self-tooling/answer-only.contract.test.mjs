@@ -13,7 +13,8 @@ import { readFileSync } from "node:fs";
 import { isAnswerOnlyRead, toolParamNames } from "./pipeline.js";
 import { chatToolChange } from "../adaptive-learning/index.js";
 
-const pipeline = readFileSync(new URL("./pipeline.js", import.meta.url), "utf8");
+const PIPELINE_PARTS = ["./pipeline.js", "./pipeline-create.js", "./pipeline-dry.js", "./pipeline-io.js", "./pipeline-verify.js", "./rules.js"];
+const pipeline = PIPELINE_PARTS.map((p) => readFileSync(new URL(p, import.meta.url), "utf8")).join("\n");
 const chat = readFileSync(new URL("../adaptive-learning/chat.js", import.meta.url), "utf8");
 const toolCatalogue = readFileSync(new URL("../adaptive-learning/chat/tool-catalogue-core.js", import.meta.url), "utf8");
 const manifest = readFileSync(new URL("../../migrations/manifest.json", import.meta.url), "utf8");

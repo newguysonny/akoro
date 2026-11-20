@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { readLayer, readRoutesSource } from "./routesSource.mjs";
 import test from "node:test";
 import { PDFDocument } from "pdf-lib";
 
@@ -8,7 +9,7 @@ process.env.SUPABASE_SERVICE_KEY ||= "test-service-key";
 
 const { cleanAnswer, cleanQuestionMarks, questionPoints } = await import("./submissionView.js");
 const { buildMarkedPdf } = await import("./submissionMarkup.js");
-const routes = await readFile(new URL("./routes.js", import.meta.url), "utf8");
+const routes = await readRoutesSource();
 const manifest = JSON.parse(await readFile(new URL("../../migrations/manifest.json", import.meta.url), "utf8"));
 
 const questions = [
@@ -57,9 +58,10 @@ test("the marked copy's grade page lists each question's mark and comment", asyn
   assert.equal((await PDFDocument.load(bytes)).getPageCount(), 2);
 });
 
-test("routes: answers are submitted per question, handed in from the review, marks published per question", () => {
+test("routes: answers are submitted per question, handed in from the review, marks published per question", async () => {
   assert.match(routes, /router\.put\("\/:id\/draft\/:index", asyncHandler/);
-  const draft = routes.slice(routes.indexOf('router.put("/:id/draft/:index"'), routes.indexOf('router.post("/:id/start"'));
+  const learnerSrc = await readLayer("./service-learner.js");
+  const draft = learnerSrc.slice(learnerSrc.indexOf("export async function saveDraftAnswer"), learnerSrc.indexOf("export async function saveDraftText"));
   assert.match(draft, /target\.grade != null \|\| target\.status === "complete"\) return res\.status\(409\)/);   // closed once handed in
   assert.match(draft, /cleanAnswer\(assignment\?\.details\?\.questions/);
   assert.match(routes, /const merged = \{ \.\.\.\(target\.draft\?\.answers \|\| \{\}\), \.\.\.sent \};/);
@@ -95,7 +97,7 @@ test("typed answers: the API and both apps read an MCQ answer the same way", asy
 
 test("the learner's Review step reads the same paper template as the handed-in copy (draft.html, mine only)", async () => {
   const { readFileSync } = await import("node:fs");
-  const routes = readFileSync(new URL("./routes.js", import.meta.url), "utf8");
+  const routes = await readRoutesSource();
   assert.match(routes, /draft\\\.html\$\/i/);
   assert.match(routes, /seen\.target\.student_id !== req\.user\.id\) return denied/);
   assert.match(routes, /submissionPaperHtml\(seen\.target\.id, \{ embed: !!req\.query\.embed, draft: true \}\)/);

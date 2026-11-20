@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFile } from "node:fs/promises";
+import { readRoutesSource } from "./routesSource.mjs";
 import { createCanvas, loadImage } from "@napi-rs/canvas";
 
 process.env.SUPABASE_URL ||= "http://localhost:59999";
@@ -11,7 +12,7 @@ const { normalizePaper, applyRevision, draftPaper, revisePaper, mergePlan, parse
 const { cropDrawing, isDrawingName } = await import("./submissionFiles.js");
 const { aiGradeSchema, shapeAiGrade } = await import("./aiGrade.js");
 
-const routes = await readFile(new URL("./routes.js", import.meta.url), "utf8");
+const routes = await readRoutesSource();
 
 /** OpenAI strict mode: every object closed, every property required. */
 function assertStrict(node, path = "$") {

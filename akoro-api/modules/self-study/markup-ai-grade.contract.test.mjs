@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { readLayer, readRoutesSource } from "./routesSource.mjs";
 import test from "node:test";
 import { PDFDocument, StandardFonts } from "pdf-lib";
 
@@ -8,7 +9,8 @@ process.env.SUPABASE_SERVICE_KEY ||= "test-service-key";
 
 const { validateMarks, numberComments, buildMarkedPdf, MARKUP_LIMITS } = await import("./submissionMarkup.js");
 const { scoreMcqs, rubricRows, buildAiGradeMessages, shapeAiGrade, runAiGrade, aiGradeSchema } = await import("./aiGrade.js");
-const routes = await readFile(new URL("./routes.js", import.meta.url), "utf8");
+const routes = await readRoutesSource();
+const mineSrc = await readLayer("./service-mine.js");
 const migration = await readFile(new URL("../../migrations/2026-submission-markup.sql", import.meta.url), "utf8");
 const manifest = JSON.parse(await readFile(new URL("../../migrations/manifest.json", import.meta.url), "utf8"));
 
@@ -131,7 +133,7 @@ test("routes: marks saved by the owner, the marked copy on publish, AI drafts af
   assert.match(routes, /\.is\("grade", null\)/);   // never overwrites a teacher's grade
   assert.match(routes, /feedbackRubric: t\.grade != null/);
   // the AI draft itself never reaches the learner — /mine may only read its status (the "marking…" flag)
-  const mine = routes.slice(routes.indexOf('router.get("/mine"'), routes.indexOf('router.get("/:id/analytics"'));
+  const mine = mineSrc.slice(mineSrc.indexOf('export async function mine'), mineSrc.indexOf('export async function streak'));
   assert.doesNotMatch(mine, /markup/);
   assert.equal((mine.match(/ai_grade/g) || []).length, 1);
   assert.match(mine, /t\.ai_grade\?\.status === "making"/);

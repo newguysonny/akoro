@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFile } from 'node:fs/promises';
+import { readRoutesSource } from './routesSource.mjs';
 import { ANSWER_FORMATS, ANSWER_FORMAT_INFO, cleanAnswerFormat, answerFormatOf, permits, fileRefusal, typedRefusal } from './answerFormat.js';
 
 test('a missing or unknown format is "all", so every assignment made before this setting behaves as it did', () => {
@@ -37,7 +38,7 @@ test('typed answers are refused only on a photo-only assignment', () => {
 });
 
 test('the routes enforce it on files, autosaves and the hand-in (the app is not the gate)', async () => {
-  const src = await readFile(new URL('./routes.js', import.meta.url), 'utf8');
+  const src = await readRoutesSource();
   assert.match(src, /fileRefusal\(answerFormatOf\(brief\?\.details\), sniffed\.kind\)/);
   assert.match(src, /typedNo && !Array\.isArray\(asked\?\.options\)/);                  // autosave: open answers only — picking an option is not typing
   assert.match(src, /if \(typedNo && !Array\.isArray\(questions\[Number\(k\)\]\?\.options\)\) continue;/);   // hand-in

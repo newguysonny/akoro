@@ -11,7 +11,8 @@ import assert from "node:assert/strict";
 import { readFileSync, existsSync } from "node:fs";
 import { toolDef, toolActions, visibleActions } from "./pipeline.js";
 
-const pipeline = readFileSync(new URL("./pipeline.js", import.meta.url), "utf8");
+const PIPELINE_PARTS = ["./pipeline.js", "./pipeline-create.js", "./pipeline-dry.js", "./pipeline-io.js", "./pipeline-verify.js", "./rules.js"];
+const pipeline = PIPELINE_PARTS.map((p) => readFileSync(new URL(p, import.meta.url), "utf8")).join("\n");
 const routes = readFileSync(new URL("./routes.js", import.meta.url), "utf8");
 const manifest = readFileSync(new URL("../../migrations/manifest.json", import.meta.url), "utf8");
 const ui = readFileSync(new URL("../../../akoro-learner/src/pages/settings/myToolsSection.jsx", import.meta.url), "utf8");

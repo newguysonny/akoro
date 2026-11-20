@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFile } from 'node:fs/promises';
+import { readRoutesSource } from './routesSource.mjs';
 import { aiGradeSchema, buildAiGradeMessages, shapeAiGrade, schemePrompt, snapLevel, runAiGrade, openQuestions } from './aiGrade.js';
 import { cleanMarkScheme } from './markScheme.js';
 
@@ -99,7 +100,7 @@ test('runAiGrade follows the scheme end to end', async () => {
 
 test('the rubric, settings and assign are wired through the draft flow', async () => {
   const drafts = await readFile(new URL('./drafts.js', import.meta.url), 'utf8');
-  const routes = await readFile(new URL('./routes.js', import.meta.url), 'utf8');
+  const routes = await readRoutesSource();
   const versions = await readFile(new URL('./draftVersions.js', import.meta.url), 'utf8');
   assert.match(drafts, /export async function setAssignmentSettings/);
   assert.match(drafts, /if \(patch\.ai_auto_grade\)/);                                          // turning it on writes the rubric

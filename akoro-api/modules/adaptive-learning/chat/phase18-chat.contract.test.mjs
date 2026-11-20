@@ -194,7 +194,7 @@ test("executeChatTool: explicit by default, inherits the work's basis, refuses a
 });
 
 test("the rows: self-tooling builds and change cards, proactive proposals, V4 runs carry the basis", async () => {
-  assert.match(read("../../self-tooling/pipeline.js"), /insert\(\{ \.\.\.row, \.\.\.basisColumns\(currentActionBasis\(\) \|\| \{ basis: "explicit" \}\) \}\)/);
+  assert.match(read("../../self-tooling/pipeline-io.js"), /insert\(\{ \.\.\.row, \.\.\.basisColumns\(currentActionBasis\(\) \|\| \{ basis: "explicit" \}\) \}\)/);
   assert.equal((read("../../self-tooling/confirmations.js").match(/\.\.\.basisColumns\(currentActionBasis\(\) \|\| \{ basis: "explicit" \}\)/g) || []).length, 2);
   assert.match(read("../../self-tooling/escalation.js"), /withActionBasis\(\{ basis: "inferred", rule: RULES\.request\(claimed\.id\) \}, \(\) => createTool\(/);
   for (const f of ["../../autonomy/cycle.js", "../../autonomy/instructorCycle.js"]) assert.match(read(f), /basisColumns\(\{ basis: "inferred", rule: RULES\.proactive\(p\.kind\) \}\)/, f);

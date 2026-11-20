@@ -27,8 +27,6 @@
     "modules/records/studyMaterial.js": 863,
     "modules/self-study/drafts.js": 1013,
     "modules/self-study/questionPaper.js": 683,
-    "modules/self-study/routes.js": 1379,
-    "modules/self-tooling/pipeline.js": 1268,
     "modules/tasks/routes.js": 615,
     "modules/verify/scenarios/selftool.js": 1189,
     "modules/verify/scenarios/studyprep.js": 630,

@@ -6,6 +6,9 @@ import { rowsText, requestLine, escalate } from "./escalation.js";
 import { CAPABILITIES } from "./capabilities.js";
 import { CAP_RUNNERS } from "./capRuntime.js";
 
+const PIPELINE_PARTS = ["./pipeline.js", "./pipeline-create.js", "./pipeline-dry.js", "./pipeline-io.js", "./pipeline-verify.js", "./rules.js"];
+const pipelineSource = () => PIPELINE_PARTS.map((p) => readFileSync(new URL(p, import.meta.url), "utf8")).join("\n");
+
 test("posted answers read as a short list, capped", () => {
   assert.equal(rowsText([]), "There's nothing to show yet.");
   const t = rowsText(Array.from({ length: 12 }, (_, i) => ({ player: `P${i}`, score: i + 0.456 })));
@@ -84,7 +87,7 @@ test("library: similar goals over the same data group; analytics summarise", asy
 });
 
 test("catalogue: platform tools join the learner's own; own wins a name clash; platform never auto-disables", () => {
-  const src = readFileSync(new URL("./pipeline.js", import.meta.url), "utf8");
+  const src = pipelineSource();
   assert.match(src, /\.eq\("scope", "platform"\)\.eq\("audience", audience\)\.eq\("status", "active"\)/);
   assert.match(src, /filter\(\(t\) => !own\.has\(t\.name\)\)/);
   assert.match(src, /fail >= 3 && !platform \? \{ status: "disabled" \}/);
@@ -142,7 +145,7 @@ test("questions about other players in battles force create_tool, own-task chang
   assert.match(chat, /const forced = on && role === "student" \? await forcedSelfTool\(req\.user\.id, userMessage\)/);
   // forcedSelfTool names the tool: create_tool (others in battles) or schema_lookup (a change to their own tasks).
   assert.match(chat, /: forceSelfTool \? forceSelfTool/);
-  const pipe = readFileSync(new URL("./pipeline.js", import.meta.url), "utf8");
+  const pipe = pipelineSource();
   assert.match(pipe, /return data\?\.length \? null : "schema_lookup";/);
 });
 

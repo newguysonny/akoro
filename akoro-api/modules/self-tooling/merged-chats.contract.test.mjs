@@ -14,6 +14,8 @@ import {
 import { presentMergedToolRow } from "./pipeline.js";
 
 const read = (rel) => readFileSync(new URL(rel, import.meta.url), "utf8");
+const PIPELINE_PARTS = ["./pipeline.js", "./pipeline-create.js", "./pipeline-dry.js", "./pipeline-io.js", "./pipeline-verify.js", "./rules.js"];
+const readPipeline = () => PIPELINE_PARTS.map(read).join("\n");
 
 test("the merged chats def offers count/list/search in the runtime shape", () => {
   const def = mergedChatsDef();
@@ -69,7 +71,7 @@ test("Fix 1: My tools presents only delta actions for merged domains", () => {
 });
 
 test("wiring: pipeline carries the chats guard, runners and My-tools presentation", () => {
-  const src = read("./pipeline.js");
+  const src = readPipeline();
   assert.match(src, /mergedChatsEnabled\(\) && spec\.view === "my_chats" && !resumed && !replaced && chatsBuildIsCovered\(actions\)/);
   assert.match(src, /export async function getChatsToolState/);
   assert.match(src, /export async function runChatsViewAction/);
@@ -90,7 +92,7 @@ test("wiring: chat.js assembles and dispatches the merged chats tool", () => {
 });
 
 test("Fix 2: the own-copy gate names beyond-standard actions as NOT covered", () => {
-  const src = read("./pipeline.js");
+  const src = readPipeline();
   assert.match(src, /const beyond = actions\.filter\(\(a\) => !\(spec\.actions \|\| \[\]\)\.includes\(a\)\)/);
   assert.match(src, /but it CANNOT do: \$\{beyond\.join\(", "\)\}/);
   assert.match(src, /the extra is what their OWN copy would add/);

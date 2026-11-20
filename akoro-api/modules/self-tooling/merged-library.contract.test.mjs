@@ -7,6 +7,8 @@ import {
 } from "./mergedLibrary.js";
 
 const read = (rel) => readFileSync(new URL(rel, import.meta.url), "utf8");
+const PIPELINE_PARTS = ["./pipeline.js", "./pipeline-create.js", "./pipeline-dry.js", "./pipeline-io.js", "./pipeline-verify.js", "./rules.js"];
+const readPipeline = () => PIPELINE_PARTS.map(read).join("\n");
 const runtime = read("../adaptive-learning/chat/tool-runtime.js");
 
 test("the merged def offers base + platform actions, in the runtime shape", () => {
@@ -64,7 +66,7 @@ test("wiring: chat.js dispatches the merged tool and swaps the defs; pipeline se
   assert.match(network, /async search_my_library\(input, ctx\) \{ return searchMyLibraryTool\(ctx\.studentId, input\); \}/);
   assert.match(chatMain, /applyLibraryMerge\(allTools, req\.user\.id, selfToolOn\)/);
   assert.match(chat, /runLibraryViewAction\(action, input, studentId\)/);
-  const pipe = read("./pipeline.js");
+  const pipe = readPipeline();
   assert.match(pipe, /export async function runLibraryViewAction\(action, input, learnerId\)/);
   assert.match(pipe, /export async function getLibraryToolState\(learnerId\)/);
   assert.match(pipe, /libraryBuildIsCovered\(actions\)\) \{\s+return finish\("reused"/);

@@ -44,6 +44,6 @@ test("the loop wires the force: labels flow from the catalogue into forcedTool",
   const chat = readFileSync(new URL("./turn-answer.js", import.meta.url), "utf8");
   assert.match(chat, /namedLearnerTool/);
   assert.match(chat, /if \(!forcedTool && learnerLabels\?\.size\)/);
-  const pipeline = readFileSync(new URL("../../self-tooling/pipeline.js", import.meta.url), "utf8");
+  const pipeline = readFileSync(new URL("../../self-tooling/pipeline-io.js", import.meta.url), "utf8");
   assert.match(pipeline, /const labels = new Map\(rows\.map\(\(t\) => \[t\.name, t\.label \|\| t\.name\]\)\);/);
 });

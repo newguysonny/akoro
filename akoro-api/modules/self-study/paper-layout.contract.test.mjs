@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { readRoutesSource } from "./routesSource.mjs";
 import { PDFDocument } from "pdf-lib";
 
 process.env.SUPABASE_URL ||= "http://localhost:59999";
@@ -11,7 +12,7 @@ const { buildSubmissionPdf, submissionMarkdown } = await import("./submissionPdf
 const { buildAiGradeMessages } = await import("./aiGrade.js");
 const read = (p) => readFile(new URL(p, import.meta.url), "utf8");
 const [guide, routes, createAssignment, page, builder, learnerPaper, instructorPaper, detail, marker] = await Promise.all([
-  read("../adaptive-learning/agents/nana-esumai/guide.js"), read("./routes.js"), read("./createAssignment.js"),
+  read("../adaptive-learning/agents/nana-esumai/guide.js"), readRoutesSource(), read("./createAssignment.js"),
   Promise.all([   // the Activities page and the parts it was split into
     "../../../akoro-instructor/src/pages/ActivitiesPage.jsx", "../../../akoro-instructor/src/components/activities/ActivityForm.jsx",
     "../../../akoro-instructor/src/pages/activities-page/ActivitiesHome.jsx", "../../../akoro-instructor/src/pages/activities-page/DetailPage.jsx",

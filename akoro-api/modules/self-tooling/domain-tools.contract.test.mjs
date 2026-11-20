@@ -6,9 +6,11 @@ import { dirname, join } from "node:path";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const read = (p) => readFileSync(join(here, p), "utf8");
+const PIPELINE_PARTS = ["./pipeline.js", "./pipeline-create.js", "./pipeline-dry.js", "./pipeline-io.js", "./pipeline-verify.js", "./rules.js"];
+const readPipeline = () => PIPELINE_PARTS.map(read).join("\n");
 
 test("split domain tools: one per view, action cap, cleanup + builder guidance", () => {
-  const pipe = read("./pipeline.js");
+  const pipe = readPipeline();
   assert.match(pipe, /MAX_DOMAIN_ACTIONS/, "action cap enforced");
   assert.match(pipe, /retireSameView\(learnerId, spec\.view, spec\.name\)/, "retires other domain tools over the same view");
   assert.match(pipe, /isDomainTool/, "writes (no action enum) are never retired with read domains");
@@ -19,7 +21,7 @@ test("split domain tools: one per view, action cap, cleanup + builder guidance",
 });
 
 test("reuse is domain-based, not goal-text fuzzy", () => {
-  const pipe = read("./pipeline.js");
+  const pipe = readPipeline();
   assert.match(pipe, /const goalView = docGoal \? "my_library"/, "resolves the goal's data view");
   assert.match(pipe, /bestSelfView\(goal\)/, "falls back to the views' own keywords");
   assert.match(pipe, /domainOf\(t\) === goalView/, "only same-domain tools are candidates");
@@ -40,7 +42,7 @@ test("stale cleanup is per-learner and global, and never archives write tools", 
 });
 
 test("agent_tools carries domain/actions and the migration is registered", () => {
-  const pipe = read("./pipeline.js");
+  const pipe = readPipeline();
   assert.match(pipe, /domain: spec\.view, actions/, "domain tool writes domain + actions");
   const manifest = JSON.parse(read("../../migrations/manifest.json"));
   assert.ok(manifest.schema.includes("2026-agent-tools-domain.sql"), "migration registered");
@@ -48,7 +50,7 @@ test("agent_tools carries domain/actions and the migration is registered", () =>
 });
 
 test("a rejected rebuild never archives the working domain tool", () => {
-  const pipe = read("./pipeline.js");
+  const pipe = readPipeline();
   const verifyAt = pipe.indexOf("await verifyDomainActions(spec2");
   const rejectAt = pipe.indexOf("if (bad.length)");
   const archiveAt = pipe.indexOf("Retire ONLY after verification passes");
@@ -58,7 +60,7 @@ test("a rejected rebuild never archives the working domain tool", () => {
 });
 
 test("replace captures actions before archiving, so a rebuild keeps them", () => {
-  const pipe = read("./pipeline.js");
+  const pipe = readPipeline();
   const replaceBlock = pipe.slice(pipe.indexOf("const replaceRaw"), pipe.indexOf("// Build a domain tool"));
   assert.match(replaceBlock, /select\("id, name, views, domain, params_schema"\)/, "reads the old params_schema before archiving");
   assert.ok(replaceBlock.indexOf("params_schema") < replaceBlock.indexOf('status: "archived"'), "captured before the archive update");
@@ -66,7 +68,7 @@ test("replace captures actions before archiving, so a rebuild keeps them", () =>
 });
 
 test("a domain build reports what was added and that the rest still works", () => {
-  const pipe = read("./pipeline.js");
+  const pipe = readPipeline();
   assert.match(pipe, /const added = actions\.filter\(\(a\) => !have\.has\(a\)\)/, "computes what was added");
   assert.match(pipe, /const kept = actions\.filter\(\(a\) => have\.has\(a\)\)/, "computes what was kept");
   assert.match(pipe, /nothing that worked before has broken/i, "reassures no regression");
