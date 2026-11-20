@@ -28,7 +28,7 @@ Lysosomes: digestion of waste and worn organelles.
 Chloroplasts (plants): photosynthesis.
 Vacuole (plants): storage and turgor.
 Cell membrane: selective barrier, transport.$note$), false
-FROM users u
+FROM public.users u
 WHERE u.email = 'stu.jss11@demo.akoro.app'
   AND NOT EXISTS (SELECT 1 FROM edu.records r WHERE r.name = 'Cell structure: organelle functions');
 
@@ -58,6 +58,6 @@ Calvin cycle / light-independent (stroma)
 - Regenerates RuBP; product becomes glucose.
 
 Limiting factors: light intensity, CO2 concentration, temperature.$note$), false
-FROM users u
+FROM public.users u
 WHERE u.email = 'stu.jss11@demo.akoro.app'
   AND NOT EXISTS (SELECT 1 FROM edu.records r WHERE r.name = 'Photosynthesis: light and dark reactions');
