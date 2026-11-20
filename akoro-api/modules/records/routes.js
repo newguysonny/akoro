@@ -166,6 +166,7 @@ const uploadMem = multer({ storage: multer.memoryStorage(), limits: { fileSize: 
 router.post("/upload", authenticateToken, uploadMem.single("file"), asyncHandler(records.uploadFile));
 const previewMem = multer({ storage: multer.memoryStorage(), limits: { fileSize: 512 * 1024 } });
 router.get("/:id/preview", authenticateToken, asyncHandler(records.openPreview));
+router.post("/:id/preview/generate", authenticateToken, asyncHandler(records.generatePreview));
 router.post("/:id/preview", authenticateToken, previewMem.single("file"), asyncHandler(records.uploadPreview));
 
 export default router;

@@ -35,7 +35,7 @@ export const getRecordOwner = (id) =>
 
 export const getRecordWithFile = (id) =>
   edu().from("records")
-    .select("id, user_id, file_key").eq("id", id).maybeSingle();
+    .select("id, user_id, kind, name, mime, file_key").eq("id", id).maybeSingle();
 
 export const getRecordFileForOwner = (id, userId) =>
   edu().from("records")

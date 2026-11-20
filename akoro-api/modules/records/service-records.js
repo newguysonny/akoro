@@ -9,8 +9,9 @@
  */
 import {
   recordsStorageEnabled, createPresignedUpload, createPresignedDownload, removeRecordFile,
-  ownsRecordFileKey, isFallbackFileKey, MAX_FALLBACK_FILE_BYTES, putRecordObject,
+  ownsRecordFileKey, isFallbackFileKey, MAX_FALLBACK_FILE_BYTES, putRecordObject, readFileObject,
 } from "./lib/storage.js";
+import { renderPdfFirstPage } from "./preview.js";
 import { avEnabled, autoTranscribeContent, autoTranscribeEnabled, avKindOf } from "./avTranscribeLib.js";
 import { indexRecord, searchRecordChunks } from "./searchLib.js";
 import { activePremiumUserIds } from "./access.js";
@@ -19,7 +20,7 @@ import {
   MAX_FILE_BYTES, MAX_TEXT_CHARS, MAX_RECORDS, MAX_COVER_BYTES,
   pageParams, encodeCursor, detectType,
 } from "./rules.js";
-import { res200, res201, res400, res403, res404, res503 } from "./http.js";
+import { res200, res201, res400, res403, res404, res422, res500, res503 } from "./http.js";
 import * as store from "./store-records.js";
 
 /* Row → API shape. Uploads with bytes get a fresh presigned URL; legacy
@@ -51,6 +52,30 @@ const toApi = async (r) => ({
   createdAt: r.created_at,
   lastOpenedAt: r.last_opened_at || null,
 });
+
+/* Render page 1 of a stored PDF and keep it as the record's preview.
+   Server-side (pdfjs + napi canvas), so it works for uploads the browser sent
+   straight to the store and for the backfill script alike. */
+export async function generatePreviewForRecord(r) {
+  if (!r?.id || !r.file_key) return null;
+  try {
+    const { body, contentType } = await readFileObject(r.file_key);
+    const pdf = /pdf/i.test(r.mime || "") || /\.pdf$/i.test(r.name || "") || body.subarray(0, 4).toString() === "%PDF";
+    if (!pdf) return null;
+    const jpg = await renderPdfFirstPage(body);
+    if (!jpg) return null;
+    const key = await putRecordObject({
+      userId: r.user_id, name: `preview-${r.id}.jpg`,
+      body: jpg, contentType: "image/jpeg", prefix: "previews",
+    });
+    const { error } = await store.setPreviewKey(r.id, key);
+    if (error) { console.error("[records] preview key save failed:", error.message); return null; }
+    return key;
+  } catch (err) {
+    console.error("[records] preview generate failed:", err?.message || err);
+    return null;
+  }
+}
 
 /* POST /api/records/:id/preview — one JPEG of page 1.
    The reader already renders PDF pages with pdf.js, so the client makes the
@@ -94,6 +119,17 @@ export async function openPreview(req, res) {
   });
   if (!url) return res503(res, "Could not load the preview.");
   return streamFromStore(res, url, { cache: "public, max-age=600" });
+}
+
+/* POST /api/records/:id/preview/generate — render page 1 from the stored file. */
+export async function generatePreview(req, res) {
+  const { data: r } = await store.getRecordOwner(req.params.id);
+  if (!r || r.user_id !== req.user.id) return res404(res, "Record not found.");
+  const row = (await store.getRecordWithFile(req.params.id)).data;
+  if (!row?.file_key) return res400(res, "This record has no saved file.");
+  const key = await generatePreviewForRecord(row);
+  if (!key) return res422(res, "A preview could not be made for this file.");
+  return res200(res, { previewKey: key });
 }
 
 /* POST /api/records/upload — the bytes come to us.
@@ -208,6 +244,11 @@ export async function createRecord(req, res) {
 
   const { data, error } = await store.insertRecord(row);
   if (error) throw error;
+  // Uploads get their page-1 preview now, off the request path: rendering a
+  // page takes ~200 ms and the learner should not wait for a thumbnail.
+  if (data.kind === "upload" && data.file_key) {
+    void generatePreviewForRecord(data).catch(() => {});
+  }
   // Semantic search index — the name always, pasted text too. Fire-and-forget:
   // an embedding hiccup must not fail a create; the sweeper repairs gaps.
   void indexRecord({

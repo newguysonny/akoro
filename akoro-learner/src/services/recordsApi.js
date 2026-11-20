@@ -125,6 +125,16 @@ export async function uploadRecordFile(file, onProgress, { signal, purpose } = {
 /** The stored page-1 image for a record (the card's thumbnail). */
 export const recordPreviewUrl = (id) => `${API}/api/records/${id}/preview`;
 
+/** Ask the API to render page 1 from the stored file (server-side, owner only). */
+export async function generateRecordPreview(id) {
+  try {
+    const res = await fetch(`${API}/api/records/${id}/preview/generate`, {
+      method: 'POST', credentials: 'include', headers: { 'X-Akoro-Portal': 'student' },
+    });
+    return res.ok;
+  } catch { return false; }
+}
+
 /** Send the page image the reader rendered. Silently best-effort: a preview
  *  is a nicety, never a reason for the document to fail. */
 export async function uploadRecordPreview(id, blob) {
