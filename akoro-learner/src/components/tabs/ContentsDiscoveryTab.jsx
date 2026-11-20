@@ -82,6 +82,7 @@ function RecordCard({ item, type, wide, opening, onOpen }) {
       }}>
         {item.hasPreview && !opening ? (
           <RecordPreviewImage id={item.id}
+            fallback={<span style={{ fontSize: 46 }}><Icon name={meta.icon} size={46} color={meta.color}/></span>}
             style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'top center' }}/>
         ) : (
           <span style={{ fontSize: 46 }}>

@@ -178,6 +178,7 @@ function RecordCard({ item, onOpen, onMore }) {
       style={{ ...CARD_BASE, cursor: 'pointer' }}>
       {item.hasPreview ? (
         <RecordPreviewImage id={item.id}
+          fallback={<div style={{ width: 46, height: 46, borderRadius: 11, flexShrink: 0, background: `${meta.color}14`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Icon name={meta.icon} size={22} color={meta.color}/></div>}
           style={{ width: 46, height: 46, borderRadius: 11, flexShrink: 0, objectFit: 'cover', background: 'var(--ak-tag-bg)' }}/>
       ) : (
       <div style={{
