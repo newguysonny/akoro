@@ -17,10 +17,13 @@ import { fileURLToPath } from 'node:url';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const KIT = path.join(HERE, 'ui');
 const CLIENT = path.join(HERE, 'client');
+const SHARED = path.join(HERE, 'shared');
 const PAGES = path.join(HERE, 'pages');
 export const TARGETS = ['akoro-instructor'];
 // One shared HTTP core for all four apps (Grand Plan Phase 19 step 5).
 export const CLIENT_TARGETS = ['akoro-learner', 'akoro-school', 'akoro-instructor', 'akoro-admin'];
+// Framework-light page components every app may use (Phase 19 step 5).
+export const SHARED_TARGETS = ['akoro-learner', 'akoro-school', 'akoro-instructor', 'akoro-admin'];
 // Shared pages carried identically by the console apps (Grand Plan Phase 19 step 5).
 export const PAGE_TARGETS = ['akoro-admin', 'akoro-school'];
 
@@ -32,6 +35,8 @@ export const kitFiles = () => readdirSync(KIT).filter((f) => /\.(js|jsx|css)$/.t
 export const copyOf = (file) => banner(file) + readFileSync(path.join(KIT, file), 'utf8');
 export const clientFiles = () => readdirSync(CLIENT).filter((f) => /\.(ts|tsx|js|css)$/.test(f)).sort();
 export const clientCopyOf = (file) => banner(file, 'client') + readFileSync(path.join(CLIENT, file), 'utf8');
+export const sharedFiles = () => readdirSync(SHARED).filter((f) => /\.(js|jsx|css)$/.test(f)).sort();
+export const sharedCopyOf = (file) => banner(file, 'shared') + readFileSync(path.join(SHARED, file), 'utf8');
 export const pageFiles = () => readdirSync(PAGES).filter((f) => /\.(js|jsx|css)$/.test(f)).sort();
 export const pageCopyOf = (file) => banner(file, 'pages') + readFileSync(path.join(PAGES, file), 'utf8');
 
@@ -42,6 +47,13 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     mkdirSync(dir, { recursive: true });
     for (const f of kitFiles()) writeFileSync(path.join(dir, f), copyOf(f));
     console.log(`${app}/src/ui ← ${kitFiles().length} files`);
+  }
+  for (const app of SHARED_TARGETS) {
+    const dir = path.join(HERE, '..', app, 'src', 'shared');
+    rmSync(dir, { recursive: true, force: true });
+    mkdirSync(dir, { recursive: true });
+    for (const f of sharedFiles()) writeFileSync(path.join(dir, f), sharedCopyOf(f));
+    console.log(`${app}/src/shared ← ${sharedFiles().length} files`);
   }
   for (const app of CLIENT_TARGETS) {
     const dir = path.join(HERE, '..', app, 'src', 'client');

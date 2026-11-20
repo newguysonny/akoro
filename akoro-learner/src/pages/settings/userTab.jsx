@@ -18,6 +18,7 @@ import { getAlarmChoice, storeAlarmChoice, alarmChoiceLabel, getCustomAlarmMeta,
 import { isHigherEdUI, setCachedTier } from '../../utils/studyLevel.js';
 import { ACCOUNT_CARDS, tr } from './groups.js';
 import { PLAN_OPTIONS, setPlanOverride } from '../../utils/planOverride.js';
+import { SettingsCard } from '../../shared/SettingsCard.jsx';
 
 // A concise, recognisable list keeps the mobile selector usable. The API still
 // validates IANA identifiers, so the agent never treats a display label as a
@@ -339,19 +340,11 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent,
         const title = tr(t, g.titleKey, g.title);
         const hint = { profile: profile.fullName ? `@${profile.username}` : '', learn: profile.studyLevel || '', personalization: profile.language || '' }[g.key];
         return (
-          <button key={g.key} type="button" onClick={()=>navigate(`/settings/${g.key}`)} data-testid={`settings-card-${g.key}`}
-            style={{ display:'flex',alignItems:'center',gap:12,width:'calc(100% - 32px)',margin:'0 16px 12px',borderRadius:16,padding:'14px 16px',cursor:'pointer',
-              background:'var(--ak-surface)',border:'1px solid var(--ak-border)',boxShadow:'0 1px 6px rgba(0,0,0,.06)',fontFamily:"'Nunito',sans-serif",textAlign:'left' }}>
-            <span style={{ width:38,height:38,borderRadius:11,flexShrink:0,background:`${color}18`,display:'flex',alignItems:'center',justifyContent:'center' }}>
-              <Icon name={g.icon} size={19} color={color}/>
-            </span>
-            <span style={{ flex:1,minWidth:0 }}>
-              <span style={{ display:'block',fontSize:14,fontWeight:800,color:'var(--ak-text)' }}>{title}</span>
-              <span style={{ display:'block',fontSize:12,color:'var(--ak-text-muted)' }}>{tr(t, g.subKey, g.sub)}</span>
-            </span>
-            {hint && <span style={{ fontSize:12,fontWeight:700,color:'var(--ak-text-muted)',maxWidth:110,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' }}>{hint}</span>}
-            <Icon name="ti-chevron-right" size={18} color="var(--ak-text-muted)"/>
-          </button>
+          <SettingsCard key={g.key} onClick={()=>navigate(`/settings/${g.key}`)} testId={`settings-card-${g.key}`}
+            color={color}
+            icon={<Icon name={g.icon} size={19} color={color}/>}
+            title={title} subtitle={tr(t, g.subKey, g.sub)} hint={hint}
+            chevron={<Icon name="ti-chevron-right" size={18} color="var(--ak-text-muted)"/>}/>
         );
       })}
 
