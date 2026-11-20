@@ -32,7 +32,7 @@ const runValidation = (req, res, next) => {
 
 const now = () => new Date().toISOString();
 
-const AGENT_SELECT = "id, agent_name, agent_emoji, agent_color, agent_bg, total_xp, system_prompt, personality, teacher_agent_id, guide_name, guide_emoji, guide_render_style, is_active, created_at, updated_at";
+const AGENT_SELECT = "id, agent_name, agent_emoji, agent_color, agent_bg, total_xp, system_prompt, personality, teacher_agent_id, guide_name, guide_emoji, guide_render_style, is_active, created_at, updated_at, discipline";
 
 const NANA_RENDER_STYLE = {
   bubbleBg:     "rgba(124,58,237,0.10)",
