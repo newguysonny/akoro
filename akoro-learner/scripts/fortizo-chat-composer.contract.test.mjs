@@ -4,11 +4,17 @@ import test from 'node:test';
 
 const read = name => readFile(new URL(name, import.meta.url), 'utf8');
 const composer = await read('../src/components/common/FortizoChatComposer.jsx');
-const session = await read('../src/components/teaching/SessionChatView.jsx');
+const teaching = (...files) => Promise.all(files.map((f) => read(`../src/features/teaching/${f}`))).then((a) => a.join('\n'));
+const session = await teaching('components/SessionChatView.jsx');
 const agent = await read('../src/features/agent-chat/AgentChatTab.jsx');
 const reference = await read('../reference/FortizoApp.jsx');
-const reader = await read('../src/components/teaching/SessionReaderModal.jsx');
-const teach = await read('../src/components/teaching/TeachAgentModal.jsx');
+const reader = await teaching(
+  'components/SessionReaderModal.jsx', 'components/SessionReaderChrome.jsx',
+  'components/SessionReaderDocument.jsx', 'components/SessionReaderResult.jsx',
+  'components/SessionReaderOverlays.jsx', 'components/sessionReaderModel.js',
+  'hooks/useSessionReader.js',
+);
+const teach = await teaching('components/TeachAgentModal.jsx', 'hooks/useTeachAgent.js');
 
 test('shared composer follows the supplied Fortizo reference, without its search control', () => {
   assert.match(reference, /function ChatPanel/);
@@ -59,10 +65,10 @@ test('session reader reuses the Fortizo reader architecture with Akoro branding'
     /folio-redaction/, /folio-annotation/, /handleSelectionAction/, /doc-page/,
   ]) assert.match(reader, marker);
   // Akoro branding: purple brand token, no lucide imports, tabler icons only.
-  assert.match(reader, /from "\.\.\/\.\.\/constants\.js"/);
+  assert.match(reader, /from ['"]\.\.\/\.\.\/\.\.\/constants\.js['"]/);
   assert.match(reader, /BRAND/);
   assert.doesNotMatch(reader, /lucide-react/);
-  assert.match(reader, /from "\.\.\/common\/Icons\.jsx"/);
+  assert.match(reader, /from ['"]\.\.\/\.\.\/\.\.\/components\/common\/Icons\.jsx['"]/);
   // Mobile: full-screen modal; the chat button hands back to the session.
   assert.match(reader, /onOpenChat/);
   assert.match(reader, /showChatButton=\{isMobile\}/);

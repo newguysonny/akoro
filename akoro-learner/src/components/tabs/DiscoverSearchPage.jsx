@@ -26,7 +26,7 @@ import { listRecords, listFolders } from '../../services/recordsApi.js';
 import { fetchMyCommunities } from '../../services/communityApi.js';
 import { fetchPharmdProgramme } from '../../services/pharmdApi.js';
 import { TYPES, matchTypes, FONT } from './dhubTypes.js';
-import { useIsMobileView } from '../teaching/SessionReaderModal.jsx';
+import { useIsMobileView } from '../../hooks/useIsMobileView.js';
 import useDebouncedValue from '../../hooks/useDebouncedValue.js';
 
 export const RECENTS_KEY = 'akoro.dhubRecents';

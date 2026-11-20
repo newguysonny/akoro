@@ -9,10 +9,10 @@
  * tap on a turn plays from there, and its source chip jumps the reader.
  */
 import { useEffect, useRef, useState } from 'react';
-import { Icon } from '../common/Icons.jsx';
-import { BRAND } from '../../constants.js';
-import { citeLabel, toReaderCite } from '../../lib/askAnswer.js';
-import { turnAt, turnStart, clock } from '../../lib/podcastTimeline.js';
+import { Icon } from '../../../components/common/Icons.jsx';
+import { BRAND } from '../../../constants.js';
+import { citeLabel, toReaderCite } from '../../../lib/askAnswer.js';
+import { turnAt, turnStart, clock } from '../../../lib/podcastTimeline.js';
 
 const SPEAKER_COLOR = { Host: BRAND, Guest: '#0EA5E9' };
 

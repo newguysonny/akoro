@@ -20,10 +20,12 @@ async function walk(dir, out = []) {
   return out;
 }
 
-// The one deliberate composition: the dashboard hosts Agent Chat in a tab.
+// The one deliberate composition: the dashboard hosts Agent Chat in a tab,
+// and its session modals come from the teaching feature (moved out of
+// components/teaching in the same step).
 // Cross-feature imports are allowed ONLY through the other feature's index.js
 // and must be listed here.
-const ALLOWED = { dashboard: ["agent-chat"] };
+const ALLOWED = { dashboard: ["agent-chat", "teaching"], teaching: ["agent-chat"], library: ["teaching"] };
 
 test("every feature has an index.js; cross-feature imports go through the public index", async () => {
   const features = (await readdir(FEATURES, { withFileTypes: true }))

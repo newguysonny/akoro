@@ -19,10 +19,10 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { API } from '../../services/api.js';
-import { socketOptions } from '../../client/socket';
-import { fetchDiscussionMessages, postDiscussionMessage } from '../../services/communityApi.js';
-import { BRAND, STUDENT_ID } from '../../constants.js';
+import { API } from '../../../services/api.js';
+import { socketOptions } from '../../../client/socket';
+import { fetchDiscussionMessages, postDiscussionMessage } from '../../../services/communityApi.js';
+import { BRAND, STUDENT_ID } from '../../../constants.js';
 
 const MAX_BODY = 2000;   // the server trims/caps the same way
 

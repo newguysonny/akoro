@@ -19,12 +19,14 @@ import SessionCard    from '../../components/sessions/SessionCard.jsx';
 import SelfStudyList  from '../../components/sessions/SelfStudyList.jsx';
 import SessionSheet   from '../../components/sessions/SessionSheet.jsx';
 import BlockRenderer  from '../../components/sessions/BlockRenderer.jsx';
-import TeachAgentModal   from '../../components/teaching/TeachAgentModal.jsx';
-import ConceptTrackerModal from '../../components/teaching/ConceptTrackerModal.jsx';
-import AdaptiveControlsModal from '../../components/teaching/AdaptiveControlsModal.jsx';
-import DecaySessionModal from '../../components/teaching/DecaySessionModal.jsx';
-import DecayReviewModal from '../../components/teaching/DecayReviewModal.jsx';
-import ConfigModal       from '../../components/teaching/ConfigModal.jsx';
+import {
+  TeachAgentModal,
+  ConceptTrackerModal,
+  AdaptiveControlsModal,
+  DecaySessionModal,
+  DecayReviewModal,
+  ConfigModal,
+} from '../teaching/index.js';
 import AssessmentRoom     from '../../components/assessment/AssessmentRoom.jsx';
 import ExamPrepConfidenceModal from '../../components/assessment/ExamPrepConfidenceModal.jsx';
 import BattleModal       from '../../components/battles/BattleModal.jsx';

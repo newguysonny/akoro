@@ -5,9 +5,9 @@
  * guess never counts. One row per question; the first thing still to teach
  * becomes a "Teach … next" button that fills the message box.
  */
-import { BRAND } from '../../constants.js';
-import { Icon } from '../common/Icons.jsx';
-import { ScoreRing } from '../../features/agent-chat/index.js';
+import { BRAND } from '../../../constants.js';
+import { Icon } from '../../../components/common/Icons.jsx';
+import { ScoreRing } from '../../agent-chat/index.js';
 
 const NUNITO = "'Nunito',sans-serif";
 const MARK = {

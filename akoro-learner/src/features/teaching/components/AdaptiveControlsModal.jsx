@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { apiDelete, apiGet, apiPut } from '../../services/api.js';
-import { BRAND, RED } from '../../constants.js';
+import { apiDelete, apiGet, apiPut } from '../../../services/api.js';
+import { BRAND, RED } from '../../../constants.js';
 
 const DEFAULTS={interactionStyle:'balanced',responseTone:'direct',challengeLevel:'adaptive',encouragementLevel:'minimal'};
 const OPTIONS={interactionStyle:['balanced','collaborative','independent','socratic'],responseTone:['calm','curious','direct','celebratory'],challengeLevel:['gentle','adaptive','stretch'],encouragementLevel:['minimal','balanced','frequent']};

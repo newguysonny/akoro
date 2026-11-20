@@ -18,8 +18,8 @@
  * tapping one asks it. No suggestions → no dropdown.
  */
 import { useEffect, useRef, useState } from 'react';
-import { Icon } from '../common/Icons.jsx';
-import { answerBlocks, citeLabel, toReaderCite } from '../../lib/askAnswer.js';
+import { Icon } from '../../../components/common/Icons.jsx';
+import { answerBlocks, citeLabel, toReaderCite } from '../../../lib/askAnswer.js';
 
 function CiteChip({ cite, onCite }) {
   const target = toReaderCite(cite);

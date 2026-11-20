@@ -46,7 +46,7 @@ const CommunitySettingsPage = PRODUCT_BUILD ? lazyWithRetry(() => import('./page
 const CommunityPeoplePage = PRODUCT_BUILD ? lazyWithRetry(() => import('./pages/CommunityPeoplePage.jsx')) : null;
 const CommunityAnalyticsPage = PRODUCT_BUILD ? lazyWithRetry(() => import('./pages/CommunityAnalyticsPage.jsx')) : null;
 const CommunityProfilePage = PRODUCT_BUILD ? lazyWithRetry(() => import('./pages/CommunityProfilePage.jsx')) : null;
-const LibraryPage = PRODUCT_BUILD ? lazyWithRetry(() => import('./pages/LibraryPage.jsx')) : null;
+const LibraryPage = PRODUCT_BUILD ? lazyWithRetry(() => import('./features/library/index.js')) : null;
 const DrawPage = PRODUCT_BUILD ? lazyWithRetry(() => import('./pages/DrawPage.jsx')) : null;
 const PrivacyPolicyPage = SITE_BUILD ? lazyWithRetry(() => import('./pages/PrivacyPolicyPage.jsx')) : null;
 const TermsOfServicePage = SITE_BUILD ? lazyWithRetry(() => import('./pages/TermsOfServicePage.jsx')) : null;

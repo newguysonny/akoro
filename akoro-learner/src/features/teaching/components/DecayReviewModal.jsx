@@ -8,11 +8,11 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BRAND } from '../../constants.js';
-import { Icon } from '../common/Icons.jsx';
-import { apiGet, apiPost } from '../../services/api.js';
+import { BRAND } from '../../../constants.js';
+import { Icon } from '../../../components/common/Icons.jsx';
+import { apiGet, apiPost } from '../../../services/api.js';
 import DecaySessionModal from './DecaySessionModal.jsx';
-import { APP_HOME } from '../../config/target.js';
+import { APP_HOME } from '../../../config/target.js';
 
 const NUNITO = "'Nunito',sans-serif";
 const WAITING = ['created', 'inspecting', 'diagnostic', 'evaluating', 'decayed', 'retained', 'retest', 'adapt_strategy'];

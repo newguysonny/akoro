@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { apiDelete, apiGet } from '../../services/api.js';
-import { BRAND, RED } from '../../constants.js';
+import { apiDelete, apiGet } from '../../../services/api.js';
+import { BRAND, RED } from '../../../constants.js';
 
 const STATUS = { not_started:'Not started', introduced:'Introduced', learning:'Learning', confused:'Needs repair', understood:'Understood', mastered:'Mastered' };
 

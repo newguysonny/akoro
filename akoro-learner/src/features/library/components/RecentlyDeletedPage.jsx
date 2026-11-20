@@ -8,10 +8,10 @@
  * (shellMode) on tablet and desktop.
  */
 import { useEffect, useState } from 'react';
-import { BRAND } from '../../constants.js';
-import { Icon } from '../common/Icons.jsx';
-import Spinner from '../common/Spinner.jsx';
-import { listDeleted, purgeIngest, restoreIngest } from '../../lib/chatUploads.js';
+import { BRAND } from '../../../constants.js';
+import { Icon } from '../../../components/common/Icons.jsx';
+import Spinner from '../../../components/common/Spinner.jsx';
+import { listDeleted, purgeIngest, restoreIngest } from '../../../lib/chatUploads.js';
 
 const RED = '#DC2626';
 const DAY = 86_400_000;

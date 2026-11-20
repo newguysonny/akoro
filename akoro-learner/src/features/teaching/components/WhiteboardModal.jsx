@@ -13,7 +13,7 @@
  */
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { X, Undo2, Trash2, Pencil, Eraser, Paperclip, Presentation } from 'lucide-react';
-import { BRAND } from '../../constants.js';
+import { BRAND } from '../../../constants.js';
 
 // Light board: ink first, then the brand and bright colours.
 const PALETTE = ['#1A1A2E', BRAND, '#F59E0B', '#10B981', '#EF4444', '#3B82F6'];

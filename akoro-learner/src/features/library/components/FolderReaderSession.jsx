@@ -13,10 +13,10 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
-import SessionReaderModal from '../teaching/SessionReaderModal.jsx';
+import { SessionReaderModal } from '../../teaching/index.js';
 import RecordTeachSession from './RecordTeachSession.jsx';
-import { listFolderItems, getAskHistory, askRecord, generateRecordTool, startRecordPodcast, getRecordPodcast, listRecordArtifacts, saveRecordArtifact, updateRecordArtifact, deleteRecordArtifact } from '../../services/recordsApi.js';
-import { Icon } from '../common/Icons.jsx';
+import { listFolderItems, getAskHistory, askRecord, generateRecordTool, startRecordPodcast, getRecordPodcast, listRecordArtifacts, saveRecordArtifact, updateRecordArtifact, deleteRecordArtifact } from '../../../services/recordsApi.js';
+import { Icon } from '../../../components/common/Icons.jsx';
 
 const ITEM_ICON = { pdf: 'ti-file-text', image: 'ti-photo', audio: 'ti-headphones', video: 'ti-video',
   docx: 'ti-file-text', pptx: 'ti-presentation', text: 'ti-file-text', paste: 'ti-clipboard' };

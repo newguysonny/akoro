@@ -5,7 +5,11 @@ import test from 'node:test';
 const read = (f) => readFile(new URL(f, import.meta.url), 'utf8');
 
 test('the short check result card: drawn in the lesson before the protégé line, guesses never counted', async () => {
-  const [card, view, modal] = await Promise.all([read('./LessonCheckCard.jsx'), read('./SessionChatView.jsx'), read('./TeachAgentModal.jsx')]);
+  const [card, view, modal] = await Promise.all([
+    read('./LessonCheckCard.jsx'),
+    read('./SessionChatView.jsx'),
+    Promise.all([read('./TeachAgentModal.jsx'), read('../hooks/useTeachAgent.js')]).then((a) => a.join('\n')),
+  ]);
   assert.match(card, /A guess never counts/);
   assert.match(card, /you haven't taught this yet/);
   assert.match(card, /<ScoreRing /);
@@ -15,7 +19,7 @@ test('the short check result card: drawn in the lesson before the protégé line
 });
 
 test('blog passage chips: the post and its section, opening the post', async () => {
-  const [tab, ideas] = await Promise.all([read('../../features/agent-chat/AgentChatTab.jsx'), read('../../features/agent-chat/lib/chatIdeas.js')]);
+  const [tab, ideas] = await Promise.all([read('../../agent-chat/AgentChatTab.jsx'), read('../../agent-chat/lib/chatIdeas.js')]);
   assert.match(tab, /msg\.materials\.map\(\(m\)=>m\.sub\?\(/);
   assert.match(tab, />Blog</);
   assert.match(ideas, /m\.sub \? \{ sub: String\(m\.sub\)\.slice\(0, 90\) \}/);

@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { BRAND, RED, GREEN, GOLD, SUBJECTS, SUBJECT_COLORS } from '../../constants.js';
-import { XIcon, ChevDownIcon, Icon } from '../common/Icons.jsx';
-import { apiGet, apiPost, apiUpload } from '../../services/api.js';
-import { useLang } from '../../contexts/LanguageContext.jsx';
+import { BRAND, RED, GREEN, GOLD, SUBJECTS, SUBJECT_COLORS } from '../../../constants.js';
+import { XIcon, ChevDownIcon, Icon } from '../../../components/common/Icons.jsx';
+import { apiGet, apiPost, apiUpload } from '../../../services/api.js';
+import { useLang } from '../../../contexts/LanguageContext.jsx';
 
 // Default objective placeholders for a manually-added subtopic. These are just
 // editable prompts the user fills in before starting — the real subtopics and

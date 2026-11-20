@@ -1,18 +1,18 @@
 import { useState, useRef, useEffect } from 'react';
-import CopyMessageButton from "../common/CopyMessageButton.jsx";
-import RichText from "../common/RichText.jsx";
-import { BRAND, RED, GREEN, GOLD, SUBJECTS, SUBJECT_COLORS, AGENT_STYLES } from '../../constants.js';
-import { MicIcon, XIcon, BrainIcon, SparkleIcon, ZapIcon, ChevDownIcon, Icon } from '../common/Icons.jsx';
-import FortizoChatComposer from '../common/FortizoChatComposer.jsx';
-import QuoteChip from '../common/QuoteChip.jsx';
-import { parseQuoted } from '../../lib/quotedMessage.js';
-import StreamCaret from '../common/StreamCaret.jsx';
-import BlockRenderer from '../sessions/BlockRenderer.jsx';
+import CopyMessageButton from "../../../components/common/CopyMessageButton.jsx";
+import RichText from "../../../components/common/RichText.jsx";
+import { BRAND, RED, GREEN, GOLD, SUBJECTS, SUBJECT_COLORS, AGENT_STYLES } from '../../../constants.js';
+import { MicIcon, XIcon, BrainIcon, SparkleIcon, ZapIcon, ChevDownIcon, Icon } from '../../../components/common/Icons.jsx';
+import FortizoChatComposer from '../../../components/common/FortizoChatComposer.jsx';
+import QuoteChip from '../../../components/common/QuoteChip.jsx';
+import { parseQuoted } from '../../../lib/quotedMessage.js';
+import StreamCaret from '../../../components/common/StreamCaret.jsx';
+import BlockRenderer from '../../../components/sessions/BlockRenderer.jsx';
 import LessonCheckCard from './LessonCheckCard.jsx';
-import { citeLabel, toReaderCite } from '../../lib/askAnswer.js';
+import { citeLabel, toReaderCite } from '../../../lib/askAnswer.js';
 import { Answer } from './ReaderAsk.jsx';
-import { AgentAvatar } from '../common/AgentAvatar.jsx';
-import { useLang } from '../../contexts/LanguageContext.jsx';
+import { AgentAvatar } from '../../../components/common/AgentAvatar.jsx';
+import { useLang } from '../../../contexts/LanguageContext.jsx';
 
 /* ── Mic level meter ──────────────────────────────────────────────
    Twelve segments lit in proportion to RMS loudness. Segments rather than a

@@ -2,9 +2,15 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-const source = await readFile(new URL("../features/agent-chat/AgentChatTab.jsx", import.meta.url), "utf8");
-const teachSource = await readFile(new URL("../components/teaching/TeachAgentModal.jsx", import.meta.url), "utf8");
-const decaySource = await readFile(new URL("../components/teaching/DecaySessionModal.jsx", import.meta.url), "utf8");
+const read = (f) => readFile(new URL(f, import.meta.url), "utf8");
+const source = await read("../features/agent-chat/AgentChatTab.jsx");
+// The teaching session was split (Phase 19 step 6): its socket lifecycle is
+// in the feature hook, its markup in the feature's components.
+const teachSource = (await Promise.all([
+  read("../features/teaching/components/TeachAgentModal.jsx"),
+  read("../features/teaching/hooks/useTeachAgent.js"),
+])).join("\n");
+const decaySource = await read("../features/teaching/components/DecaySessionModal.jsx");
 
 const between = (text, start, end) => text.slice(text.indexOf(start), text.indexOf(end));
 

@@ -15,13 +15,13 @@
  * row hands it back to the parent to open on its home surface.
  */
 import { useEffect, useState } from 'react';
-import { BRAND } from '../../constants.js';
-import { Icon } from '../common/Icons.jsx';
-import Toast from '../common/Toast.jsx';
-import NowStudyingBar from '../dashboard/NowStudyingBar.jsx';
-import { useIsMobileView } from '../teaching/SessionReaderModal.jsx';
-import { renameFolder, deleteFolder, listFolderItemsPage } from '../../services/recordsApi.js';
-import { useCursorList, pagedStatusText } from '../../lib/usePagedList.js';
+import { BRAND } from '../../../constants.js';
+import { Icon } from '../../../components/common/Icons.jsx';
+import Toast from '../../../components/common/Toast.jsx';
+import NowStudyingBar from '../../../components/dashboard/NowStudyingBar.jsx';
+import { useIsMobileView } from '../../../hooks/useIsMobileView.js';
+import { renameFolder, deleteFolder, listFolderItemsPage } from '../../../services/recordsApi.js';
+import { useCursorList, pagedStatusText } from '../../../lib/usePagedList.js';
 
 /* The reference's folder gradient — same family as Pharm.D's accent art. */
 const ART_BG = `linear-gradient(160deg, ${BRAND} 0%, #2E1A6E 75%)`;

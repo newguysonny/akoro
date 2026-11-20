@@ -11,11 +11,18 @@ import test from "node:test";
  * to /library?add=1 instead of owning the sheet.
  */
 const read = (name) => readFile(new URL(name, import.meta.url), "utf8");
-const [library, dashboard, modal] = await Promise.all([
-  read("../src/pages/LibraryPage.jsx"),
+const [page, header, content, cards, modals, data, meta, dashboard, modal] = await Promise.all([
+  read("../src/features/library/LibraryPage.jsx"),
+  read("../src/features/library/components/LibraryHeader.jsx"),
+  read("../src/features/library/components/LibraryContent.jsx"),
+  read("../src/features/library/components/LibraryCards.jsx"),
+  read("../src/features/library/components/LibraryModals.jsx"),
+  read("../src/features/library/hooks/useLibraryData.js"),
+  read("../src/features/library/components/libraryMeta.js"),
   read("../src/features/dashboard/LearnerDashboard.jsx"),
   read("../src/components/dashboard/AddRecordModal.jsx"),
 ]);
+const library = [page, header, content, cards, modals, data, meta].join("\n");
 
 test("the Library header carries the + and the sheet, community-style", () => {
   assert.match(library, /aria-label=\{t\('records\.title'\)\}/, "the + button, labelled like the old FAB");

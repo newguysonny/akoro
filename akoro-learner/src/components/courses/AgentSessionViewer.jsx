@@ -26,7 +26,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
-import TeachAgentModal from '../teaching/TeachAgentModal.jsx';
+import { TeachAgentModal } from '../../features/teaching/index.js';
 import { API } from '../../services/api.js';
 import { startLessonTranscription, getLessonTranscriptionStatus } from '../../services/recordsApi.js';
 import { setNowStudying, updateNowProgress } from '../../utils/nowStudying.js';

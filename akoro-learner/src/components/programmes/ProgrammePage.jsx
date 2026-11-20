@@ -36,7 +36,7 @@ import { BRAND } from '../../constants.js';
 import { Icon } from '../common/Icons.jsx';
 import Toast from '../common/Toast.jsx';
 import Spinner from '../common/Spinner.jsx';
-import { useIsMobileView } from '../teaching/SessionReaderModal.jsx';
+import { useIsMobileView } from '../../hooks/useIsMobileView.js';
 import { AUTHOR } from '../pharmd/pharmdData.js';
 import { fetchProgramme, fetchProgrammeCourse } from '../../services/programmesApi.js';
 

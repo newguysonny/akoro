@@ -12,7 +12,7 @@ import { hasAnswer, stepStatuses, resumeStep, openingAnswers, shownAnswer, lastC
 import { MathText, QuestionFigure, QuestionContext } from '../components/activity/QuestionPaper.jsx';
 import AnswerPaper, { FileCard } from '../components/activity/AnswerPaper.jsx';
 import PaperFrame, { printPaperHtml } from '../components/activity/PaperFrame.jsx';
-import WhiteboardModal from '../components/teaching/WhiteboardModal.jsx';
+import { WhiteboardModal } from '../features/teaching/index.js';
 // The document editor (TipTap + the .docx writer) loads only when opened.
 const WordEditor = lazy(() => import('../components/docs/WordEditor.jsx'));
 import { labelAnswerText, parseLabelAnswer, letterOf, readChoice, isAnswered, FORMAT_NAMES } from '../lib/paper.js';

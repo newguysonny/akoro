@@ -11,10 +11,15 @@ import test from "node:test";
 const read = (name) => readFile(new URL(name, import.meta.url), "utf8");
 const [composer, chatView, board, teach, decay] = await Promise.all([
   read("../src/components/common/FortizoChatComposer.jsx"),
-  read("../src/components/teaching/SessionChatView.jsx"),
-  read("../src/components/teaching/WhiteboardModal.jsx"),
-  read("../src/components/teaching/TeachAgentModal.jsx"),
-  read("../src/components/teaching/DecaySessionModal.jsx"),
+  read("../src/features/teaching/components/SessionChatView.jsx"),
+  read("../src/features/teaching/components/WhiteboardModal.jsx"),
+  // Teaching moved to src/features/teaching; the composer prop lives in the
+  // chat view and the modal in the shell after the split.
+  Promise.all([
+    read("../src/features/teaching/components/TeachAgentModal.jsx"),
+    read("../src/features/teaching/components/TeachAgentChat.jsx"),
+  ]).then((a) => a.join("\n")),
+  read("../src/features/teaching/components/DecaySessionModal.jsx"),
 ]);
 
 test("the composer gains a whiteboard tool beside the reader tool", () => {

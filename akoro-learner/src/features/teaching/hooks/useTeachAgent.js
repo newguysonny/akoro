@@ -1,23 +1,27 @@
+// Teaching session state, socket lifecycle, voice/tts and handlers.
+//
+// Extracted verbatim from TeachAgentModal: the modal keeps the markup and
+// calls this hook once. No behaviour lives here that did not live in the
+// component before.
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { io } from 'socket.io-client';
-import { startMicCapture } from '../../utils/micCapture.js';
-import { BRAND, RED, GREEN, GOLD, SUBJECTS, SUBJECT_COLORS, STUDENT_ID } from '../../constants.js';
-import { acquireActivityLock } from '../../utils/activityLock.js';
-import { useWakeLock } from '../../hooks/useWakeLock.js';
-import { API, apiGet, apiPost } from '../../services/api.js';
-import { socketOptions } from '../../client/socket';
-const AGENT_CONFIG = { name: '', emoji: '🤖', guideName: 'NaNa Esumai', guideEmoji: '🧠', guideRenderStyle: {} };
-import { XIcon, SparkleIcon, ZapIcon, BrainIcon, Icon } from '../common/Icons.jsx';
-import SessionChatView from './SessionChatView.jsx';
-import { makeQuote, withQuote } from '../../lib/quotedMessage.js';
-import { materialText, localLearnSuggestions, learnSuggestionInput, shapeLearnSuggestions } from '../../lib/learnSuggestions.js';
-import SessionReaderModal, { buildSessionReaderPages, useIsMobileView } from './SessionReaderModal.jsx';
-import WhiteboardModal from './WhiteboardModal.jsx';
-import { useLang } from '../../contexts/LanguageContext.jsx';
-import { APP_HOME } from '../../config/target.js';
+import { startMicCapture } from '../../../utils/micCapture.js';
+import { STUDENT_ID } from '../../../constants.js';
+import { acquireActivityLock } from '../../../utils/activityLock.js';
+import { useWakeLock } from '../../../hooks/useWakeLock.js';
+import { API, apiGet, apiPost } from '../../../services/api.js';
+import { socketOptions } from '../../../client/socket';
+import { makeQuote, withQuote } from '../../../lib/quotedMessage.js';
+import { materialText, localLearnSuggestions, learnSuggestionInput, shapeLearnSuggestions } from '../../../lib/learnSuggestions.js';
+import { APP_HOME } from '../../../config/target.js';
+import { useLang } from '../../../contexts/LanguageContext.jsx';
+import { useIsMobileView } from '../../../hooks/useIsMobileView.js';
+import { buildSessionReaderPages } from '../components/sessionReaderModel.js';
 
-function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarted, onSessionSaved, content = null }) {
+const AGENT_CONFIG = { name: '', emoji: '🤖', guideName: 'NaNa Esumai', guideEmoji: '🧠', guideRenderStyle: {} };
+
+export function useTeachAgent({ session, config, onClose, onMinimize, onSessionStarted, onSessionSaved, content = null }) {
   // Hold the activity lock so an auto-reload can't interrupt a teaching session.
   useEffect(() => acquireActivityLock(), []);
   // Keep the screen awake while a session runs (teaching, continuation,
@@ -835,276 +839,17 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
     }
   };
 
-  // Summary view — own fullscreen container
-  if (activeTab === "summary") {
-    const sc = SUBJECT_COLORS[subject?.toLowerCase()] || BRAND;
-    return (
-      <div style={{ position:"fixed",inset:0,zIndex:3000,background:"var(--ak-bg)",
-        display:"flex",flexDirection:"column",fontFamily:"'Nunito',sans-serif" }}>
-        <div style={{ display:"flex",alignItems:"center",background:"var(--ak-tag-bg)",
-          borderBottom:"1px solid var(--ak-border)",paddingTop:"calc(env(safe-area-inset-top, 0px) + 14px)" }}>
-          {["chat","summary"].map(tab=>(
-            <button key={tab} onClick={()=>setActiveTab(tab)}
-              style={{ flex:1,padding:"10px 0",background:"none",border:"none",cursor:"pointer",
-                fontSize:12,fontWeight:activeTab===tab?800:600,
-                color:activeTab===tab?sc:"var(--ak-text-muted)",
-                borderBottom:`2px solid ${activeTab===tab?sc:"transparent"}`,
-                fontFamily:"'Nunito',sans-serif",transition:"all .2s" }}>
-              {tab==="chat" ? t('teaching.tab_chat') : t('teaching.tab_summary')}
-            </button>
-          ))}
-          <div onClick={onClose} style={{ width:36,height:36,borderRadius:"50%",background:"var(--ak-tag-bg)",
-            display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",marginRight:12,flexShrink:0 }}>
-            <XIcon size={15} color="var(--ak-text-muted)"/>
-          </div>
-        </div>
-        <div style={{ flex:1,overflowY:"auto",padding:"16px" }}>
-          {loading&&!summary?(
-            <div style={{ display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"60%",gap:16 }}>
-              <div style={{ width:56,height:56,borderRadius:"50%",background:`${sc}22`,border:`2px solid ${sc}`,display:"flex",alignItems:"center",justifyContent:"center",animation:"pulse-dot 1.2s ease-in-out infinite" }}><SparkleIcon size={22} color={sc}/></div>
-              <p style={{ fontSize:14,fontWeight:700,color:"var(--ak-text-muted)",margin:0 }}>{t('teaching.generating_summary')}</p>
-            </div>
-          ):summaryErr?(
-            <div style={{ display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"60%",gap:14,padding:"0 24px",textAlign:"center" }}>
-              <p style={{ fontSize:14,fontWeight:700,color:"var(--ak-text-sub)",margin:0,lineHeight:1.6 }}>{summaryErr}</p>
-              <button onClick={generateSummary} style={{ padding:"11px 22px",borderRadius:12,border:"none",background:`linear-gradient(135deg,${sc},${sc}CC)`,fontSize:13,fontWeight:800,color:"#fff",cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>{t('common.retry') || 'Try again'}</button>
-            </div>
-          ):summary&&(
-            <div style={{ display:"flex",flexDirection:"column",gap:12 }}>
-              <div style={{ background:`linear-gradient(135deg,${sc}22,${sc}10)`,border:`1.5px solid ${sc}30`,borderRadius:18,padding:"18px 16px" }}>
-                <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12 }}>
-                  <div><p style={{ fontSize:11,fontWeight:800,color:sc,margin:"0 0 3px",letterSpacing:.4 }}>{t('teaching.teaching_score')}</p><p style={{ fontSize:38,fontWeight:900,color:"var(--ak-text)",margin:0,fontFamily:"monospace" }}>{summary.teachingScore}<span style={{ fontSize:16,color:"var(--ak-text-muted)" }}>/100</span></p></div>
-                  <div style={{ textAlign:"right" }}><p style={{ fontSize:10,fontWeight:700,color:"var(--ak-text-muted)",margin:"0 0 4px" }}>{t('teaching.xp_earned')}</p><div style={{ display:"flex",alignItems:"center",gap:5,justifyContent:"flex-end" }}><ZapIcon size={14} color={GOLD}/><span style={{ fontSize:20,fontWeight:900,color:GOLD }}>{summary.xpEarned}</span></div></div>
-                </div>
-              </div>
-              <div style={{ background:"var(--ak-tag-bg)",border:"1px solid var(--ak-border)",borderRadius:14,padding:"14px" }}>
-                <div style={{ display:"flex",alignItems:"center",gap:6,marginBottom:8 }}><BrainIcon size={13} color={sc}/><span style={{ fontSize:10.5,fontWeight:800,color:sc,letterSpacing:.3 }}>{t('teaching.agent_feedback')}</span></div>
-                <p style={{ fontSize:13,fontWeight:600,color:"var(--ak-text-sec)",margin:0,lineHeight:1.6 }}>{summary.agentFeedback}</p>
-              </div>
-              {summary.keyConcepts?.length>0&&(
-                <div style={{ background:"var(--ak-tag-bg)",border:"1px solid var(--ak-border)",borderRadius:14,padding:"14px" }}>
-                  <p style={{ fontSize:10.5,fontWeight:800,color:"var(--ak-text-sub)",margin:"0 0 10px",letterSpacing:.3 }}>{t('teaching.key_concepts')}</p>
-                  <div style={{ display:"flex",flexWrap:"wrap",gap:7 }}>{summary.keyConcepts.map((c,i)=><div key={i} style={{ background:`${sc}18`,border:`1px solid ${sc}30`,borderRadius:8,padding:"4px 11px" }}><span style={{ fontSize:11.5,fontWeight:700,color:sc }}>{c}</span></div>)}</div>
-                </div>
-              )}
-              <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10 }}>
-                <div style={{ background:"rgba(16,185,129,.08)",border:"1px solid rgba(16,185,129,.20)",borderRadius:14,padding:"12px" }}><p style={{ fontSize:10,fontWeight:800,color:GREEN,margin:"0 0 8px",letterSpacing:.3 }}>{t('teaching.strengths')}</p>{summary.strengthAreas?.map((s,i)=><p key={i} style={{ fontSize:11.5,fontWeight:600,color:"var(--ak-success-text)",margin:"0 0 4px",lineHeight:1.4 }}>· {s}</p>)}</div>
-                <div style={{ background:"rgba(245,158,11,.08)",border:"1px solid rgba(245,158,11,.20)",borderRadius:14,padding:"12px" }}><p style={{ fontSize:10,fontWeight:800,color:GOLD,margin:"0 0 8px",letterSpacing:.3 }}>{t('teaching.gaps')}</p>{summary.gapsIdentified?.map((g,i)=><p key={i} style={{ fontSize:11.5,fontWeight:600,color:"var(--ak-warn-text)",margin:"0 0 4px",lineHeight:1.4 }}>· {g}</p>)}</div>
-              </div>
-              {/* Not a battle: you never battle the guide. It asks, your protégé answers, a mark sheet. */}
-              <div style={{ background:`${BRAND}0C`,border:`1px solid ${BRAND}26`,borderRadius:14,padding:"13px 14px",display:"flex",alignItems:"center",gap:12 }}>
-                <Icon name="ti-clipboard-check" size={22} color={BRAND}/>
-                <div style={{ flex:1,minWidth:0 }}>
-                  <p style={{ fontSize:12.5,fontWeight:900,color:"var(--ak-text)",margin:0 }}>Review with your teaching guide</p>
-                  <p style={{ fontSize:11.5,fontWeight:600,color:"var(--ak-text-sub)",margin:"2px 0 0",lineHeight:1.45 }}>Your guide asks questions on what you just taught; your protégé answers. A mark sheet, no opponent.</p>
-                  {review.msg&&<p style={{ fontSize:11.5,fontWeight:800,color:RED,margin:"6px 0 0" }}>{review.msg}</p>}
-                </div>
-                <button onClick={requestReview} disabled={review.busy} style={{ padding:"9px 14px",borderRadius:12,border:"none",background:BRAND,color:"#fff",fontSize:12.5,fontWeight:900,cursor:review.busy?"default":"pointer",opacity:review.busy?.6:1,fontFamily:"'Nunito',sans-serif",flexShrink:0 }}>{review.busy?"Starting…":"Request a review"}</button>
-              </div>
-              <button onClick={onClose} style={{ padding:"13px",borderRadius:14,border:"none",background:`linear-gradient(135deg,${sc},${sc}CC)`,fontSize:13,fontWeight:800,color:"#fff",cursor:"pointer",fontFamily:"'Nunito',sans-serif",marginBottom:8 }}>{t('teaching.save_close')}</button>
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  // Chat view — SessionChatView is the root, no wrapper needed. When the
-  // reader is open, the same live session is reused: embedded as the right
-  // column on desktop/tablet (the Fortizo split — reader left, chat right),
-  // or sitting underneath the full-screen reader modal on mobile. All session
-  // state lives here, so opening/closing the reader never restarts anything.
-  const sessionChat = (embedded) => (
-    <SessionChatView
-      blocks={blocks}
-      loading={loading || (initLoading && blocks.length === 0)}
-      loadingNote={initLoading && blocks.length === 0 ? prepNote : ''}
-      input={input}
-      onInputChange={setInput}
-      onSend={handleSend}
-      quote={quote}
-      onQuoteClear={() => setQuote(null)}
-      topic={topic}
-      subject={subject}
-      reference={config?.reference || null}
-      agentName={agentNm}
-      agentEmoji={agentEm}
-      mode={mode}
-      userTurns={userTurns}
-      showSummarize={userTurns >= 2 && !summary}
-      onSummarize={generateSummary}
-      onMinimize={handleMinimize}
-      recording={recording}
-      onToggleRecording={toggleRecording}
-      seconds={seconds}
-      voiceStreaming={voiceStreaming}
-      interimText={interimText}
-      voiceLevel={voiceLevel}
-      onToggleVoice={toggleVoiceStream}
-      cognitive={cogState}
-      guideLabel={`${guide.emoji} ${guide.name}`}
-      onSwitchAgent={wsReady ? openSwitch : null}
-      switching={switching}
-      connState={connState}
-      onClose={onClose}
-      embedded={embedded}
-      onOpenReader={readerOpen ? closeReader : openReader}
-      onCite={content ? jumpToCitation : null}
-      onOpenBoard={() => setBoardOpen(true)}
-      materialBox={materialBox}
-      liveStudent={liveStudent}
-      liveGuide={liveGuide}
-    />
-  );
-
-  /* The content box — the session's material, one tap away. */
-  const materialBox = content ? (
-    <button
-      type="button"
-      onClick={openReader}
-      disabled={content.state !== 'ready'}
-      title={content.state === 'ready' ? 'Open the material' : content.state === 'loading' ? 'Opening…' : (content.err || 'Material unavailable')}
-      style={{
-        width: '100%', display: 'flex', alignItems: 'center', gap: 11, padding: '9px 12px',
-        borderRadius: 14, cursor: content.state === 'ready' ? 'pointer' : 'default',
-        background: 'var(--ak-surface)', border: `1.5px solid ${content.state === 'ready' ? `${BRAND}45` : 'var(--ak-border2)'}`,
-        opacity: content.state === 'ready' ? 1 : 0.75, textAlign: 'left',
-        fontFamily: "'Nunito',sans-serif",
-      }}>
-      <span style={{ width: 34, height: 34, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: content.state === 'error' ? 'rgba(239,68,68,.12)' : `${BRAND}16` }}>
-        {content.state === 'loading' ? <span className="ti ti-loader-2" style={{ fontSize: 16, color: BRAND, animation: 'tam-spin 1s linear infinite' }}/>
-          : <Icon name={content.state === 'error' ? 'ti-cloud-off' : (content.box?.icon || 'ti-file-text')} size={16} color={content.state === 'error' ? RED : BRAND}/>}
-      </span>
-      <span style={{ flex: 1, minWidth: 0 }}>
-        <span style={{ display: 'block', fontSize: 12.5, fontWeight: 800, color: 'var(--ak-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{content.box?.title || topic}</span>
-        <span style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: 'var(--ak-text-sub)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-          {content.state === 'loading' ? 'Opening the material…' : content.state === 'error' ? (content.err || 'Couldn’t open this material.') : (content.box?.sub || 'Tap to open')}
-        </span>
-        {content.state === 'ready' && content.pct != null && (
-          <span style={{ display: 'block', height: 3.5, borderRadius: 99, background: 'var(--ak-tag-bg)', marginTop: 5, overflow: 'hidden' }}>
-            <span style={{ display: 'block', height: '100%', width: `${Math.max(0, Math.min(100, content.pct))}%`, borderRadius: 99, background: `linear-gradient(90deg,${BRAND}AA,${BRAND})`, transition: 'width .4s' }}/>
-          </span>
-        )}
-      </span>
-      {content.state === 'ready' && <span className="ti ti-chevron-right" style={{ fontSize: 15, color: 'var(--ak-text-sub)', flexShrink: 0 }}/>}
-    </button>
-  ) : null;
-
-  /* The reader — the session guide, or the real material when present. */
-  const readerProps = content ? {
-    docTitle: content.docTitle || `${subject} — ${topic}`,
-    sourceName: content.sourceName || 'Session material',
-    docKey: content.docKey || null,
-    pages: content.pages || [],
-    media: content.media || null,
-    renderPageContent: content.renderPageContent || null,
-    rawPages: content.rawPages || false,
-    initialTool: config?.openTool || null,
-    initialArtifactId: config?.openArtifact || null,
-    pageBlocks: content.pageBlocks || null,
-    transcript: content.transcript || null,
-    onTranscribe: content.onTranscribe || null,
-    transcribeState: content.transcribeState || null,
-    transcribeError: content.transcribeError || null,
-    // The community discussion attached to this content — every content
-    // connected to one of the learner's communities carries its chat
-    // into the reader. Null (plain topic sessions) keeps the old reader.
-    discussion: content.discussion || null,
-    // Ask (library records): whole-document Q&A with jump-to-source citations,
-    // plus the grounded learn suggestions for its dropdown.
-    ask: content.ask ? { ...content.ask, suggestions: learnSuggestions } : null,
-    tools: content.tools || null,
-    artifacts: content.artifacts || null,
-    // Gathered content: citation chips + Sources list (the host opens the
-    // original source and returns). Folder mode: contents row / home grid.
-    sourceCitations: content.sourceCitations || null,
-    folderNav: content.folderNav || null,
-    folderHome: content.folderHome || null,
-    onClose: closeReader,
-    onExplainSelection: explainSelection,
-    jumpTo: readerJump,
-  } : {
-    docTitle: `${subject} — ${topic}`,
-    sourceName: readerReference?.name || "Session guide",
-    pages: readerPages,
-    onClose: closeReader,
-    onExplainSelection: explainSelection,
+  return {
+    session, config, onClose, onMinimize, onSessionStarted, onSessionSaved, content,
+    topic, subject, agentNm, agentEm, guideNm, guideEm, guideRS, mode, t,
+    sessionId, blocks, initLoading, prepNote, input, setInput, quote, setQuote,
+    recording, seconds, loading, activeTab, setActiveTab, summary, summaryErr, review,
+    requestReview, wsReady, connState, userTurns, fmt,
+    handleSend, handleMinimize, toggleRecording, toggleVoiceStream,
+    voiceStreaming, interimText, voiceLevel, cogState, liveStudent, liveGuide,
+    guide, switching, switchOpen, setSwitchOpen, agentChoices, openSwitch, performSwitch,
+    generateSummary, isMobileView, readerOpen, boardOpen, setBoardOpen,
+    openReader, closeReader, readerChat, jumpToCitation, explainSelection,
+    readerJump, readerPages, readerReference, learnSuggestions,
   };
-
-  return (
-    <>
-      <style>{'@keyframes tam-spin{to{transform:rotate(360deg)}}'}</style>
-      {isMobileView ? (
-        // Mobile: full-screen reader modal over the session chat (the chat
-        // button inside the reader returns here).
-        <>
-          {sessionChat(false)}
-          {readerOpen && <SessionReaderModal {...readerProps} chatState={readerChat} onOpenChat={closeReader} onClose={readerChat === "ask" && onClose ? onClose : closeReader}/>}
-        </>
-      ) : readerOpen ? (
-        // Desktop/tablet: the Fortizo split — reader left, live session right.
-        // Same close rule as mobile: in the default Ask state the reader's
-        // back exits the viewer to the previous page; only an Agent session's
-        // reader closes back onto the session chat.
-        <SessionReaderModal {...readerProps} chatState={readerChat} onClose={readerChat === "ask" && onClose ? onClose : closeReader} chatNode={readerChat === "agent" ? sessionChat(true) : null}/>
-      ) : (
-        sessionChat(false)
-      )}
-
-      {boardOpen && (
-        <WhiteboardModal topic={topic} subject={subject} onClose={() => setBoardOpen(false)} />
-      )}
-
-      {switchOpen && (
-        <div className="ak-sheet-overlay" onClick={() => !switching && setSwitchOpen(false)}
-          style={{ position:"fixed",inset:0,zIndex:3200,background:"rgba(6,6,18,.6)",
-            backdropFilter:"blur(5px)",display:"flex",alignItems:"flex-end",justifyContent:"center" }}>
-          <div className="ak-sheet-panel" onClick={e => e.stopPropagation()}
-            style={{ background:"var(--ak-surface)",width:"100%",maxWidth:540,maxHeight:"78vh",overflowY:"auto",
-              borderRadius:"22px 22px 0 0",fontFamily:"'Nunito',sans-serif",
-              animation:"sheet-up .28s cubic-bezier(.34,1.4,.6,1)",border:"1px solid var(--ak-border)" }}>
-            <div style={{ padding:"12px 0 4px",display:"flex",justifyContent:"center" }}>
-              <div style={{ width:38,height:4,borderRadius:4,background:"var(--ak-border3)" }}/>
-            </div>
-            <div style={{ padding:"6px 18px 26px" }}>
-              <p style={{ fontSize:16,fontWeight:900,color:"var(--ak-text)",margin:"4px 0 3px" }}>{t('teaching.switch_teacher')}</p>
-              <p style={{ fontSize:12,fontWeight:600,color:"var(--ak-text-muted)",margin:"0 0 16px",lineHeight:1.5 }}>
-                {t('teaching.switch_sub')}
-              </p>
-              {!agentChoices ? (
-                [0,1].map(i => <div key={i} style={{ height:64,borderRadius:14,background:"var(--ak-tag-bg)",marginBottom:9 }}/>)
-              ) : (
-                <div style={{ display:"flex",flexDirection:"column",gap:9 }}>
-                  {agentChoices.map(a => {
-                    const active = a.id === currentPair;
-                    return (
-                      <button key={a.id} onClick={() => performSwitch(a.id)} disabled={switching || active}
-                        style={{ display:"flex",alignItems:"center",gap:12,textAlign:"left",
-                          background:active?"rgba(108,59,255,.16)":"var(--ak-tag-bg)",
-                          border:`1.5px solid ${active?BRAND:"var(--ak-border)"}`,borderRadius:14,
-                          padding:"12px 14px",cursor:(switching||active)?"default":"pointer",width:"100%" }}>
-                        <div style={{ width:42,height:42,borderRadius:12,flexShrink:0,display:"flex",
-                          alignItems:"center",justifyContent:"center",fontSize:22,background:"var(--ak-tag-bg)" }}>{a.avatar}</div>
-                        <div style={{ flex:1,minWidth:0 }}>
-                          <div style={{ fontSize:13.5,fontWeight:800,color:"var(--ak-text)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{a.name}</div>
-                          <div style={{ fontSize:11,fontWeight:600,color:"var(--ak-text-muted)",marginTop:2 }}>
-                            {a.kind === "platform" ? t('teaching.platform_default') : (a.teacher ? `by ${a.teacher}` : t('teaching.trained_agent'))}{a.subject ? ` · ${a.subject}` : ""}
-                          </div>
-                        </div>
-                        {active && <span style={{ fontSize:10,fontWeight:900,color:BRAND,background:`${BRAND}22`,padding:"3px 9px",borderRadius:20,flexShrink:0 }}>{t('teaching.current')}</span>}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-    </>
-  );
 }
-
-
-
-export default TeachAgentModal;

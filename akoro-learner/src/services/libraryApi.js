@@ -1,7 +1,7 @@
 /**
  * libraryApi.js — learner library data seam.
  *
- * The Library page (pages/LibraryPage.jsx) shows what the learner owns,
+ * The Library page (features/library/LibraryPage.jsx) shows what the learner owns,
  * filterable by kind. Each kind is a small fetch + normalizer that returns
  * unified rows:
  *

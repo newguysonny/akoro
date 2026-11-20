@@ -40,7 +40,7 @@ import Toast from '../common/Toast.jsx';
 import AddToFolderPage from '../library/AddToFolderPage.jsx';
 import AddToCommunityPage from '../communities/AddToCommunityPage.jsx';
 import Spinner from '../common/Spinner.jsx';
-import { useIsMobileView } from '../teaching/SessionReaderModal.jsx';
+import { useIsMobileView } from '../../hooks/useIsMobileView.js';
 import {
   fetchPharmdProgramme, fetchPharmdCourse, fetchPharmdProgress, completePharmdTopic,
 } from '../../services/pharmdApi.js';

@@ -29,7 +29,7 @@
  * Guests get the honest sign-in prompt (same as course videos).
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import TeachAgentModal from '../teaching/TeachAgentModal.jsx';
+import { TeachAgentModal } from '../../features/teaching/index.js';
 import ExtractionCard from '../library/ExtractionCard.jsx';
 import { Icon } from '../common/Icons.jsx';
 import { BRAND } from '../../constants.js';
