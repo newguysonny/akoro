@@ -1,0 +1,16 @@
+{
+  "name": "Akoro Instructor",
+  "short_name": "Akoro",
+  "description": "Akoro for instructors — build courses, run live classes and track your students.",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#FAF8F5",
+  "theme_color": "#E8884A",
+  "icons": [
+    { "src": "/logo/akoro-light-180.png", "sizes": "180x180", "type": "image/png", "purpose": "any" },
+    { "src": "/logo/akoro-light-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/logo/akoro-light-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

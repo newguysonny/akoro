@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import { Users, BookOpen, Plus, Eye, Video, Bot, Zap, Wallet, Layers, Flame, Swords } from 'lucide-react';
 import { PageLayout } from '../../components/Layout.jsx';
 import SchoolNudge from '../../components/SchoolNudge.jsx';
+import InstallBanner from '../../components/InstallBanner.jsx';
 import { Btn, Toast, Skeleton, Modal, Inp } from '../../components/Primitives.jsx';
 import { useStatsAPI } from '../../hooks/useStatsAPI.js';
 import { useCoursesAPI } from '../../hooks/useCoursesAPI.js';
@@ -126,6 +127,9 @@ export default function HomePage() {
           </div>
         )}
         <SchoolNudge />
+        {/* Installable PWA: one-tap where the browser prompts, per-platform
+            instructions everywhere else. Dismissal persists per device. */}
+        <InstallBanner />
         {/* Stats grid */}
         <div style={{
           display: 'grid',

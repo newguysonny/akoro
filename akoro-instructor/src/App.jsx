@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext.jsx';
 import GlobalStyles from './components/GlobalStyles.jsx';
+import UpdatePrompt from './components/UpdatePrompt.jsx';
 import SigninPage         from './pages/auth/SigninPage.jsx';
 import SignupPage         from './pages/auth/SignupPage.jsx';
 import OnboardingPage     from './pages/auth/OnboardingPage.jsx';
@@ -190,6 +191,8 @@ export default function App() {
       <AuthProvider>
         <BrowserRouter>
           <AppRoutes />
+          {/* One update prompt for the whole app; it also registers the SW. */}
+          <UpdatePrompt />
         </BrowserRouter>
       </AuthProvider>
     </>
