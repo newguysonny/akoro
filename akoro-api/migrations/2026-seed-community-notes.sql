@@ -4,6 +4,13 @@
 -- Paste records, deliberately: their content lives in the row, so the seed
 -- needs no storage object and cannot leave a broken card. Idempotent by name.
 
+-- The premium showcase learner's own rows never appear in Discover (premium
+-- owners are excluded), so the seed belongs to tester01 instead.
+DELETE FROM edu.records
+ WHERE kind = 'paste'
+   AND name IN ('Cell structure: organelle functions', 'Photosynthesis: light and dark reactions')
+   AND user_id = (SELECT id FROM public.users WHERE email = 'stu.jss11@demo.akoro.app');
+
 INSERT INTO edu.records (user_id, kind, name, content, size, private)
 SELECT u.id, 'paste', 'Cell structure: organelle functions',
 $note$Cell structure — quick reference
@@ -29,7 +36,7 @@ Chloroplasts (plants): photosynthesis.
 Vacuole (plants): storage and turgor.
 Cell membrane: selective barrier, transport.$note$), false
 FROM public.users u
-WHERE u.email = 'stu.jss11@demo.akoro.app'
+WHERE u.email = 'tester01@demo.akoro.app'
   AND NOT EXISTS (SELECT 1 FROM edu.records r WHERE r.name = 'Cell structure: organelle functions');
 
 INSERT INTO edu.records (user_id, kind, name, content, size, private)
@@ -59,5 +66,5 @@ Calvin cycle / light-independent (stroma)
 
 Limiting factors: light intensity, CO2 concentration, temperature.$note$), false
 FROM public.users u
-WHERE u.email = 'stu.jss11@demo.akoro.app'
+WHERE u.email = 'tester01@demo.akoro.app'
   AND NOT EXISTS (SELECT 1 FROM edu.records r WHERE r.name = 'Photosynthesis: light and dark reactions');
