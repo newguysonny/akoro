@@ -66,9 +66,29 @@ const FILE_URL_TTL = 6 * 3600;   // outlasts a study sitting, like record downlo
    (seeded rows can store a generated name), so the URL is a candidate too. */
 function keyFromUrl(u) {
   try {
+    const url = new URL(u);
+    const all = url.pathname.replace(/^\/+/, "");
+    // Virtual-hosted R2: the bucket is the subdomain, so the whole path is key.
+    if (/\.r2\.cloudflarestorage\.com$/i.test(url.hostname)) return all || null;
+    const parts = all.split("/");
+    const i = parts.findIndex((seg) => seg === "public" || seg === "sign");
+    return (i >= 0 ? parts.slice(i + 2) : parts.slice(1)).join("/") || null;   // path-style: drop bucket
+  } catch { return null; }
+}
+
+/* The bucket a stored URL points into. R2 URLs are
+   <bucket>.<account>.r2.cloudflarestorage.com/<key>; a path-style or Supabase
+   URL keeps it as the first path segment (after /public/). The catalogue rows
+   were uploaded through more than one store, so the bucket in the row wins
+   over the configured one. */
+function bucketFromUrl(u) {
+  try {
+    const host = new URL(u).hostname;
+    const r2 = host.match(/^([a-z0-9-]+)\.([a-z0-9]+\.r2\.cloudflarestorage\.com)$/i);
+    if (r2) return r2[1];
     const parts = new URL(u).pathname.replace(/^\/+/, "").split("/");
     const i = parts.indexOf("public");
-    return (i >= 0 ? parts.slice(i + 2) : parts.slice(1)).join("/") || null;
+    return (i >= 0 ? parts[i + 1] : parts[0]) || null;
   } catch { return null; }
 }
 
@@ -87,11 +107,14 @@ async function resolveFileUrl(bucket, path, storedUrl) {
   // R2 only when it is actually configured - without a bucket name the SDK
   // returns a bucket-less URL that 404s, which is worse than the stored one.
   if (recordsStorageEnabled()) {
+    const urlBucket = storedUrl ? bucketFromUrl(storedUrl) : null;
     for (const key of keys) {
-      try {
-        return await createPresignedDownload(key);
-      } catch (err) {
-        console.error("[pharmd] could not sign file url (r2):", key, err?.message || err);
+      for (const b of [urlBucket, undefined]) {
+        try {
+          return await createPresignedDownload(key, b ? { bucket: b } : undefined);
+        } catch (err) {
+          console.error("[pharmd] could not sign file url (r2)", b || "(configured)", key, err?.message || err);
+        }
       }
     }
   }

@@ -157,7 +157,7 @@ export async function createPresignedUpload(fileName, fileType, userId, { sizeBy
 
 /** A readable URL for the file — inline for the viewer (media/pdf),
  *  attachment when downloading. Dispatches on the key's store prefix. */
-export async function createPresignedDownload(fileKey, { downloadName } = {}) {
+export async function createPresignedDownload(fileKey, { downloadName, bucket } = {}) {
   if (isFallbackFileKey(fileKey)) {
     const name = downloadName
       ? String(downloadName).replace(/[^a-zA-Z0-9 ._ -]/g, "_").slice(0, 150)
@@ -170,7 +170,7 @@ export async function createPresignedDownload(fileKey, { downloadName } = {}) {
     return data.signedUrl;
   }
   const cmd = new GetObjectCommand({
-    Bucket: BUCKET,
+    Bucket: bucket || BUCKET,
     Key:    fileKey,
     ...(downloadName
       ? { ResponseContentDisposition: `attachment; filename="${String(downloadName).replace(/[^a-zA-Z0-9 ._ -]/g, "_").slice(0, 150)}"` }
