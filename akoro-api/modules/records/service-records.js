@@ -68,7 +68,11 @@ export async function uploadPreview(req, res) {
       userId: req.user.id, name: `preview-${req.params.id}.jpg`,
       body: file.buffer, contentType: file.mimetype || "image/jpeg", prefix: "previews",
     });
-    await store.setPreviewKey(req.params.id, key);
+    const { error: saveError } = await store.setPreviewKey(req.params.id, key);
+    if (saveError) {
+      console.error("[records] preview key save failed:", saveError.message);
+      return res500(res, "The preview could not be saved.");
+    }
     return res200(res, { previewKey: key });
   } catch (error) {
     return res400(res, error.message || "The preview could not be stored.");

@@ -4,4 +4,4 @@
 -- renders page 1 once (pdf.js already ships for the reader) and uploads the
 -- JPEG here; the key is what the card fetches. Nullable: older rows fall back
 -- to the icon until a document is opened once.
-ALTER TABLE records ADD COLUMN IF NOT EXISTS preview_key TEXT;
+ALTER TABLE edu.records ADD COLUMN IF NOT EXISTS preview_key TEXT;
