@@ -135,8 +135,10 @@ function topicFileUrl(req, id) {
 
 router.get("/topics/:id/file", asyncHandler(async (req, res) => {
   const id = req.params.id;
+  // programme_materials has no file_bucket column: the unified catalogue
+  // lives in "pharmd-courses"; the legacy table carries its own bucket.
   const uni = await edu().from("programme_materials")
-    .select("file_path, url, file_bucket").eq("id", id).maybeSingle();
+    .select("file_path, url").eq("id", id).maybeSingle();
   let row = uni.data;
   if (!row) {
     const legacy = await edu().from("pharmd_topics")
