@@ -105,7 +105,7 @@ export default function SettingsPage() {
 
   return (
     <PageLayout title="Settings" subtitle="Platform settings and account management">
-      <div style={{ maxWidth: 640, margin: '0 auto' }}>
+      <div style={{ width: '100%' }}>
 
         {/* Announcements */}
         <SettingsGroup title="Communication">

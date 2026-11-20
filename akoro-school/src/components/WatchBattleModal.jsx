@@ -22,7 +22,7 @@
  */
 import { useState, useEffect, useRef } from 'react';
 import { io } from 'socket.io-client';
-import { X, Trophy, Users, Radio, Square, Gavel , Flame, Swords, Flag, Ban, OctagonX } from 'lucide-react';
+import { X, Trophy, Users, Radio, Square, Gavel , Flame, Swords, Flag, Ban, XOctagon } from 'lucide-react';
 import { apiGet, apiPost } from '../services/api.js';
 import { socketOptions } from '../client/socket';
 import { WS_URL } from '../constants.js';
