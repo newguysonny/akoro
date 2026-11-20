@@ -20,7 +20,9 @@ export async function backfillPreviews(req, res) {
     rows = await listRecordsMissingPreview(limit);
   } catch (err) {
     console.error("[admin/previews] could not list records:", err?.message || err);
-    return res.status(400).json({ success: false, message: "Could not read the records table." });
+    // Surfaced to the admin console: this is an ops tool, and a generic "could
+    // not read" hides the actual PostgREST error from the person running it.
+    return res.status(400).json({ success: false, message: `Could not read the records table: ${err?.message || err}` });
   }
 
   let written = 0;
@@ -32,6 +34,8 @@ export async function backfillPreviews(req, res) {
     if (key) written += 1; else failed += 1;
   }
 
-  const remaining = await countRecordsMissingPreview();
+  let remaining = 0;
+  try { remaining = await countRecordsMissingPreview(); }
+  catch (err) { console.error("[admin/previews] count failed:", err?.message || err); }
   return res.status(200).json({ success: true, data: { dryRun, scanned: rows.length, written, failed, remaining } });
 }
