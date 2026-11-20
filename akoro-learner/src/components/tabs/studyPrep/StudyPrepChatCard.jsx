@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { BRAND, GREEN, RED } from '../../../constants.js';
-import BattleModal from '../../battles/BattleModal.jsx';
+import BattleModal from '../../../features/battles/index.js';
 import { Icon } from '../../common/Icons.jsx';
 import { countdownLabel, studyPrepCardHead, wakeOpen, workflowCardSteps } from '../../../lib/agentChatTrace.js';
 import { cacheEvents, cachedEvents, openWorkflowStream, rememberSeen, seenSequence } from '../../../lib/workflowStream.js';

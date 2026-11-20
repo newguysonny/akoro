@@ -13,9 +13,9 @@
  * request is still in flight tells them something false about themselves.
  */
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { BRAND, RED, GREEN } from '../../constants.js';
-import { apiGet, apiPost } from '../../services/api.js';
-import { Icon } from '../common/Icons.jsx';
+import { BRAND, RED, GREEN } from '../../../constants.js';
+import { apiGet, apiPost } from '../../../services/api.js';
+import { Icon } from '../../../components/common/Icons.jsx';
 import NoAgentSheet, { isNoAgentError } from './NoAgentSheet.jsx';
 
 const SHEET = {

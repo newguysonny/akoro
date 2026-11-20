@@ -27,12 +27,12 @@ import {
   DecayReviewModal,
   ConfigModal,
 } from '../teaching/index.js';
-import AssessmentRoom     from '../../components/assessment/AssessmentRoom.jsx';
-import ExamPrepConfidenceModal from '../../components/assessment/ExamPrepConfidenceModal.jsx';
-import BattleModal       from '../../components/battles/BattleModal.jsx';
-import ChallengeModal    from '../../components/battles/ChallengeModal.jsx';
-import { BattlesTab } from '../../components/battles/BattlesTab.jsx';
-import ChallengesList from '../../components/battles/ChallengesList.jsx';
+import { AssessmentRoom, ExamPrepConfidenceModal } from '../activities/index.js';
+import BattleModal, {
+  ChallengeModal,
+  BattlesTab,
+  ChallengesList,
+} from '../battles/index.js';
 import { fetchChallengeRequests } from '../../services/agentNetworkApi.js';
 import AgentChatTab  from '../agent-chat/index.js';
 import RankingsTab   from '../../components/tabs/RankingsTab.jsx';

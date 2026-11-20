@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { BRAND, RED, GREEN, GOLD, difficultyStyle, subjectStyle, AVATAR_FALLBACK } from '../../constants.js';
-import { XIcon, ZapIcon, StarIcon, Icon } from '../common/Icons.jsx';
-import { useLang } from '../../contexts/LanguageContext.jsx';
+import { BRAND, RED, GREEN, GOLD, difficultyStyle, subjectStyle, AVATAR_FALLBACK } from '../../../constants.js';
+import { XIcon, ZapIcon, StarIcon, Icon } from '../../../components/common/Icons.jsx';
+import { useLang } from '../../../contexts/LanguageContext.jsx';
 import { useNavigate } from 'react-router-dom';
-import { apiGet } from '../../services/api.js';
+import { apiGet } from '../../../services/api.js';
 
 import SheetFrame from './SheetFrame.jsx';
 /**

@@ -13,7 +13,7 @@ import { API, apiPost } from '../../services/api.js';
 import { BRAND } from '../../constants.js';
 import { Icon } from '../../components/common/Icons.jsx';
 import { AgentAvatar } from '../../components/common/AgentAvatar.jsx';
-import BattleModal from '../../components/battles/BattleModal.jsx';
+import BattleModal from '../../features/battles/index.js';
 
 /* ── palette ──────────────────────────────────────────────── */
 

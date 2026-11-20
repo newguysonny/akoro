@@ -1,4 +1,4 @@
-import { BRAND, RED, GREEN, GOLD } from '../../constants.js';
+import { BRAND, RED, GREEN, GOLD } from '../../../constants.js';
 
 /**
  * ProctorMonitor — webcam feed + live proctoring status.

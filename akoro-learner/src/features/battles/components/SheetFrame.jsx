@@ -4,7 +4,7 @@
  * scrim close it. The content is the caller's.
  */
 import { useEffect, useState } from 'react';
-import { Icon } from '../common/Icons.jsx';
+import { Icon } from '../../../components/common/Icons.jsx';
 
 const DESKTOP = '(min-width: 1025px)';
 

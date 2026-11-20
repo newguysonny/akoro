@@ -1,14 +1,14 @@
 import { useState, useRef, useEffect } from 'react';
 import { io } from 'socket.io-client';
-import { BRAND, RED, GREEN, GOLD, getStudentId } from '../../constants.js';
-import { acquireActivityLock } from '../../utils/activityLock.js';
-import { API } from '../../services/api.js';
-import { socketOptions } from '../../client/socket';
-import { useProctoring } from '../../hooks/useProctoring.js';
-import { useVoiceSession } from '../../hooks/useVoiceSession.js';
-import { useVoiceAnswer } from '../../hooks/useVoiceAnswer.js';
+import { BRAND, RED, GREEN, GOLD, getStudentId } from '../../../constants.js';
+import { acquireActivityLock } from '../../../utils/activityLock.js';
+import { API } from '../../../services/api.js';
+import { socketOptions } from '../../../client/socket';
+import { useProctoring } from '../../../hooks/useProctoring.js';
+import { useVoiceSession } from '../../../hooks/useVoiceSession.js';
+import { useVoiceAnswer } from '../../../hooks/useVoiceAnswer.js';
 import VoiceExam from './VoiceExam.jsx';
-import { XIcon, Icon } from '../common/Icons.jsx';
+import { XIcon, Icon } from '../../../components/common/Icons.jsx';
 
 /**
  * AssessmentRoom — the proctored Session Assessment Gateway.

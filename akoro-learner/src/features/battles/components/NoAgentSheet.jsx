@@ -7,10 +7,10 @@
  * they were trying to do.
  */
 import React, { useState } from 'react';
-import { BRAND, RED } from '../../constants.js';
-import { Icon } from '../common/Icons.jsx';
-import { DrawnAvatar } from '../common/AgentAvatar.jsx';
-import { API } from '../../config/urls.js';
+import { BRAND, RED } from '../../../constants.js';
+import { Icon } from '../../../components/common/Icons.jsx';
+import { DrawnAvatar } from '../../../components/common/AgentAvatar.jsx';
+import { API } from '../../../config/urls.js';
 
 // settingsApi's putAgent resolves the body even on a 4xx/5xx, so it cannot tell
 // us whether the agent was actually created — and here that difference decides

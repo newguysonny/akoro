@@ -15,10 +15,10 @@
  * the rows switch to showing what each agent scored.
  */
 import { useState, useEffect } from 'react';
-import { BRAND, RED, GREEN, GOLD } from '../../constants.js';
-import { apiGet } from '../../services/api.js';
-import { XIcon, Icon } from '../common/Icons.jsx';
-import { useLang } from '../../contexts/LanguageContext.jsx';
+import { BRAND, RED, GREEN, GOLD } from '../../../constants.js';
+import { apiGet } from '../../../services/api.js';
+import { XIcon, Icon } from '../../../components/common/Icons.jsx';
+import { useLang } from '../../../contexts/LanguageContext.jsx';
 
 const FONT = "'Nunito', sans-serif";
 

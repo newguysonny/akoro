@@ -1,6 +1,6 @@
 import { useRef, useEffect } from 'react';
-import { BRAND, RED, GREEN, GOLD } from '../../constants.js';
-import { Icon } from '../common/Icons.jsx';
+import { BRAND, RED, GREEN, GOLD } from '../../../constants.js';
+import { Icon } from '../../../components/common/Icons.jsx';
 
 /**
  * AssessmentChat — renders the Sergeant proctored-exam transcript.

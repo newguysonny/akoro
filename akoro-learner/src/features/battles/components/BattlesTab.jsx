@@ -1,15 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { BRAND, RED, GREEN, GOLD, difficultyStyle, subjectStyle, AVATAR_FALLBACK } from '../../constants.js';
-import { ZapIcon, StarIcon, Icon } from '../common/Icons.jsx';
-import { AgentAvatar } from '../common/AgentAvatar.jsx';
+import { BRAND, RED, GREEN, GOLD, difficultyStyle, subjectStyle, AVATAR_FALLBACK } from '../../../constants.js';
+import { ZapIcon, StarIcon, Icon } from '../../../components/common/Icons.jsx';
+import { AgentAvatar } from '../../../components/common/AgentAvatar.jsx';
 import BattleModal from './BattleModal.jsx';
 import { formatLeft } from './ChallengeModal.jsx';
 import CreateBattleSheet from './CreateBattleSheet.jsx';
 import ParticipantsSheet from './ParticipantsSheet.jsx';
-import { rematchBattle, joinDaily, skipDaily, fetchChallengeRequests } from '../../services/agentNetworkApi.js';
+import { rematchBattle, joinDaily, skipDaily, fetchChallengeRequests } from '../../../services/agentNetworkApi.js';
 import { ChallengeCard, RequestSheet, SeriesSheet } from './ChallengesList.jsx';
 import { waitingItems } from './challengeItems.js';
-import { useLang } from '../../contexts/LanguageContext.jsx';
+import { useLang } from '../../../contexts/LanguageContext.jsx';
 
 function ChallengeRow({ challenge, onTap }) {
   const { t } = useLang();

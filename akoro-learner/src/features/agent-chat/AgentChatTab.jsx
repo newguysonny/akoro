@@ -19,7 +19,7 @@ import RichText from '../../components/common/RichText.jsx';
 import CopyMessageButton from '../../components/common/CopyMessageButton.jsx';
 import { copyTextFrom } from '../../components/common/CopyMessageButton.jsx';
 import { useTaskAPI } from '../../hooks/useTaskAPI.js';
-import NoAgentSheet, { isNoAgentError } from '../../components/battles/NoAgentSheet.jsx';
+import { NoAgentSheet, isNoAgentError } from '../battles/index.js';
 import { confirmDialog } from '../../components/common/ConfirmHost.jsx';
 import AgentStatsTab from '../../components/tabs/AgentStatsTab.jsx';
 import { AGENT_CHAT_STOP_ENDPOINT, agentChatEndpoint, createAgentChatTurnId } from './lib/agentChatEndpoint.js';

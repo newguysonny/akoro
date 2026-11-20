@@ -6,9 +6,9 @@
  * by voice, with a tucked-away text fallback.
  */
 import { useState } from 'react';
-import { BRAND, RED, GREEN } from '../../constants.js';
-import { XIcon, Icon } from '../common/Icons.jsx';
-import { AgentAvatar } from '../common/AgentAvatar.jsx';
+import { BRAND, RED, GREEN } from '../../../constants.js';
+import { XIcon, Icon } from '../../../components/common/Icons.jsx';
+import { AgentAvatar } from '../../../components/common/AgentAvatar.jsx';
 
 const AMBER = '#F59E0B';
 

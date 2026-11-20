@@ -12,13 +12,13 @@
  * reference/Akoro Battles — Model.md.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Icon } from '../common/Icons.jsx';
-import Spinner from '../common/Spinner.jsx';
+import { Icon } from '../../../components/common/Icons.jsx';
+import Spinner from '../../../components/common/Spinner.jsx';
 import SheetFrame from './SheetFrame.jsx';
-import { BRAND, RED } from '../../constants.js';
+import { BRAND, RED } from '../../../constants.js';
 import { FILTERS, filterItems, challengeItems } from './challengeItems.js';
-import { acceptChallengeRequest, cancelChallengeRequest, fetchChallengeRequests } from '../../services/agentNetworkApi.js';
-import { apiPost } from '../../services/api.js';
+import { acceptChallengeRequest, cancelChallengeRequest, fetchChallengeRequests } from '../../../services/agentNetworkApi.js';
+import { apiPost } from '../../../services/api.js';
 
 const NUNITO = "'Nunito',sans-serif";
 const FORMAT_ICON = { '1v1': 'ti-swords', Group: 'ti-users-group', 'Team 2v2': 'ti-users', 'Open lobby': 'ti-door-enter', Daily: 'ti-calendar-event', Review: 'ti-clipboard-check' };
