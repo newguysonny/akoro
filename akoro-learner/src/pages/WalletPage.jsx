@@ -70,7 +70,8 @@ export default function WalletPage() {
         <h1 style={{ fontSize: 18, fontWeight: 900, margin: 0 }}>Wallet & AI Credits</h1>
       </div>
 
-      <div style={{ maxWidth: 620, margin: '0 auto', padding: 18 }}>
+      {/* Full-width content, matching the settings page: 16px gutters, no centred column. */}
+      <div style={{ padding: '18px 16px 24px' }}>
         {/* Balance */}
         <div style={{ background: `linear-gradient(135deg,${BRAND},#4C1DCC)`, borderRadius: 18, padding: '22px 20px', color: '#fff', marginBottom: 18 }}>
           <div style={{ fontSize: 13, fontWeight: 700, opacity: 0.85 }}>Your balance</div>
