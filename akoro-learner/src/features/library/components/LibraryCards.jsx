@@ -1,7 +1,8 @@
 import { Icon } from '../../../components/common/Icons.jsx';
 import { BRAND, RED, GREEN, GOLD } from '../../../constants.js';
 import { CARD_BASE, getMeta, getStatus, recordMeta, fmtDur, fmtSize } from './libraryMeta.js';
-import { recordFileSrc, recordPreviewUrl } from '../../../services/recordsApi.js';
+import { recordFileSrc } from '../../../services/recordsApi.js';
+import RecordPreviewImage from '../../../components/common/RecordPreviewImage.jsx';
 
 function MoreBtn({ item, onMore }) {
   if (!onMore) return null;
@@ -176,9 +177,8 @@ function RecordCard({ item, onOpen, onMore }) {
     <button onClick={() => onOpen(item)} onPointerDown={warm} onPointerEnter={warm}
       style={{ ...CARD_BASE, cursor: 'pointer' }}>
       {item.hasPreview ? (
-        <img src={recordPreviewUrl(item.id)} alt="" loading="lazy"
-          style={{ width: 46, height: 46, borderRadius: 11, flexShrink: 0, objectFit: 'cover', background: 'var(--ak-tag-bg)' }}
-          onError={(e) => { e.currentTarget.style.display = 'none'; }}/>
+        <RecordPreviewImage id={item.id}
+          style={{ width: 46, height: 46, borderRadius: 11, flexShrink: 0, objectFit: 'cover', background: 'var(--ak-tag-bg)' }}/>
       ) : (
       <div style={{
         width: 46, height: 46, borderRadius: 11, flexShrink: 0,

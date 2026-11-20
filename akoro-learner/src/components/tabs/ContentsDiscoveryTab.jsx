@@ -25,7 +25,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Icon } from '../common/Icons.jsx';
 import { BRAND, RED, GREEN, GOLD, STUDENT_ID } from '../../constants.js';
-import { discoverRecordsPage, discoverRecordOpen, listRecords, recordPreviewUrl } from '../../services/recordsApi.js';
+import { discoverRecordsPage, discoverRecordOpen, listRecords } from '../../services/recordsApi.js';
+import RecordPreviewImage from '../common/RecordPreviewImage.jsx';
 import { useCursorList, pagedStatusText } from '../../lib/usePagedList.js';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 import Toast from '../common/Toast.jsx';
@@ -80,9 +81,8 @@ function RecordCard({ item, type, wide, opening, onOpen }) {
         border: `1px solid ${meta.color}33`,
       }}>
         {item.hasPreview && !opening ? (
-          <img src={recordPreviewUrl(item.id)} alt="" loading="lazy"
-            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'top center' }}
-            onError={(e) => { e.currentTarget.style.display = 'none'; }}/>
+          <RecordPreviewImage id={item.id}
+            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'top center' }}/>
         ) : (
           <span style={{ fontSize: 46 }}>
             {opening
