@@ -60,18 +60,34 @@ const missing = (res, m) => res.status(404).json({ success: false, error: m });
    back to the stored/public URL when neither can sign. */
 const FILE_URL_TTL = 6 * 3600;   // outlasts a study sitting, like record downloads
 
+/* The object key inside a stored URL: R2 public/presigned URLs look like
+   /<bucket>/<key>, Supabase like /storage/v1/object/public/<bucket>/<key>.
+   The catalogue's rows do not always keep the same key the uploader wrote
+   (seeded rows can store a generated name), so the URL is a candidate too. */
+function keyFromUrl(u) {
+  try {
+    const parts = new URL(u).pathname.replace(/^\/+/, "").split("/");
+    const i = parts.indexOf("public");
+    return (i >= 0 ? parts.slice(i + 2) : parts.slice(1)).join("/") || null;
+  } catch { return null; }
+}
+
 async function resolveFileUrl(bucket, path, storedUrl) {
-  if (!path) return storedUrl || null;
-  try {
-    return await createPresignedDownload(path);
-  } catch (err) {
-    console.error("[pharmd] could not sign file url (r2):", err?.message || err);
+  const keys = [...new Set([path, storedUrl ? keyFromUrl(storedUrl) : null].filter(Boolean))];
+  for (const key of keys) {
+    try {
+      return await createPresignedDownload(key);
+    } catch (err) {
+      console.error("[pharmd] could not sign file url (r2):", key, err?.message || err);
+    }
   }
-  try {
-    const { data } = await db.storage.from(bucket || "pharmd-courses").createSignedUrl(path, FILE_URL_TTL);
-    if (data?.signedUrl) return data.signedUrl;
-  } catch (err) {
-    console.error("[pharmd] could not sign file url (supabase):", err?.message || err);
+  for (const key of keys) {
+    try {
+      const { data } = await db.storage.from(bucket || "pharmd-courses").createSignedUrl(key, FILE_URL_TTL);
+      if (data?.signedUrl) return data.signedUrl;
+    } catch (err) {
+      console.error("[pharmd] could not sign file url (supabase):", key, err?.message || err);
+    }
   }
   return storedUrl || publicFileUrl(bucket, path);
 }
