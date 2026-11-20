@@ -40,7 +40,7 @@ import { authenticateToken }  from "../auth/index.js";
 import { runPharmdUpload }    from "./uploader.js";
 import { safeCompare } from "../../lib/safeCompare.js";
 import { openai, OPENAI_MODEL } from "../../lib/aiModel.js";
-import { buildAskMessages, extractCitations, cleanModelOutput } from "../records/index.js";
+import { buildAskMessages, extractCitations, cleanModelOutput, createPresignedDownload } from "../records/index.js";
 import { pharmdContentKey } from "../../lib/contentKey.js";
 
 const edu = () => db.schema("edu");
@@ -51,8 +51,31 @@ const ok  = (res, data)  => res.json({ success: true, data });
 const bad = (res, m)     => res.status(400).json({ success: false, error: m });
 const missing = (res, m) => res.status(404).json({ success: false, error: m });
 
-/* The public URL of a topic's PDF — bucket objects are public, so
-   this is a pure string build (no storage round-trip). */
+/* The URL a learner opens a topic PDF with.
+   A stored public URL is only correct while the object is genuinely public:
+   a seeded or admin-uploaded file can live in a private bucket, and the
+   catalogue then hands out a 403 link the reader reports as "Failed to
+   fetch". Sign on read instead — R2 first (the catalogue uploader and the
+   records store share the bucket), then the Supabase bucket, and only fall
+   back to the stored/public URL when neither can sign. */
+const FILE_URL_TTL = 6 * 3600;   // outlasts a study sitting, like record downloads
+
+async function resolveFileUrl(bucket, path, storedUrl) {
+  if (!path) return storedUrl || null;
+  try {
+    return await createPresignedDownload(path);
+  } catch (err) {
+    console.error("[pharmd] could not sign file url (r2):", err?.message || err);
+  }
+  try {
+    const { data } = await db.storage.from(bucket || "pharmd-courses").createSignedUrl(path, FILE_URL_TTL);
+    if (data?.signedUrl) return data.signedUrl;
+  } catch (err) {
+    console.error("[pharmd] could not sign file url (supabase):", err?.message || err);
+  }
+  return storedUrl || publicFileUrl(bucket, path);
+}
+
 const publicFileUrl = (bucket, path) =>
   path ? db.storage.from(bucket || "pharmd-courses").getPublicUrl(path).data.publicUrl : null;
 
@@ -119,17 +142,17 @@ async function serveUnifiedCourse(res, code) {
     .eq("course_id", course.id).eq("status", "published").order("position").order("created_at");
   ok(res, {
     course: { id: course.id, code: course.code, title: course.title || course.code },
-    topics: (materials ?? []).map((m) => ({
+    topics: await Promise.all((materials ?? []).map(async (m) => ({
       id: m.id,
       position: m.position,
       title: m.title,
       read_minutes: m.read_minutes ?? parseMinutes(m.meta),
       mime: MIME_BY_TYPE[m.type] || "application/pdf",
       size: m.file_size ?? parseSizeBytes(m.meta),
-      file_url: m.url || (m.file_path ? publicFileUrl("pharmd-courses", m.file_path) : null),
+      file_url: await resolveFileUrl("pharmd-courses", m.file_path, m.url),
       file_hash: m.file_hash || null,
       contentKey: m.file_path ? pharmdContentKey({ file_path: m.file_path, file_hash: m.file_hash }) : null,
-    })),
+    }))),
   });
   return true;
 }
@@ -217,20 +240,20 @@ router.get("/courses/:code", asyncHandler(async (req, res) => {
 
   ok(res, {
     course: { id: course.id, code: course.code, title: course.title || course.code },
-    topics: (topics ?? []).map((t) => ({
+    topics: await Promise.all((topics ?? []).map(async (t) => ({
       id: t.id,
       position: t.position,
       title: t.title,
       read_minutes: t.read_minutes,
       mime: t.file_mime,
       size: t.file_size,
-      file_url: publicFileUrl(t.file_bucket, t.file_path),
+      file_url: await resolveFileUrl(t.file_bucket, t.file_path, t.url),
       file_hash: t.file_hash || null,
       // Shared extraction key: the parse is cached once per file and every
       // learner reads the same markdown (the workbook is public catalogue
       // content). Versioned by the file hash so a replaced PDF is a new key.
       contentKey: pharmdContentKey(t),
-    })),
+    }))),
   });
 }));
 
