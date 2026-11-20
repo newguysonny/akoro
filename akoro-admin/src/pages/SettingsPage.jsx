@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
-import { Settings, Lock, User, Shield, Megaphone, CreditCard } from 'lucide-react';
+import { Lock, User, Shield, Megaphone, CreditCard, KeyRound, Webhook, Mail, MessageSquare } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { PageLayout } from '../components/Layout.jsx';
 import { Btn, Inp, Toast, PageSkeleton } from '../components/Primitives.jsx';
 import { apiGet, apiPost, apiPatch } from '../services/api.js';
-import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, FONT } from '../constants.js';
+import { AMBER, INK, MUTED, BORDER, LIGHT, WHITE, RED, FONT } from '../constants.js';
+import { SettingsCard, SettingsGroup } from '../shared/SettingsCard.jsx';
 
 export default function SettingsPage() {
   const { user } = useAuth();
@@ -97,25 +98,25 @@ export default function SettingsPage() {
     padding: 24, marginBottom: 20,
   };
 
-  const cardTitle = (label, Icon) => (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
-      <div style={{
-        width: 36, height: 36, borderRadius: 10, background: `${AMBER}15`,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-      }}>
-        <Icon size={18} color={AMBER} />
-      </div>
-      <span style={{ fontSize: 15, fontWeight: 700, color: INK, fontFamily: FONT }}>{label}</span>
-    </div>
-  );
+  const cardHeader = {
+    margin: '0 0 20px', width: '100%', padding: 0, background: 'transparent',
+    border: 'none', boxShadow: 'none',
+  };
 
   return (
     <PageLayout title="Settings" subtitle="Platform settings and account management">
       <div style={{ maxWidth: 640, margin: '0 auto' }}>
 
-        {/* Announcements card */}
+        {/* Announcements */}
+        <SettingsGroup title="Communication">
         <div style={cardStyle}>
-          {cardTitle('Send Announcement', Megaphone)}
+          <SettingsCard
+            icon={<Megaphone size={18} color={AMBER} />}
+            title="Send Announcement"
+            color={AMBER}
+            chevron={false}
+            style={cardHeader}
+          />
           <form onSubmit={handleAnnouncement} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             <div>
               <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: INK, fontFamily: FONT, marginBottom: 6 }}>
@@ -168,10 +169,19 @@ export default function SettingsPage() {
             </div>
           </form>
         </div>
+        </SettingsGroup>
 
         {/* Billing: notifications & branding card (plan §4.6 #4) */}
+        <SettingsGroup title="Billing">
         <div style={cardStyle}>
-          {cardTitle('Billing — Notifications & Branding', CreditCard)}
+          <SettingsCard
+            icon={<CreditCard size={18} color={AMBER} />}
+            title="Billing"
+            subtitle="Notifications & Branding"
+            color={AMBER}
+            chevron={false}
+            style={cardHeader}
+          />
           {billDraft ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div style={{ display: 'flex', gap: 12 }}>
@@ -210,37 +220,43 @@ export default function SettingsPage() {
             <PageSkeleton header={false} variant="form" rows={3} />
           )}
         </div>
+        </SettingsGroup>
 
-        {/* Billing: gateway status card (read-only — keys live in env) */}
+        {/* Billing: gateway status (read-only — keys live in env) */}
         {billing?.gateway && (
-          <div style={cardStyle}>
-            {cardTitle('Billing — Gateway', CreditCard)}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-              {[
-                ['Paystack mode', billing.gateway.paystack_mode === 'live' ? 'Live' : billing.gateway.paystack_mode === 'test' ? 'Test' : 'Not configured'],
-                ['Paystack keys', billing.gateway.paystack_public_key && billing.gateway.paystack_secret_key ? 'Public + secret present' : 'Missing — set PAYSTACK_PUBLIC_KEY / PAYSTACK_SECRET_KEY'],
-                ['Webhook URL', billing.gateway.webhook_url || '—'],
-                ['Email provider (Resend)', billing.gateway.email_provider_configured ? 'Configured' : 'Not configured (RESEND_API_KEY)'],
-                ['SMS provider (Twilio)', billing.gateway.sms_provider_configured ? 'Configured' : 'Not configured (TWILIO_*)'],
-              ].map(([k, v], i) => (
-                <div key={k} style={{
-                  display: 'flex', justifyContent: 'space-between', gap: 16,
-                  padding: '10px 0', borderTop: i === 0 ? 'none' : `1px solid ${BORDER}`,
-                }}>
-                  <span style={{ fontSize: 12.5, fontWeight: 700, color: MUTED, fontFamily: FONT }}>{k}</span>
-                  <span style={{ fontSize: 12.5, color: INK, fontFamily: FONT, textAlign: 'right' }}>{v}</span>
-                </div>
-              ))}
-            </div>
-            <p style={{ fontSize: 11.5, color: MUTED, fontFamily: FONT, margin: '14px 0 0' }}>
+          <SettingsGroup title="Billing — Gateway">
+            {[
+              ['Paystack mode', billing.gateway.paystack_mode === 'live' ? 'Live' : billing.gateway.paystack_mode === 'test' ? 'Test' : 'Not configured', CreditCard],
+              ['Paystack keys', billing.gateway.paystack_public_key && billing.gateway.paystack_secret_key ? 'Public + secret present' : 'Missing — set PAYSTACK_PUBLIC_KEY / PAYSTACK_SECRET_KEY', KeyRound],
+              ['Webhook URL', billing.gateway.webhook_url || '—', Webhook],
+              ['Email provider (Resend)', billing.gateway.email_provider_configured ? 'Configured' : 'Not configured (RESEND_API_KEY)', Mail],
+              ['SMS provider (Twilio)', billing.gateway.sms_provider_configured ? 'Configured' : 'Not configured (TWILIO_*)', MessageSquare],
+            ].map(([k, v, Icon]) => (
+              <SettingsCard
+                key={k}
+                icon={<Icon size={18} color={AMBER} />}
+                title={k}
+                subtitle={v}
+                color={AMBER}
+                chevron={false}
+              />
+            ))}
+            <p style={{ fontSize: 11.5, color: MUTED, fontFamily: FONT, margin: '4px 16px 20px' }}>
               Keys are environment variables on the API service and are never editable from this dashboard.
             </p>
-          </div>
+          </SettingsGroup>
         )}
 
-        {/* Admin account card */}
+        {/* Admin account */}
+        <SettingsGroup title="Account">
         <div style={cardStyle}>
-          {cardTitle('Admin Account', User)}
+          <SettingsCard
+            icon={<User size={18} color={AMBER} />}
+            title="Admin Account"
+            color={AMBER}
+            chevron={false}
+            style={cardHeader}
+          />
 
           {/* Current user info */}
           <div style={{
@@ -311,6 +327,7 @@ export default function SettingsPage() {
             </form>
           </div>
         </div>
+        </SettingsGroup>
       </div>
 
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}

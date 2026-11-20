@@ -4,10 +4,11 @@
  */
 import { useState, useEffect, useCallback } from 'react';
 import { PageSkeleton } from '../components/Primitives.jsx';
-import { Coins, Plus, Loader2, ArrowUpRight, ArrowDownRight, Wallet as WalletIcon } from 'lucide-react';
+import { Coins, Plus, Loader2, ArrowUpRight, ArrowDownRight } from 'lucide-react';
 import { apiGet, apiPost } from '../services/api.js';
 import { PageLayout } from '../components/Layout.jsx';
-import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, FONT } from '../constants.js';
+import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, FONT } from '../constants.js';
+import { WalletBalanceCard, WalletPanel, WalletPreset, WalletPrimaryButton, WalletRow } from '../shared/WalletShell.jsx';
 
 const PRESETS = [500, 2000, 5000, 20000];
 const fmt = (n) => Number(n || 0).toLocaleString();
@@ -48,53 +49,51 @@ export default function WalletPage() {
 
   const recent = data?.recent || [];
   return (
-    <PageLayout title="Wallet & AI Credits" subtitle="Top up coins — every AI feature draws from this balance">
-    <div style={{ maxWidth: 720, fontFamily: FONT }}>
-      <div style={{ background: `linear-gradient(135deg, ${AMBER}, #D4651E)`, borderRadius: 18, padding: '22px 20px', color: WHITE, marginBottom: 18 }}>
-        <div style={{ fontSize: 13, fontWeight: 700, opacity: 0.9, display: 'flex', alignItems: 'center', gap: 6 }}><WalletIcon size={15} /> Your balance</div>
-        <div style={{ fontSize: 40, fontWeight: 900, marginTop: 4 }}><span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><Coins size={22} color={AMBER} /> {fmt(data?.balance)}</span> <span style={{ fontSize: 16, fontWeight: 700, opacity: 0.9 }}>coins</span></div>
-      </div>
+    <PageLayout title="Wallet & AI Credits" subtitle="Top up coins — every AI feature draws from this balance" contentMaxWidth="100%">
+    <div style={{ width: '100%', padding: '0 16px', boxSizing: 'border-box', fontFamily: FONT }}>
+      <WalletBalanceCard
+        label="Your balance"
+        amount={data?.balance}
+        unit="coins"
+        icon={<Coins size={22} color={AMBER} />}
+        accent={AMBER}
+      />
 
       <AdminOverview showToast={showToast} />
 
 
-      <div style={card}>
-        <div style={cardTitle}><Plus size={16} /> Top up</div>
+      <WalletPanel title="Top up">
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
           {PRESETS.map((c) => (
-            <button key={c} onClick={() => setCoins(c)} style={{ ...pill, ...(Number(coins) === c ? pillOn : {}) }}>
+            <WalletPreset key={c} active={Number(coins) === c} onClick={() => setCoins(c)}>
               {fmt(c)}{nairaFor(c) != null && <span style={{ opacity: 0.7, marginLeft: 5 }}>≈₦{fmt(nairaFor(c))}</span>}
-            </button>
+            </WalletPreset>
           ))}
         </div>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
           <input type="number" min="1" value={coins} onChange={(e) => setCoins(e.target.value)} style={inp} />
           {nairaFor(coins) != null && <span style={{ fontSize: 12.5, color: MUTED }}>≈ ₦{fmt(nairaFor(coins))}</span>}
-          <button onClick={topUp} disabled={busy} style={primaryBtn}>{busy ? <Loader2 size={14} style={{ animation: 'spin .8s linear infinite' }} /> : <Plus size={14} />} Pay with Paystack</button>
+          <WalletPrimaryButton onClick={topUp} disabled={busy} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            {busy ? <Loader2 size={14} style={{ animation: 'spin .8s linear infinite' }} /> : <Plus size={14} />} Pay with Paystack
+          </WalletPrimaryButton>
         </div>
         {pricing && <div style={{ marginTop: 12, fontSize: 12, color: MUTED2 }}>Example: {pricing.examples?.map((e) => `${e.label} ≈ ${e.coins}`).join(' · ')} coins</div>}
-      </div>
+      </WalletPanel>
 
-      <div style={{ ...card, padding: 0, overflow: 'hidden' }}>
-        <div style={{ ...cardTitle, padding: '16px 18px 0' }}><Coins size={16} /> Recent activity</div>
+      <WalletPanel title="Recent activity">
         {recent.length === 0 ? (
           <div style={{ padding: 28, textAlign: 'center', color: MUTED2, fontSize: 13 }}>No transactions yet.</div>
-        ) : (
-          <table style={{ borderCollapse: 'collapse', width: '100%', marginTop: 10 }}>
-            <thead><tr>{['When', 'Type', 'Detail', 'Coins'].map((h) => <th key={h} style={th}>{h}</th>)}</tr></thead>
-            <tbody>
-              {recent.map((t) => (
-                <tr key={t.id} style={{ borderTop: `1px solid ${BORDER}` }}>
-                  <td style={td}>{new Date(t.created_at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</td>
-                  <td style={td}>{TYPE_LABEL[t.type] || t.type}</td>
-                  <td style={{ ...td, color: MUTED2 }}>{(t.feature || t.model || '—').replace(/_/g, ' ')}</td>
-                  <td style={{ ...td, fontWeight: 800, color: t.delta >= 0 ? GREEN : RED }}>{t.delta >= 0 ? <ArrowUpRight size={13} /> : <ArrowDownRight size={13} />} {t.delta >= 0 ? '+' : ''}{fmt(t.delta)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+        ) : recent.map((t, i) => (
+          <WalletRow
+            key={t.id}
+            title={TYPE_LABEL[t.type] || t.type}
+            detail={`${(t.feature || t.model || '—').replace(/_/g, ' ')} · ${new Date(t.created_at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}`}
+            amount={<>{t.delta >= 0 ? <ArrowUpRight size={13} /> : <ArrowDownRight size={13} />} {t.delta >= 0 ? '+' : ''}{fmt(t.delta)}</>}
+            positive={t.delta >= 0}
+            last={i === recent.length - 1}
+          />
+        ))}
+      </WalletPanel>
       {toast && <div style={toastStyle}>{toast}</div>}
     </div>
     </PageLayout>
@@ -123,8 +122,7 @@ function AdminOverview({ showToast }) {
     </div>
   );
   return (
-    <div style={card}>
-      <div style={cardTitle}>Platform coins</div>
+    <WalletPanel title="Platform coins">
       {!o ? <PageSkeleton header={false} rows={2} /> : (
         <>
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
@@ -154,22 +152,15 @@ function AdminOverview({ showToast }) {
               <input placeholder="account owner id (uuid)" value={form.owner_id} onChange={(e) => setForm({ ...form, owner_id: e.target.value })} style={{ ...inp, width: 260 }} />
               <input type="number" placeholder="coins (± )" value={form.coins} onChange={(e) => setForm({ ...form, coins: e.target.value })} style={{ ...inp, width: 110 }} />
               <input placeholder="reason" value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} style={{ ...inp, width: 150 }} />
-              <button onClick={grant} disabled={busy} style={primaryBtn}>Apply</button>
+              <WalletPrimaryButton onClick={grant} disabled={busy}>Apply</WalletPrimaryButton>
             </div>
             <div style={{ fontSize: 11, color: MUTED2, marginTop: 6 }}>Positive coins grant credit; negative deducts. Reason is recorded in the ledger.</div>
           </div>
         </>
       )}
-    </div>
+    </WalletPanel>
   );
 }
 
-const card = { background: WHITE, border: `1.5px solid ${BORDER}`, borderRadius: 14, padding: 18, marginBottom: 18 };
-const cardTitle = { display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 800, color: INK, marginBottom: 14 };
-const pill = { padding: '9px 13px', borderRadius: 100, border: `1px solid ${BORDER}`, background: WHITE, color: INK, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT };
-const pillOn = { border: `1px solid ${AMBER}`, background: `${AMBER}12`, color: '#B45309' };
 const inp = { width: 140, padding: '10px 12px', borderRadius: 10, border: `1px solid ${BORDER}`, background: WHITE, color: INK, fontSize: 14, fontFamily: FONT };
-const primaryBtn = { display: 'inline-flex', alignItems: 'center', gap: 6, padding: '10px 16px', borderRadius: 10, border: 'none', background: `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: WHITE, fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: FONT };
-const th = { textAlign: 'left', padding: '10px 14px', fontSize: 11.5, fontWeight: 800, color: MUTED2, background: LIGHT };
-const td = { padding: '10px 14px', fontSize: 12.5, color: MUTED, verticalAlign: 'middle' };
 const toastStyle = { position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: INK, color: WHITE, padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999, fontFamily: FONT };

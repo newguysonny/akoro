@@ -4,12 +4,15 @@
  */
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Coins } from 'lucide-react';
 import { apiGet, apiPost } from '../services/api.js';
 import { PageLayout } from '../components/Layout.jsx';
 import { GREEN, RED } from '../constants.js';
-import { C, tint } from '../theme/colors.js';
+import { C } from '../theme/colors.js';
 import { Ico } from '../theme/Ico.jsx';
+import { BRAND } from '../ui/tokens.js';
+import {
+  WalletBalanceCard, WalletPanel, WalletPreset, WalletPrimaryButton, WalletRow,
+} from '../shared/WalletShell.jsx';
 
 const PRESETS = [500, 2000, 5000, 20000];
 const fmt = (n) => Number(n || 0).toLocaleString();
@@ -68,25 +71,29 @@ export default function WalletPage() {
 
   return (
     <PageLayout title="Wallet & AI Credits" subtitle="Top up coins — every AI feature draws from this balance">
-    <div style={{ maxWidth: 720, fontFamily: C.font }}>
-      <div style={{ background: `linear-gradient(135deg, ${C.brand}, ${C.brandDeep})`, borderRadius: 18, padding: '22px 20px', color: '#fff', marginBottom: 18 }}>
-        <div style={{ fontSize: 13, fontWeight: 700, opacity: 0.9, display: 'flex', alignItems: 'center', gap: 6 }}><Ico ti="ti-wallet" size={15} /> Your balance</div>
-        <div style={{ fontSize: 40, fontWeight: 900, marginTop: 4, display: 'flex', alignItems: 'center', gap: 8 }}><Ico ti="ti-coins" size={30} />{fmt(data?.balance)} <span style={{ fontSize: 16, fontWeight: 700, opacity: 0.9 }}>coins</span></div>
-      </div>
+    <div style={{ fontFamily: C.font }}>
+      <WalletBalanceCard
+        accent={BRAND}
+        label={<span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><Ico ti="ti-wallet" size={15} /> Your balance</span>}
+        amount={data?.balance}
+        unit="coins"
+        icon={<Ico ti="ti-coins" size={30} />}
+      />
 
-      <div style={card}>
-        <div style={cardTitle}><Ico ti="ti-plus" size={16} /> Top up</div>
+      <WalletPanel title={<span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Ico ti="ti-plus" size={16} /> Top up</span>}>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
           {PRESETS.map((c) => (
-            <button key={c} onClick={() => setCoins(c)} style={{ ...pill, ...(Number(coins) === c ? pillOn : {}) }}>
+            <WalletPreset key={c} active={Number(coins) === c} onClick={() => setCoins(c)}>
               {fmt(c)}{nairaFor(c) != null && <span style={{ opacity: 0.7, marginLeft: 5 }}>≈₦{fmt(nairaFor(c))}</span>}
-            </button>
+            </WalletPreset>
           ))}
         </div>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
           <input type="number" min="1" value={coins} onChange={(e) => setCoins(e.target.value)} style={inp} />
           {nairaFor(coins) != null && <span style={{ fontSize: 12.5, color: C.muted }}>≈ ₦{fmt(nairaFor(coins))}</span>}
-          <button onClick={topUp} style={primaryBtn}><Ico ti="ti-plus" size={14} /> Continue to checkout</button>
+          <WalletPrimaryButton onClick={topUp} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <Ico ti="ti-plus" size={14} /> Continue to checkout
+          </WalletPrimaryButton>
         </div>
         {pricing && <div style={{ marginTop: 12, fontSize: 12, color: C.muted2 }}>Example: {pricing.examples?.map((e) => `${e.label} ≈ ${e.coins}`).join(' · ')} coins</div>}
 
@@ -114,40 +121,30 @@ export default function WalletPage() {
             </form>
           )}
         </div>
-      </div>
+      </WalletPanel>
 
-      <div style={{ ...card, padding: 0, overflow: 'hidden' }}>
-        <div style={{ ...cardTitle, padding: '16px 18px 0' }}><Ico ti="ti-coins" size={16} /> Recent activity</div>
+      <WalletPanel title={<span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Ico ti="ti-coins" size={16} /> Recent activity</span>}>
         {recent.length === 0 ? (
           <div style={{ padding: 28, textAlign: 'center', color: C.muted2, fontSize: 13 }}>No transactions yet.</div>
         ) : (
-          <table style={{ borderCollapse: 'collapse', width: '100%', marginTop: 10 }}>
-            <thead><tr>{['When', 'Type', 'Detail', 'Coins'].map((h) => <th key={h} style={th}>{h}</th>)}</tr></thead>
-            <tbody>
-              {recent.map((t) => (
-                <tr key={t.id} style={{ borderTop: `1px solid ${C.border}` }}>
-                  <td style={td}>{new Date(t.created_at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</td>
-                  <td style={td}>{TYPE_LABEL[t.type] || t.type}</td>
-                  <td style={{ ...td, color: C.muted2 }}>{(t.feature || t.model || '—').replace(/_/g, ' ')}</td>
-                  <td style={{ ...td, fontWeight: 800, color: t.delta >= 0 ? GREEN : RED }}>{t.delta >= 0 ? <Ico ti="ti-arrow-up-right" size={13} /> : <Ico ti="ti-arrow-down-right" size={13} />} {t.delta >= 0 ? '+' : ''}{fmt(t.delta)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          recent.map((t, i) => (
+            <WalletRow
+              key={t.id}
+              last={i === recent.length - 1}
+              title={TYPE_LABEL[t.type] || t.type}
+              detail={`${(t.feature || t.model || '—').replace(/_/g, ' ')} · ${new Date(t.created_at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}`}
+              amount={<>{t.delta >= 0 ? <Ico ti="ti-arrow-up-right" size={13} /> : <Ico ti="ti-arrow-down-right" size={13} />} {t.delta >= 0 ? '+' : ''}{fmt(t.delta)}</>}
+              positive={t.delta >= 0}
+            />
+          ))
         )}
-      </div>
+      </WalletPanel>
       {toast && <div style={toastStyle}>{toast}</div>}
     </div>
     </PageLayout>
   );
 }
 
-const card = { background: C.surface, border: `1.5px solid ${C.border}`, borderRadius: 14, padding: 18, marginBottom: 18 };
-const cardTitle = { display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 800, color: C.ink, marginBottom: 14 };
-const pill = { padding: '9px 13px', borderRadius: 100, border: `1px solid ${C.border}`, background: C.surface, color: C.ink, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: C.font };
-const pillOn = { border: `1px solid ${C.brand}`, background: tint(7), color: '#B45309' };
 const inp = { width: 140, padding: '10px 12px', borderRadius: 10, border: `1px solid ${C.border}`, background: C.surface, color: C.ink, fontSize: 14, fontFamily: C.font };
 const primaryBtn = { display: 'inline-flex', alignItems: 'center', gap: 6, padding: '10px 16px', borderRadius: 10, border: 'none', background: `linear-gradient(135deg, ${C.brand}, ${C.brandDeep})`, color: '#fff', fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: C.font };
-const th = { textAlign: 'left', padding: '10px 14px', fontSize: 11.5, fontWeight: 800, color: C.muted2, background: C.bg };
-const td = { padding: '10px 14px', fontSize: 12.5, color: C.muted, verticalAlign: 'middle' };
 const toastStyle = { position: 'fixed', bottom: 96, left: '50%', transform: 'translateX(-50%)', background: C.hero, color: '#fff', padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999, fontFamily: C.font };

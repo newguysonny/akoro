@@ -9,13 +9,17 @@ import {
   Settings2, Warehouse, Hash, MapPin, Fingerprint, UserCog, GraduationCap,
   AlertTriangle, Eye, EyeOff, RefreshCw, Check, Languages, Moon, Palette,
   Key, Lock, PauseCircle, Trash2, HelpCircle, Bug, MessageCircle, FileText,
-  ChevronRight, Globe, Loader2, CreditCard, X,
+  Globe, Loader2, CreditCard, X,
 } from 'lucide-react';
 import { PageLayout } from '../../components/Layout.jsx';
 import { apiGet, apiPut, apiPost, API } from '../../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, BLUE, RED, FONT } from '../../constants.js';
 import { COUNTRIES as GEO_COUNTRIES, NG_STATES } from '../../data/locations.js';
 import { LEARNER_URL } from '../../config/urls.js';
+import { SettingsCard, SettingsGroup } from '../../shared/SettingsCard.jsx';
+import { WalletPanel } from '../../shared/WalletShell.jsx';
+
+const ACCENT = AMBER;
 
 
 const EDUCATION_LEVELS = ['Nursery / Pre-school', 'Primary', 'Junior Secondary', 'Senior Secondary'];
@@ -72,12 +76,14 @@ const inputStyle = {
   width: '100%', padding: '10px 13px', borderRadius: 10, border: `1.5px solid ${BORDER}`,
   outline: 'none', fontSize: 13.5, fontFamily: FONT, color: INK, background: WHITE, boxSizing: 'border-box',
 };
-function SectionHeader({ color, icon: Icon, title }) {
+function Section({ color, icon: Icon, title, children }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 9, background: `${color}10`, borderLeft: `3px solid ${color}`, borderRadius: 8, padding: '11px 14px', marginBottom: 18 }}>
-      <Icon size={16} color={color} />
-      <span style={{ fontSize: 12.5, fontWeight: 800, letterSpacing: .6, color, fontFamily: FONT, textTransform: 'uppercase' }}>{title}</span>
-    </div>
+    <SettingsGroup
+      title={<span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><Icon size={13} color={color} />{title}</span>}
+      style={{ marginBottom: 18 }}
+    >
+      {children}
+    </SettingsGroup>
   );
 }
 function Toggle({ on, onChange }) {
@@ -145,37 +151,6 @@ function UploadTile({ label, preview, kind, onUploaded, onToast }) {
   );
 }
 
-function Row({ icon: Icon, label, sublabel, right, onClick, danger, last }) {
-  return (
-    <div
-      onClick={onClick}
-      style={{
-        display: 'flex', alignItems: 'center', gap: 14, padding: '13px 4px',
-        borderBottom: last ? 'none' : `1px solid ${BORDER}`, cursor: onClick ? 'pointer' : 'default',
-        color: danger ? RED : INK, transition: 'background .1s', borderRadius: 8,
-      }}
-      onMouseEnter={(e) => { if (onClick) e.currentTarget.style.background = LIGHT; }}
-      onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
-    >
-      {Icon && (
-        <div style={{
-          width: 34, height: 34, borderRadius: 9, flexShrink: 0,
-          background: danger ? `${RED}15` : `${AMBER}18`,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          color: danger ? RED : AMBER,
-        }}>
-          <Icon size={16} />
-        </div>
-      )}
-      <div style={{ flex: 1 }}>
-        <div style={{ fontSize: 13.5, fontWeight: 700, fontFamily: FONT }}>{label}</div>
-        {sublabel && <div style={{ fontSize: 11.5, color: MUTED2, fontFamily: FONT, marginTop: 2 }}>{sublabel}</div>}
-      </div>
-      {right ?? (onClick && <ChevronRight size={16} color={MUTED2} />)}
-    </div>
-  );
-}
-
 /* ── School Profile panel (controlled) ───────────────────────────── */
 function SchoolProfilePanel({ value, onChange, onToast }) {
   const set = (k) => (e) => onChange({ ...value, [k]: e.target.value });
@@ -187,7 +162,7 @@ function SchoolProfilePanel({ value, onChange, onToast }) {
   const toggleLevel = (l) => onChange({ ...value, educationLevels: levels.includes(l) ? levels.filter((x) => x !== l) : [...levels, l] });
   return (
     <div>
-      <SectionHeader color={BLUE} icon={Info} title="General Information" />
+      <Section color={BLUE} icon={Info} title="General Information">
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16, marginBottom: 24 }}>
         <Field label="School Name" required><input style={inputStyle} value={value.name || ''} onChange={set('name')} /></Field>
         <Field label="Short Name / Acronym"><input style={inputStyle} value={value.acronym || ''} onChange={set('acronym')} /></Field>
@@ -195,8 +170,9 @@ function SchoolProfilePanel({ value, onChange, onToast }) {
         <Field label="Phone Number"><input style={inputStyle} value={value.phone || ''} onChange={set('phone')} /></Field>
         <Field label="Principal Name"><input style={inputStyle} value={value.principal || ''} onChange={set('principal')} /></Field>
       </div>
+      </Section>
 
-      <SectionHeader color={BLUE} icon={MapPin} title="Location" />
+      <Section color={BLUE} icon={MapPin} title="Location">
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16, marginBottom: 16 }}>
         <Field label="Country">
           <select style={{ ...inputStyle, cursor: 'pointer' }} value={value.country || 'Nigeria'} onChange={(e) => onChange({ ...value, country: e.target.value, state: '', lga: '' })}>
@@ -218,8 +194,9 @@ function SchoolProfilePanel({ value, onChange, onToast }) {
           <Field label="Street Address"><textarea rows={2} style={{ ...inputStyle, resize: 'vertical', lineHeight: 1.5 }} value={value.address || ''} onChange={set('address')} /></Field>
         </div>
       </div>
+      </Section>
 
-      <SectionHeader color={GREEN} icon={GraduationCap} title="Academics" />
+      <Section color={GREEN} icon={GraduationCap} title="Academics">
       <Field label="Education Levels Offered">
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
           {EDUCATION_LEVELS.map((l) => {
@@ -246,13 +223,15 @@ function SchoolProfilePanel({ value, onChange, onToast }) {
           <select style={{ ...inputStyle, cursor: 'pointer' }} value={value.studentBand || ''} onChange={set('studentBand')}><option value="">Select…</option>{STUDENT_BANDS.map((s) => <option key={s}>{s}</option>)}</select>
         </Field>
       </div>
+      </Section>
 
-      <SectionHeader color={AMBER} icon={Sparkles} title="Branding & Appearance" />
+      <Section color={AMBER} icon={Sparkles} title="Branding & Appearance">
       <div style={{ display: 'flex', gap: 36, flexWrap: 'wrap' }}>
         <UploadTile label="School Logo" kind="logo" onToast={onToast} onUploaded={(url) => onChange({ ...value, logoUrl: url })} preview={value.logoUrl ? <img src={value.logoUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : null} />
         <UploadTile label="Favicon (.ico, .png)" kind="favicon" onToast={onToast} onUploaded={(url) => onChange({ ...value, faviconUrl: url })} preview={value.faviconUrl ? <img src={value.faviconUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : null} />
         <UploadTile label="Principal Signature" kind="signature" onToast={onToast} onUploaded={(url) => onChange({ ...value, signatureUrl: url })} preview={value.signatureUrl ? <img src={value.signatureUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain' }} /> : null} />
       </div>
+      </Section>
     </div>
   );
 }
@@ -266,7 +245,7 @@ function SystemFormatsPanel({ formats, onFormatsChange, personalisation, onPerso
 
   return (
     <div>
-      <SectionHeader color={BLUE} icon={Settings2} title="System & Academic Settings" />
+      <Section color={BLUE} icon={Settings2} title="System & Academic Settings">
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16, marginBottom: 22 }}>
         <Field label="School Code / UDISE"><input style={inputStyle} value={f.udise || ''} onChange={setF('udise')} /></Field>
         <Field label="Affiliated By"><input style={inputStyle} value={f.affiliatedBy || ''} onChange={setF('affiliatedBy')} /></Field>
@@ -314,8 +293,9 @@ function SystemFormatsPanel({ formats, onFormatsChange, personalisation, onPerso
           <p style={{ fontSize: 11.5, color: MUTED2, margin: '6px 0 0', fontFamily: FONT }}>PDF shown to parents/students in the mobile app. Leave blank to reuse the default.</p>
         </div>
       </div>
+      </Section>
 
-      <SectionHeader color={AMBER} icon={Warehouse} title="Inventory Tax Settings" />
+      <Section color={AMBER} icon={Warehouse} title="Inventory Tax Settings">
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16, marginBottom: 22 }}>
         <div>
           <Field label="Tax Label (e.g. GST, VAT, Tax)"><input style={inputStyle} value={f.taxLabel || ''} onChange={setF('taxLabel')} /></Field>
@@ -326,38 +306,42 @@ function SystemFormatsPanel({ formats, onFormatsChange, personalisation, onPerso
           <p style={{ fontSize: 11.5, color: MUTED2, margin: '6px 0 0', fontFamily: FONT }}>Used on supplier forms and invoices.</p>
         </div>
       </div>
+      </Section>
 
-      <SectionHeader color={BLUE} icon={Hash} title="Fee Receipt Numbering" />
+      <Section color={BLUE} icon={Hash} title="Fee Receipt Numbering">
       <div style={{ background: `${BLUE}08`, border: `1px solid ${BLUE}22`, borderRadius: 10, padding: '10px 14px', marginBottom: 16, fontSize: 12.5, fontFamily: FONT }}>
         Live Preview: <b style={{ color: BLUE }}>{f.receiptPrefix || 'SCH'}-2027-2028-JUL26-0005</b>
       </div>
       <Field label="Receipt Prefix"><input style={{ ...inputStyle, maxWidth: 260 }} value={f.receiptPrefix || ''} onChange={setF('receiptPrefix')} /></Field>
+      </Section>
 
       <div style={{ marginTop: 26 }}>
-        <SectionHeader color={AMBER} icon={Palette} title="Personalisation" />
+        <Section color={AMBER} icon={Palette} title="Personalisation">
         <div style={{ display: 'flex', flexDirection: 'column' }}>
-          <Row
-            icon={Languages}
-            label="Language"
-            sublabel={p.language || 'English'}
-            right={
+          <SettingsCard
+            color={ACCENT}
+            icon={<Languages size={17} color={ACCENT} />}
+            title="Language"
+            subtitle={p.language || 'English'}
+            chevron={
               <select value={p.language || 'English'} onChange={(e) => setP('language')(e.target.value)}
                 style={{ border: `1.5px solid ${BORDER}`, borderRadius: 8, padding: '6px 10px', fontFamily: FONT, fontSize: 13, background: WHITE, color: INK, cursor: 'pointer' }}>
                 {LANGUAGES.map((l) => <option key={l}>{l}</option>)}
               </select>
             }
           />
-          <Row
-            icon={Moon}
-            label="Dark Mode"
-            sublabel="Currently in preview"
-            right={<Toggle on={!!p.darkMode} onChange={(v) => setP('darkMode')(v)} />}
+          <SettingsCard
+            color={ACCENT}
+            icon={<Moon size={17} color={ACCENT} />}
+            title="Dark Mode"
+            subtitle="Currently in preview"
+            chevron={<Toggle on={!!p.darkMode} onChange={(v) => setP('darkMode')(v)} />}
           />
-          <Row
-            icon={Palette}
-            label="Accent Colour"
-            last
-            right={
+          <SettingsCard
+            color={ACCENT}
+            icon={<Palette size={17} color={ACCENT} />}
+            title="Accent Colour"
+            chevron={
               <div style={{ display: 'flex', gap: 6 }}>
                 {ACCENTS.map((c) => (
                   <div key={c} onClick={() => setP('accentColour')(c)} style={{
@@ -369,6 +353,7 @@ function SystemFormatsPanel({ formats, onFormatsChange, personalisation, onPerso
             }
           />
         </div>
+        </Section>
       </div>
     </div>
   );
@@ -381,7 +366,7 @@ function AttendancePanel({ value, onChange }) {
 
   return (
     <div>
-      <SectionHeader color={BLUE} icon={MapPin} title="Staff Geolocation & Time Settings" />
+      <Section color={BLUE} icon={MapPin} title="Staff Geolocation & Time Settings">
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
         <span style={{ fontSize: 13, fontWeight: 700, color: INK, fontFamily: FONT }}>Enable Geolocation Restrictions for Staff App Punch In/Out</span>
         <Toggle on={!!v.geoRestriction} onChange={(on) => onChange({ ...v, geoRestriction: on })} />
@@ -402,8 +387,9 @@ function AttendancePanel({ value, onChange }) {
         <Field label="Punch Out Start"><input type="time" style={inputStyle} value={v.punchOutStart || ''} onChange={set('punchOutStart')} /></Field>
         <Field label="Punch Out End"><input type="time" style={inputStyle} value={v.punchOutEnd || ''} onChange={set('punchOutEnd')} /></Field>
       </div>
+      </Section>
 
-      <SectionHeader color={AMBER} icon={Fingerprint} title="Biometric Attendance Settings" />
+      <Section color={AMBER} icon={Fingerprint} title="Biometric Attendance Settings">
       <p style={{ fontSize: 12, color: MUTED, margin: '0 0 16px', fontFamily: FONT, lineHeight: 1.55 }}>
         Configure how biometric device punches are mapped to Clock-In / Clock-Out. If left empty, the system uses smart fallback (first punch = in, last punch = out).
       </p>
@@ -426,6 +412,7 @@ function AttendancePanel({ value, onChange }) {
           <p style={{ fontSize: 11, color: MUTED2, margin: '6px 0 0', fontFamily: FONT }}>Minutes after school start time before marking as Late.</p>
         </div>
       </div>
+      </Section>
     </div>
   );
 }
@@ -472,7 +459,7 @@ function SecurityPanel({ value, onChange, onToast }) {
   const [pwOpen, setPwOpen] = useState(false);
   return (
     <div>
-      <SectionHeader color="#F59E0B" icon={AlertTriangle} title="Website Maintenance Mode" />
+      <Section color="#F59E0B" icon={AlertTriangle} title="Website Maintenance Mode">
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
         <span style={{ fontSize: 13, fontWeight: 700, color: INK, fontFamily: FONT }}>Enable Maintenance Mode</span>
         <Toggle on={!!v.maintenanceMode} onChange={(on) => onChange({ ...v, maintenanceMode: on })} />
@@ -480,13 +467,18 @@ function SecurityPanel({ value, onChange, onToast }) {
       <p style={{ fontSize: 12, color: MUTED, margin: '0 0 26px', fontFamily: FONT, lineHeight: 1.6 }}>
         When active, a <b style={{ color: INK }}>maintenance banner</b> is shown across your public school website so visitors know some information may be temporarily unavailable. Your admin panel is unaffected.
       </p>
+      </Section>
 
-      <SectionHeader color={AMBER} icon={ShieldCheck} title="Account Security" />
-      <div style={{ display: 'flex', flexDirection: 'column' }}>
-        <Row icon={Key} label="Change Password" sublabel="Update your admin login password" onClick={() => setPwOpen(true)} last />
-      </div>
+      <Section color={AMBER} icon={ShieldCheck} title="Account Security">
+      <SettingsCard
+        icon={<Key size={17} color={ACCENT} />}
+        title="Change Password"
+        subtitle="Update your admin login password"
+        onClick={() => setPwOpen(true)}
+      />
 
       {pwOpen && <ChangePasswordModal onClose={() => setPwOpen(false)} onToast={onToast} />}
+      </Section>
     </div>
   );
 }
@@ -497,7 +489,7 @@ function IntegrationsPanel({ apiKey, onRegenerate, regenerating }) {
   const masked = apiKey ? '•'.repeat(Math.max(24, apiKey.length)) : 'No API key generated yet';
   return (
     <div>
-      <SectionHeader color={BLUE} icon={Fingerprint} title="Biometric API Access" />
+      <Section color={BLUE} icon={Fingerprint} title="Biometric API Access">
       <p style={{ fontSize: 12.5, color: MUTED, margin: '0 0 18px', fontFamily: FONT, lineHeight: 1.6 }}>
         This API Key is used by the Windows Biometric Sync Agent to communicate with the server. Keep it secret.
       </p>
@@ -520,6 +512,7 @@ function IntegrationsPanel({ apiKey, onRegenerate, regenerating }) {
           <b>Warning:</b> Generating a new key will instantly disconnect any Windows Agents using the old key. You must update the <code style={{ color: '#D4651E', background: `${AMBER}12`, padding: '1px 5px', borderRadius: 4 }}>appsettings.json</code> file on your Windows machine immediately.
         </Banner>
       </div>
+      </Section>
     </div>
   );
 }
@@ -528,12 +521,11 @@ function IntegrationsPanel({ apiKey, onRegenerate, regenerating }) {
 function HelpSupportPanel() {
   return (
     <div>
-      <SectionHeader color={BLUE} icon={HelpCircle} title="Help & Support" />
-      <div style={{ display: 'flex', flexDirection: 'column' }}>
-        <Row icon={HelpCircle}    label="Help Centre"  sublabel="Browse guides and FAQs"       onClick={() => window.open(`${SITE_URL}/contact`, '_blank', 'noopener')} />
-        <Row icon={Bug}           label="Report a Bug" sublabel="Something not working right?"  onClick={() => { window.location.href = `mailto:${SUPPORT_EMAIL}?subject=Bug%20report%20(School%20app)`; }} />
-        <Row icon={MessageCircle} label="Contact Us"   sublabel="Talk to the Akoro team"        onClick={() => { window.location.href = `mailto:${SUPPORT_EMAIL}?subject=School%20support`; }} last />
-      </div>
+      <Section color={BLUE} icon={HelpCircle} title="Help & Support">
+        <SettingsCard icon={<HelpCircle size={17} color={ACCENT} />} title="Help Centre" subtitle="Browse guides and FAQs" onClick={() => window.open(`${SITE_URL}/contact`, '_blank', 'noopener')} />
+        <SettingsCard icon={<Bug size={17} color={ACCENT} />} title="Report a Bug" subtitle="Something not working right?" onClick={() => { window.location.href = `mailto:${SUPPORT_EMAIL}?subject=Bug%20report%20(School%20app)`; }} />
+        <SettingsCard icon={<MessageCircle size={17} color={ACCENT} />} title="Contact Us" subtitle="Talk to the Akoro team" onClick={() => { window.location.href = `mailto:${SUPPORT_EMAIL}?subject=School%20support`; }} />
+      </Section>
     </div>
   );
 }
@@ -542,12 +534,11 @@ function HelpSupportPanel() {
 function AboutPanel() {
   return (
     <div>
-      <SectionHeader color={AMBER} icon={Info} title="About" />
-      <div style={{ display: 'flex', flexDirection: 'column' }}>
-        <Row icon={FileText} label="Terms of Service" onClick={() => window.open(`${SITE_URL}/terms`, '_blank', 'noopener')} />
-        <Row icon={FileText} label="Privacy Policy"   onClick={() => window.open(`${SITE_URL}/privacy`, '_blank', 'noopener')} />
-        <Row icon={Info}     label="App Version"       last right={<span style={{ fontSize: 13, color: MUTED2, fontFamily: FONT }}>1.0.0</span>} />
-      </div>
+      <Section color={AMBER} icon={Info} title="About">
+        <SettingsCard icon={<FileText size={17} color={ACCENT} />} title="Terms of Service" onClick={() => window.open(`${SITE_URL}/terms`, '_blank', 'noopener')} />
+        <SettingsCard icon={<FileText size={17} color={ACCENT} />} title="Privacy Policy" onClick={() => window.open(`${SITE_URL}/privacy`, '_blank', 'noopener')} />
+        <SettingsCard icon={<Info size={17} color={ACCENT} />} title="App Version" hint="1.0.0" chevron={false} />
+      </Section>
     </div>
   );
 }
@@ -587,7 +578,7 @@ const QUICK_GUIDE = {
 function QuickGuide({ tab }) {
   const items = QUICK_GUIDE[tab] || QUICK_GUIDE.profile;
   return (
-    <div style={{ background: `${BLUE}08`, border: `1px solid ${BLUE}22`, borderRadius: 14, padding: '14px 15px' }}>
+    <WalletPanel style={{ background: `${BLUE}08`, border: `1px solid ${BLUE}22`, padding: '14px 15px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 8 }}>
         <BookOpen size={15} color={BLUE} />
         <span style={{ fontSize: 12.5, fontWeight: 800, color: BLUE, fontFamily: FONT }}>Quick Guide</span>
@@ -597,7 +588,7 @@ function QuickGuide({ tab }) {
           <b style={{ color: INK }}>{it.t}:</b> {it.d}
         </p>
       ))}
-    </div>
+    </WalletPanel>
   );
 }
 
@@ -606,4 +597,4 @@ const VALID_TABS = ['profile', 'formats', 'attendance', 'security', 'integration
 const NO_SAVE_TABS = ['integrations', 'help', 'about']; // these persist via their own actions, not the footer button
 
 
-export { EDUCATION_LEVELS, OWNERSHIP_TYPES, CURRICULA, GENDER_TYPES, BOARDING_TYPES, STUDENT_BANDS, TABS, EXTERNAL, LANGUAGES, ACCENTS, COUNTRIES, THEMES, CURRENCIES, Field, inputStyle, SectionHeader, Toggle, Banner, UploadTile, Row, SchoolProfilePanel, SystemFormatsPanel, AttendancePanel, SecurityPanel, IntegrationsPanel, HelpSupportPanel, AboutPanel, QUICK_GUIDE, QuickGuide, VALID_TABS, NO_SAVE_TABS };
+export { EDUCATION_LEVELS, OWNERSHIP_TYPES, CURRICULA, GENDER_TYPES, BOARDING_TYPES, STUDENT_BANDS, TABS, EXTERNAL, LANGUAGES, ACCENTS, COUNTRIES, THEMES, CURRENCIES, Field, inputStyle, Section, Toggle, Banner, UploadTile, SchoolProfilePanel, SystemFormatsPanel, AttendancePanel, SecurityPanel, IntegrationsPanel, HelpSupportPanel, AboutPanel, QUICK_GUIDE, QuickGuide, VALID_TABS, NO_SAVE_TABS };

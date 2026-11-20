@@ -5,6 +5,7 @@ import { PageLayout } from '../components/Layout.jsx';
 import { apiGet, apiPut, apiPost, apiDelete } from '../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, BLUE, FONT } from '../constants.js';
 import { ADMISSION_BASE_URL } from '../config/urls.js';
+import { WalletPanel } from '../shared/WalletShell.jsx';
 
 const FIELD_TYPES = ['text', 'number', 'date', 'dropdown', 'file', 'textarea', 'checkbox'];
 const FIELD_TYPE_LABEL = { text: 'Text Input', number: 'Number', date: 'Date', dropdown: 'Dropdown', file: 'File', textarea: 'Textarea', checkbox: 'Checkbox' };
@@ -108,7 +109,7 @@ export default function AdmissionSettingsPage() {
       <>
       <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start', flexWrap: 'wrap', marginBottom: 20 }}>
         {/* Fee & Payment Settings */}
-        <div style={{ flex: '1 1 320px', minWidth: 300, background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 14, padding: '18px 20px' }}>
+        <WalletPanel style={{ flex: '1 1 320px', minWidth: 300, padding: '18px 20px', marginBottom: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
             <Wallet size={16} color={AMBER} />
             <span style={{ fontSize: 13.5, fontWeight: 800, color: INK, fontFamily: FONT }}>Fee &amp; Payment Settings</span>
@@ -141,10 +142,10 @@ export default function AdmissionSettingsPage() {
           <button onClick={saveSettings} disabled={savingSettings} style={{ width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '11px', borderRadius: 10, border: 'none', background: savingSettings ? '#E5E7EB' : `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: savingSettings ? '#9CA3AF' : WHITE, fontSize: 13, fontWeight: 800, cursor: savingSettings ? 'default' : 'pointer', fontFamily: FONT }}>
             {savingSettings ? <Loader2 size={14} style={{ animation: 'spin .8s linear infinite' }} /> : <Save size={14} />} {savingSettings ? 'Saving…' : 'Save Settings'}
           </button>
-        </div>
+        </WalletPanel>
 
         {/* Custom Form Fields */}
-        <div style={{ flex: '1.3 1 400px', minWidth: 320, background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 14, padding: '18px 20px' }}>
+        <WalletPanel style={{ flex: '1.3 1 400px', minWidth: 320, padding: '18px 20px', marginBottom: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
             <ListChecks size={16} color={BLUE} />
             <span style={{ fontSize: 13.5, fontWeight: 800, color: INK, fontFamily: FONT }}>Custom Form Fields</span>
@@ -206,11 +207,11 @@ export default function AdmissionSettingsPage() {
               </table>
             </div>
           )}
-        </div>
+        </WalletPanel>
       </div>
 
       {/* Smart Share & Digital Card */}
-      <div style={{ background: WHITE, border: `1px solid ${BORDER}`, borderTop: `3px solid ${AMBER}`, borderRadius: 14, padding: '20px 22px' }}>
+      <WalletPanel style={{ borderTop: `3px solid ${AMBER}`, padding: '20px 22px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 18 }}>
           <Share2 size={16} color={AMBER} />
           <span style={{ fontSize: 14, fontWeight: 800, color: INK, fontFamily: FONT }}>Smart Share &amp; Digital Card</span>
@@ -261,7 +262,7 @@ export default function AdmissionSettingsPage() {
             </div>
           </div>
         </div>
-      </div>
+      </WalletPanel>
       </>
       )}
 

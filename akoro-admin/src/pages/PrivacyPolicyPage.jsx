@@ -2,7 +2,8 @@
 import { Archive, Ban, Bot, ClipboardList, GraduationCap, Link2, Lock, Mail, PencilLine, Scale, Settings } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AMBER, INK, MUTED, BORDER, WHITE, LIGHT, FONT } from '../constants.js';
+import { AMBER, INK, MUTED, BORDER, WHITE, FONT } from '../constants.js';
+import { LegalShell } from '../shared/LegalShell.jsx';
 
 const A = AMBER;
 
@@ -120,43 +121,19 @@ export default function PrivacyPolicyPage() {
   };
 
   return (
-    <div style={{ minHeight: '100vh', background: LIGHT, fontFamily: FONT }}>
+    <LegalShell title="Privacy Policy" updated="1 June 2025" onBack={() => navigate(-1)}>
       <style>{`
         .ip-toc-btn:hover{background:${A}18!important;color:${A}!important}
         .ip-section{scroll-margin-top:80px}
       `}</style>
 
-      {/* Sticky header */}
-      <div style={{ background: 'rgba(255,255,255,.96)', backdropFilter: 'blur(12px)', borderBottom: `1px solid ${BORDER}`, padding: '14px 24px', display: 'flex', alignItems: 'center', gap: 14, position: 'sticky', top: 0, zIndex: 200 }}>
-        <button onClick={() => navigate(-1)}
-          style={{ background: `${A}15`, border: 'none', cursor: 'pointer', color: A, padding: '8px 14px', borderRadius: 10, fontSize: 14, fontWeight: 700, fontFamily: FONT }}>
-          ← Back
-        </button>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 16, fontWeight: 700, color: INK, fontFamily: FONT }}>Privacy Policy</div>
-          <div style={{ fontSize: 11, color: MUTED, fontFamily: FONT }}>Effective: 1 June 2025 · Akoro Technologies Ltd</div>
-        </div>
+      {/* Cross-link kept from the old header */}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 14 }}>
         <button onClick={() => navigate('/terms')}
           style={{ background: `${A}15`, border: `1px solid ${A}40`, cursor: 'pointer', color: A, padding: '7px 14px', borderRadius: 10, fontSize: 12, fontWeight: 700, fontFamily: FONT }}>
           Terms of Service →
         </button>
       </div>
-
-      {/* Hero */}
-      <div style={{ background: `linear-gradient(135deg, ${A} 0%, #C07020 100%)`, padding: '44px 24px 48px', textAlign: 'center' }}>
-        <div style={{ marginBottom: 10, display: 'flex', justifyContent: 'center' }}><Lock size={44} /></div>
-        <h1 style={{ fontSize: 'clamp(22px,3.5vw,32px)', fontWeight: 700, color: WHITE, marginBottom: 12, fontFamily: FONT }}>Instructor Privacy Policy</h1>
-        <p style={{ fontSize: 14, color: 'rgba(255,255,255,.85)', maxWidth: 520, margin: '0 auto 22px', lineHeight: 1.7, fontFamily: FONT }}>
-          We collect only what we need to run the platform and pay you fairly. Your course content and your students' data are never sold.
-        </p>
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
-          {['NDPR Compliant','GDPR Aligned','TLS Encrypted','No Data Selling','DPA Available'].map(b => (
-            <span key={b} style={{ background: 'rgba(255,255,255,.2)', border: '1px solid rgba(255,255,255,.35)', borderRadius: 20, padding: '4px 12px', fontSize: 11, fontWeight: 700, color: WHITE, fontFamily: FONT }}>{b}</span>
-          ))}
-        </div>
-      </div>
-
-      <div style={{ maxWidth: 1040, margin: '0 auto', padding: '32px 24px 80px' }}>
 
         {/* Summary cards */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 14, marginBottom: 32 }}>
@@ -245,7 +222,6 @@ export default function PrivacyPolicyPage() {
             </p>
           </div>
         </div>
-      </div>
-    </div>
+    </LegalShell>
   );
 }

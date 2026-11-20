@@ -1,22 +1,19 @@
 /**
  * SettingsBillingPage — composes the components from ./parts.jsx.
  */
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import {
-  Building2, SlidersHorizontal, Clock, ShieldCheck, Plug, Facebook, Send,
-  Bell, BookOpen, Info, Sparkles, Save, ExternalLink, Upload,
-  Settings2, Warehouse, Hash, MapPin, Fingerprint, UserCog, GraduationCap,
-  AlertTriangle, Eye, EyeOff, RefreshCw, Check, Languages, Moon, Palette,
-  Key, Lock, PauseCircle, Trash2, HelpCircle, Bug, MessageCircle, FileText,
-  ChevronRight, Globe, Loader2,
-} from 'lucide-react';
+import { ExternalLink, Save, Loader2 } from 'lucide-react';
 import { PageLayout } from '../../components/Layout.jsx';
 import { apiGet, apiPut, apiPost } from '../../services/api.js';
-import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, BLUE, RED, FONT } from '../../constants.js';
-import { COUNTRIES as GEO_COUNTRIES, NG_STATES } from '../../data/locations.js';
+import { AMBER, INK, MUTED2, BORDER, WHITE, FONT } from '../../constants.js';
+import { SettingsCard, SettingsGroup } from '../../shared/SettingsCard.jsx';
+import { WalletPanel } from '../../shared/WalletShell.jsx';
 
-import { EDUCATION_LEVELS, OWNERSHIP_TYPES, CURRICULA, GENDER_TYPES, BOARDING_TYPES, STUDENT_BANDS, TABS, EXTERNAL, LANGUAGES, ACCENTS, COUNTRIES, THEMES, CURRENCIES, Field, inputStyle, SectionHeader, Toggle, Banner, UploadTile, Row, SchoolProfilePanel, SystemFormatsPanel, AttendancePanel, SecurityPanel, IntegrationsPanel, HelpSupportPanel, AboutPanel, QUICK_GUIDE, QuickGuide, VALID_TABS, NO_SAVE_TABS } from './parts.jsx';
+import { TABS, EXTERNAL, SchoolProfilePanel, SystemFormatsPanel, AttendancePanel, SecurityPanel, IntegrationsPanel, HelpSupportPanel, AboutPanel, QuickGuide, VALID_TABS, NO_SAVE_TABS } from './parts.jsx';
+
+const ACCENT = AMBER;
+const ACTIVE_CARD = { background: `${AMBER}14`, border: `1px solid ${ACCENT}`, boxShadow: 'none' };
 
 export default function SettingsBillingPage() {
   const navigate = useNavigate();
@@ -80,25 +77,20 @@ export default function SettingsBillingPage() {
     finally { setSaving(false); }
   };
 
-  const TabButton = ({ t }) => {
+  const TabCard = ({ t }) => {
     const on = tab === t.key;
     const go = () => {
       if (t.external) { if (t.to && t.to !== '#') navigate(t.to); return; }
       setTab(t.key);
     };
     return (
-      <button onClick={go} style={{
-        display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left',
-        padding: '11px 13px', borderRadius: 10, border: 'none', cursor: 'pointer',
-        background: on ? BLUE : 'transparent', color: on ? WHITE : MUTED,
-        fontSize: 13.5, fontWeight: on ? 700 : 600, fontFamily: FONT, transition: 'all .12s',
-      }}
-        onMouseEnter={(e) => { if (!on) e.currentTarget.style.background = LIGHT; }}
-        onMouseLeave={(e) => { if (!on) e.currentTarget.style.background = 'transparent'; }}>
-        <t.icon size={16} style={{ flexShrink: 0 }} />
-        <span style={{ flex: 1 }}>{t.label}</span>
-        {t.external && <ExternalLink size={13} color={MUTED2} />}
-      </button>
+      <SettingsCard
+        icon={<t.icon size={17} color={on ? ACCENT : 'var(--ak-text-muted, #8a8aa3)'} />}
+        title={t.label}
+        onClick={go}
+        style={on ? ACTIVE_CARD : undefined}
+        chevron={t.external ? <ExternalLink size={14} color="var(--ak-text-muted, #8a8aa3)" /> : undefined}
+      />
     );
   };
 
@@ -106,19 +98,20 @@ export default function SettingsBillingPage() {
     <PageLayout title="School Settings" subtitle="Manage your school profile, formats and integrations">
       <div style={{ display: 'flex', gap: 22, alignItems: 'flex-start', flexWrap: 'wrap' }}>
         {/* Left tab rail */}
-        <aside style={{ width: 232, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <div style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 14, padding: 8, display: 'flex', flexDirection: 'column', gap: 3 }}>
-            {TABS.map((t) => <TabButton key={t.key} t={t} />)}
-            <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 1, color: MUTED2, padding: '12px 13px 6px', fontFamily: FONT }}>EXTERNAL CHANNELS</div>
-            {EXTERNAL.map((t) => <TabButton key={t.key} t={t} />)}
-          </div>
+        <aside style={{ width: 280, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <SettingsGroup title="Settings" style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+            {TABS.map((t) => <TabCard key={t.key} t={t} />)}
+          </SettingsGroup>
+          <SettingsGroup title="External channels" style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+            {EXTERNAL.map((t) => <TabCard key={t.key} t={t} />)}
+          </SettingsGroup>
 
           {/* Quick Guide */}
           <QuickGuide tab={tab} />
         </aside>
 
         {/* Right content card */}
-        <section style={{ flex: 1, minWidth: 300, background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 16, padding: '22px 24px' }}>
+        <WalletPanel style={{ flex: 1, minWidth: 300, padding: '22px 24px', marginBottom: 0 }}>
           {loading ? (
             <div style={{ padding: '60px 0', textAlign: 'center', color: MUTED2, fontFamily: FONT, fontSize: 13.5, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
               <Loader2 size={22} style={{ animation: 'spin .8s linear infinite' }} /> Loading settings…
@@ -142,7 +135,7 @@ export default function SettingsBillingPage() {
               )}
             </>
           )}
-        </section>
+        </WalletPanel>
       </div>
 
       {toast && (
@@ -151,4 +144,3 @@ export default function SettingsBillingPage() {
     </PageLayout>
   );
 }
-

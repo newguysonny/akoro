@@ -1,6 +1,7 @@
-import { Ban, Bot, ClipboardList, GraduationCap, Link2, Lock, PencilLine, Scale, Settings, Archive } from 'lucide-react';
+import { Archive, Bot, ClipboardList, GraduationCap, Link2, Lock, Scale, Settings } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { LegalShell } from '../shared/LegalShell.jsx';
 import { C, tint } from '../theme/colors.js';
 import { Ico } from '../theme/Ico.jsx';
 
@@ -108,7 +109,16 @@ const SECTIONS = [
   },
 ];
 
-const TOC = SECTIONS.map(({ id, title, icon: Icon, ti }) => ({ id, title, icon: Icon, ti }));
+const TOC = SECTIONS.map(({ id, title, ti }) => ({ id, title, ti }));
+
+const HIGHLIGHTS = [
+  { ti: 'ti-ban', title: 'No data selling', desc: 'We never sell your data or your students\' data.' },
+  { ti: 'ti-robot', title: 'AI content stays yours', desc: 'Training materials are only used for your courses.' },
+  { ti: 'ti-lock', title: 'Encrypted', desc: 'TLS in transit, encrypted at rest.' },
+  { ti: 'ti-pencil', title: 'Full control', desc: 'Access, edit, export or delete any time.' },
+];
+
+const TRUST = ['NDPR Compliant', 'GDPR Aligned', 'TLS Encrypted', 'No Data Selling', 'DPA Available'];
 
 export default function PrivacyPolicyPage() {
   const navigate = useNavigate();
@@ -120,132 +130,107 @@ export default function PrivacyPolicyPage() {
   };
 
   return (
-    <div style={{ minHeight: '100vh', background: C.bg, fontFamily: C.font }}>
+    <LegalShell title="Instructor Privacy Policy" updated="1 June 2025" onBack={() => navigate(-1)}>
       <style>{`
         .ip-toc-btn:hover{background:${tint(9, A)}!important;color:${A}!important}
         .ip-section{scroll-margin-top:80px}
       `}</style>
 
-      {/* Sticky header */}
-      <div style={{ background: 'rgba(255,255,255,.96)', backdropFilter: 'blur(12px)', borderBottom: `1px solid ${C.border}`, padding: '14px 24px', display: 'flex', alignItems: 'center', gap: 14, position: 'sticky', top: 0, zIndex: 200 }}>
-        <button onClick={() => navigate(-1)}
-          style={{ background: tint(8, A), border: 'none', cursor: 'pointer', color: A, padding: '8px 14px', borderRadius: 10, fontSize: 14, fontWeight: 700, fontFamily: C.font }}>
-          ← Back
-        </button>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 16, fontWeight: 700, color: C.ink, fontFamily: C.font }}>Privacy Policy</div>
-          <div style={{ fontSize: 11, color: C.muted, fontFamily: C.font }}>Effective: 1 June 2025 · Akoro Technologies Ltd</div>
-        </div>
-        <button onClick={() => navigate('/terms')}
-          style={{ background: tint(8, A), border: `1px solid ${tint(25, A)}`, cursor: 'pointer', color: A, padding: '7px 14px', borderRadius: 10, fontSize: 12, fontWeight: 700, fontFamily: C.font }}>
-          Terms of Service →
-        </button>
+      <p style={introP}>
+        We collect only what we need to run the platform and pay you fairly. Your course content and your students' data are never sold.
+      </p>
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', margin: '0 0 12px' }}>
+        {TRUST.map(b => (
+          <span key={b} style={{ background: tint(8, A), border: `1px solid ${tint(20, A)}`, borderRadius: 20, padding: '3px 10px', fontSize: 11, fontWeight: 700, color: A, fontFamily: C.font }}>{b}</span>
+        ))}
+      </div>
+      <button type="button" onClick={() => navigate('/terms')} style={linkBtn}>Terms of Service →</button>
+
+      {/* Summary cards */}
+      <div style={cardGrid}>
+        {HIGHLIGHTS.map(({ ti, title, desc }) => (
+          <div key={title} style={summaryCard}>
+            <Ico ti={ti} size={20} color={A} />
+            <div style={summaryTitle}>{title}</div>
+            <div style={summaryDesc}>{desc}</div>
+          </div>
+        ))}
       </div>
 
-      {/* Hero */}
-      <div style={{ background: `linear-gradient(135deg, ${A} 0%, #C07020 100%)`, padding: '44px 24px 48px', textAlign: 'center' }}>
-        <div style={{ marginBottom: 10 }}><Ico ti="ti-lock" size={40} color={A} /></div>
-        <h1 style={{ fontSize: 'clamp(22px,3.5vw,32px)', fontWeight: 700, color: '#fff', marginBottom: 12, fontFamily: C.font }}>Instructor Privacy Policy</h1>
-        <p style={{ fontSize: 14, color: 'rgba(255,255,255,.85)', maxWidth: 520, margin: '0 auto 22px', lineHeight: 1.7, fontFamily: C.font }}>
-          We collect only what we need to run the platform and pay you fairly. Your course content and your students' data are never sold.
+      {/* TOC */}
+      <div style={{ marginBottom: 22 }}>
+        <div style={tocLabel}>Contents</div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+          {TOC.map(({ id, title, ti }) => (
+            <button key={id} className="ip-toc-btn" onClick={() => scrollTo(id)}
+              style={{ background: active === id ? tint(8, A) : 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left', padding: '6px 9px', borderRadius: 8, fontSize: 12, fontWeight: active === id ? 800 : 600, color: active === id ? A : '#4B5563', fontFamily: C.font, display: 'flex', alignItems: 'center', gap: 6, transition: 'all .15s' }}>
+              <Ico ti={ti} size={13} />{title}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div style={lead}>
+        <p style={{ ...bodyText, color: C.ink }}>
+          <strong>Akoro Technologies Ltd</strong> ("Akoro", "we", "us") operates the Akoro Instructor portal. This policy explains what data we collect from instructors, how we use it, and your rights. It also covers your obligations regarding the student data you access through our platform.
         </p>
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
-          {['NDPR Compliant','GDPR Aligned','TLS Encrypted','No Data Selling','DPA Available'].map(b => (
-            <span key={b} style={{ background: 'rgba(255,255,255,.2)', border: '1px solid rgba(255,255,255,.35)', borderRadius: 20, padding: '4px 12px', fontSize: 11, fontWeight: 700, color: '#fff', fontFamily: C.font }}>{b}</span>
-          ))}
-        </div>
       </div>
 
-      <div style={{ maxWidth: 1040, margin: '0 auto', padding: '32px 24px 80px' }}>
-
-        {/* Summary cards */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 14, marginBottom: 32 }}>
-          {[
-            { icon: Ban, ti: 'ti-ban', title: 'No data selling', desc: 'We never sell your data or your students\' data.' },
-            { icon: Bot, ti: 'ti-robot', title: 'AI content stays yours', desc: 'Training materials are only used for your courses.' },
-            { icon: Lock, ti: 'ti-lock', title: 'Encrypted', desc: 'TLS in transit, encrypted at rest.' },
-            { icon: PencilLine, ti: 'ti-pencil', title: 'Full control', desc: 'Access, edit, export or delete any time.' },
-          ].map(({ icon: Icon, ti, title, desc }) => (
-            <div key={title} style={{ background: C.surface, borderRadius: 12, padding: '16px', border: `1px solid ${C.border}`, display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <span style={{ display: 'flex' }}><Ico ti={ti} size={24} color={A} /></span>
-              <div style={{ fontSize: 13, fontWeight: 700, color: C.ink, fontFamily: C.font }}>{title}</div>
-              <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.5, fontFamily: C.font }}>{desc}</div>
+      {SECTIONS.map(({ id, ti, title, badge, badgeColor, body }) => (
+        <div key={id} id={id} className="ip-section" style={{ marginBottom: 22 }}>
+          <div style={sectionHead}>
+            <span style={{ width: 36, height: 36, borderRadius: 10, background: tint(9, badgeColor), display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <Ico ti={ti} size={18} color={A} />
+            </span>
+            <h2 style={sectionTitle}>{title}</h2>
+            <span style={{ ...badgePill, background: tint(9, badgeColor), color: badgeColor }}>{badge}</span>
+          </div>
+          {body.map(({ subtitle, text }) => (
+            <div key={subtitle} style={{ marginBottom: 10 }}>
+              <div style={subTitle}>{subtitle}</div>
+              <p style={bodyText}>{text}</p>
             </div>
           ))}
         </div>
+      ))}
 
-        <div style={{ display: 'grid', gridTemplateColumns: '210px minmax(0,1fr)', gap: 28, alignItems: 'start' }}>
-
-          {/* TOC */}
-          <div style={{ position: 'sticky', top: 80 }}>
-            <div style={{ background: C.surface, borderRadius: 12, padding: '14px', border: `1px solid ${C.border}` }}>
-              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: C.muted, marginBottom: 10, fontFamily: C.font }}>Contents</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                {TOC.map(({ id, title, icon: Icon, ti }) => (
-                  <button key={id} className="ip-toc-btn" onClick={() => scrollTo(id)}
-                    style={{ background: active === id ? tint(8, A) : 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left', padding: '7px 10px', borderRadius: 8, fontSize: 12, fontWeight: active === id ? 700 : 500, color: active === id ? A : '#4B5563', fontFamily: C.font, display: 'flex', alignItems: 'center', gap: 8, transition: 'all .15s' }}>
-                    <Ico ti={ti} size={13} style={{ verticalAlign: '-2px', marginRight: 4 }} />{title}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Content */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-            <div style={{ background: tint(6, A), borderRadius: 12, padding: '18px 20px', borderLeft: `4px solid ${A}` }}>
-              <p style={{ fontSize: 13.5, lineHeight: 1.8, color: C.ink, fontFamily: C.font }}>
-                <strong>Akoro Technologies Ltd</strong> ("Akoro", "we", "us") operates the Akoro Instructor portal. This policy explains what data we collect from instructors, how we use it, and your rights. It also covers your obligations regarding the student data you access through our platform.
-              </p>
-            </div>
-
-            {SECTIONS.map(({ id, icon: Icon, ti, title, badge, badgeColor, body }) => (
-              <div key={id} id={id} className="ip-section"
-                style={{ background: C.surface, borderRadius: 14, overflow: 'hidden', border: `1px solid ${C.border}` }}>
-                <div style={{ padding: '18px 22px 14px', borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-                  <div style={{ width: 42, height: 42, borderRadius: 10, background: tint(7, badgeColor), display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Ico ti={ti} size={20} color={A} /></div>
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
-                      <h2 style={{ fontSize: 15, fontWeight: 700, color: C.ink, fontFamily: C.font }}>{title}</h2>
-                      <span style={{ background: tint(7, badgeColor), color: badgeColor, fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20 }}>{badge}</span>
-                    </div>
-                  </div>
-                </div>
-                <div style={{ padding: '14px 22px 18px', display: 'flex', flexDirection: 'column', gap: 14 }}>
-                  {body.map(({ subtitle, text }) => (
-                    <div key={subtitle}>
-                      <div style={{ fontSize: 11, fontWeight: 700, color: C.ink, marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.06em', fontFamily: C.font }}>{subtitle}</div>
-                      <p style={{ fontSize: 13.5, lineHeight: 1.75, color: C.muted, fontFamily: C.font }}>{text}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-
-            {/* Contact */}
-            <div style={{ background: tint(6, A), borderRadius: 14, padding: '26px 22px', border: `1px solid ${tint(19, A)}`, textAlign: 'center' }}>
-              <div style={{ marginBottom: 10 }}><Ico ti="ti-mail" size={30} color={A} /></div>
-              <h3 style={{ fontSize: 16, fontWeight: 700, color: C.ink, marginBottom: 8, fontFamily: C.font }}>Questions about your data?</h3>
-              <p style={{ fontSize: 13, color: C.muted, lineHeight: 1.6, marginBottom: 18, fontFamily: C.font }}>We respond to all requests within 30 days.</p>
-              <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
-                <a href="mailto:privacy@akoro.app"
-                  style={{ background: A, color: '#fff', padding: '10px 20px', borderRadius: 10, fontSize: 13, fontWeight: 700, textDecoration: 'none', fontFamily: C.font }}>
-                  privacy@akoro.app
-                </a>
-                <button onClick={() => navigate('/terms')}
-                  style={{ background: C.surface, color: A, border: `1.5px solid ${tint(25, A)}`, padding: '10px 20px', borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: C.font }}>
-                  Read Terms of Service
-                </button>
-              </div>
-            </div>
-
-            <p style={{ fontSize: 11, color: C.muted, textAlign: 'center', lineHeight: 1.6, fontFamily: C.font }}>
-              Akoro Technologies Ltd · RC 1234567 · Lagos, Nigeria<br/>
-              Last updated: 1 June 2025
-            </p>
-          </div>
+      {/* Contact */}
+      <div style={contact}>
+        <div style={{ marginBottom: 10 }}><Ico ti="ti-mail" size={30} color={A} /></div>
+        <h3 style={{ fontSize: 16, fontWeight: 800, color: C.ink, marginBottom: 8, fontFamily: C.font }}>Questions about your data?</h3>
+        <p style={{ fontSize: 13, color: C.muted, lineHeight: 1.6, marginBottom: 18, fontFamily: C.font }}>We respond to all requests within 30 days.</p>
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
+          <a href="mailto:privacy@akoro.app"
+            style={{ background: A, color: '#fff', padding: '10px 20px', borderRadius: 10, fontSize: 13, fontWeight: 700, textDecoration: 'none', fontFamily: C.font }}>
+            privacy@akoro.app
+          </a>
+          <button onClick={() => navigate('/terms')}
+            style={{ background: C.surface, color: A, border: `1.5px solid ${tint(25, A)}`, padding: '10px 20px', borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: C.font }}>
+            Read Terms of Service
+          </button>
         </div>
       </div>
-    </div>
+
+      <p style={footer}>
+        Akoro Technologies Ltd · RC 1234567 · Lagos, Nigeria<br/>
+        Last updated: 1 June 2025
+      </p>
+    </LegalShell>
   );
 }
+
+const introP = { fontSize: 14, lineHeight: 1.7, color: C.muted, margin: '0 0 8px', fontFamily: C.font };
+const linkBtn = { background: 'none', border: 'none', padding: 0, color: A, fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: C.font, marginBottom: 18 };
+const cardGrid = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10, marginBottom: 22 };
+const summaryCard = { background: tint(4, A), borderRadius: 12, padding: 12, border: `1px solid ${tint(14, A)}`, display: 'flex', flexDirection: 'column', gap: 4, fontFamily: C.font };
+const summaryTitle = { fontSize: 13, fontWeight: 800, color: C.ink, fontFamily: C.font };
+const summaryDesc = { fontSize: 12, color: C.muted, lineHeight: 1.5, fontFamily: C.font };
+const tocLabel = { fontSize: 10, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', color: C.muted, marginBottom: 8, fontFamily: C.font };
+const lead = { background: tint(6, A), borderRadius: 12, padding: '14px 16px', borderLeft: `4px solid ${A}`, marginBottom: 22 };
+const sectionHead = { display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, flexWrap: 'wrap' };
+const sectionTitle = { fontSize: 16, fontWeight: 800, color: C.ink, margin: 0, fontFamily: C.font };
+const badgePill = { fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 20, fontFamily: C.font };
+const subTitle = { fontSize: 11, fontWeight: 800, color: C.ink, marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.06em', fontFamily: C.font };
+const bodyText = { fontSize: 14, lineHeight: 1.7, color: C.muted, margin: 0, fontFamily: C.font, whiteSpace: 'pre-line' };
+const contact = { background: tint(6, A), borderRadius: 12, padding: '22px 18px', border: `1px solid ${tint(19, A)}`, textAlign: 'center', marginBottom: 18 };
+const footer = { fontSize: 11, color: C.muted, textAlign: 'center', lineHeight: 1.6, fontFamily: C.font, margin: 0 };
