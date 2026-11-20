@@ -40,7 +40,7 @@ import { authenticateToken }  from "../auth/index.js";
 import { runPharmdUpload }    from "./uploader.js";
 import { safeCompare } from "../../lib/safeCompare.js";
 import { openai, OPENAI_MODEL } from "../../lib/aiModel.js";
-import { buildAskMessages, extractCitations, cleanModelOutput, createPresignedDownload, recordsStorageEnabled } from "../records/index.js";
+import { buildAskMessages, extractCitations, cleanModelOutput, createPresignedDownload, recordsStorageEnabled, readFileObject } from "../records/index.js";
 import { pharmdContentKey } from "../../lib/contentKey.js";
 
 const edu = () => db.schema("edu");
@@ -124,6 +124,53 @@ async function resolveFileUrl(bucket, path, storedUrl) {
 const publicFileUrl = (bucket, path) =>
   path ? db.storage.from(bucket || "pharmd-courses").getPublicUrl(path).data.publicUrl : null;
 
+/* Catalogue PDFs are served by the API. A signed third-party URL is useless
+   when that bucket has no CORS for the app origins (R2 in the sandbox):
+   the browser refuses the fetch even though curl gets 200. The API streams
+   the bytes instead — same origin as every other call, cacheable, and it can
+   read whichever store the row actually lives in. */
+function topicFileUrl(req, id) {
+  return id ? `${req.protocol}://${req.get("host")}/api/pharmd/topics/${id}/file` : null;
+}
+
+router.get("/topics/:id/file", asyncHandler(async (req, res) => {
+  const id = req.params.id;
+  const uni = await edu().from("programme_materials")
+    .select("file_path, url, file_bucket").eq("id", id).maybeSingle();
+  let row = uni.data;
+  if (!row) {
+    const legacy = await edu().from("pharmd_topics")
+      .select("file_bucket, file_path").eq("id", id).maybeSingle();
+    row = legacy.data;
+  }
+  if (!row) return missing(res, "Topic not found");
+  const keys = [...new Set([row.file_path, row.url ? keyFromUrl(row.url) : null].filter(Boolean))];
+  const urlBucket = row.url ? bucketFromUrl(row.url) : null;
+  const supabaseBuckets = [...new Set([row.file_bucket, "pharmd-courses"].filter(Boolean))];
+
+  for (const key of keys) {
+    for (const bucket of supabaseBuckets) {
+      try {
+        const { data, error } = await db.storage.from(bucket).download(key);
+        if (!error && data) {
+          res.set("Content-Type", data.type || "application/pdf");
+          res.set("Cache-Control", "public, max-age=3600");
+          return res.send(Buffer.from(await data.arrayBuffer()));
+        }
+      } catch { /* try the next store */ }
+    }
+  }
+  for (const key of keys) {
+    try {
+      const { body, contentType } = await readFileObject(key, urlBucket ? { bucket: urlBucket } : undefined);
+      res.set("Content-Type", contentType || "application/pdf");
+      res.set("Cache-Control", "public, max-age=3600");
+      return res.send(body);
+    } catch { /* try the next key */ }
+  }
+  return missing(res, "This document is not available right now");
+}));
+
 /* ── Unified read path ─────────────────────────────────────────────────────
    The generic tables are the source of truth: status gates at every level
    (an unpublished programme/course/material never leaves), topic ids in
@@ -187,17 +234,17 @@ async function serveUnifiedCourse(res, code) {
     .eq("course_id", course.id).eq("status", "published").order("position").order("created_at");
   ok(res, {
     course: { id: course.id, code: course.code, title: course.title || course.code },
-    topics: await Promise.all((materials ?? []).map(async (m) => ({
+    topics: (materials ?? []).map((m) => ({
       id: m.id,
       position: m.position,
       title: m.title,
       read_minutes: m.read_minutes ?? parseMinutes(m.meta),
       mime: MIME_BY_TYPE[m.type] || "application/pdf",
       size: m.file_size ?? parseSizeBytes(m.meta),
-      file_url: await resolveFileUrl("pharmd-courses", m.file_path, m.url),
+      file_url: topicFileUrl(req, m.id),
       file_hash: m.file_hash || null,
       contentKey: m.file_path ? pharmdContentKey({ file_path: m.file_path, file_hash: m.file_hash }) : null,
-    }))),
+    })),
   });
   return true;
 }
@@ -285,20 +332,20 @@ router.get("/courses/:code", asyncHandler(async (req, res) => {
 
   ok(res, {
     course: { id: course.id, code: course.code, title: course.title || course.code },
-    topics: await Promise.all((topics ?? []).map(async (t) => ({
+    topics: (topics ?? []).map((t) => ({
       id: t.id,
       position: t.position,
       title: t.title,
       read_minutes: t.read_minutes,
       mime: t.file_mime,
       size: t.file_size,
-      file_url: await resolveFileUrl(t.file_bucket, t.file_path, t.url),
+      file_url: topicFileUrl(req, t.id),
       file_hash: t.file_hash || null,
       // Shared extraction key: the parse is cached once per file and every
       // learner reads the same markdown (the workbook is public catalogue
       // content). Versioned by the file hash so a replaced PDF is a new key.
       contentKey: pharmdContentKey(t),
-    }))),
+    })),
   });
 }));
 

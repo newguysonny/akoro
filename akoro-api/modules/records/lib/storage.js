@@ -180,6 +180,23 @@ export async function createPresignedDownload(fileKey, { downloadName, bucket } 
 }
 
 /**
+ * Read an object's bytes on the server (no browser CORS, no signed URL):
+ * R2 when the key is an R2 key, else the Supabase bucket. Returns
+ * { body: Buffer, contentType } so a route can stream it.
+ */
+export async function readFileObject(fileKey, { bucket } = {}) {
+  if (isFallbackFileKey(fileKey)) {
+    const { data, error } = await db.storage.from(bucket || FALLBACK_BUCKET).download(fileKey);
+    if (error || !data) throw new Error(`Supabase storage could not read the file: ${error?.message || "no data"}`);
+    return { body: Buffer.from(await data.arrayBuffer()), contentType: data.type || "application/octet-stream" };
+  }
+  const out = await s3.send(new GetObjectCommand({ Bucket: bucket || BUCKET, Key: fileKey }));
+  const chunks = [];
+  for await (const chunk of out.Body) chunks.push(chunk);
+  return { body: Buffer.concat(chunks), contentType: out.ContentType || "application/octet-stream" };
+}
+
+/**
  * Write bytes the SERVER made (a generated podcast episode) under the
  * learner's own prefix → the key. R2 when configured, else the Supabase
  * fallback (which refuses anything over its 5 MB cap). `name` is a short
