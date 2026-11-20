@@ -1,6 +1,5 @@
 {
   "oversized": {
-    "app.js": 1120,
     "lib/aiModel.js": 745,
     "modules/adaptive-learning/agents/student/decayEngine.js": 831,
     "modules/adaptive-learning/agents/student/knowledge.js": 628,
@@ -19,7 +18,6 @@
     "modules/courses/cart.js": 821,
     "modules/courses/course-content.js": 709,
     "modules/courses/courses.js": 644,
-    "modules/courses/live-sessions.js": 1101,
     "modules/courses/meeting-integration.js": 754,
     "modules/courses/payouts.js": 717,
     "modules/ranking/routes.js": 639,

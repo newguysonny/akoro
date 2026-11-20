@@ -31,7 +31,7 @@ test("a reminder for a cancelled, ended, deleted or moved session sends nothing"
 
 test("every path that creates, moves or removes a session handles its reminders", async () => {
   const [live, instructor, app, notifier] = await Promise.all([
-    read("../modules/courses/live-sessions.js"), read("../modules/instructor/service-sessions.js"), read("../app.js"), read("./sessionNotifier.js"),
+    read("../modules/courses/live-sessions-service.js"), read("../modules/instructor/service-sessions.js"), read("../app.js"), read("./sessionNotifier.js"),
   ]);
   // the old import pointed at modules/workers/ (no such folder) and queued a job type the worker never handled
   assert.match(live, /import\("\.\.\/\.\.\/workers\/sessionNotifier\.js"\)/);

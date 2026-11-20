@@ -41,9 +41,12 @@ root, so its route files carry their own path prefixes.
   `PLATFORM_COMMISSION_PERCENT`.
 - Live teaching: `meeting-integration.js` stores Zoom/Google/Teams OAuth tokens
   in `provider_tokens` with a Redis read cache and refresh lock;
-  `live-sessions.js`, `peer-sessions.js` and `scheduler.js` create and drive
-  meetings. A `node-cron` tick runs every minute to create links and expire
-  sessions; `/api/scheduler/*` can force that state manually.
+  `live-sessions.js` is the mounted router over `live-sessions-service*.js`
+  (request orchestration), `live-sessions-rules.js` (validation + field
+  allowlist) and `live-sessions-store.js` (Supabase queries). `peer-sessions.js`
+  and `scheduler.js` create and drive meetings. A `node-cron` tick runs every
+  minute to create links and expire sessions; `/api/scheduler/*` can force that
+  state manually.
 - Media: `stream.js` uploads the source to R2. With `MEDIA_WORKER_URL` set,
   `encodeDispatch.js` hands the job to the media container and opens no BullMQ
   queue; otherwise it enqueues on `video-encoding`. The container/worker calls
@@ -67,9 +70,8 @@ root, so its route files carry their own path prefixes.
 
 ## Known limits
 
-- Baselined over 600 lines: `live-sessions.js` (1100), `cart.js` (820),
-  `meeting-integration.js` (753), `payouts.js` (716), `course-content.js` (708),
-  `courses.js` (643).
+- Baselined over 600 lines: `cart.js` (821), `meeting-integration.js` (754),
+  `payouts.js` (717), `course-content.js` (709), `courses.js` (644).
 - `courses.js` is the legacy in-memory mock, intentionally unmounted: real CRUD
   lives in `/api/instructor/courses`, reads come from `public-catalog.js` and
   `course-content.js`, and mounting it would shadow real routes.
