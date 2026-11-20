@@ -56,23 +56,24 @@ const toApi = async (r) => ({
 /* Render page 1 of a stored PDF and keep it as the record's preview.
    Server-side (pdfjs + napi canvas), so it works for uploads the browser sent
    straight to the store and for the backfill script alike. */
-export async function generatePreviewForRecord(r) {
+export async function generatePreviewForRecord(r, onError = null) {
   if (!r?.id || !r.file_key) return null;
   try {
     const { body, contentType } = await readFileObject(r.file_key);
     const pdf = /pdf/i.test(r.mime || "") || /\.pdf$/i.test(r.name || "") || body.subarray(0, 4).toString() === "%PDF";
     if (!pdf) return null;
     const jpg = await renderPdfFirstPage(body);
-    if (!jpg) return null;
+    if (!jpg) { onError?.(new Error("page could not be rendered")); return null; }
     const key = await putRecordObject({
       userId: r.user_id, name: `preview-${r.id}.jpg`,
       body: jpg, contentType: "image/jpeg", prefix: "previews",
     });
     const { error } = await store.setPreviewKey(r.id, key);
-    if (error) { console.error("[records] preview key save failed:", error.message); return null; }
+    if (error) { onError?.(new Error(error.message)); console.error("[records] preview key save failed:", error.message); return null; }
     return key;
   } catch (err) {
     console.error("[records] preview generate failed:", err?.message || err);
+    onError?.(err);
     return null;
   }
 }

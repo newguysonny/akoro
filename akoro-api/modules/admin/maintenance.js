@@ -28,18 +28,21 @@ export async function backfillPreviews(req, res) {
 
   let written = 0;
   let failed = 0;
+  const failures = [];
   for (const row of rows) {
     if (dryRun) continue;
     // A render is ~200 ms; a batch of 50 stays well inside a normal request.
-    const key = await generatePreviewForRecord(row);
-    if (key) written += 1; else failed += 1;
+    let reason = null;
+    const key = await generatePreviewForRecord(row, (err) => { reason = err?.message || String(err); });
+    if (key) written += 1;
+    else { failed += 1; if (failures.length < 5) failures.push({ id: row.id, name: row.name, reason }); }
   }
 
   let remaining = 0;
   try { remaining = await countRecordsMissingPreview(); }
   catch (err) { console.error("[admin/previews] count failed:", err?.message || err); }
 
-  return res.status(200).json({ success: true, data: { dryRun, scanned: rows.length, written, failed, remaining } });
+  return res.status(200).json({ success: true, data: { dryRun, scanned: rows.length, written, failed, remaining, failures } });
  } catch (err) {
    console.error("[admin/previews] backfill failed:", err?.stack || err);
    return res.status(500).json({ success: false, message: String(err?.message || err) });
