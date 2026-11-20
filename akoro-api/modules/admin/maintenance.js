@@ -11,6 +11,7 @@ import {
 const MAX_BATCH = 50;
 
 export async function backfillPreviews(req, res) {
+ try {
   const dryRun = !!req.body?.dryRun;
   const requested = Number(req.body?.limit);
   const limit = Number.isFinite(requested) && requested > 0 ? Math.min(MAX_BATCH, Math.floor(requested)) : MAX_BATCH;
@@ -37,5 +38,10 @@ export async function backfillPreviews(req, res) {
   let remaining = 0;
   try { remaining = await countRecordsMissingPreview(); }
   catch (err) { console.error("[admin/previews] count failed:", err?.message || err); }
+
   return res.status(200).json({ success: true, data: { dryRun, scanned: rows.length, written, failed, remaining } });
+ } catch (err) {
+   console.error("[admin/previews] backfill failed:", err?.stack || err);
+   return res.status(500).json({ success: false, message: String(err?.message || err) });
+ }
 }
