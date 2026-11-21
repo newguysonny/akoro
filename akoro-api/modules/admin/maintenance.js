@@ -134,7 +134,7 @@ export async function compareExtractEngines(req, res) {
     const tModel = Date.now();
     const modeled = await parsePagesWithModel({
       pages: pages.map((p) => ({ pageNumber: p.pageNumber, b64: p.jpeg.toString("base64") })),
-      userId: req.user?.id || null, model,
+      userId: null, model,
     });
     const modelMs = Date.now() - tModel;
 
@@ -254,7 +254,7 @@ export async function startExtractBenchmark(req, res) {
         const tModel = Date.now();
         const parsed = await parsePagesWithModel({
           pages: pages.map((p) => ({ pageNumber: p.pageNumber, b64: p.jpeg.toString('base64') })),
-          userId: req.user?.id || null, model, concurrency,
+          userId: null, model, concurrency,
         });
         const modelMs = Date.now() - tModel;
         const ok = parsed.filter((p) => !p.error);
