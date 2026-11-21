@@ -290,6 +290,13 @@ export async function extractRecordPages({ recordId, contentKey, pages }) {
   return d?.data ?? { pending: [] };
 }
 
+/** Which parser the server runs: runpod | model | ocr. The OCR lane reads the
+    whole stored document in one call, so the client skips rasterization. */
+export async function getExtractionEngine() {
+  const d = await apiGet('/api/records/extract/engine');
+  return d?.data?.engine || 'runpod';
+}
+
 /** One poll of the submitted batch → { done, pages (saved this poll), pending, failed }. */
 export async function getExtractionStatus({ recordId, contentKey }) {
   const q = contentKey ? `contentKey=${encodeURIComponent(contentKey)}` : `recordId=${encodeURIComponent(recordId)}`;

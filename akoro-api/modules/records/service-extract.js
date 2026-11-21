@@ -334,6 +334,17 @@ export async function extractText(req, res) {
   okExtract(res, { ...(await getExtraction(id.contentKey)), done: true });
 }
 
+/* GET /api/records/extract/engine — which parser this deployment runs.
+   The client uses it to take the OCR fast path: one whole-document submit
+   and no page rasterization (the OCR lane ignores page images). */
+export async function extractEngine(_req, res) {
+  try {
+    return res.json({ success: true, data: { engine: await getExtractEngine() } });
+  } catch {
+    return res.json({ success: true, data: { engine: "runpod" } });
+  }
+}
+
 export async function getRecordExtraction(req, res) {
   const recordId = String(req.params.recordId || "");
   if (!/^[0-9a-f-]{36}$/i.test(recordId)) return res400(res, "A recordId is required.");

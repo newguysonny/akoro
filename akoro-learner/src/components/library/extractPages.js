@@ -14,12 +14,59 @@
  * re-running only parses what's missing).
  */
 import * as pdfjsLib from 'pdfjs-dist';
-import { extractRecordPages, getExtractionStatus, getRecordExtraction } from '../../services/recordsApi.js';
+import { extractRecordPages, getExtractionStatus, getRecordExtraction, getExtractionEngine } from '../../services/recordsApi.js';
 import { runExtraction, EXTRACT_BATCH_PAGES } from '../../lib/extractRun.js';
 import { looksScanned } from '../../lib/textLayer.js';
 import { fetchFileWithRetry } from '../../lib/fetchFile.js';
 
 export const MAX_RECORD_PAGES = 60;   // matches the API's cap
+
+/* The OCR lane recognises the WHOLE stored file server-side in one call, so
+   there is nothing to rasterize or batch: submit once (pages: []) and poll the
+   job. The old path rasterized every page, uploaded them in ≤16-page batches —
+   images the OCR lane ignores — and because each batch submits, a 27-page scan
+   ran the full recognition twice. This keeps it to one round. */
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+export const OCR_POLL_MS = 3000;
+const OCR_DEADLINE_MS = 12 * 60_000;
+async function runOcrWholeDocument(record, { total = 0, onProgress } = {}) {
+  // The lane saves all pages or none, so anything already stored is the whole
+  // result — a retry after a completed run costs nothing.
+  const before = await getRecordExtraction(record.id).catch(() => ({ pages: [] }));
+  if (before?.pages?.length) return { status: 'done', done: before.pages.length, total: total || before.pages.length };
+  onProgress?.(0, total);
+  try {
+    await extractRecordPages({ recordId: record.id, pages: [] });   // OCR branch reads the stored file
+  } catch (e) {
+    if (e?.status !== 409) return { status: 'error', error: e?.message || 'Could not start the extraction.', done: 0, total };
+  }
+  const deadline = Date.now() + OCR_DEADLINE_MS;
+  let flaky = 0, limited = 0;
+  for (;;) {
+    await sleep(OCR_POLL_MS);
+    let st;
+    try { st = await getExtractionStatus({ recordId: record.id }); }
+    catch (e) {
+      if (e?.status === 429 && ++limited <= 8) { await sleep(15_000); continue; }
+      if (!e?.status && ++flaky <= 6) { await sleep(5_000); continue; }
+      return { status: 'error', error: e?.message || 'Lost the connection while reading the file.', done: 0, total };
+    }
+    flaky = 0;
+    if (st?.failed?.length) {
+      const saved = await getRecordExtraction(record.id).catch(() => ({ pages: [] }));
+      return { status: 'error', error: st.failed[0]?.error || 'The file could not be read.', done: saved.pages?.length || 0, total };
+    }
+    if (st?.done) {
+      const saved = await getRecordExtraction(record.id).catch(() => ({ pages: [] }));
+      const pages = saved?.pages || [];
+      if (!pages.length) return { status: 'skipped' };
+      return { status: 'done', done: pages.length, total: total || pages.length };
+    }
+    if (Date.now() > deadline) {
+      return { status: 'error', error: 'The OCR worker is taking too long — try again in a few minutes.', done: 0, total };
+    }
+  }
+}
 
 // The parse model trains/serves at a 2 MP pixel cap — render a bit under
 // it so pages land at (roughly) the resolution the checkpoint expects and
@@ -127,7 +174,10 @@ export async function extractUpload(record, { onProgress, isCancelled } = {}) {
   const isImage = /^image\//.test(record.mime || '');
   if (!isPdf && !isImage) return { status: 'skipped' };   // text files read as-is; A/V is the API's lane
 
+  const engine = await getExtractionEngine().catch(() => 'runpod');
+
   if (isImage) {
+    if (engine === 'ocr') return runOcrWholeDocument(record, { total: 1, onProgress });
     let pages;
     try { pages = await rasterizeImageFile(record.fileUrl); }
     catch (e) { return { status: 'error', error: e?.message || 'Could not open the file to read it.', done: 0, total: 0 }; }
@@ -160,6 +210,9 @@ export async function extractUpload(record, { onProgress, isCancelled } = {}) {
     const texts = await pdfPageTexts(pdf, { maxPages: total });
     if (!looksScanned(texts)) return { status: 'skipped' };
   } catch { /* the text read failed — fall through to the model parse */ }
+
+  // A scan on the OCR deployment: the server reads the stored file itself.
+  if (engine === 'ocr') return runOcrWholeDocument(record, { total, onProgress });
 
   // Pages the MODEL already saved (an earlier run, or a retry) aren't sent
   // again. Free pdf-text pages don't count: on a scan they hold at most a

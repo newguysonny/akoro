@@ -110,11 +110,13 @@ router.post("/folders/items", authenticateToken, asyncHandler(folders.addFolderI
  *   POST /api/records/extract              { recordId|contentKey, pages:≤16 }
  *   GET  /api/records/extract/status       collect the batch's pages
  *   POST /api/records/extract/text         free stored-text read (retry)
+ *   GET  /api/records/extract/engine       which parser runs (runpod|model|ocr)
  *   GET  /api/records/extract/:recordId    cached extraction (your record)
  *   GET  /api/records/extract/content/:key cached extraction (shared file)
  */
 router.post("/extract", authenticateToken, asyncHandler(extract.submitExtract));
 router.get("/extract/status", authenticateToken, asyncHandler(extract.extractStatus));
+router.get("/extract/engine", authenticateToken, asyncHandler(extract.extractEngine));
 router.post(["/extract/text", "/extract/office"], authenticateToken, asyncHandler(extract.extractText));
 router.get("/extract/:recordId", authenticateToken, asyncHandler(extract.getRecordExtraction));
 router.get("/extract/content/:key", authenticateToken, asyncHandler(extract.getContentExtraction));
