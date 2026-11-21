@@ -45,6 +45,7 @@ import NowStudyingBar from '../../components/dashboard/NowStudyingBar.jsx';
 import PharmDProgram from '../../features/pharmd/index.js';
 import ProgrammePage from '../../components/programmes/ProgrammePage.jsx';
 import { programmeBySlug } from '../../lib/disciplineProgrammes.js';
+import { rememberDiscipline } from '../../lib/disciplineCache.js';
 import ContentsDiscoveryTab from '../../components/tabs/ContentsDiscoveryTab.jsx';
 import { AppShell, SidebarToggle } from '../../components/AppShell.jsx';
 import { NavIcon } from '../../components/common/NavIcons.jsx';
@@ -583,7 +584,13 @@ export default function LearnerDashboard() {
   useEffect(()=>{
     // User profile — name, avatar, year group, XP for the header
     apiGet("/api/profiles/me")
-      .then(d=>{ if(d?.id||d?.data?.id) setUserProfile(d.data||d); })
+      .then(d=>{
+        const profile = d?.data || d;
+        if (profile?.id) {
+          setUserProfile(profile);
+          rememberDiscipline(profile.discipline);   // first paint after reload
+        }
+      })
       .catch(()=>{});
 
     // Read the durable preference every fresh dashboard load. A failed read

@@ -31,6 +31,7 @@ import Toast from '../common/Toast.jsx';
 import DiscoverSearchPage from './DiscoverSearchPage.jsx';
 import { TYPES, matchTypes, FONT } from './dhubTypes.js';
 import { programmeForDiscipline, programmeBySlug, ALL_PROGRAMMES, PHARMD_SLUG } from '../../lib/disciplineProgrammes.js';
+import { cachedDiscipline } from '../../lib/disciplineCache.js';
 
 /* Gradient washes for programme cards without a cover image — the same
    colour-block energy as the type cards, cycled per programme. */
@@ -69,7 +70,9 @@ export default function DiscoverHub({ onOpenCourses, onOpenCourse, onOpenRecord,
   /* Programme cards are STATIC (lib/disciplineProgrammes.js): the learner's
      own discipline gets its card, and a second card lists the rest. Nothing
      is fetched on this page. */
-  const mine = programmeForDiscipline(discipline);
+  // Prefer the profile value; until it loads, the cached one keeps the card
+  // in place instead of flashing "More programmes" first.
+  const mine = programmeForDiscipline(discipline || cachedDiscipline());
   /* "More programmes" is this SAME page with the fixed programme cards in
      place of the discovery types — one UI, no separate layout. */
   const T = TYPES(t);

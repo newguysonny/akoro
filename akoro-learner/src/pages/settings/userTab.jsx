@@ -285,6 +285,7 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent,
         if (result?.success !== true) {
           throw new Error('The change was not confirmed by Akoro. Please try again.');
         }
+        rememberDiscipline(val);
         showToast('Saved');
         if (!unchanged) {
           try { localStorage.setItem('akoro_boot_splash', String(Date.now())); } catch { /* private mode */ }
