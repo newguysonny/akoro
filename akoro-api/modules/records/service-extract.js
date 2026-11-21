@@ -87,7 +87,7 @@ async function submitExtractInner(req, res) {
       try {
         const { body } = await readFileObject(rec.file_key);
         const out = await runDeepseekOcr({ buffer: body, filename: rec.name || "document.pdf" });
-        await saveExtractionPages(contentKey, out.pages, out.model);
+        await saveExtractionPages({ contentKey, pages: out.pages, model: out.model });
         void indexByContentKey({ contentKey, pages: out.pages });
         await finishContentJob(contentKey, "parse", "done", { mode: "ocr", model: out.model, pages: out.pages.length });
       } catch (err) {
