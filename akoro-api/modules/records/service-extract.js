@@ -99,6 +99,7 @@ async function submitExtractInner(req, res) {
     return res.status(500).json({ success: false, error: `Could not read the extraction engine: ${err?.message || err}` });
   }
   if (engine === "model") {
+   try {
     // Asynchronous, like the RunPod lane: the request saves the batch and
     // returns, the pages parse in the background, and the reader polls status.
     // Parsing inline hit the edge timeout on 16-page batches (502) and left the
@@ -146,6 +147,11 @@ async function submitExtractInner(req, res) {
       success: true,
       data: { contentKey, pending: work.map((w) => w.pageNumber), failed: [], model },
     });
+   } catch (err) {
+     console.error("[extract/model] submit failed:", err?.stack || err);
+     try { await finishContentJob(contentKey, "parse", "failed", { mode: "model", error: String(err?.message || err) }); } catch {}
+     return res.status(500).json({ success: false, error: `The vision lane could not start: ${err?.message || err}` });
+   }
   }
 
   const submittedAt = new Date().toISOString();
