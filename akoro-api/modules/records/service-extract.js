@@ -91,37 +91,53 @@ export async function submitExtract(req, res) {
     return res.status(500).json({ success: false, error: `Could not read the extraction engine: ${err?.message || err}` });
   }
   if (engine === "model") {
-   try {
+    // Asynchronous, like the RunPod lane: the request saves the batch and
+    // returns, the pages parse in the background, and the reader polls status.
+    // Parsing inline hit the edge timeout on 16-page batches (502) and left the
+    // single-flight claim running, which then answered 409 to every retry.
     const model = extractModelId();
-    const results = await parsePagesWithModel({ pages: work, userId: req.user.id, model });
-    const saved = [];
-    const failed = [];
-    for (const r of results) {
-      if (r.error) { failed.push({ pageNumber: r.pageNumber, error: r.error }); continue; }
+    const batch = {
+      mode: "model", model, submittedAt: new Date().toISOString(),
+      jobs: work.map((w) => ({ pageNumber: w.pageNumber, state: "pending", size: w.size || null })),
+    };
+    await updateContentJob(contentKey, "parse", batch);
+
+    void (async () => {
+      let saved = 0, failed = 0;
       try {
-        await saveExtractionPage({
-          contentKey, pageNumber: r.pageNumber, blocks: [], markdown: r.markdown,
-          model: r.model, size: r.size || null,
-        });
-        saved.push({ pageNumber: r.pageNumber, markdown: r.markdown, blocks: [], model: r.model });
+        const results = await parsePagesWithModel({ pages: work, userId: req.user.id, model });
+        for (const r of results) {
+          const entry = batch.jobs.find((j) => j.pageNumber === r.pageNumber);
+          if (r.error) { entry.state = "failed"; entry.error = r.error; failed += 1; continue; }
+          try {
+            await saveExtractionPage({
+              contentKey, pageNumber: r.pageNumber, blocks: [], markdown: r.markdown,
+              model: r.model, size: r.size || null,
+            });
+            entry.state = "saved";
+            saved += 1;
+          } catch (err) {
+            entry.state = "failed";
+            entry.error = `could not save the page: ${err?.message || err}`;
+            failed += 1;
+          }
+        }
       } catch (err) {
-        // A cache write failure must not become a generic 500 with no clue.
-        console.error("[extract/model] page save failed:", err?.message || err);
-        failed.push({ pageNumber: r.pageNumber, error: `could not save the page: ${err?.message || err}` });
+        console.error("[extract/model] batch failed:", err?.stack || err);
+        for (const entry of batch.jobs) if (entry.state === "pending") { entry.state = "failed"; entry.error = String(err?.message || err); failed += 1; }
+      } finally {
+        await finishContentJob(contentKey, "parse", saved ? "done" : "failed", { ...batch, pages: saved, failed });
+        if (saved) {
+          const pages = batch.jobs.filter((j) => j.state === "saved").map((j) => ({ pageNumber: j.pageNumber }));
+          void indexByContentKey({ contentKey, pages });
+        }
       }
-    }
-    await finishContentJob(contentKey, "parse", saved.length ? "done" : "failed", { mode: "model", pages: saved.length, model });
-    if (saved.length) void indexByContentKey({ contentKey, pages: saved });
-    if (!saved.length) {
-      return res.status(424).json({ success: false, code: "parse_failed",
-        error: failed[0]?.error ? `The model could not read these pages: ${failed[0].error}` : "The model could not read these pages.",
-        failed });
-    }
-    return res.status(202).json({ success: true, data: { contentKey, pending: [], failed, model } });
-   } catch (err) {
-     console.error("[extract/model] lane failed:", err?.stack || err);
-     return res.status(500).json({ success: false, code: "parse_failed", error: `The vision lane failed: ${err?.message || err}` });
-   }
+    })();
+
+    return res.status(202).json({
+      success: true,
+      data: { contentKey, pending: work.map((w) => w.pageNumber), failed: [], model },
+    });
   }
 
   const submittedAt = new Date().toISOString();
@@ -178,6 +194,15 @@ export async function extractStatus(req, res) {
   const { contentKey } = id;
 
   const job = await getContentJob(contentKey, "parse");
+  // Model lane: pages are saved by the background run; status only reports.
+  if (job?.result?.mode === "model") {
+    const mb = job.result;
+    const pending = (mb.jobs || []).filter((j) => j.state === "pending").map((j) => j.pageNumber);
+    const failures = (mb.jobs || []).filter((j) => j.state === "failed")
+      .map(({ pageNumber, error }) => ({ pageNumber, error: error || "page failed" }));
+    const done = pending.length === 0 && job.status !== "running";
+    return okExtract(res, { contentKey, done, pages: [], pending, failed: failures });
+  }
   const batch = job?.result?.mode === "async" && Array.isArray(job.result.jobs) ? job.result : null;
   if (!batch) {
     return okExtract(res, { contentKey, running: job?.status === "running", done: job?.status !== "running", pages: [], failed: [], pending: [] });

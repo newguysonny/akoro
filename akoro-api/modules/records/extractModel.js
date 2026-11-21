@@ -29,7 +29,7 @@ export async function parsePageWithModel({ imageBase64, pageNumber, userId = nul
     : `data:image/jpeg;base64,${String(imageBase64 || "")}`;
   if (!url || url.length < 64) throw new Error("No page image was provided.");
 
-  const res = await meteredChat({
+  const call = meteredChat({
     userId,
     feature: "records_extract",
     model,
@@ -46,6 +46,8 @@ export async function parsePageWithModel({ imageBase64, pageNumber, userId = nul
       },
     ],
   });
+  // A stuck provider call must not pin the batch (and its claim) forever.
+  const res = await Promise.race([call, new Promise((_, reject) => setTimeout(() => reject(new Error("the model took too long on this page")), 120000))]);
 
   let markdown = String(res?.choices?.[0]?.message?.content || "").trim();
   // Models sometimes wrap the answer in a fence despite the prompt.
