@@ -6,6 +6,7 @@
 // request never sits long enough for a proxy to cut it.
 import {
   listRecordsMissingPreview, countRecordsMissingPreview, generatePreviewForRecord,
+  renderPdfPages, pdfTextsByPage, parsePagesWithModel, parsePageOnRunpod,
 } from "../records/index.js";
 import { getExtractEngine, setExtractEngine, extractModelId } from "../records/index.js";
 
@@ -67,5 +68,115 @@ export async function writeExtractEngine(req, res) {
     return res.status(200).json({ success: true, data: { engine, model: extractModelId() } });
   } catch (err) {
     return res.status(400).json({ success: false, message: String(err?.message || err) });
+  }
+}
+
+/* ── Engine comparison (ops evidence before changing the default) ────────── */
+
+const words = (text) => new Set(String(text || "").toLowerCase().match(/[a-z0-9]{3,}/g) || []);
+const jaccard = (a, b) => {
+  const A = words(a), B = words(b);
+  if (!A.size && !B.size) return 1;
+  let shared = 0;
+  for (const w of A) if (B.has(w)) shared += 1;
+  return shared / (A.size + B.size - shared);
+};
+const tableRows = (md) => String(md || "").split("\n").filter((l) => l.trim().startsWith("|") && !/^\|?[\s:|-]+\|?$/.test(l.trim()));
+const tableCells = (md) => tableRows(md).flatMap((l) => l.split("|").map((c) => c.trim()).filter(Boolean));
+
+/* How much of a lane's table content also appears in the page's real text —
+   a proxy for table accuracy without a hand-labelled fixture. Scanned pages
+   have no text layer, so the score is null there. */
+function tableScore(md, pageText) {
+  const cells = tableCells(md);
+  if (!cells.length) return { rows: 0, cells: 0, inPageText: null };
+  if (!pageText || !pageText.trim()) return { rows: tableRows(md).length, cells: cells.length, inPageText: null };
+  const haystack = String(pageText).toLowerCase();
+  const hit = cells.filter((c) => c.length > 2 && haystack.includes(c.toLowerCase())).length;
+  return { rows: tableRows(md).length, cells: cells.length, inPageText: +(hit / cells.length).toFixed(2) };
+}
+
+/* Citation offset: the page index whose real text best matches the markdown.
+   Should be the same page; +1/-1 means the engine drifted a page. */
+function bestOffset(markdown, texts, pageNumber) {
+  const scores = texts.map((t) => ({ page: t.pageNumber, s: jaccard(markdown, t.text) }));
+  scores.sort((a, b) => b.s - a.s);
+  const best = scores[0];
+  if (!best) return null;
+  return { offset: best.page - pageNumber, score: +best.s.toFixed(2) };
+}
+
+async function fetchPdfBytes(url) {
+  const res = await fetch(url, { redirect: "follow" });
+  if (!res.ok) throw new Error(`could not fetch the PDF (${res.status})`);
+  const buf = Buffer.from(await res.arrayBuffer());
+  if (buf.length > 40 * 1024 * 1024) throw new Error("PDF is larger than 40 MB");
+  return buf;
+}
+
+/* POST /api/admin/records/extract-compare
+   { pdfUrl, from?, to? (max 3 pages), model? } → per-page metrics from both
+   lanes. Admin-only; documents are fetched server-side, so CORS and storage
+   do not interfere. */
+export async function compareExtractEngines(req, res) {
+  try {
+    const url = String(req.body?.pdfUrl || "");
+    if (!/^https?:\/\//.test(url)) return res.status(400).json({ success: false, message: "pdfUrl must be http(s)." });
+    const from = Math.max(1, Number(req.body?.from) || 1);
+    const to = Math.min(from + 2, Math.max(from, Number(req.body?.to) || from + 1));   // ≤3 pages/request
+    const model = String(req.body?.model || "") || extractModelId();
+
+    const bytes = await fetchPdfBytes(url);
+    const pages = await renderPdfPages(bytes, { from, to, width: 1200 });
+    if (!pages.length) return res.status(422).json({ success: false, message: "No pages rendered." });
+    const texts = await pdfTextsByPage(bytes, { from, to });
+
+    const tModel = Date.now();
+    const modeled = await parsePagesWithModel({
+      pages: pages.map((p) => ({ pageNumber: p.pageNumber, b64: p.jpeg.toString("base64") })),
+      userId: req.user?.id || null, model,
+    });
+    const modelMs = Date.now() - tModel;
+
+    const tRun = Date.now();
+    const runpod = [];
+    for (const p of pages) {
+      try {
+        const out = await parsePageOnRunpod({ imageBase64: p.jpeg.toString("base64") });
+        runpod.push({ pageNumber: p.pageNumber, markdown: out.markdown });
+      } catch (err) {
+        runpod.push({ pageNumber: p.pageNumber, error: String(err?.message || err) });
+      }
+    }
+    const runpodMs = Date.now() - tRun;
+
+    const rows = pages.map((p) => {
+      const a = modeled.find((m) => m.pageNumber === p.pageNumber) || {};
+      const b = runpod.find((m) => m.pageNumber === p.pageNumber) || {};
+      const pageText = texts.find((t) => t.pageNumber === p.pageNumber)?.text || "";
+      return {
+        page: p.pageNumber,
+        overlap: a.markdown && b.markdown ? +jaccard(a.markdown, b.markdown).toFixed(2) : null,
+        modelChars: (a.markdown || "").length,
+        runpodChars: (b.markdown || "").length,
+        modelTable: tableScore(a.markdown || "", pageText),
+        runpodTable: tableScore(b.markdown || "", pageText),
+        modelOffset: bestOffset(a.markdown || "", texts, p.pageNumber),
+        runpodOffset: bestOffset(b.markdown || "", texts, p.pageNumber),
+        error: a.error || b.error || null,
+      };
+    });
+    const overlaps = rows.map((r) => r.overlap).filter((n) => typeof n === "number");
+    return res.status(200).json({
+      success: true,
+      data: {
+        model, from, to, pages: pages.length, modelMs, runpodMs,
+        meanOverlap: overlaps.length ? +(overlaps.reduce((x, y) => x + y, 0) / overlaps.length).toFixed(2) : null,
+        rows,
+      },
+    });
+  } catch (err) {
+    console.error("[admin/compare] failed:", err?.stack || err);
+    return res.status(500).json({ success: false, message: String(err?.message || err) });
   }
 }

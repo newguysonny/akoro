@@ -32,7 +32,7 @@ import { usageSnapshot }                  from "../../lib/usageMeter.js";
 
 const router = Router();
 const adminOnly = [authenticateToken, requireRole(["admin"])];
-import { backfillPreviews, readExtractEngine, writeExtractEngine } from "./maintenance.js";
+import { backfillPreviews, readExtractEngine, writeExtractEngine, compareExtractEngines } from "./maintenance.js";
 
 const asyncHandler = (fn) => (req, res, next) =>
   Promise.resolve(fn(req, res, next)).catch(next);
@@ -420,5 +420,6 @@ router.delete("/courses/:id", adminOnly, asyncHandler(async (req, res) => {
 router.post("/records/previews/backfill", adminOnly, asyncHandler(backfillPreviews));
 router.get("/records/extract-engine", adminOnly, asyncHandler(readExtractEngine));
 router.put("/records/extract-engine", adminOnly, asyncHandler(writeExtractEngine));
+router.post("/records/extract-compare", adminOnly, asyncHandler(compareExtractEngines));
 
 export default router;

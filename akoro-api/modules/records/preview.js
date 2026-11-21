@@ -59,6 +59,22 @@ export async function renderPdfPages(buffer, { from = 1, to = 1, width = 1200 } 
   return out;
 }
 
+/** Per-page text layer (for comparing an engine's page to the page it claims). */
+export async function pdfTextsByPage(buffer, { from = 1, to = 1 } = {}) {
+  if (!buffer?.length) return [];
+  const lib = await loadPdfjs();
+  const doc = await lib.getDocument({ data: new Uint8Array(buffer), disableFontFace: true, useSystemFonts: true, isEvalSupported: false }).promise;
+  const out = [];
+  try {
+    for (let n = Math.max(1, from); n <= Math.min(to, doc.numPages); n += 1) {
+      const page = await doc.getPage(n);
+      const content = await page.getTextContent();
+      out.push({ pageNumber: n, text: content.items.map((i) => i.str).join(" ") });
+    }
+  } finally { try { await doc.destroy(); } catch {} }
+  return out;
+}
+
 /** A downscaled JPEG of an image upload (the picture IS the preview). */
 export async function renderImagePreview(buffer, { width = 360 } = {}) {
   if (!buffer?.length) return null;

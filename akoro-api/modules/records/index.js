@@ -1,5 +1,7 @@
 export { listRecordsMissingPreview, countRecordsMissingPreview } from "./store-records.js";
 export { getExtractEngine, setExtractEngine, extractModelId } from "./extractEngine.js";
+export { renderPdfPages, pdfTextsByPage } from "./preview.js";
+export { parsePagesWithModel } from "./extractModel.js";
 export { generatePreviewForRecord } from "./service-records.js";
 export { resolveAskTargetFor, resolveContentAccess } from "./access.js";
 export { gatherPassages, extractCitations, passageWhere, buildAskMessages, cleanModelOutput } from "./askLib.js";
@@ -15,3 +17,5 @@ export { storedTextKindOf, extractStoredText, pdfTextPages } from "./storedText.
 export { docxToPages, downloadCapped } from "./officeText.js";
 export { default as parseConsoleModule } from "./parseConsole.js";
 export { default as recordsModule } from "./routes.js";
+
+export { parsePageOnRunpod } from "./extractLib.js";
