@@ -34,7 +34,10 @@ const dbLazy = async () => (await import("../../db.js")).default;
    A runner CLAIMS (content_key, lane) before spending anything: another
    LIVE claim loses (poll instead), a finished/failed/stale claim is
    re-claimable (refresh / crashed worker). */
-const CLAIM_STALE_MINUTES = 10;
+// A crashed/failed parse must not lock a file for long: 2 minutes is enough
+// for a real batch to report progress, and short enough that "Try again"
+// recovers without a support round trip.
+const CLAIM_STALE_MINUTES = Number(process.env.EXTRACT_CLAIM_STALE_MINUTES || 2);
 
 export async function claimContentJob(contentKey, lane, userId) {
   const db = await dbLazy();
