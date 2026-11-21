@@ -143,7 +143,7 @@ export async function compareExtractEngines(req, res) {
     for (const p of pages) {
       try {
         const out = await parsePageOnRunpod({ imageBase64: p.jpeg.toString("base64") });
-        runpod.push({ pageNumber: p.pageNumber, markdown: out.markdown });
+        runpod.push({ pageNumber: p.pageNumber, markdown: out.markdown, blocks: out.blocks });
       } catch (err) {
         runpod.push({ pageNumber: p.pageNumber, error: String(err?.message || err) });
       }
