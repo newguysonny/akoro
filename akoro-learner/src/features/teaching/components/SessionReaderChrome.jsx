@@ -94,7 +94,8 @@ export default function SessionReaderChrome({ reader }) {
 
         {/* Tab strip. First tab is the document itself. */}
         <div className="flex-shrink-0 border-b" style={{ borderColor: "var(--ak-border)", background: "var(--ak-tag-bg)" }}>
-          <PillsBar tabs={allTabs} showChatButton={isMobile && chatState !== "ask"}/>
+          <PillsBar tabs={allTabs} activeTabId={activeTabId} activeResultTab={activeResultTab}
+            switchTabTo={switchTabTo} closeTab={closeTab} showChatButton={isMobile && chatState !== "ask"}/>
         </div>
 
         {/* Folder contents row — this document was opened from a folder:

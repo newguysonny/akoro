@@ -360,12 +360,15 @@ export async function guideReply({ recordId, contentKey, message, selection = nu
 
 /** Generate a study tool (summary | quiz | flashcards) from the document — grounded, cited. */
 export async function generateRecordTool({ recordId, contentKey, folderId, tool, scope = 'page', pageNumber = null, pageText = '', values = {} }) {
+  // Grounded generation runs the model over the page: measured ~40 s on a
+  // real page. The 30 s default aborted it and the sheet said "timed out"
+  // while the server was still writing a perfectly good quiz.
   const d = await apiPost(`/api/records/tools/${encodeURIComponent(tool)}`, {
     ...(folderId ? { folderId } : contentKey ? { contentKey } : { recordId }),
     scope, ...(Number.isInteger(pageNumber) ? { pageNumber } : {}),
     ...(pageText ? { pageText: String(pageText).slice(0, 8000) } : {}),
     values,
-  });
+  }, { timeout: 90_000 });
   return d?.data ?? {};
 }
 
