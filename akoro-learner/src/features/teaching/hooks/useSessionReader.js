@@ -10,7 +10,7 @@ import { TAB_KINDS, artifactToTab, marksFromArtifacts, tabContentPatch, tabToArt
 import { toReaderCite } from "../../../lib/askAnswer.js";
 import {
   TOOL_DEFS, toolById, SERVER_TOOLS, isServerPodcast, FORM_DEFS, mediaTime,
-  deriveToolContent,
+  deriveToolContent, cleanFocusText,
 } from "../components/sessionReaderModel.js";
 
 export function useSessionReader({
@@ -410,7 +410,7 @@ export function useSessionReader({
   function openForm(toolId, focus = "") {
     setActiveTabId("reader");
     setFormTool(toolId);
-    setPrefillFocus(focus);
+    setPrefillFocus(cleanFocusText(focus));
     setSelection(null);
     setGenMenuOpen(true);
   }

@@ -23,6 +23,20 @@ export const SERVER_TOOLS = new Set(["summary", "quiz", "flashcards"]);
 export const isServerPodcast = (tools, id) => id === "podcast" && !!tools?.podcast;
 export const SCOPE_FIELD = { id: "scope", label: "From", type: "select", options: ["This page", "Whole document"] };
 
+/* Selected page text → a short, human focus line. A selection can come from
+   the OCR/text layer, where it carries markdown headings ("# 5 The
+   chloroplast## Part I …") or layout tokens (<|ref|>…); the quiz sheet should
+   not show that markup as the learner's focus. */
+export function cleanFocusText(value) {
+  return String(value || "")
+    .replace(/<\|[^>]*\|>/g, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/[#*_`>|]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 160);
+}
+
 export const FORM_DEFS = {
   podcast: {
     title: "Podcast", sub: "Turn this page into a short audio episode",
