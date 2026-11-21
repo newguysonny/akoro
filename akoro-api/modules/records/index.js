@@ -1,4 +1,5 @@
 export { listRecordsMissingPreview, countRecordsMissingPreview } from "./store-records.js";
+export { getExtractEngine, setExtractEngine, extractModelId } from "./extractEngine.js";
 export { generatePreviewForRecord } from "./service-records.js";
 export { resolveAskTargetFor, resolveContentAccess } from "./access.js";
 export { gatherPassages, extractCitations, passageWhere, buildAskMessages, cleanModelOutput } from "./askLib.js";

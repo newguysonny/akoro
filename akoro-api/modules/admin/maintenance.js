@@ -7,6 +7,7 @@
 import {
   listRecordsMissingPreview, countRecordsMissingPreview, generatePreviewForRecord,
 } from "../records/index.js";
+import { getExtractEngine, setExtractEngine, extractModelId } from "../records/index.js";
 
 const MAX_BATCH = 50;
 
@@ -47,4 +48,24 @@ export async function backfillPreviews(req, res) {
    console.error("[admin/previews] backfill failed:", err?.stack || err);
    return res.status(500).json({ success: false, message: String(err?.message || err) });
  }
+}
+
+/* GET /api/admin/records/extract-engine — which parser runs, and on which model. */
+export async function readExtractEngine(req, res) {
+  try {
+    const engine = await getExtractEngine();
+    return res.status(200).json({ success: true, data: { engine, model: extractModelId() } });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: String(err?.message || err) });
+  }
+}
+
+/* PUT /api/admin/records/extract-engine { engine: runpod|model } */
+export async function writeExtractEngine(req, res) {
+  try {
+    const engine = await setExtractEngine(req.body?.engine, req.user?.id || null);
+    return res.status(200).json({ success: true, data: { engine, model: extractModelId() } });
+  } catch (err) {
+    return res.status(400).json({ success: false, message: String(err?.message || err) });
+  }
 }

@@ -33,6 +33,32 @@ class NapiCanvasFactory {
   }
 }
 
+/** Pages of a PDF as JPEG buffers (1-indexed, inclusive), for extraction
+    comparisons and backfills that need the same rasteriser the previews use. */
+export async function renderPdfPages(buffer, { from = 1, to = 1, width = 1200 } = {}) {
+  if (!buffer?.length) return [];
+  const lib = await loadPdfjs();
+  const factory = new NapiCanvasFactory();
+  let doc = null;
+  const out = [];
+  try {
+    doc = await lib.getDocument({ data: new Uint8Array(buffer), canvasFactory: factory, disableFontFace: true, useSystemFonts: true, isEvalSupported: false }).promise;
+    const last = Math.min(to, doc.numPages);
+    for (let n = Math.max(1, from); n <= last; n += 1) {
+      const page = await doc.getPage(n);
+      const base = page.getViewport({ scale: 1 });
+      const scale = Math.min(3, width / base.width);
+      const viewport = page.getViewport({ scale });
+      const { canvas, context } = factory.create(Math.ceil(viewport.width), Math.ceil(viewport.height));
+      await page.render({ canvasContext: context, viewport }).promise;
+      out.push({ pageNumber: n, jpeg: await canvas.encode("jpeg", 82) });
+    }
+  } finally {
+    try { await doc?.destroy(); } catch { /* already gone */ }
+  }
+  return out;
+}
+
 /** A downscaled JPEG of an image upload (the picture IS the preview). */
 export async function renderImagePreview(buffer, { width = 360 } = {}) {
   if (!buffer?.length) return null;

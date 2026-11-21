@@ -76,6 +76,28 @@ export async function submitExtract(req, res) {
     return res.status(409).json({ success: false, error: "This file is being extracted right now — the shared result will appear in a moment.", job: await getContentJob(contentKey, "parse") });
   }
 
+  // Direct-model lane: one vision call per page, same saved rows and claim as
+  // the RunPod lane, so the reader's contract is unchanged. Bounded
+  // concurrency; failures ride back per page.
+  if ((await getExtractEngine()) === "model") {
+    const model = extractModelId();
+    const results = await parsePagesWithModel({ pages: work, userId: req.user.id, model });
+    const saved = [];
+    const failed = [];
+    for (const r of results) {
+      if (r.error) { failed.push({ pageNumber: r.pageNumber, error: r.error }); continue; }
+      await saveExtractionPage({
+        contentKey, pageNumber: r.pageNumber, blocks: [], markdown: r.markdown,
+        model: r.model, size: r.size || null,
+      });
+      saved.push({ pageNumber: r.pageNumber, markdown: r.markdown, blocks: [], model: r.model });
+    }
+    await finishContentJob(contentKey, "parse", saved.length ? "done" : "failed", { mode: "model", pages: saved.length, model });
+    if (saved.length) void indexByContentKey({ contentKey, pages: saved });
+    if (!saved.length) return res.status(424).json({ success: false, code: "parse_failed", error: "The model could not read these pages." });
+    return res.status(202).json({ success: true, data: { contentKey, pending: [], failed, model } });
+  }
+
   const submittedAt = new Date().toISOString();
   const jobs = [];
   let submitError = null;

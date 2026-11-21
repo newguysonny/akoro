@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Lock, User, Shield, Megaphone, CreditCard, KeyRound, Webhook, Mail, MessageSquare, Image as ImageIcon } from 'lucide-react';
+import { Lock, User, Shield, Megaphone, CreditCard, KeyRound, Webhook, Mail, MessageSquare, Image as ImageIcon, FileSearch } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { PageLayout } from '../components/Layout.jsx';
 import { Btn, Inp, Toast, PageSkeleton } from '../components/Primitives.jsx';
-import { apiGet, apiPost, apiPatch } from '../services/api.js';
+import { apiGet, apiPost, apiPatch, apiPut } from '../services/api.js';
 import { AMBER, INK, MUTED, BORDER, LIGHT, WHITE, RED, FONT } from '../constants.js';
 import { SettingsCard, SettingsGroup } from '../shared/SettingsCard.jsx';
 
@@ -20,6 +20,26 @@ export default function SettingsPage() {
   const [toast,     setToast]     = useState(null);
   const [pvBusy,    setPvBusy]    = useState(false);
   const [pvResult,  setPvResult]  = useState(null);
+  const [extract,   setExtract]   = useState(null);   // { engine, model }
+  const [extractBusy, setExtractBusy] = useState(false);
+
+  useEffect(() => {
+    apiGet('/api/admin/records/extract-engine')
+      .then((r) => setExtract(r?.data ?? r ?? null))
+      .catch(() => {});
+  }, []);
+
+  const saveExtractEngine = async (engine) => {
+    setExtractBusy(true);
+    try {
+      const r = await apiPut('/api/admin/records/extract-engine', { engine });
+      const d = r?.data ?? r ?? {};
+      setExtract(d);
+      setToast({ message: `Extraction now uses ${d.engine === 'model' ? 'the vision model' : 'the RunPod worker'}`, type: 'success' });
+    } catch (e) {
+      setToast({ message: e?.message || 'Could not change the extraction engine', type: 'error' });
+    } finally { setExtractBusy(false); }
+  };
 
   /* Document previews: render page 1 for uploads that have none yet. Batched
      server-side (50 a call); press again until "remaining" is 0. Dry run first
@@ -346,6 +366,26 @@ export default function SettingsPage() {
         </div>
         </SettingsGroup>
         {/* Maintenance: host-level jobs without a shell. */}
+        <SettingsGroup title="Document extraction">
+          <div style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 16, padding: '16px 18px', margin: '0 16px 12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ width: 38, height: 38, borderRadius: 11, background: `${AMBER}18`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <FileSearch size={18} color={AMBER}/>
+              </span>
+              <div style={{ flex: 1 }}>
+                <p style={{ margin: 0, fontSize: 14, fontWeight: 800, color: INK }}>Scanned-document parser</p>
+                <p style={{ margin: 0, fontSize: 12, color: MUTED }}>
+                  RunPod is the fine-tuned layout worker; the vision model reads a page straight into markdown
+                  (faster, weaker on dense tables). Currently: <strong>{extract?.engine === 'model' ? `vision model (${extract?.model || 'configured'})` : 'RunPod worker'}</strong>.
+                </p>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+              <Btn type="button" disabled={extractBusy || extract?.engine === 'runpod'} onClick={() => saveExtractEngine('runpod')}>Use RunPod</Btn>
+              <Btn type="button" disabled={extractBusy || extract?.engine === 'model'} onClick={() => saveExtractEngine('model')}>Use vision model</Btn>
+            </div>
+          </div>
+        </SettingsGroup>
         <SettingsGroup title="Maintenance">
           <div style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 16, padding: '16px 18px', margin: '0 16px 12px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
