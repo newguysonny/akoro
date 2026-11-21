@@ -32,6 +32,9 @@ export async function parsePageWithModel({ imageBase64, pageNumber, userId = nul
   const call = meteredChat({
     userId,
     feature: "records_extract",
+    // The platform pays (the RunPod lane never charged learners); without this
+    // the request context's learner wallet is debited and can run dry.
+    __payer: "platform",
     model,
     max_tokens: 4000,
     temperature: 0,
