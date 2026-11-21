@@ -57,12 +57,23 @@ const toApi = async (r) => ({
    Server-side (pdfjs + napi canvas), so it works for uploads the browser sent
    straight to the store and for the backfill script alike. */
 export async function generatePreviewForRecord(r, onError = null) {
-  if (!r?.id || !r.file_key) return null;
+  if (!r?.id) return null;
+  // A pasted note has no file: its page is drawn from the text itself, the
+  // same way a text upload is. Everything else needs the stored object.
+  const isPaste = r.kind === "paste";
+  if (!isPaste && !r.file_key) return null;
   try {
-    const { body, contentType } = await readFileObject(r.file_key);
+    let body, mime, name = r.name;
+    if (isPaste) {
+      body = Buffer.from(String(r.content || ""), "utf8");
+      mime = "text/markdown";
+    } else {
+      const file = await readFileObject(r.file_key);
+      body = file.body; mime = r.mime || file.contentType;
+    }
     // PDF page, downscaled image, or a drawn page for text/markdown; anything
     // else (Office, audio, video) has no honest thumbnail without extra tools.
-    const jpg = await renderPreview({ mime: r.mime || contentType, name: r.name, body });
+    const jpg = await renderPreview({ mime, name, body });
     if (!jpg) { onError?.(new Error("no preview for this file type")); return null; }
     const key = await putRecordObject({
       userId: r.user_id, name: `preview-${r.id}.jpg`,
@@ -247,7 +258,7 @@ export async function createRecord(req, res) {
   if (error) throw error;
   // Uploads get their page-1 preview now, off the request path: rendering a
   // page takes ~200 ms and the learner should not wait for a thumbnail.
-  if (data.kind === "upload" && data.file_key) {
+  if ((data.kind === "upload" && data.file_key) || data.kind === "paste") {
     void generatePreviewForRecord(data).catch(() => {});
   }
   // Semantic search index — the name always, pasted text too. Fire-and-forget:

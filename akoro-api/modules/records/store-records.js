@@ -108,25 +108,35 @@ export const getRecordPreviewRow = (id) =>
     .select("id, user_id, private, preview_key, deleted_at").eq("id", id).maybeSingle();
 
 export async function listRecordsMissingPreview(limit = 100) {
-  const { data, error } = await edu().from("records")
-    .select("id, user_id, kind, name, mime, file_key")
+  const db = edu();
+  const base = () => db.from("records")
+    .select("id, user_id, kind, name, mime, file_key, content")
+    .is("preview_key", null).is("deleted_at", null);
+
+  // Uploads the renderer can handle (PDF/image/text), plus every paste — a
+  // pasted note's page is drawn from its text, so it needs no file.
+  const { data: uploads, error: uploadErr } = await base()
     .eq("kind", "upload").not("file_key", "is", null)
-    .is("preview_key", null).is("deleted_at", null)
-    // Previews: PDFs, images (the picture itself) and text/markdown (a drawn
-    // page). Anything else has no honest thumbnail yet.
     .or("mime.ilike.%pdf%,mime.ilike.image/%,mime.ilike.text/%,name.ilike.%.pdf,name.ilike.%.txt,name.ilike.%.md,name.ilike.%.markdown,name.ilike.%.png,name.ilike.%.jpg,name.ilike.%.jpeg,name.ilike.%.webp,name.ilike.%.gif,name.ilike.%.bmp")
     .order("created_at", { ascending: true }).limit(limit);
-  if (error) throw new Error(error.message);
-  return data || [];
+  if (uploadErr) throw new Error(uploadErr.message);
+
+  const { data: pastes, error: pasteErr } = await base()
+    .eq("kind", "paste").not("content", "is", null)
+    .order("created_at", { ascending: true }).limit(limit);
+  if (pasteErr) throw new Error(pasteErr.message);
+
+  const rows = [...(uploads || []), ...(pastes || [])]
+    .sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)));
+  return rows.slice(0, limit);
 }
 
 export const countRecordsMissingPreview = async () => {
-  const { count } = await edu().from("records")
-    .select("id", { count: "exact", head: true })
-    .eq("kind", "upload").not("file_key", "is", null)
-    .is("preview_key", null).is("deleted_at", null)
-    // Previews: PDFs, images (the picture itself) and text/markdown (a drawn
-    // page). Anything else has no honest thumbnail yet.
+  const db = edu();
+  const base = () => db.from("records").select("id", { count: "exact", head: true })
+    .is("preview_key", null).is("deleted_at", null);
+  const upload = await base().eq("kind", "upload").not("file_key", "is", null)
     .or("mime.ilike.%pdf%,mime.ilike.image/%,mime.ilike.text/%,name.ilike.%.pdf,name.ilike.%.txt,name.ilike.%.md,name.ilike.%.markdown,name.ilike.%.png,name.ilike.%.jpg,name.ilike.%.jpeg,name.ilike.%.webp,name.ilike.%.gif,name.ilike.%.bmp");
-  return count || 0;
+  const paste = await base().eq("kind", "paste").not("content", "is", null);
+  return (upload.count || 0) + (paste.count || 0);
 };
