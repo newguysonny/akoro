@@ -20,3 +20,5 @@ export { default as recordsModule } from "./routes.js";
 
 export { parsePageOnRunpod, saveExtractionPage } from "./extractLib.js";
 export { readRecordFileBytes } from "./service-records.js";
+
+export { runDeepseekOcr, ocrConfigured } from "./extractOcr.js";

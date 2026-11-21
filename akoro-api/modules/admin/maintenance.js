@@ -7,6 +7,7 @@
 import {
   listRecordsMissingPreview, countRecordsMissingPreview, generatePreviewForRecord,
   renderPdfPages, pdfTextsByPage, parsePagesWithModel, parsePageOnRunpod, saveExtractionPage, readRecordFileBytes,
+  runDeepseekOcr, ocrConfigured,
 } from "../records/index.js";
 import { getExtractEngine, setExtractEngine, extractModelId } from "../records/index.js";
 
@@ -284,4 +285,26 @@ export async function readExtractBenchmark(req, res) {
     .select('value').eq('key', 'extract_benchmark:' + req.params.jobId).maybeSingle();
   if (!data) return res.status(404).json({ success: false, message: 'Unknown benchmark job.' });
   return res.status(200).json({ success: true, data: data.value });
+}
+
+/* POST /api/admin/records/ocr-test {recordId} — run the OCR lane synchronously
+   and return counts/first page, to see exactly what the API gave us. */
+export async function ocrTest(req, res) {
+  try {
+    if (!ocrConfigured()) return res.status(501).json({ success: false, message: 'DEEPSEEK_API_KEY is not set.' });
+    const recordId = String(req.body?.recordId || '');
+    const bytes = await readRecordFileBytes(recordId);
+    if (!bytes?.length) return res.status(404).json({ success: false, message: 'No stored file.' });
+    const t0 = Date.now();
+    const out = await runDeepseekOcr({ buffer: bytes, filename: 'document.pdf' });
+    return res.status(200).json({ success: true, data: {
+      ms: Date.now() - t0, model: out.model, pageCount: out.pageCount, pages: out.pages.length,
+      chars: out.pages.reduce((n, p) => n + (p.markdown || '').length, 0),
+      withBlocks: out.pages.filter((p) => (p.blocks || []).length).length,
+      first: { pageNumber: out.pages[0]?.pageNumber, chars: out.pages[0]?.markdown?.length, blocks: out.pages[0]?.blocks?.length, sample: out.pages[0]?.markdown?.slice(0, 120) },
+    } });
+  } catch (err) {
+    console.error('[admin/ocr-test] failed:', err?.stack || err);
+    return res.status(500).json({ success: false, message: String(err?.message || err) });
+  }
 }
