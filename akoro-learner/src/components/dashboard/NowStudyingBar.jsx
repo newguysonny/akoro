@@ -35,13 +35,15 @@ export default function NowStudyingBar({ item, onOpen, onAdd, onDismiss, sticky 
   const dotColor = isBattle ? (battleLive ? RED : BRAND) : stage.color;
   const livePulse = { animation: 'now-live-pulse 1.6s ease-in-out infinite' };
 
-  /* sticky — the same bar rendered INSIDE a full-screen page's scrolling
-     phone column (folders, Pharm.D): pinned to the column's bottom edge
-     instead of the viewport's, and stacked UNDER that page's sheets
-     (z 30 < the sheets' 40) so rename/delete still cover it. */
+  /* sticky — the same bar rendered INSIDE a full-screen page (folders,
+     Pharm.D, programme pages). It pins to the VIEWPORT bottom, not the
+     content's: a sticky element in a short page (a coming-soon card, a page
+     still loading) sits wherever the content ends, which read as a misplaced
+     bar mid-screen. Fixed keeps it on the bottom edge for every page length;
+     z 30 stays under that page's sheets (40) so rename/delete still cover it. */
   return (
     <div className="ak-now-bar" onClick={onOpen} style={sticky
-      ? { position: 'sticky', bottom: 0, zIndex: 30,
+      ? { position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 30,
           background: 'var(--ak-surface)', borderTop: '1px solid var(--ak-border)',
           boxShadow: '0 -4px 18px rgba(0,0,0,.10)', fontFamily: FONT,
           animation: `sheet-up .28s var(--ease-spring)`, cursor: 'pointer' }
