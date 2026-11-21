@@ -28,6 +28,7 @@ const REQUIRED = [
   ["ocrConfigured", "extractOcr.js"],
   ["readFileObject", null],
   ["saveExtractionPage", null],
+  ["saveExtractionPages", null],
   ["indexByContentKey", null],
 ];
 

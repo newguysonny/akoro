@@ -18,7 +18,7 @@
  */
 import { createPresignedDownload, readFileObject } from "./lib/storage.js";
 import {
-  recordsExtractionEnabled, parsePageRunAsync, getParseJob, settleParseJob, saveExtractionPage,
+  recordsExtractionEnabled, parsePageRunAsync, getParseJob, settleParseJob, saveExtractionPage, saveExtractionPages,
   getExtraction, claimContentJob, finishContentJob, updateContentJob, getContentJob,
   MAX_PAGES_PER_REQUEST, MAX_RECORD_PAGES, MAX_IMAGE_B64_CHARS,
 } from "./extractLib.js";
