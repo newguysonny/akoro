@@ -238,7 +238,8 @@ export async function startExtractBenchmark(req, res) {
     if (!/^[0-9a-f-]{36}$/i.test(recordId)) return res.status(400).json({ success: false, message: 'recordId is required.' });
     const jobId = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
     const model = String(req.body?.model || '') || extractModelId();
-    const concurrency = Math.min(8, Math.max(1, Number(req.body?.concurrency) || 4));
+    const concurrency = Math.min(16, Math.max(1, Number(req.body?.concurrency) || 4));
+    const width = Math.min(1600, Math.max(600, Number(req.body?.width) || 1200));
     const db = (await import('../../db.js')).default;
     const save = (value) => db.schema('edu').from('platform_settings')
       .upsert({ key: 'extract_benchmark:' + jobId, value, updated_at: new Date().toISOString() }, { onConflict: 'key' });
@@ -248,7 +249,7 @@ export async function startExtractBenchmark(req, res) {
         const bytes = await readRecordFileBytes(recordId);
         if (!bytes?.length) throw new Error('no stored file');
         const tRender = Date.now();
-        const pages = await renderPdfPages(bytes, { from: 1, to: 999, width: 1200 });
+        const pages = await renderPdfPages(bytes, { from: 1, to: 999, width });
         const renderMs = Date.now() - tRender;
         const tModel = Date.now();
         const parsed = await parsePagesWithModel({
@@ -258,7 +259,7 @@ export async function startExtractBenchmark(req, res) {
         const modelMs = Date.now() - tModel;
         const ok = parsed.filter((p) => !p.error);
         await save({
-          status: 'done', model, concurrency, pages: pages.length,
+          status: 'done', model, concurrency, width, pages: pages.length,
           renderMs, modelMs, totalMs: renderMs + modelMs,
           chars: ok.reduce((n, p) => n + (p.markdown || '').length, 0),
           failures: parsed.filter((p) => p.error).map((p) => ({ pageNumber: p.pageNumber, error: p.error })),
