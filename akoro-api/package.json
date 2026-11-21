@@ -27,7 +27,8 @@
     "test:client": "node --test modules/client-core.contract.test.mjs modules/client-core.behavior.test.mjs modules/client-auth.behavior.test.mjs modules/client-socket.behavior.test.mjs modules/client-session-user.behavior.test.mjs modules/shared-pages.contract.test.mjs modules/shared-components.contract.test.mjs",
     "test:imports": "node --test lib/moduleImports.contract.test.mjs lib/importsResolve.test.mjs lib/barrelExports.contract.test.mjs lib/unboundHelpers.contract.test.mjs",
     "preview:backfill": "node scripts/backfill-record-previews.mjs",
-    "extract:compare": "node scripts/compare-extract-engines.mjs"
+    "extract:compare": "node scripts/compare-extract-engines.mjs",
+    "test:extract": "node --test modules/records/extract-lane.contract.test.mjs modules/records/extract.contract.test.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.131.0",

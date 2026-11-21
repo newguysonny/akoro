@@ -23,6 +23,8 @@ import {
   MAX_PAGES_PER_REQUEST, MAX_RECORD_PAGES, MAX_IMAGE_B64_CHARS,
 } from "./extractLib.js";
 import { indexByContentKey } from "./searchLib.js";
+import { getExtractEngine, extractModelId } from "./extractEngine.js";
+import { parsePagesWithModel } from "./extractModel.js";
 import { resolveContentAccess } from "./access.js";
 import { storedTextKindOf, extractStoredText } from "./storedText.js";
 import { pageSizeOf } from "./rules.js";
