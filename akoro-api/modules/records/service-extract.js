@@ -16,7 +16,7 @@
  * first-opens from double-spending: the loser gets 409 + the job row and
  * polls instead.
  */
-import { createPresignedDownload } from "./lib/storage.js";
+import { createPresignedDownload, readFileObject } from "./lib/storage.js";
 import {
   recordsExtractionEnabled, parsePageRunAsync, getParseJob, settleParseJob, saveExtractionPage,
   getExtraction, claimContentJob, finishContentJob, updateContentJob, getContentJob,
