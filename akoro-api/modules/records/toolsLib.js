@@ -378,7 +378,16 @@ export async function gatherToolPassages({ target, scope, pageNumber = null, pag
       const fromBoxes = pagePassages(pageNumber, pages.get(pageNumber));
       if (fromBoxes.length) return fromBoxes;
     }
-    return pageText ? textPassages(pageNumber, pageText) : [];
+    if (pageText) return textPassages(pageNumber, pageText);
+    // The page carries no text (a paste's cover page, a blank scan page): a
+    // tool asked for "this page" should still build from the document it sits
+    // in, rather than refuse with "no readable text yet".
+    const pastedPage = await pastedPagesFor(target).catch(() => new Map());
+    if (pastedPage.size) {
+      const own = pagePassages(pageNumber, pastedPage.get(pageNumber));
+      return own.length ? own : samplePassages(pastedPage);
+    }
+    return [];
   }
   // Whole document: the extracted PAGES are the grounding (RunPod markdown +
   // blocks when it exists, the free pdf-text pages otherwise). A focus narrows
