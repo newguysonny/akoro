@@ -227,3 +227,59 @@ export async function extractRunTest(req, res) {
     return res.status(500).json({ success: false, message: String(err?.message || err), stack: String(err?.stack || '').split(String.fromCharCode(10)).slice(0, 3) });
   }
 }
+
+/* POST /api/admin/records/extract-benchmark {recordId, model?, concurrency?}
+   Times the vision lane over EVERY page of a stored PDF, off the request path.
+   Returns { jobId } immediately; GET .../extract-benchmark/:jobId reads the
+   result from edu.platform_settings. Nothing is cached. */
+export async function startExtractBenchmark(req, res) {
+  try {
+    const recordId = String(req.body?.recordId || '');
+    if (!/^[0-9a-f-]{36}$/i.test(recordId)) return res.status(400).json({ success: false, message: 'recordId is required.' });
+    const jobId = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    const model = String(req.body?.model || '') || extractModelId();
+    const concurrency = Math.min(8, Math.max(1, Number(req.body?.concurrency) || 4));
+    const db = (await import('../../db.js')).default;
+    const save = (value) => db.schema('edu').from('platform_settings')
+      .upsert({ key: 'extract_benchmark:' + jobId, value, updated_at: new Date().toISOString() }, { onConflict: 'key' });
+
+    void (async () => {
+      try {
+        const bytes = await readRecordFileBytes(recordId);
+        if (!bytes?.length) throw new Error('no stored file');
+        const tRender = Date.now();
+        const pages = await renderPdfPages(bytes, { from: 1, to: 999, width: 1200 });
+        const renderMs = Date.now() - tRender;
+        const tModel = Date.now();
+        const parsed = await parsePagesWithModel({
+          pages: pages.map((p) => ({ pageNumber: p.pageNumber, b64: p.jpeg.toString('base64') })),
+          userId: req.user?.id || null, model, concurrency,
+        });
+        const modelMs = Date.now() - tModel;
+        const ok = parsed.filter((p) => !p.error);
+        await save({
+          status: 'done', model, concurrency, pages: pages.length,
+          renderMs, modelMs, totalMs: renderMs + modelMs,
+          chars: ok.reduce((n, p) => n + (p.markdown || '').length, 0),
+          failures: parsed.filter((p) => p.error).map((p) => ({ pageNumber: p.pageNumber, error: p.error })),
+          perPage: parsed.map((p) => ({ pageNumber: p.pageNumber, chars: (p.markdown || '').length, error: p.error || null })),
+        });
+      } catch (err) {
+        console.error('[admin/extract-benchmark] failed:', err?.stack || err);
+        await save({ status: 'failed', error: String(err?.message || err) }).catch(() => {});
+      }
+    })();
+
+    return res.status(202).json({ success: true, data: { jobId } });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: String(err?.message || err) });
+  }
+}
+
+export async function readExtractBenchmark(req, res) {
+  const db = (await import('../../db.js')).default;
+  const { data } = await db.schema('edu').from('platform_settings')
+    .select('value').eq('key', 'extract_benchmark:' + req.params.jobId).maybeSingle();
+  if (!data) return res.status(404).json({ success: false, message: 'Unknown benchmark job.' });
+  return res.status(200).json({ success: true, data: data.value });
+}

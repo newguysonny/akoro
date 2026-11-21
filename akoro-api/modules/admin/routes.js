@@ -32,7 +32,7 @@ import { usageSnapshot }                  from "../../lib/usageMeter.js";
 
 const router = Router();
 const adminOnly = [authenticateToken, requireRole(["admin"])];
-import { backfillPreviews, readExtractEngine, writeExtractEngine, compareExtractEngines, extractSaveTest, extractRunTest } from "./maintenance.js";
+import { backfillPreviews, readExtractEngine, writeExtractEngine, compareExtractEngines, extractSaveTest, extractRunTest, startExtractBenchmark, readExtractBenchmark } from "./maintenance.js";
 
 const asyncHandler = (fn) => (req, res, next) =>
   Promise.resolve(fn(req, res, next)).catch(next);
@@ -423,5 +423,7 @@ router.put("/records/extract-engine", adminOnly, asyncHandler(writeExtractEngine
 router.post("/records/extract-compare", adminOnly, asyncHandler(compareExtractEngines));
 router.post("/records/extract-save-test", adminOnly, asyncHandler(extractSaveTest));
 router.post("/records/extract-run-test", adminOnly, asyncHandler(extractRunTest));
+router.post("/records/extract-benchmark", adminOnly, asyncHandler(startExtractBenchmark));
+router.get("/records/extract-benchmark/:jobId", adminOnly, asyncHandler(readExtractBenchmark));
 
 export default router;
