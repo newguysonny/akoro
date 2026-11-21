@@ -18,4 +18,4 @@ export { docxToPages, downloadCapped } from "./officeText.js";
 export { default as parseConsoleModule } from "./parseConsole.js";
 export { default as recordsModule } from "./routes.js";
 
-export { parsePageOnRunpod } from "./extractLib.js";
+export { parsePageOnRunpod, saveExtractionPage } from "./extractLib.js";
