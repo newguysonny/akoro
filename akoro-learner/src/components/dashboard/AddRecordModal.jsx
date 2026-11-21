@@ -183,7 +183,13 @@ export default function AddRecordModal({ open, onClose, user, onOpenRecord, onRe
         onProgress: (done, total) => { if (mine()) setExt((x) => (x ? { ...x, done, total } : x)); },
       });
     } catch (e) {
-      res = { status: 'error', error: e?.message || 'Extraction failed.' };
+      // A thrown fetch has no HTTP status: the API was unreachable (offline,
+      // a hibernating server, a dropped radio) — not a parse failure. Say so;
+      // the file is already saved and a retry resumes only the missing pages.
+      const unreachable = !e?.status && /failed to fetch|network|load failed|networkerror/i.test(String(e?.message || ''));
+      res = { status: 'error', error: unreachable
+        ? "Couldn't reach the server — the file is saved. Check your connection and try again; a retry only reads the pages still missing."
+        : (e?.message || 'Extraction failed.') };
     }
     if (!mine()) return;
     if (res.status === 'skipped') { setExt(null); return; }
