@@ -19,3 +19,4 @@ export { default as parseConsoleModule } from "./parseConsole.js";
 export { default as recordsModule } from "./routes.js";
 
 export { parsePageOnRunpod, saveExtractionPage } from "./extractLib.js";
+export { readRecordFileBytes } from "./service-records.js";

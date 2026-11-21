@@ -6,7 +6,7 @@
 // request never sits long enough for a proxy to cut it.
 import {
   listRecordsMissingPreview, countRecordsMissingPreview, generatePreviewForRecord,
-  renderPdfPages, pdfTextsByPage, parsePagesWithModel, parsePageOnRunpod, saveExtractionPage,
+  renderPdfPages, pdfTextsByPage, parsePagesWithModel, parsePageOnRunpod, saveExtractionPage, readRecordFileBytes,
 } from "../records/index.js";
 import { getExtractEngine, setExtractEngine, extractModelId } from "../records/index.js";
 
@@ -193,5 +193,37 @@ export async function extractSaveTest(req, res) {
   } catch (err) {
     console.error("[admin/extract-save-test] failed:", err?.stack || err);
     return res.status(500).json({ success: false, message: String(err?.message || err), detail: String(err?.details || err?.hint || "") });
+  }
+}
+
+/* POST /api/admin/records/extract-run-test {recordId, from?, to?}
+   Runs the model lane against a stored record exactly as submitExtract does,
+   returning the real error instead of a bare 500. Admin-only diagnostics. */
+export async function extractRunTest(req, res) {
+  try {
+    const recordId = String(req.body?.recordId || '');
+    if (!/^[0-9a-f-]{36}$/i.test(recordId)) return res.status(400).json({ success: false, message: 'recordId is required.' });
+    const bytes = await readRecordFileBytes(recordId);
+    if (!bytes?.length) return res.status(404).json({ success: false, message: 'No stored file for that record.' });
+    const from = Math.max(1, Number(req.body?.from) || 1);
+    const to = Math.min(from + 2, Number(req.body?.to) || from + 1);
+    const pages = await renderPdfPages(bytes, { from, to, width: 1200 });
+    const model = extractModelId();
+    const parsed = await parsePagesWithModel({
+      pages: pages.map((p) => ({ pageNumber: p.pageNumber, b64: p.jpeg.toString('base64') })),
+      userId: req.user?.id || null, model,
+    });
+    const saved = [];
+    for (const r of parsed) {
+      if (r.error) { saved.push({ pageNumber: r.pageNumber, error: r.error }); continue; }
+      try {
+        await saveExtractionPage({ contentKey: 'debug-run-' + recordId + '-' + Date.now(), pageNumber: r.pageNumber, blocks: [], markdown: r.markdown, model: r.model, size: null });
+        saved.push({ pageNumber: r.pageNumber, ok: true, chars: r.markdown.length });
+      } catch (err) { saved.push({ pageNumber: r.pageNumber, saveError: String(err?.message || err) }); }
+    }
+    return res.status(200).json({ success: true, data: { model, pages: pages.length, parsed: saved } });
+  } catch (err) {
+    console.error('[admin/extract-run-test] failed:', err?.stack || err);
+    return res.status(500).json({ success: false, message: String(err?.message || err), stack: String(err?.stack || '').split(String.fromCharCode(10)).slice(0, 3) });
   }
 }

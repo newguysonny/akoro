@@ -89,6 +89,14 @@ export async function generatePreviewForRecord(r, onError = null) {
   }
 }
 
+/* The stored bytes of a record's file (diagnostics: engine comparison). */
+export async function readRecordFileBytes(recordId) {
+  const { data: r } = await store.getRecordWithFile(recordId);
+  if (!r?.file_key) return null;
+  const { body } = await readFileObject(r.file_key);
+  return body;
+}
+
 /* POST /api/records/:id/preview — one JPEG of page 1.
    The reader already renders PDF pages with pdf.js, so the client makes the
    image and sends it here; the store keeps it under previews/. Cards then
