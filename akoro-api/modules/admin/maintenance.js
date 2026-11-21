@@ -159,6 +159,8 @@ export async function compareExtractEngines(req, res) {
         overlap: a.markdown && b.markdown ? +jaccard(a.markdown, b.markdown).toFixed(2) : null,
         modelChars: (a.markdown || "").length,
         runpodChars: (b.markdown || "").length,
+        modelBlocks: 0,                                  // the model lane has no geometry
+        runpodBlocks: Array.isArray(b.blocks) ? b.blocks.filter((x) => Array.isArray(x.bbox_2d) && x.bbox_2d.length === 4).length : 0,
         modelTable: tableScore(a.markdown || "", pageText),
         runpodTable: tableScore(b.markdown || "", pageText),
         modelOffset: bestOffset(a.markdown || "", texts, p.pageNumber),

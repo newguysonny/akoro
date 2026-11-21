@@ -20,7 +20,9 @@ Rules
 - Write [unreadable] for any word or cell you cannot read. Never guess, never invent content.
 - Ignore page furniture: running headers, footers, page numbers, watermarks.`;
 
-/** One page → { markdown, model } via the configured vision model. */
+/** One page → { markdown, model } via the configured vision model.
+ *  No layout blocks: a general vision model cannot give trustworthy coordinates,
+ *  so citations from this lane are page-level (bbox null) rather than boxed. */
 export async function parsePageWithModel({ imageBase64, pageNumber, userId = null, model }) {
   const url = String(imageBase64 || "").startsWith("data:")
     ? String(imageBase64)
