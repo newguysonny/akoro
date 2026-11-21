@@ -118,7 +118,10 @@ async function submitExtractInner(req, res) {
       try {
         // Extraction is platform cost (the RunPod lane never charged the learner), so
         // no coin wallet is debited and a learner with zero coins can still read.
-        const results = await parsePagesWithModel({ pages: work, userId: null, model });
+        const results = await parsePagesWithModel({
+          pages: work, userId: null, model,
+          pagesPerCall: Number(process.env.RECORDS_EXTRACT_PAGES_PER_CALL || 3),
+        });
         for (const r of results) {
           const entry = batch.jobs.find((j) => j.pageNumber === r.pageNumber);
           if (r.error) { entry.state = "failed"; entry.error = r.error; failed += 1; continue; }

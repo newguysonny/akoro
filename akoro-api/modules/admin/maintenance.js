@@ -240,6 +240,7 @@ export async function startExtractBenchmark(req, res) {
     const model = String(req.body?.model || '') || extractModelId();
     const concurrency = Math.min(16, Math.max(1, Number(req.body?.concurrency) || 4));
     const width = Math.min(1600, Math.max(600, Number(req.body?.width) || 1200));
+    const pagesPerCall = Math.min(4, Math.max(1, Number(req.body?.pagesPerCall) || 1));
     const db = (await import('../../db.js')).default;
     const save = (value) => db.schema('edu').from('platform_settings')
       .upsert({ key: 'extract_benchmark:' + jobId, value, updated_at: new Date().toISOString() }, { onConflict: 'key' });
@@ -254,7 +255,7 @@ export async function startExtractBenchmark(req, res) {
         const tModel = Date.now();
         const parsed = await parsePagesWithModel({
           pages: pages.map((p) => ({ pageNumber: p.pageNumber, b64: p.jpeg.toString('base64') })),
-          userId: null, model, concurrency,
+          userId: null, model, concurrency, pagesPerCall,
         });
         const modelMs = Date.now() - tModel;
         const ok = parsed.filter((p) => !p.error);
