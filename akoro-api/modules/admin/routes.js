@@ -32,7 +32,7 @@ import { usageSnapshot }                  from "../../lib/usageMeter.js";
 
 const router = Router();
 const adminOnly = [authenticateToken, requireRole(["admin"])];
-import { backfillPreviews, readExtractEngine, writeExtractEngine, compareExtractEngines } from "./maintenance.js";
+import { backfillPreviews, readExtractEngine, writeExtractEngine, compareExtractEngines, extractSaveTest } from "./maintenance.js";
 
 const asyncHandler = (fn) => (req, res, next) =>
   Promise.resolve(fn(req, res, next)).catch(next);
@@ -421,5 +421,6 @@ router.post("/records/previews/backfill", adminOnly, asyncHandler(backfillPrevie
 router.get("/records/extract-engine", adminOnly, asyncHandler(readExtractEngine));
 router.put("/records/extract-engine", adminOnly, asyncHandler(writeExtractEngine));
 router.post("/records/extract-compare", adminOnly, asyncHandler(compareExtractEngines));
+router.post("/records/extract-save-test", adminOnly, asyncHandler(extractSaveTest));
 
 export default router;

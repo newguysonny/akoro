@@ -6,7 +6,7 @@
 // request never sits long enough for a proxy to cut it.
 import {
   listRecordsMissingPreview, countRecordsMissingPreview, generatePreviewForRecord,
-  renderPdfPages, pdfTextsByPage, parsePagesWithModel, parsePageOnRunpod,
+  renderPdfPages, pdfTextsByPage, parsePagesWithModel, parsePageOnRunpod, saveExtractionPage,
 } from "../records/index.js";
 import { getExtractEngine, setExtractEngine, extractModelId } from "../records/index.js";
 
@@ -180,5 +180,18 @@ export async function compareExtractEngines(req, res) {
   } catch (err) {
     console.error("[admin/compare] failed:", err?.stack || err);
     return res.status(500).json({ success: false, message: String(err?.message || err) });
+  }
+}
+
+/* POST /api/admin/records/extract-save-test — proves the cache write path.
+   Returns the thrown message instead of a bare 500. */
+export async function extractSaveTest(req, res) {
+  const contentKey = `debug-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  try {
+    const out = await saveExtractionPage({ contentKey, pageNumber: 1, blocks: [], markdown: "hello from the save test", model: "debug", size: null });
+    return res.status(200).json({ success: true, data: { contentKey, page: out } });
+  } catch (err) {
+    console.error("[admin/extract-save-test] failed:", err?.stack || err);
+    return res.status(500).json({ success: false, message: String(err?.message || err), detail: String(err?.details || err?.hint || "") });
   }
 }
