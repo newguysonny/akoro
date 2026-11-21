@@ -23,6 +23,7 @@ import { BRAND, RED } from '../../constants.js';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 import { progressStage } from '../../utils/nowStudying.js';
 import { Icon } from '../common/Icons.jsx';
+import RecordPreviewImage from '../common/RecordPreviewImage.jsx';
 
 const FONT = "'Nunito', sans-serif";
 
@@ -34,6 +35,9 @@ export default function NowStudyingBar({ item, onOpen, onAdd, onDismiss, sticky 
   const stage = isBattle ? null : progressStage(item.progress);
   const dotColor = isBattle ? (battleLive ? RED : BRAND) : stage.color;
   const livePulse = { animation: 'now-live-pulse 1.6s ease-in-out infinite' };
+  /* Real page-1 art for uploaded/pasted records; sessions, courses and links
+     keep the tinted icon tile. Older stored items lack hasPreview → icon. */
+  const showPreview = item.type === 'record' && item.hasPreview !== false;
 
   /* sticky — the same bar rendered INSIDE a full-screen page (folders,
      Pharm.D, programme pages). It pins to the VIEWPORT bottom, not the
@@ -41,7 +45,7 @@ export default function NowStudyingBar({ item, onOpen, onAdd, onDismiss, sticky 
      still loading) sits wherever the content ends, which read as a misplaced
      bar mid-screen. Fixed keeps it on the bottom edge for every page length;
      z 30 stays under that page's sheets (40) so rename/delete still cover it. */
-  return (
+  const bar = (
     <div className="ak-now-bar" onClick={onOpen} style={sticky
       ? { position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 30,
           background: 'var(--ak-surface)', borderTop: '1px solid var(--ak-border)',
@@ -56,10 +60,15 @@ export default function NowStudyingBar({ item, onOpen, onAdd, onDismiss, sticky 
       <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '9px 12px 11px 14px' }}>
         {/* Art — subject emoji on a tinted tile (session/record), ⚔️ for a
             parked battle (red tint while live, brand in the lobby) */}
-        <div style={{ width: 42, height: 42, borderRadius: 'var(--r-md)', flexShrink: 0,
+        <div style={{ width: 42, height: 42, borderRadius: 'var(--r-md)', flexShrink: 0, overflow: 'hidden',
           background: battleLive ? `${RED}14` : `${BRAND}14`,
           border: `1px solid ${battleLive ? `${RED}2e` : `${BRAND}2e`}`,
-          display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>{item.emoji?.startsWith('ti-') ? <Icon name={item.emoji} size={20}/> : item.emoji ? <span>{item.emoji}</span> : <Icon name="ti-book" size={20}/>}</div>
+          display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>
+          {showPreview
+            ? <RecordPreviewImage id={item.id} alt={item.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                fallback={item.emoji?.startsWith('ti-') ? <Icon name={item.emoji} size={20}/> : <Icon name="ti-book" size={20}/>}/>
+            : item.emoji?.startsWith('ti-') ? <Icon name={item.emoji} size={20}/> : item.emoji ? <span>{item.emoji}</span> : <Icon name="ti-book" size={20}/>}
+        </div>
 
         {/* Title + source — taps land on the bar's root (open) */}
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -109,4 +118,5 @@ export default function NowStudyingBar({ item, onOpen, onAdd, onDismiss, sticky 
       )}
     </div>
   );
+  return bar;
 }

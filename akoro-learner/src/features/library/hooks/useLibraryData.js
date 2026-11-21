@@ -307,6 +307,7 @@ export function useLibraryData() {
     nowActs.setCurrent({
       type: 'record', id: r.id, title: r.name, sub: kindLabel,
       emoji: r.kind === 'link' ? 'ti-link' : r.kind === 'paste' ? 'ti-clipboard' : 'ti-paperclip',
+      hasPreview: r.kind !== 'link' && !!r.hasPreview,
       progress: r.progress || 0,
     });
     if (r.kind === 'link' && r.url) { try { window.open(r.url, '_blank', 'noopener'); } catch { /* popup blocked */ } }

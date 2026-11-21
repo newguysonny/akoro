@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom';
 import { Icon, XIcon } from '../../../components/common/Icons.jsx';
 import { BRAND, STUDENT_ID } from '../../../constants.js';
 import AddRecordModal from '../../../components/dashboard/AddRecordModal.jsx';
@@ -161,12 +162,11 @@ export default function LibraryModals({
       {/* The Now-Studying bar, mobile — the tablet bar comes with AppShell.
           This page has no bottom nav of its own, so the bar rides the
           screen's bottom edge (the scoped style re-anchors it). */}
-      {higherEd && now.item && !now.dismissed && !viewer && !folderPage && !addToFolder && !addToCommunity && !addTarget && (
+      {higherEd && now.item && !now.dismissed && !viewer && !folderPage && !addToFolder && !addToCommunity && !addTarget && createPortal(
         <div className="ak-lib-nowbar">
           <style>{`@media (min-width:769px){.ak-lib-nowbar{display:none}}.ak-lib-nowbar .ak-now-bar{bottom:env(safe-area-inset-bottom,0px)}`}</style>
           <NowStudyingBar item={now.item} onOpen={openNowFromLibrary} onAdd={() => setSheetOpen(true)} onDismiss={nowActs.dismiss}/>
-        </div>
-      )}
+        </div>, document.body)}
     </>
   );
 }

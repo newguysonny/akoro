@@ -345,6 +345,7 @@ export default function LearnerDashboard() {
       title: r.name,
       sub: kindLabel,
       emoji: r.kind === 'link' ? 'ti-link' : r.kind === 'paste' ? 'ti-clipboard' : 'ti-paperclip',
+      hasPreview: r.kind !== 'link' && !!r.hasPreview,
       progress: r.progress || 0,
     });
     if (!r.progress) { setRecordProgress(r.id, 10); nowActs.setProgress(r.id, 10); }
@@ -384,6 +385,7 @@ export default function LearnerDashboard() {
         type: 'record', id: nx.id, title: nx.name,
         sub: nx.kind === 'link' ? t('records.tab_link') : nx.kind === 'paste' ? t('records.tab_paste') : t('records.tab_upload'),
         emoji: nx.kind === 'link' ? 'ti-link' : nx.kind === 'paste' ? 'ti-clipboard' : 'ti-paperclip',
+        hasPreview: nx.kind !== 'link' && !!nx.hasPreview,
         progress: nx.progress || 0,
       });
     } else {
