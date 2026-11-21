@@ -76,6 +76,20 @@ async function submitExtractInner(req, res) {
       ? (await store.getRecordWithFile(req.body.recordId)).data
       : (await store.getRecordByFileKey(contentKey)).data;
     if (!rec?.file_key) return res400(res, "This record has no stored file to recognise.");
+    // A page-batched client (older builds) submits each ≤16-page batch, and
+    // every batch would otherwise re-run the WHOLE document — a 27-page scan
+    // paid for two full recognitions. The OCR lane saves all pages or none,
+    // so when the stored recognitions already cover the furthest page this
+    // batch asks for, answer like a finished submit and skip the call.
+    const wantedPages = Array.isArray(req.body?.pages)
+      ? req.body.pages.map((p) => Number(p?.pageNumber) || 0) : [];
+    if (wantedPages.length) {
+      const existing = await getExtraction(contentKey).catch(() => null);
+      const ocrPages = (existing?.pages || []).filter((p) => p.model === "deepseek-ocr");
+      if (ocrPages.length && ocrPages.length >= Math.max(...wantedPages)) {
+        return res.status(202).json({ success: true, data: { contentKey, pending: [], failed: [], model: "deepseek-ocr", cached: true } });
+      }
+    }
     let claimed;
     try { claimed = await claimContentJob(contentKey, "parse", req.user.id); }
     catch (err) { return res.status(500).json({ success: false, error: `Could not claim the file: ${err?.message || err}` }); }
