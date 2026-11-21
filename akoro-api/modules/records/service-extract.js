@@ -71,7 +71,12 @@ export async function submitExtract(req, res) {
   }
 
   // Single flight: only one batch runs per file; latecomers poll.
-  const claimed = await claimContentJob(contentKey, "parse", req.user.id);
+  let claimed;
+  try { claimed = await claimContentJob(contentKey, "parse", req.user.id); }
+  catch (err) {
+    console.error("[extract] claim failed:", err?.stack || err);
+    return res.status(500).json({ success: false, error: `Could not claim the file: ${err?.message || err}` });
+  }
   if (!claimed) {
     return res.status(409).json({ success: false, error: "This file is being extracted right now — the shared result will appear in a moment.", job: await getContentJob(contentKey, "parse") });
   }
@@ -79,7 +84,13 @@ export async function submitExtract(req, res) {
   // Direct-model lane: one vision call per page, same saved rows and claim as
   // the RunPod lane, so the reader's contract is unchanged. Bounded
   // concurrency; failures ride back per page.
-  if ((await getExtractEngine()) === "model") {
+  let engine;
+  try { engine = await getExtractEngine(); }
+  catch (err) {
+    console.error("[extract] engine read failed:", err?.stack || err);
+    return res.status(500).json({ success: false, error: `Could not read the extraction engine: ${err?.message || err}` });
+  }
+  if (engine === "model") {
    try {
     const model = extractModelId();
     const results = await parsePagesWithModel({ pages: work, userId: req.user.id, model });
