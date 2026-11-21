@@ -120,7 +120,7 @@ async function submitExtractInner(req, res) {
         // no coin wallet is debited and a learner with zero coins can still read.
         const results = await parsePagesWithModel({
           pages: work, userId: null, model,
-          pagesPerCall: Number(process.env.RECORDS_EXTRACT_PAGES_PER_CALL || 3),
+          pagesPerCall: Number(process.env.RECORDS_EXTRACT_PAGES_PER_CALL || 1),
         });
         for (const r of results) {
           const entry = batch.jobs.find((j) => j.pageNumber === r.pageNumber);

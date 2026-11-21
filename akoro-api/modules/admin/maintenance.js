@@ -260,7 +260,7 @@ export async function startExtractBenchmark(req, res) {
         const modelMs = Date.now() - tModel;
         const ok = parsed.filter((p) => !p.error);
         await save({
-          status: 'done', model, concurrency, width, pages: pages.length,
+          status: 'done', model, concurrency, width, pagesPerCall, pages: pages.length,
           renderMs, modelMs, totalMs: renderMs + modelMs,
           chars: ok.reduce((n, p) => n + (p.markdown || '').length, 0),
           failures: parsed.filter((p) => p.error).map((p) => ({ pageNumber: p.pageNumber, error: p.error })),
