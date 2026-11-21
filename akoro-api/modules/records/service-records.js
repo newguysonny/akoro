@@ -11,7 +11,7 @@ import {
   recordsStorageEnabled, createPresignedUpload, createPresignedDownload, removeRecordFile,
   ownsRecordFileKey, isFallbackFileKey, MAX_FALLBACK_FILE_BYTES, putRecordObject, readFileObject,
 } from "./lib/storage.js";
-import { renderPdfFirstPage } from "./preview.js";
+import { renderPreview } from "./preview.js";
 import { avEnabled, autoTranscribeContent, autoTranscribeEnabled, avKindOf } from "./avTranscribeLib.js";
 import { indexRecord, searchRecordChunks } from "./searchLib.js";
 import { activePremiumUserIds } from "./access.js";
@@ -60,10 +60,10 @@ export async function generatePreviewForRecord(r, onError = null) {
   if (!r?.id || !r.file_key) return null;
   try {
     const { body, contentType } = await readFileObject(r.file_key);
-    const pdf = /pdf/i.test(r.mime || "") || /\.pdf$/i.test(r.name || "") || body.subarray(0, 4).toString() === "%PDF";
-    if (!pdf) return null;
-    const jpg = await renderPdfFirstPage(body);
-    if (!jpg) { onError?.(new Error("page could not be rendered")); return null; }
+    // PDF page, downscaled image, or a drawn page for text/markdown; anything
+    // else (Office, audio, video) has no honest thumbnail without extra tools.
+    const jpg = await renderPreview({ mime: r.mime || contentType, name: r.name, body });
+    if (!jpg) { onError?.(new Error("no preview for this file type")); return null; }
     const key = await putRecordObject({
       userId: r.user_id, name: `preview-${r.id}.jpg`,
       body: jpg, contentType: "image/jpeg", prefix: "previews",

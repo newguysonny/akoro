@@ -112,9 +112,9 @@ export async function listRecordsMissingPreview(limit = 100) {
     .select("id, user_id, kind, name, mime, file_key")
     .eq("kind", "upload").not("file_key", "is", null)
     .is("preview_key", null).is("deleted_at", null)
-    // Previews are page images: only PDFs qualify. Filtering here keeps the
-    // remaining count honest (text/image uploads would never clear it).
-    .or("mime.ilike.%pdf%,name.ilike.%.pdf%")
+    // Previews: PDFs, images (the picture itself) and text/markdown (a drawn
+    // page). Anything else has no honest thumbnail yet.
+    .or("mime.ilike.%pdf%,mime.ilike.image/%,mime.ilike.text/%,name.ilike.%.pdf,name.ilike.%.txt,name.ilike.%.md,name.ilike.%.markdown,name.ilike.%.png,name.ilike.%.jpg,name.ilike.%.jpeg,name.ilike.%.webp,name.ilike.%.gif,name.ilike.%.bmp")
     .order("created_at", { ascending: true }).limit(limit);
   if (error) throw new Error(error.message);
   return data || [];
@@ -125,6 +125,8 @@ export const countRecordsMissingPreview = async () => {
     .select("id", { count: "exact", head: true })
     .eq("kind", "upload").not("file_key", "is", null)
     .is("preview_key", null).is("deleted_at", null)
-    .or("mime.ilike.%pdf%,name.ilike.%.pdf%");
+    // Previews: PDFs, images (the picture itself) and text/markdown (a drawn
+    // page). Anything else has no honest thumbnail yet.
+    .or("mime.ilike.%pdf%,mime.ilike.image/%,mime.ilike.text/%,name.ilike.%.pdf,name.ilike.%.txt,name.ilike.%.md,name.ilike.%.markdown,name.ilike.%.png,name.ilike.%.jpg,name.ilike.%.jpeg,name.ilike.%.webp,name.ilike.%.gif,name.ilike.%.bmp");
   return count || 0;
 };

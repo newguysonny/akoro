@@ -7,7 +7,7 @@
 // pdfjs needs a canvas factory in Node; @napi-rs/canvas provides the 2D
 // context and JPEG encoding without a native build step.
 
-import { createCanvas } from "@napi-rs/canvas";
+import { createCanvas, loadImage } from "@napi-rs/canvas";
 
 let pdfjs = null;
 async function loadPdfjs() {
@@ -31,6 +31,84 @@ class NapiCanvasFactory {
     target.canvas = null;
     target.context = null;
   }
+}
+
+/** A downscaled JPEG of an image upload (the picture IS the preview). */
+export async function renderImagePreview(buffer, { width = 360 } = {}) {
+  if (!buffer?.length) return null;
+  try {
+    const img = await loadImage(buffer);
+    const scale = Math.min(1, width / img.width);
+    const canvas = createCanvas(Math.max(1, Math.round(img.width * scale)), Math.max(1, Math.round(img.height * scale)));
+    canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+    return await canvas.encode("jpeg", 80);
+  } catch (err) {
+    console.error("[preview] image render failed:", err?.message || err);
+    return null;
+  }
+}
+
+/** The first page of a text/markdown note, drawn as a document. */
+export async function renderTextPreview(text, { width = 360, height = 480 } = {}) {
+  const source = String(text || "").replace(/\r/g, "").trim();
+  if (!source) return null;
+  const canvas = createCanvas(width, height);
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, width, height);
+
+  // A slim accent bar so a note still reads as Akoro, not a blank page.
+  ctx.fillStyle = "#6C3BFF";
+  ctx.fillRect(0, 0, 6, height);
+
+  const pad = 22;
+  const lineHeight = 17;
+  const maxLines = Math.floor((height - pad * 2) / lineHeight);
+  ctx.font = "13px sans-serif";
+  ctx.fillStyle = "#1c1c28";
+  ctx.textBaseline = "top";
+
+  // Wrap on words; markdown noise is stripped so headings read as text.
+  const clean = source
+    .replace(/^#{1,6}\s+/gm, "")
+    .replace(/[*_~]{1,3}([^*_~]+)[*_~]{1,3}/g, "$1")
+    .replace(/^\s*[-*+]\s+/gm, "• ");
+  const lines = [];
+  // Keep paragraph breaks: wrap each source line, and a blank line stays blank.
+  for (const sourceLine of clean.split("\n")) {
+    if (!sourceLine.trim()) { lines.push(""); continue; }
+    let current = "";
+    for (const word of sourceLine.trim().split(/\s+/)) {
+      const candidate = current ? `${current} ${word}` : word;
+      if (ctx.measureText(candidate).width > width - pad * 2) {
+        if (current) lines.push(current);
+        current = word;
+        if (lines.length >= maxLines) break;
+      } else current = candidate;
+    }
+    if (current && lines.length < maxLines) lines.push(current);
+    if (lines.length >= maxLines) break;
+  }
+
+  lines.forEach((textLine, i) => {
+    const y = pad + i * lineHeight;
+    ctx.fillText(i === lines.length - 1 && lines.length === maxLines ? `${textLine.slice(0, -1)}…` : textLine, pad, y);
+  });
+  return await canvas.encode("jpeg", 80);
+}
+
+/** Pick the right renderer for an upload: PDF page, image, or text page. */
+export async function renderPreview({ mime = "", name = "", body } = {}) {
+  if (!body?.length) return null;
+  const lower = String(name || "").toLowerCase();
+  const type = String(mime || "").toLowerCase();
+  const isPdf = type.includes("pdf") || lower.endsWith(".pdf") || body.subarray(0, 4).toString() === "%PDF";
+  if (isPdf) return renderPdfFirstPage(body);
+  const isImage = type.startsWith("image/") || /\.(jpe?g|png|webp|gif|bmp)$/.test(lower);
+  if (isImage) return renderImagePreview(body);
+  const isText = type.startsWith("text/") || /\.(txt|md|markdown)$/.test(lower);
+  if (isText) return renderTextPreview(body.toString("utf8"));
+  return null;
 }
 
 /** Page 1 of a PDF as a JPEG buffer, or null when it cannot be rendered. */
