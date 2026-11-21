@@ -10,7 +10,7 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const SERVICE = path.join(ROOT, "modules", "records", "service-extract.js");
 const ENGINE = path.join(ROOT, "modules", "records", "extractEngine.js");
 const MODEL = path.join(ROOT, "modules", "records", "extractModel.js");
