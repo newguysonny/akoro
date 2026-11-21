@@ -140,3 +140,7 @@ export const countRecordsMissingPreview = async () => {
   const paste = await base().eq("kind", "paste").not("content", "is", null);
   return (upload.count || 0) + (paste.count || 0);
 };
+
+export const getRecordByFileKey = (key) =>
+  edu().from("records").select("id, user_id, kind, name, mime, file_key")
+    .eq("file_key", key).is("deleted_at", null).maybeSingle();

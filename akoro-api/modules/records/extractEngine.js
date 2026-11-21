@@ -7,7 +7,7 @@
 // rolling back is one toggle.
 
 const KEY = "records_extract_engine";
-export const EXTRACT_ENGINES = ["runpod", "model"];
+export const EXTRACT_ENGINES = ["runpod", "model", "ocr"];
 
 const dbLazy = async () => (await import("../../db.js")).default;
 

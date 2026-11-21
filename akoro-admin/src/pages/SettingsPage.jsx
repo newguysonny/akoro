@@ -376,13 +376,14 @@ export default function SettingsPage() {
                 <p style={{ margin: 0, fontSize: 14, fontWeight: 800, color: INK }}>Scanned-document parser</p>
                 <p style={{ margin: 0, fontSize: 12, color: MUTED }}>
                   RunPod is the fine-tuned layout worker; the vision model reads a page straight into markdown
-                  (faster, weaker on dense tables). Currently: <strong>{extract?.engine === 'model' ? `vision model (${extract?.model || 'configured'})` : 'RunPod worker'}</strong>.
+                  (faster, weaker on dense tables); DeepSeek OCR recognises the whole document server-side with layout boxes. Currently: <strong>{extract?.engine === 'ocr' ? 'DeepSeek OCR' : extract?.engine === 'model' ? `vision model (${extract?.model || 'configured'})` : 'RunPod worker'}</strong>.
                 </p>
               </div>
             </div>
             <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
               <Btn type="button" disabled={extractBusy || extract?.engine === 'runpod'} onClick={() => saveExtractEngine('runpod')}>Use RunPod</Btn>
               <Btn type="button" disabled={extractBusy || extract?.engine === 'model'} onClick={() => saveExtractEngine('model')}>Use vision model</Btn>
+              <Btn type="button" disabled={extractBusy || extract?.engine === 'ocr'} onClick={() => saveExtractEngine('ocr')}>Use DeepSeek OCR</Btn>
             </div>
           </div>
         </SettingsGroup>

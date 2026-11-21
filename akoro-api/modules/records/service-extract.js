@@ -25,6 +25,7 @@ import {
 import { indexByContentKey } from "./searchLib.js";
 import { getExtractEngine, extractModelId } from "./extractEngine.js";
 import { parsePagesWithModel } from "./extractModel.js";
+import { runDeepseekOcr, ocrConfigured } from "./extractOcr.js";
 import { resolveContentAccess } from "./access.js";
 import { storedTextKindOf, extractStoredText } from "./storedText.js";
 import { pageSizeOf } from "./rules.js";
@@ -60,6 +61,43 @@ async function submitExtractInner(req, res) {
   if (id.error !== undefined || id.status) return res.status(id.status).json({ success: false, message: id.message });
   const { contentKey } = id;
 
+  let engine;
+  try { engine = await getExtractEngine(); }
+  catch (err) {
+    console.error("[extract] engine read failed:", err?.stack || err);
+    return res.status(500).json({ success: false, error: `Could not read the extraction engine: ${err?.message || err}` });
+  }
+
+  if (engine === "ocr") {
+    // Whole document, server-side: no page images from the client, and the
+    // pages carry layout boxes (0-1000) so citations keep their geometry.
+    if (!ocrConfigured()) return res.status(501).json({ success: false, error: "DeepSeek OCR is not configured (DEEPSEEK_API_KEY)." });
+    const rec = req.body?.recordId
+      ? (await store.getRecordWithFile(req.body.recordId)).data
+      : (await store.getRecordByFileKey(contentKey)).data;
+    if (!rec?.file_key) return res400(res, "This record has no stored file to recognise.");
+    let claimed;
+    try { claimed = await claimContentJob(contentKey, "parse", req.user.id); }
+    catch (err) { return res.status(500).json({ success: false, error: `Could not claim the file: ${err?.message || err}` }); }
+    if (!claimed) return res.status(409).json({ success: false, error: "This file is being extracted right now — the shared result will appear in a moment.", job: await getContentJob(contentKey, "parse") });
+
+    const batch = { mode: "ocr", model: "deepseek-ocr", submittedAt: new Date().toISOString(), jobs: [{ pageNumber: 1, state: "pending" }] };
+    await updateContentJob(contentKey, "parse", batch);
+    void (async () => {
+      try {
+        const { body } = await readFileObject(rec.file_key);
+        const out = await runDeepseekOcr({ buffer: body, filename: rec.name || "document.pdf" });
+        await saveExtractionPages(contentKey, out.pages, out.model);
+        void indexByContentKey({ contentKey, pages: out.pages });
+        await finishContentJob(contentKey, "parse", "done", { mode: "ocr", model: out.model, pages: out.pages.length });
+      } catch (err) {
+        console.error("[extract/ocr] failed:", err?.stack || err);
+        await finishContentJob(contentKey, "parse", "failed", { mode: "ocr", error: String(err?.message || err) });
+      }
+    })();
+    return res.status(202).json({ success: true, data: { contentKey, pending: [1], failed: [], model: "deepseek-ocr" } });
+  }
+
   const pages = Array.isArray(req.body?.pages) ? req.body.pages : [];
   if (!pages.length) return res400(res, "Send at least one rendered page.");
   if (pages.length > MAX_PAGES_PER_REQUEST) return res400(res, `Send at most ${MAX_PAGES_PER_REQUEST} pages per request.`);
@@ -94,12 +132,6 @@ async function submitExtractInner(req, res) {
   // Direct-model lane: one vision call per page, same saved rows and claim as
   // the RunPod lane, so the reader's contract is unchanged. Bounded
   // concurrency; failures ride back per page.
-  let engine;
-  try { engine = await getExtractEngine(); }
-  catch (err) {
-    console.error("[extract] engine read failed:", err?.stack || err);
-    return res.status(500).json({ success: false, error: `Could not read the extraction engine: ${err?.message || err}` });
-  }
   if (engine === "model") {
    try {
     // Asynchronous, like the RunPod lane: the request saves the batch and
@@ -215,6 +247,12 @@ export async function extractStatus(req, res) {
   const { contentKey } = id;
 
   const job = await getContentJob(contentKey, "parse");
+  // OCR lane: one server-side recognition; pending until the job record ends.
+  if (job?.result?.mode === "ocr") {
+    const running = job.status === "running";
+    const failed = job.result?.error ? [{ pageNumber: 1, error: job.result.error }] : [];
+    return okExtract(res, { contentKey, done: !running, pages: [], pending: running ? [1] : [], failed });
+  }
   // Model lane: pages are saved by the background run; status only reports.
   if (job?.result?.mode === "model") {
     const mb = job.result;
