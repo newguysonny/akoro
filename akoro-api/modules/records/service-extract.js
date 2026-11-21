@@ -43,6 +43,14 @@ export async function resolveAiContent(req) {
  * ~100 s cut, which killed long batches with an HTML error page.
  */
 export async function submitExtract(req, res) {
+  try { return await submitExtractInner(req, res); }
+  catch (err) {
+    console.error("[extract] submit failed:", err?.stack || err);
+    return res.status(500).json({ success: false, error: `Extraction failed: ${err?.message || err}` });
+  }
+}
+
+async function submitExtractInner(req, res) {
   if (!recordsExtractionEnabled()) {
     return res.status(501).json({ success: false, error: "Text extraction isn't configured on this deployment yet." });
   }
