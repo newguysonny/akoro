@@ -80,22 +80,37 @@ export async function submitExtract(req, res) {
   // the RunPod lane, so the reader's contract is unchanged. Bounded
   // concurrency; failures ride back per page.
   if ((await getExtractEngine()) === "model") {
+   try {
     const model = extractModelId();
     const results = await parsePagesWithModel({ pages: work, userId: req.user.id, model });
     const saved = [];
     const failed = [];
     for (const r of results) {
       if (r.error) { failed.push({ pageNumber: r.pageNumber, error: r.error }); continue; }
-      await saveExtractionPage({
-        contentKey, pageNumber: r.pageNumber, blocks: [], markdown: r.markdown,
-        model: r.model, size: r.size || null,
-      });
-      saved.push({ pageNumber: r.pageNumber, markdown: r.markdown, blocks: [], model: r.model });
+      try {
+        await saveExtractionPage({
+          contentKey, pageNumber: r.pageNumber, blocks: [], markdown: r.markdown,
+          model: r.model, size: r.size || null,
+        });
+        saved.push({ pageNumber: r.pageNumber, markdown: r.markdown, blocks: [], model: r.model });
+      } catch (err) {
+        // A cache write failure must not become a generic 500 with no clue.
+        console.error("[extract/model] page save failed:", err?.message || err);
+        failed.push({ pageNumber: r.pageNumber, error: `could not save the page: ${err?.message || err}` });
+      }
     }
     await finishContentJob(contentKey, "parse", saved.length ? "done" : "failed", { mode: "model", pages: saved.length, model });
     if (saved.length) void indexByContentKey({ contentKey, pages: saved });
-    if (!saved.length) return res.status(424).json({ success: false, code: "parse_failed", error: "The model could not read these pages." });
+    if (!saved.length) {
+      return res.status(424).json({ success: false, code: "parse_failed",
+        error: failed[0]?.error ? `The model could not read these pages: ${failed[0].error}` : "The model could not read these pages.",
+        failed });
+    }
     return res.status(202).json({ success: true, data: { contentKey, pending: [], failed, model } });
+   } catch (err) {
+     console.error("[extract/model] lane failed:", err?.stack || err);
+     return res.status(500).json({ success: false, code: "parse_failed", error: `The vision lane failed: ${err?.message || err}` });
+   }
   }
 
   const submittedAt = new Date().toISOString();
