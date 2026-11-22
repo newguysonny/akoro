@@ -144,13 +144,17 @@ export async function runDeepseekOcr({ buffer, filename = "document.pdf", purpos
  * claim means the browser's run (or a reader tap) polls this job instead of
  * paying for a second recognition.
  */
-export function startRecordScanExtraction({ userId = null, contentKey, name = "" } = {}) {
+export async function startRecordScanExtraction({ userId = null, contentKey, name = "" } = {}) {
   if (!ocrConfigured() || !contentKey) return false;
+  // Claim BEFORE returning: the upload response is what the client uses to
+  // poll. If the claim landed after the response, the first status read said
+  // done:true/pages:[] (a race) and the Add sheet closed while OCR was only
+  // just starting.
+  let claimed = false;
+  try { claimed = await claimContentJob(contentKey, "parse", userId); }
+  catch { return false; }
+  if (!claimed) return false;
   void (async () => {
-    let claimed = false;
-    try { claimed = await claimContentJob(contentKey, "parse", userId); }
-    catch { return; }
-    if (!claimed) return;
     try {
       const { body } = await readFileObject(contentKey);
       const out = await runOcrWithFallback({ buffer: body, filename: name || "document.pdf" });

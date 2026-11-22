@@ -295,7 +295,7 @@ export async function createRecord(req, res) {
   if (data.kind === "upload" && data.file_key && !storedTextKindOf(data.mime, data.name)
       && (/pdf/i.test(data.mime || "") || /\.pdf$/i.test(data.name || "") || /^image\//i.test(data.mime || ""))
       && (await getExtractEngine()) === "ocr") {
-    startRecordScanExtraction({ userId, contentKey: data.file_key, name: data.name });
+    await startRecordScanExtraction({ userId, contentKey: data.file_key, name: data.name });
   }
   // Text the server can read for free — a PDF's text layer, a text file,
   // Word / PowerPoint — becomes the file's pages right away, so Ask and the
