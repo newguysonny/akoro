@@ -82,9 +82,28 @@ export function Answer({ text, citations, onCite }) {
   );
 }
 
+const ASK_CACHE_PREFIX = "akoro_ask_msgs:";
+const readAskCache = (key) => {
+  if (!key || typeof localStorage === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(ASK_CACHE_PREFIX + key);
+    const v = raw ? JSON.parse(raw) : null;
+    return Array.isArray(v?.messages) ? v.messages : [];
+  } catch { return []; }
+};
+const writeAskCache = (key, messages) => {
+  if (!key || typeof localStorage === "undefined") return;
+  try {
+    const json = JSON.stringify({ messages, at: Date.now() });
+    if (json.length > 200_000) return;
+    localStorage.setItem(ASK_CACHE_PREFIX + key, json);
+  } catch { /* cache only */ }
+};
+
 export default function ReaderAsk({ ask, onCite, pin = null, onPinClear }) {
-  const [messages, setMessages] = useState([]);
-  const [loadState, setLoadState] = useState('loading');   // loading | ready | error
+  const cachedMessages = useRef(readAskCache(ask?.key)).current;
+  const [messages, setMessages] = useState(cachedMessages);
+  const [loadState, setLoadState] = useState(cachedMessages.length ? 'ready' : 'loading');   // loading | ready | error
   const [input, setInput] = useState('');
   const [running, setRunning] = useState(false);
   const [status, setStatus] = useState('');
@@ -103,6 +122,9 @@ export default function ReaderAsk({ ask, onCite, pin = null, onPinClear }) {
   }, [ask]);
 
   useEffect(() => { if (pin) inputRef.current?.focus(); }, [pin]);
+
+  /* The cached transcript paints immediately; server history replaces it. */
+  useEffect(() => { writeAskCache(ask?.key, messages); }, [ask?.key, messages]);
 
   useEffect(() => {
     const el = listRef.current;

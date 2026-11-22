@@ -6,6 +6,7 @@
 import { useState, useRef, useEffect, useLayoutEffect, useCallback } from "react";
 import { useIsMobileView } from "../../../hooks/useIsMobileView.js";
 import { selectionRects } from "../../../lib/markRects.js";
+import { hydrateReaderTabs, loadReaderTabs, saveReaderTabs } from "../../../lib/readerTabCache.js";
 import { TAB_KINDS, artifactToTab, marksFromArtifacts, tabContentPatch, tabToArtifact } from "../../../lib/readerArtifacts.js";
 import { toReaderCite } from "../../../lib/askAnswer.js";
 import {
@@ -175,21 +176,26 @@ export function useSessionReader({
     el.scrollLeft += (r.left + a.hf * r.width) - (c.left + c.width / 2);
   }, [zoom]);
 
-  /* tools: Generate dropdown / forms / result tabs */
+  /* tools: Generate dropdown / forms / result tabs.
+     Tabs (including the Ask tab) hydrate from the per-document cache, so a
+     reopen paints the pill strip immediately; the artifacts list reconciles. */
+  const initialTabsRef = useRef(null);
+  if (initialTabsRef.current === null) initialTabsRef.current = hydrateReaderTabs(loadReaderTabs(readerPosKey));
+  const initialTabs = initialTabsRef.current;
   const [formTool, setFormTool] = useState(null);
   const [prefillFocus, setPrefillFocus] = useState("");
-  const [resultTabs, setResultTabs] = useState([]);
-  const [activeTabId, setActiveTabId] = useState("reader");
-  const nextResultId = useRef(1);
+  const [resultTabs, setResultTabs] = useState(() => initialTabs.resultTabs);
+  const [activeTabId, setActiveTabId] = useState(() => initialTabs.activeTabId);
+  const nextResultId = useRef(initialTabs.nextResultId);
   const [genMenuOpen, setGenMenuOpen] = useState(false);
   const genMenuRef = useRef(null);
 
   /* community: Q&A and Discussion — persistent boards, opened as tabs */
   const [qaThreads, setQaThreads] = useState([]);
   const [discussionThreads, setDiscussionThreads] = useState([]);
-  const [communityTabsOpen, setCommunityTabsOpen] = useState([]);
+  const [communityTabsOpen, setCommunityTabsOpen] = useState(() => initialTabs.communityTabsOpen);
   const [askPin, setAskPin] = useState(null);   // { pageNumber, text } from "Ask about this"
-  const [savedItems, setSavedItems] = useState([]);   // saved tabs not open right now
+  const [savedItems, setSavedItems] = useState(() => initialTabs.savedItems);   // saved tabs not open right now
 
   const [isPlaying, setIsPlaying] = useState(false);
 
@@ -526,7 +532,21 @@ export function useSessionReader({
       if (wanted) { closed.splice(closed.indexOf(wanted), 1); open.push(wanted); }
       const tabs = open.map((a) => artifactToTab(a, "r" + nextResultId.current++));
       tabs.forEach((t) => lastSavedRef.current.set(t.artifactId, JSON.stringify(tabContentPatch(t))));
-      setResultTabs((rt) => [...tabs, ...rt]);
+      // Reconcile the cached (instant) tabs with the authoritative list:
+      // refreshed content keeps the cached id; closed/deleted artifacts leave;
+      // server tabs not cached are added.
+      const openById = new Map(open.map((a) => [a.id, a]));
+      setResultTabs((rt) => {
+        const kept = [];
+        for (const t of rt) {
+          if (!t.artifactId) { kept.push(t); continue; }
+          const a = openById.get(t.artifactId);
+          if (a) kept.push({ ...artifactToTab(a, t.id), loading: false });
+        }
+        const seen = new Set(kept.map((t) => t.artifactId).filter(Boolean));
+        for (const t of tabs) if (!seen.has(t.artifactId)) kept.push(t);
+        return kept;
+      });
       const focus = initialArtifactId ? tabs.find((t) => t.artifactId === initialArtifactId) : null;
       if (focus) setActiveTabId(focus.id);
       setSavedItems(closed);
@@ -544,6 +564,19 @@ export function useSessionReader({
     loadSaved(0);
     return () => { alive = false; };
   }, [artifacts]);
+
+  /* Cache the tab strip (pills + Ask) so the next open paints it at once. */
+  useEffect(() => {
+    saveReaderTabs(readerPosKey, { resultTabs, communityTabsOpen, activeTabId, savedItems });
+  }, [readerPosKey, resultTabs, communityTabsOpen, activeTabId, savedItems]);
+
+  /* A cached tab whose artifact was closed/deleted elsewhere must not leave
+     the reader pointing at nothing. */
+  useEffect(() => {
+    if (activeTabId === "reader" || communityTabsOpen.includes(activeTabId)) return;
+    if (activeTabId.startsWith("tool:")) return;
+    if (!resultTabs.some((t) => t.id === activeTabId)) setActiveTabId("reader");
+  }, [activeTabId, communityTabsOpen, resultTabs]);
 
   // Edits (notes typing, quiz answers, card position) save ~0.8 s after the
   // learner pauses; whatever is pending is flushed when the reader closes.

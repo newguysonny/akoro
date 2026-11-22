@@ -68,6 +68,7 @@ export function useRecordSession({ record, onOpened, onProgress }) {
     : (record?.id && (record.kind === 'paste' || (record.kind === 'upload' && !record.fileMissing)) ? { recordId: record.id } : null);
   const askKey = askTarget ? (askTarget.contentKey || askTarget.recordId) : null;
   const ask = useMemo(() => (askKey ? {
+    key: askKey,
     load: () => getAskHistory(askTarget),
     send: (opts) => askRecord({ ...askTarget, ...opts }),
   } : null), [askKey]);   // eslint-disable-line react-hooks/exhaustive-deps

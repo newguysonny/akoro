@@ -14,7 +14,7 @@
     "lint:undef": "eslint src",
     "ui-gate": "node ui-gate/run.mjs",
     "journey:onboarding": "node ui-gate/journeys/onboarding-approvals.mjs",
-    "test:reader": "node --test src/lib/speech.test.mjs src/lib/chatIdeas.test.mjs src/lib/paper.test.mjs src/lib/extractRun.test.mjs src/lib/askAnswer.test.mjs src/lib/readerArtifacts.test.mjs src/lib/officePages.test.mjs src/lib/podcastTimeline.test.mjs src/lib/markRects.test.mjs src/lib/questionSteps.test.mjs src/lib/wordDoc.test.mjs src/lib/chatModels.test.mjs src/lib/blockLines.test.mjs src/lib/quotedMessage.test.mjs src/lib/learnSuggestions.test.mjs src/features/teaching/components/readerTools.contract.test.mjs",
+    "test:reader": "node --test src/lib/speech.test.mjs src/lib/chatIdeas.test.mjs src/lib/paper.test.mjs src/lib/extractRun.test.mjs src/lib/askAnswer.test.mjs src/lib/readerArtifacts.test.mjs src/lib/officePages.test.mjs src/lib/podcastTimeline.test.mjs src/lib/markRects.test.mjs src/lib/questionSteps.test.mjs src/lib/wordDoc.test.mjs src/lib/chatModels.test.mjs src/lib/blockLines.test.mjs src/lib/quotedMessage.test.mjs src/lib/learnSuggestions.test.mjs src/features/teaching/components/readerTools.contract.test.mjs src/lib/readerTabCache.test.mjs",
     "test:settings": "node --test src/pages/settings/groups.test.mjs",
     "build:landing": "VITE_TARGET=landing vite build && VITE_TARGET=landing node scripts/seo-pages.mjs",
     "build:app": "VITE_TARGET=app vite build && VITE_TARGET=app node scripts/seo-pages.mjs",
