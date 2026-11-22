@@ -20,6 +20,9 @@ export default function SettingsPage() {
   const [toast,     setToast]     = useState(null);
   const [pvBusy,    setPvBusy]    = useState(false);
   const [pvResult,  setPvResult]  = useState(null);
+  const [exBusy,    setExBusy]    = useState(false);
+  const [exResult,  setExResult]  = useState(null);   // dry-run counts
+  const [exJob,     setExJob]     = useState(null);   // { status, total, processed, results }
   const [extract,   setExtract]   = useState(null);   // { engine, model }
   const [extractBusy, setExtractBusy] = useState(false);
 
@@ -56,6 +59,43 @@ export default function SettingsPage() {
     } finally { setPvBusy(false); }
   };
 
+
+  /* Extraction: the slow counterpart of previews. A dry run counts uploads
+     with no saved pages; the real run is a server job (OCR is 10–60 s per
+     document), so the console polls it instead of holding a request open. */
+  const runExtractionBackfill = async (dryRun) => {
+    setExBusy(true);
+    try {
+      const r = await apiPost('/api/admin/records/extractions/backfill', dryRun ? { dryRun: true } : { limit: 2 });
+      const d = r?.data ?? r ?? {};
+      if (dryRun) {
+        setExResult(d);
+        setToast({ message: `${d.total ?? 0} need extraction: ${d.text ?? 0} text, ${d.scannedPdf ?? 0} scans, ${d.image ?? 0} images`, type: 'success' });
+        return;
+      }
+      setExJob({ status: 'running', total: d.total ?? 0, processed: 0, results: [] });
+      if (!d.total) { setToast({ message: 'Nothing needs extraction', type: 'success' }); setExJob(null); return; }
+      setToast({ message: `Extraction backfill started (${d.total} file${d.total === 1 ? '' : 's'})`, type: 'success' });
+      for (let i = 0; i < 400; i += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+        const j = await apiGet(`/api/admin/records/extractions/backfill/${d.jobId}`);
+        const job = j?.data ?? j ?? null;
+        if (!job) break;
+        setExJob(job);
+        if (job.status !== 'running') {
+          const done = (job.results || []).filter((x) => x.status === 'done').length;
+          const failed = (job.results || []).filter((x) => x.status === 'failed').length;
+          const skipped = (job.results || []).filter((x) => x.status === 'skipped').length;
+          setToast({ message: `Extraction backfill: ${done} done, ${skipped} skipped, ${failed} failed${job.remaining != null ? `, ${job.remaining} left` : ''}`, type: failed ? 'error' : 'success' });
+          break;
+        }
+      }
+    } catch (e) {
+      setToast({ message: e?.message || 'Extraction backfill failed', type: 'error' });
+    } finally {
+      setExBusy(false);
+    }
+  };
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3500);
@@ -405,6 +445,28 @@ export default function SettingsPage() {
               <Btn type="button" disabled={pvBusy} onClick={() => runPreviewBackfill(true)}>Dry run</Btn>
               <Btn type="button" disabled={pvBusy} onClick={() => runPreviewBackfill(false)}>
                 {pvBusy ? 'Working…' : 'Backfill previews'}
+              </Btn>
+            </div>
+          </div>
+          <div style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 16, padding: '16px 18px', margin: '0 16px 12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ width: 38, height: 38, borderRadius: 11, background: `${AMBER}18`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <FileSearch size={18} color={AMBER}/>
+              </span>
+              <div style={{ flex: 1 }}>
+                <p style={{ margin: 0, fontSize: 14, fontWeight: 800, color: INK }}>Document extraction</p>
+                <p style={{ margin: 0, fontSize: 12, color: MUTED }}>
+                  Read uploads that have no saved pages, with the current engine. Dry run first: it only counts.
+                  {exResult ? ` Missing: ${exResult.total ?? 0} (${exResult.text ?? 0} text, ${exResult.scannedPdf ?? 0} scans, ${exResult.image ?? 0} images).` : ''}
+                  {exJob?.status === 'running' ? ` Working: ${exJob.processed ?? 0}/${exJob.total ?? 0}…` : ''}
+                  {exJob && exJob.status !== 'running' && exJob.remaining != null ? ` ${exJob.remaining} still missing.` : ''}
+                </p>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+              <Btn type="button" disabled={exBusy} onClick={() => runExtractionBackfill(true)}>Dry run</Btn>
+              <Btn type="button" disabled={exBusy} onClick={() => runExtractionBackfill(false)}>
+                {exBusy ? 'Working…' : 'Backfill extraction'}
               </Btn>
             </div>
           </div>

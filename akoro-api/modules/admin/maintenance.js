@@ -8,6 +8,7 @@ import {
   listRecordsMissingPreview, countRecordsMissingPreview, generatePreviewForRecord,
   renderPdfPages, pdfTextsByPage, parsePagesWithModel, parsePageOnRunpod, saveExtractionPage, readRecordFileBytes,
   runDeepseekOcr, ocrConfigured,
+  scanExtractionGaps, startExtractionBackfill, getExtractionBackfill,
 } from "../records/index.js";
 import { getExtractEngine, setExtractEngine, extractModelId } from "../records/index.js";
 
@@ -50,6 +51,33 @@ export async function backfillPreviews(req, res) {
    console.error("[admin/previews] backfill failed:", err?.stack || err);
    return res.status(500).json({ success: false, message: String(err?.message || err) });
  }
+}
+
+/* POST /api/admin/records/extractions/backfill { dryRun, limit }
+   Dry run: counts of uploads without extraction, by reader lane. Otherwise a
+   job id; GET .../backfill/:jobId polls { status, total, processed, results }. */
+export async function backfillExtractions(req, res) {
+  try {
+    if (req.body?.dryRun) {
+      const gap = await scanExtractionGaps();
+      return res.status(200).json({ success: true, data: { dryRun: true, ...gap } });
+    }
+    const out = await startExtractionBackfill({ limit: req.body?.limit, maxPages: req.body?.maxPages });
+    return res.status(200).json({ success: true, data: { dryRun: false, ...out } });
+  } catch (err) {
+    console.error("[admin/extractions] backfill failed:", err?.stack || err);
+    return res.status(500).json({ success: false, message: String(err?.message || err) });
+  }
+}
+
+export async function readExtractionBackfill(req, res) {
+  try {
+    const job = await getExtractionBackfill(req.params.jobId);
+    if (!job) return res.status(404).json({ success: false, message: "That backfill job was not found." });
+    return res.status(200).json({ success: true, data: job });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: String(err?.message || err) });
+  }
 }
 
 /* GET /api/admin/records/extract-engine — which parser runs, and on which model. */
