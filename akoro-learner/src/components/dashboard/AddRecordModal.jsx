@@ -114,6 +114,7 @@ export default function AddRecordModal({ open, onClose, user, onOpenRecord, onRe
   // { record, status: 'running'|'done'|'error', done, total, error }
   const [ext, setExt]           = useState(null);
   const extRunRef               = useRef(0);
+  const closeWhenExtractedRef   = useRef(false);   // hand back to the library once the file is read
   const uid = user?.id;
 
   /* The sheet no longer lists history (the Library has it); it only tells the
@@ -153,6 +154,17 @@ export default function AddRecordModal({ open, onClose, user, onOpenRecord, onRe
     })();
   }, [open, uid, reload]);
 
+  useEffect(() => {
+    if (!closeWhenExtractedRef.current || !ext) return undefined;
+    if (ext.status === 'done' || ext.status === 'skipped') {
+      closeWhenExtractedRef.current = false;
+      const timer = setTimeout(() => onClose?.(), 900);   // let "Text extracted" register
+      return () => clearTimeout(timer);
+    }
+    if (ext.status === 'error') closeWhenExtractedRef.current = false;
+    return undefined;
+  }, [ext, onClose]);
+
   if (!open) return null;
 
   const saveUpload = async () => {
@@ -171,10 +183,11 @@ export default function AddRecordModal({ open, onClose, user, onOpenRecord, onRe
       // "Always extract" — parse it NOW, so the text (and the search index)
       // is ready before anyone opens it. It keeps running after the sheet
       // closes; the job is server-side and saves its own pages.
+      // Land on the library list only once the file is actually read: closing
+      // at save-time left a window where opening the new card raced its own
+      // extraction. An error keeps the sheet (and the retry) in front of you.
+      closeWhenExtractedRef.current = true;
       void runExtract(created);
-      // Done: land on the library list with the new record's card, instead of
-      // leaving the learner staring at the progress row.
-      onClose?.();
     } catch (e) {
       setErr(e?.message || t('records.upload_failed'));
     } finally { setBusy(false); }
