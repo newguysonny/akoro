@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { buildSessionReaderPages } from '../../teaching/index.js';
 import { officeReaderPages } from '../../../lib/officePages.js';
-import { recordFileSrc, generateRecordPreview, extractStoredRecordText, getRecordExtraction, getSharedExtraction, getRecordTranscript, getSharedTranscript, startRecordTranscription, getRecordTranscriptionStatus, getAskHistory, askRecord, generateRecordTool, startRecordPodcast, getRecordPodcast, listRecordArtifacts, saveRecordArtifact, updateRecordArtifact, deleteRecordArtifact, discoverRecordOpen } from '../../../services/recordsApi.js';
+import { recordFileSrc, generateRecordPreview, extractStoredRecordText, getRecordExtraction, getSharedExtraction, getExtractionStatus, getRecordTranscript, getSharedTranscript, startRecordTranscription, getRecordTranscriptionStatus, getAskHistory, askRecord, generateRecordTool, startRecordPodcast, getRecordPodcast, listRecordArtifacts, saveRecordArtifact, updateRecordArtifact, deleteRecordArtifact, discoverRecordOpen } from '../../../services/recordsApi.js';
 import { rasterizePdfPages, rasterizeImageFile, runRecordExtraction } from '../../../components/library/extractPages.js';
 import { fetchFileWithRetry } from '../../../lib/fetchFile.js';
 import { fetchItemCommunities } from '../../../services/communityApi.js';
@@ -303,7 +303,41 @@ export function useRecordSession({ record, onOpened, onProgress }) {
           }
           if (byPage.size) applyExtracted(byPage, blocksByPage);   // partial: ground on what exists
           applyRef.current = applyExtracted;
-          setExtract({ status: 'offer', done: modelPages.size, total: texts.length });
+          /* An upload now starts its OCR on the SERVER when it registers.
+             If that job is still running (the common case: the reader opens
+             seconds after the upload), show progress and take the pages when
+             they land instead of offering a second, conflicting run. */
+          const extractTarget = record.contentKey ? { contentKey: record.contentKey } : { recordId: record.id };
+          const jobState = await getExtractionStatus(extractTarget).catch(() => null);
+          if (jobState && jobState.done === false) {
+            setExtract({ status: 'running', done: modelPages.size, total: texts.length });
+            void (async () => {
+              for (let i = 0; i < 80; i += 1) {
+                await new Promise((r) => setTimeout(r, 3000));
+                if (cancelled || !aliveRef.current) return;
+                const latest = record.contentKey
+                  ? await getSharedExtraction(record.contentKey).catch(() => ({ pages: [] }))
+                  : await getRecordExtraction(record.id).catch(() => ({ pages: [] }));
+                const all = latest?.pages || [];
+                const donePages = new Set(all
+                  .filter((p) => p.model !== 'pdf-text' && (p.markdown || '').trim())
+                  .map((p) => p.pageNumber));
+                if (donePages.size) {
+                  applyExtracted(new Map(all.map((p) => [p.pageNumber, p.markdown])),
+                    new Map(all.filter((p) => Array.isArray(p.blocks) && p.blocks.length).map((p) => [p.pageNumber, p.blocks])));
+                }
+                if (donePages.size >= texts.length) { setExtract((s) => (s?.status === 'running' ? null : s)); return; }
+                const st = await getExtractionStatus(extractTarget).catch(() => null);
+                if (!st || st.done) {
+                  const failed = st?.failed?.[0]?.error;
+                  setExtract({ status: failed ? 'error' : 'offer', done: donePages.size, total: texts.length, ...(failed ? { error: failed } : {}) });
+                  return;
+                }
+              }
+            })();
+          } else {
+            setExtract({ status: 'offer', done: modelPages.size, total: texts.length });
+          }
           ready(texts.map((tx) => ({ html: '', text: tx })), { pdf, PdfPage },
             joined ? { name: record.name, text: joined.slice(0, MAX_REFERENCE_CHARS) } : null);
         } else if (type === 'text') {

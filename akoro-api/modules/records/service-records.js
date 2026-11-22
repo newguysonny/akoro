@@ -16,6 +16,8 @@ import { avEnabled, autoTranscribeContent, autoTranscribeEnabled, avKindOf } fro
 import { indexRecord, searchRecordChunks } from "./searchLib.js";
 import { activePremiumUserIds } from "./access.js";
 import { storedTextKindOf, extractStoredText } from "./storedText.js";
+import { getExtractEngine } from "./extractEngine.js";
+import { startRecordScanExtraction } from "./extractOcr.js";
 import {
   MAX_FILE_BYTES, MAX_TEXT_CHARS, MAX_RECORDS, MAX_COVER_BYTES,
   pageParams, encodeCursor, detectType,
@@ -284,6 +286,15 @@ export async function createRecord(req, res) {
         userId, contentKey: data.file_key, name: data.name, mime: data.mime, fileUrl,
       }))
       .catch(() => {});
+  }
+  // A scan or image has no free text: on the OCR deployment start the
+  // whole-document recognition NOW, so it finishes while the learner is still
+  // landing in the reader instead of waiting for the "Read this PDF with AI?"
+  // tap. The claim makes the browser's own run poll this job, not repeat it.
+  if (data.kind === "upload" && data.file_key && !storedTextKindOf(data.mime, data.name)
+      && (/pdf/i.test(data.mime || "") || /\.pdf$/i.test(data.name || "") || /^image\//i.test(data.mime || ""))
+      && (await getExtractEngine()) === "ocr") {
+    startRecordScanExtraction({ userId, contentKey: data.file_key, name: data.name });
   }
   // Text the server can read for free — a PDF's text layer, a text file,
   // Word / PowerPoint — becomes the file's pages right away, so Ask and the

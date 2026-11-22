@@ -10,6 +10,10 @@
 // Compared with the chat-vision lane this needs no page rendering, is billed
 // per page ($0.225 / 1000) and is a single request per document.
 
+import { readFileObject } from "./lib/storage.js";
+import { claimContentJob, finishContentJob, saveExtractionPages } from "./extractLib.js";
+import { indexByContentKey } from "./searchLib.js";
+
 const BASE = (process.env.DEEPSEEK_OCR_BASE_URL || "https://api.deepseek.com").replace(/\/+$/, "");
 
 export const ocrConfigured = () => Boolean(process.env.DEEPSEEK_API_KEY);
@@ -102,4 +106,32 @@ export async function runDeepseekOcr({ buffer, filename = "document.pdf", purpos
       };
     }),
   };
+}
+
+/**
+ * Start the whole-document OCR for a freshly uploaded scan, off the request
+ * path. Upload used to rely on the Add sheet's browser run: if the learner
+ * opened the record first (or the sheet closed), the reader offered "Read
+ * this PDF with AI?" even though extraction was meant to be automatic. The
+ * claim means the browser's run (or a reader tap) polls this job instead of
+ * paying for a second recognition.
+ */
+export function startRecordScanExtraction({ userId = null, contentKey, name = "" } = {}) {
+  if (!ocrConfigured() || !contentKey) return false;
+  void (async () => {
+    let claimed = false;
+    try { claimed = await claimContentJob(contentKey, "parse", userId); }
+    catch { return; }
+    if (!claimed) return;
+    try {
+      const { body } = await readFileObject(contentKey);
+      const out = await runDeepseekOcr({ buffer: body, filename: name || "document.pdf" });
+      await saveExtractionPages({ contentKey, pages: out.pages, model: out.model });
+      await indexByContentKey({ contentKey, pages: out.pages, bill: false });
+      await finishContentJob(contentKey, "parse", "done", { mode: "ocr", model: out.model, pages: out.pages.length });
+    } catch (err) {
+      await finishContentJob(contentKey, "parse", "failed", { mode: "ocr", error: String(err?.message || err) }).catch(() => {});
+    }
+  })();
+  return true;
 }
