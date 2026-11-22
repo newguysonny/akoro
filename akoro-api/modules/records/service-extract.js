@@ -265,6 +265,12 @@ export async function extractStatus(req, res) {
   const { contentKey } = id;
 
   const job = await getContentJob(contentKey, "parse");
+  // A fresh claim has status running and result NULL until the lane finishes.
+  // Without this, status answered done:true/pages:[] while OCR was still
+  // reading — the Add sheet closed and the reader offered a second extraction.
+  if (job?.status === "running" && !job.result?.mode) {
+    return okExtract(res, { contentKey, done: false, pages: [], pending: [1], failed: [] });
+  }
   // OCR lane: one server-side recognition; pending until the job record ends.
   if (job?.result?.mode === "ocr") {
     const running = job.status === "running";
