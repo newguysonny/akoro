@@ -4,7 +4,7 @@ export { renderPdfPages, pdfTextsByPage } from "./preview.js";
 export { parsePagesWithModel } from "./extractModel.js";
 export { generatePreviewForRecord } from "./service-records.js";
 export { resolveAskTargetFor, resolveContentAccess } from "./access.js";
-export { gatherPassages, extractCitations, passageWhere, buildAskMessages, cleanModelOutput } from "./askLib.js";
+export { gatherPassages, extractCitations, citationCoverage, passageWhere, buildAskMessages, cleanModelOutput } from "./askLib.js";
 export { getExtraction, recordsExtractionEnabled, runpodEndpointHealth, parsePageRunAsync, getParseJob } from "./extractLib.js";
 export { removeRecordFile, createPresignedDownload, putRecordObject, ownsRecordFileKey, recordsStorageEnabled, readFileObject } from "./lib/storage.js";
 export { searchRecordChunks, indexRecord } from "./searchLib.js";

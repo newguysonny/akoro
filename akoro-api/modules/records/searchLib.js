@@ -252,7 +252,8 @@ export async function indexByContentKey({ contentKey, pages = null, segments = n
  * function fuse it with the lexical arm; either arm failing still leaves
  * the other. Returns chunk hits joined with their record's identity.
  */
-export async function searchRecordChunks({ userId, q, limit = 12, recordId = null, full = false }) {
+export async function searchRecordChunks({ userId, q, limit = 12, recordId = null, full = false, surface = "library" }) {
+  const startedAt = Date.now();
   const query = String(q || "").trim();
   if (!query) return [];
 
@@ -285,6 +286,16 @@ export async function searchRecordChunks({ userId, q, limit = 12, recordId = nul
   const ordered = rerankOn
     ? rerankChunks({ query, chunks: live.map((r) => ({ ...r, text: r.chunk_text })), limit: wanted })
     : live.slice(0, wanted);
+  // H5: the retrieval half of search health (zero-result is the useful signal).
+  recordRetrieval({
+    userId, surface, phase: "retrieval", query,
+    zeroResult: ordered.length === 0,
+    candidates: live.length,
+    latencyMs: Date.now() - startedAt,
+    vector: !!embedding,
+    topScore: Number(ordered[0]?.fused ?? ordered[0]?.similarity ?? 0) || null,
+    meta: { rerank: rerankOn, requested: wanted },
+  });
   return ordered.map((r) => ({
     recordId: r.record_id,
     name: r.record_name,

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Lock, User, Shield, Megaphone, CreditCard, KeyRound, Webhook, Mail, MessageSquare, Image as ImageIcon, FileSearch } from 'lucide-react';
+import { Lock, User, Shield, Megaphone, CreditCard, KeyRound, Webhook, Mail, MessageSquare, Image as ImageIcon, FileSearch, Activity } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { PageLayout } from '../components/Layout.jsx';
 import { Btn, Inp, Toast, PageSkeleton } from '../components/Primitives.jsx';
@@ -23,6 +23,8 @@ export default function SettingsPage() {
   const [exBusy,    setExBusy]    = useState(false);
   const [exResult,  setExResult]  = useState(null);   // dry-run counts
   const [exJob,     setExJob]     = useState(null);   // { status, total, processed, results }
+  const [retBusy,   setRetBusy]   = useState(false);
+  const [ret,       setRet]       = useState(null);   // { coverageAvg, zeroQueries, rows }
   const [extract,   setExtract]   = useState(null);   // { engine, model }
   const [extractBusy, setExtractBusy] = useState(false);
 
@@ -94,6 +96,21 @@ export default function SettingsPage() {
       setToast({ message: e?.message || 'Extraction backfill failed', type: 'error' });
     } finally {
       setExBusy(false);
+    }
+  };
+
+  /* H5: retrieval vs generation health from edu.retrieval_events. */
+  const loadRetrievalTelemetry = async () => {
+    setRetBusy(true);
+    try {
+      const r = await apiGet('/api/admin/retrieval/events?limit=200');
+      const d = r?.data ?? r ?? {};
+      setRet(d);
+      setToast({ message: `Loaded ${d.rows?.length ?? 0} event(s)`, type: 'success' });
+    } catch (e) {
+      setToast({ message: e?.message || 'Could not load retrieval telemetry', type: 'error' });
+    } finally {
+      setRetBusy(false);
     }
   };
   const showToast = (message, type = 'success') => {
@@ -467,6 +484,33 @@ export default function SettingsPage() {
               <Btn type="button" disabled={exBusy} onClick={() => runExtractionBackfill(true)}>Dry run</Btn>
               <Btn type="button" disabled={exBusy} onClick={() => runExtractionBackfill(false)}>
                 {exBusy ? 'Working…' : 'Backfill extraction'}
+              </Btn>
+            </div>
+          </div>
+          <div style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 16, padding: '16px 18px', margin: '0 16px 12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ width: 38, height: 38, borderRadius: 11, background: `${AMBER}18`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Activity size={18} color={AMBER}/>
+              </span>
+              <div style={{ flex: 1 }}>
+                <p style={{ margin: 0, fontSize: 14, fontWeight: 800, color: INK }}>Retrieval telemetry</p>
+                <p style={{ margin: 0, fontSize: 12, color: MUTED }}>
+                  Search and Ask health: citation coverage, and queries that returned nothing useful.
+                  {ret ? ` Coverage ${ret.coverageAvg == null ? '—' : `${Math.round(ret.coverageAvg * 100)}%`} over ${ret.coverageSamples ?? 0} answer(s).` : ''}
+                </p>
+              </div>
+            </div>
+            {ret?.zeroQueries?.length ? (
+              <div style={{ marginTop: 10 }}>
+                <p style={{ margin: '0 0 4px', fontSize: 11.5, fontWeight: 800, color: INK }}>Zero-result queries</p>
+                {ret.zeroQueries.slice(0, 5).map((z) => (
+                  <p key={z.query} style={{ margin: 0, fontSize: 11.5, color: MUTED }}>{z.count}× {z.query}</p>
+                ))}
+              </div>
+            ) : null}
+            <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+              <Btn type="button" disabled={retBusy} onClick={loadRetrievalTelemetry}>
+                {retBusy ? 'Loading…' : 'Refresh telemetry'}
               </Btn>
             </div>
           </div>

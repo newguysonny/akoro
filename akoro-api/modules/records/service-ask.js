@@ -5,7 +5,7 @@
  */
 import { searchRecordChunks } from "./searchLib.js";
 import {
-  ASK_LIMITS, gatherPassages, gatherFolderPassages, buildAskMessages, extractCitations, loadAskHistory,
+  ASK_LIMITS, gatherPassages, gatherFolderPassages, buildAskMessages, extractCitations, citationCoverage, loadAskHistory,
   saveAskTurn, cleanModelOutput,
 } from "./askLib.js";
 import { openai } from "../../lib/aiModel.js";
@@ -13,6 +13,7 @@ import { modelRegistry } from "../../lib/modelRegistry.js";
 import { resolveAskTargetFor, resolveFolderTargetFor } from "./access.js";
 import { cleanSelection, anchorOf } from "./rules.js";
 import { res400 } from "./http.js";
+import { recordRetrieval } from "../../lib/retrievalTelemetry.js";
 
 /*
  * recordId (the learner's own record — any kind) | contentKey (a shared
@@ -85,6 +86,15 @@ export async function ask(req, res) {
     }
     answer = cleanModelOutput(answer) || "I couldn't produce an answer from this document — try rephrasing the question.";
     const { citations } = extractCitations(answer, passages);
+    const coverage = citationCoverage(answer, citations, passages.length);
+    recordRetrieval({
+      userId: req.user.id, surface: "ask", phase: "generation", query: question,
+      zeroResult: passages.length === 0,
+      passages: passages.length, citations: citations.length,
+      coverage: coverage.coverage, unknownMarkers: coverage.unknown.length,
+      answerChars: answer.length, model: modelRegistry.defaultId,
+      meta: { claims: coverage.claims, cited: coverage.cited, streamed: !!wantsStream },
+    });
 
     let messageId = null;
     try {
@@ -92,7 +102,7 @@ export async function ask(req, res) {
     } catch (e) {
       console.warn("[records-ask] saving the turn failed:", String(e?.message || e).slice(0, 160));
     }
-    const payload = { answer, citations, messageId, passages: passages.length };
+    const payload = { answer, citations, messageId, passages: passages.length, coverage: { score: coverage.coverage, claims: coverage.claims, cited: coverage.cited, unknown: coverage.unknown } };
     if (wantsStream) { send("done", payload); clearInterval(heartbeat); return res.end(); }
     return res.json({ success: true, data: payload });
   } catch (err) {

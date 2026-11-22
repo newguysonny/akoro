@@ -444,3 +444,39 @@ export function cleanModelOutput(raw) {
   s = s.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u200B-\u200F\uFEFF]/g, "");
   return s.trim();
 }
+
+/**
+ * How much of an answer is actually attributed. Pure: headings, tables, code
+ * fences and list labels are not claims; a claim is a sentence or list item of
+ * at least four words. Returns the share of claims carrying at least one
+ * marker, plus markers that map to no passage.
+ */
+export function citationCoverage(answer, citations = [], passagesSupplied = 0) {
+  const text = String(answer || "");
+  const lines = text.split(/\n+/).filter((line) => !/^\s*(#{1,6}\s|```|\||---)/.test(line));
+  const claims = [];
+  for (const line of lines) {
+    const cleaned = line
+      .replace(/^\s*(?:[-*+]|\d+\.)\s+/, "")
+      .replace(/^\*\*[^*]+\*\*:\s*/, "")
+      .trim();
+    if (!cleaned) continue;
+    for (const sentence of cleaned.split(/(?<=[.!?])\s+(?=[A-Z0-9])/)) {
+      const s = sentence.trim();
+      if (s && s.split(/\s+/).length >= 4) claims.push(s);
+    }
+  }
+  const cited = claims.filter((s) => /\[\d{1,3}\]/.test(s)).length;
+  const valid = new Set((citations || []).map((c) => Number(c?.n)).filter(Number.isFinite));
+  const unknown = [...new Set([...text.matchAll(/\[(\d{1,3})\]/g)]
+    .map((m) => Number(m[1])).filter((n) => !valid.has(n)))];
+  const coverage = claims.length
+    ? cited / claims.length
+    : (passagesSupplied > 0 ? 0 : 1);
+  return {
+    claims: claims.length,
+    cited,
+    coverage: Number(coverage.toFixed(3)),
+    unknown,
+  };
+}

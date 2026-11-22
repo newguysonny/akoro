@@ -272,7 +272,8 @@
     "2026-pharmd-material-filemeta.sql",
     "2026-profile-discipline.sql",
     "2026-record-previews.sql",
-    "2026-platform-settings.sql"
+    "2026-platform-settings.sql",
+    "2026-retrieval-telemetry.sql"
   ],
   "demo": [
     "2026-seed-school-passwords.sql",

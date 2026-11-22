@@ -10,6 +10,7 @@ import {
   runDeepseekOcr, ocrConfigured,
   scanExtractionGaps, startExtractionBackfill, getExtractionBackfill,
 } from "../records/index.js";
+import { readRetrievalEvents } from "../../lib/retrievalTelemetry.js";
 import { getExtractEngine, setExtractEngine, extractModelId } from "../records/index.js";
 
 const MAX_BATCH = 50;
@@ -77,6 +78,20 @@ export async function readExtractionBackfill(req, res) {
     return res.status(200).json({ success: true, data: job });
   } catch (err) {
     return res.status(500).json({ success: false, message: String(err?.message || err) });
+  }
+}
+
+/* GET /api/admin/retrieval/events?limit=&surface=&zeroOnly= — H5 telemetry.
+   Recent events plus zero-result query groups and average citation coverage. */
+export async function readRetrievalTelemetry(req, res) {
+  try {
+    const out = await readRetrievalEvents({
+      limit: req.query?.limit, surface: req.query?.surface || null,
+      zeroOnly: String(req.query?.zeroOnly || "") === "true",
+    });
+    return res.status(200).json({ success: true, data: out });
+  } catch (err) {
+    return res.status(400).json({ success: false, message: `Could not read retrieval telemetry: ${err?.message || err}` });
   }
 }
 

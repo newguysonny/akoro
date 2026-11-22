@@ -298,7 +298,15 @@ then Discover changes only add a query path.
   vision model over rendered PDF pages (images stay OCR-only); if the fallback also fails the
   OCR answer is kept. Used by the extract lane, upload auto-extraction and the admin backfill.
   Disable with `RECORDS_OCR_FALLBACK=off`. Tests: `modules/records/ocr-fallback.test.mjs`.
-- These are the pre-H5 levers: they can ship now, but H5 telemetry is what proves whether they
+- **H4/H5 baseline** — `citationCoverage` (pure, in `askLib`) is computed on every Ask
+  answer and returned as `coverage`; retrieval events are written from `searchRecordChunks`
+  and generation events from `service-ask`, into `edu.retrieval_events`
+  (`migrations/2026-retrieval-telemetry.sql`). Admin: `GET /api/admin/retrieval/events` and
+  a Settings card with coverage and zero-result queries. `RETRIEVAL_TELEMETRY=off` silences
+  writes. Tests: `citation-coverage.test.mjs`, `retrievalTelemetry.test.mjs`,
+  `retrieval-telemetry.contract.test.mjs`.
+- These are the pre-H5 levers: they can ship now, and with H4/H5 instrumented they can be
+  judged on real data: whether they
   moved recall/citation quality before investing in H1–H3 reindexing.
 
 ## Evaluation
