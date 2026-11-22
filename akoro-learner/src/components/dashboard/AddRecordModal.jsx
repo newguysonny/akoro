@@ -168,9 +168,13 @@ export default function AddRecordModal({ open, onClose, user, onOpenRecord, onRe
       // few hundred ms) so the new card shows its thumbnail without a reload.
       if (created?.id) { try { await generateRecordPreview(created.id); } catch { /* thumbnail is a nicety */ } }
       await reload();
-      // "Always extract" — parse it NOW, in the sheet, so the text (and the
-      // search index) is ready before anyone opens it.
+      // "Always extract" — parse it NOW, so the text (and the search index)
+      // is ready before anyone opens it. It keeps running after the sheet
+      // closes; the job is server-side and saves its own pages.
       void runExtract(created);
+      // Done: land on the library list with the new record's card, instead of
+      // leaving the learner staring at the progress row.
+      onClose?.();
     } catch (e) {
       setErr(e?.message || t('records.upload_failed'));
     } finally { setBusy(false); }
