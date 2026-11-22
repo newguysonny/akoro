@@ -25,7 +25,7 @@ const read = (name) => readFile(new URL(name, import.meta.url), "utf8");
 const [storageSrc, recordsRoutesSrc, tasksRoutesSrc] = await Promise.all([
   read("./lib/storage.js"),
   Promise.all([read("./routes.js"), read("./service-records.js")]).then(([a, b]) => a + b),
-  read("../tasks/routes.js"),
+  Promise.all([read("../tasks/routes.js"), read("../tasks/task-file-service.js")]).then(([a, b]) => a + b),
 ]);
 
 test("the fallback is a FAILURE lane, not the primary — R2 stays primary", () => {

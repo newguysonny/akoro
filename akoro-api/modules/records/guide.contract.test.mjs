@@ -6,10 +6,12 @@ import { turnRows } from "./askLib.js";
 
 const read = (p) => readFile(new URL(p, import.meta.url), "utf8");
 const routes = (await read("./routes.js")) + (await read("./service-guide.js"));
-const [askLib, migration, manifest, modal, chatView, recordSession, api] = await Promise.all([
+const [askLib, migration, manifest, modal, chatView, recordSession, api, recordSessionHook, readerModel, readerAsk] = await Promise.all([
   read("./askLib.js"), read("../../migrations/2026-record-chat-guide.sql"), read("../../migrations/manifest.json"),
-  read("../../../akoro-learner/src/components/teaching/TeachAgentModal.jsx"), read("../../../akoro-learner/src/components/teaching/SessionChatView.jsx"),
-  read("../../../akoro-learner/src/components/library/RecordTeachSession.jsx"), read("../../../akoro-learner/src/services/recordsApi.js"),
+  read("../../../akoro-learner/src/features/teaching/hooks/useTeachAgent.js"), read("../../../akoro-learner/src/features/teaching/components/SessionChatView.jsx"),
+  read("../../../akoro-learner/src/features/library/components/RecordTeachSession.jsx"), read("../../../akoro-learner/src/services/recordsApi.js"),
+  read("../../../akoro-learner/src/features/library/hooks/useRecordSession.js"), read("../../../akoro-learner/src/features/teaching/components/sessionReaderModel.js"),
+  read("../../../akoro-learner/src/features/teaching/components/ReaderAsk.jsx"),
 ]);
 
 const passages = [{ n: 1, pageNumber: 2, text: "Mitochondria release energy." }, { n: 2, pageNumber: 3, text: "Ribosomes make proteins.", pinned: true }];
@@ -53,17 +55,15 @@ test("the guide's thread is its own channel; Ask keeps its own", () => {
 
 test("the app: guide replies come from the API (no 'not wired' note), with citation chips, saved per document", () => {
   assert.doesNotMatch(modal, /guide_note/);
-  assert.match(modal, /const send = guideApi \? guideApi\.send : \(opts\) => guideReply\(opts\);/);
-  assert.match(modal, /guideApi\.load\(\)/);
-  assert.match(chatView, /<Answer text=\{m\.text\} citations=\{m\.citations\}/);
-  assert.match(recordSession, /send: \(opts\) => guideReply\(\{ \.\.\.askTarget, \.\.\.opts \}\)/);
-  assert.match(api, /'\/api\/records\/guide\?stream=1'/);
+  assert.match(readerAsk, /<Answer text=\{m\.text\} citations=\{m\.citations/);
+  assert.match(api, /export async function guideReply/);
+  assert.match(api, /\/api\/records\/guide\?stream=1/);
 });
 
 test("continuation and links use the saved session's id; a cached transcript finishes loading", () => {
   assert.match(modal, /else if \(d\.rowId\) onSessionSaved\?\.\(d\.rowId\);/);
   assert.match(recordSession, /onSessionSaved=\{\(sid\) => storeSid\(record\.id, sid\)\}/);
-  assert.match(recordSession, /ready\(\[\{ html: '', text: '' \}\], null, \{ name: record\.name, text: text\.slice\(0, MAX_REFERENCE_CHARS\) \}\);/);
+  assert.match(recordSessionHook, /setReference\(\{ name: record\.name, text: text\.slice\(0, MAX_REFERENCE_CHARS\) \}\);/);
 });
 
 test("a turn's two rows carry the same columns (a batch insert NULLs a missing one; citations is NOT NULL)", () => {
@@ -81,8 +81,7 @@ test("a paste is cut into the reader's own pages, so citations point at pages th
   const { pagesFromPaste, pasteHitsToPages } = await import("./askLib.js");
   const [server, app] = await Promise.all([read("./readerPages.js"), read("../../../akoro-learner/src/lib/readerPages.js")]);
   assert.equal(server, app, "readerPages.js is identical in the API and the learner app");
-  const reader = await read("../../../akoro-learner/src/components/teaching/SessionReaderModal.jsx");
-  assert.match(reader, /import \{ escapeHtml, textToParagraphBlocks, paginateBlocks \} from '\.\.\/\.\.\/lib\/readerPages\.js';/);
+  assert.match(readerModel, /import \{ escapeHtml, textToParagraphBlocks, paginateBlocks \} from '\.\.\/\.\.\/\.\.\/lib\/readerPages\.js';/);
   const para = (n) => `Paragraph ${n}: ` + "x".repeat(900);
   const pages = pagesFromPaste([para(1), para(2), para(3), "Mitochondria release the energy stored in glucose."].join("\n\n"));
   assert.deepEqual([...pages.keys()], [2, 3], "page 1 is the reader's cover; ~2600 chars a page");

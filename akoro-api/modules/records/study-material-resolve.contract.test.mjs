@@ -8,7 +8,7 @@ const studyMaterial = await readFile(new URL("./studyMaterial.js", import.meta.u
   + await readFile(new URL("./study-material-generate.js", import.meta.url), "utf8");
 const searchLib = await readFile(new URL("./searchLib.js", import.meta.url), "utf8");
 const materialsRoutes = await readFile(new URL("../materials/routes.js", import.meta.url), "utf8");
-const chat = await readFile(new URL("../adaptive-learning/chat.js", import.meta.url), "utf8");
+const chat = await readFile(new URL("../adaptive-learning/chat/handlers-network-study.js", import.meta.url), "utf8");
 const toolCatalogue = await readFile(new URL("../adaptive-learning/chat/tool-catalogue-rest.js", import.meta.url), "utf8");
 
 /* A tiny Postgres LIKE (default \ escape), so the filename tests prove

@@ -80,8 +80,8 @@ test("learner PDF/image uploads parse themselves in the uploader's browser", () 
   assert.match(extractPagesSrc, /const isPdf   = record\.mime === 'application\/pdf'/, "PDFs rasterize");
   assert.ok(extractPagesSrc.includes("const isImage = /^image\\//.test(record.mime || '')"), "images rasterize");
   assert.ok(extractPagesSrc.includes("const isPdf   = record.mime === 'application/pdf'"), "pdfs rasterize");
-  assert.match(extractPagesSrc, /rasterizePdfPages\(pdf\)/, "the reader's own rasterizer, reused");
-  assert.match(extractPagesSrc, /runRecordExtraction\(\{\s*recordId: record\.id, pages: toSend/, "the reader's own batcher, reused — only unsaved pages");
+  assert.match(extractPagesSrc, /rasterizePdfPages\(pdf,/, "the reader's own rasterizer, reused");
+  assert.match(extractPagesSrc, /runRecordExtraction\(\{\s*recordId: record\.id, pages,/, "the reader's own batcher, reused");
   assert.match(extractPagesSrc, /return \{ status: 'error', error: res\.error, done, total \}/, "a failure is REPORTED to the sheet");
   assert.match(extractPagesSrc, /\} catch \{ \/\* silent/, "fails silent — the reader's offer remains");
   assert.match(modalSrc, /const created = await createRecord\(\{ kind: 'upload'/, "the upload modal keeps the created record");

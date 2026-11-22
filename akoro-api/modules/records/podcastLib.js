@@ -33,6 +33,7 @@ export const PODCAST_LIMITS = Object.freeze({
   TTS_INPUT_MAX: 4000,       // the API caps one request at 4096 characters
   CONCURRENCY: 4,
   STALE_MS: 15 * 60_000,     // a "making" item older than this was lost (a restart)
+  MIN_PAGE_CHARS: 360,        // a cover/thin page isn't an episode — widen to the document
 });
 /** Host and guest sound different — the episode reads as a conversation. */
 export const PODCAST_VOICES = Object.freeze({ Host: "nova", Guest: "onyx" });
@@ -212,7 +213,14 @@ export async function runPodcastJob({ artifactId, target, scope, pageNumber, pag
   const base = { status: "making", length: length.id, startedAt };
   const fail = (error) => deps.update(artifactId, { podcast: { ...base, status: "failed", error } }).catch(() => {});
   try {
-    const passages = await deps.gather({ target, scope, pageNumber, pageText, focus });
+    let passages = await deps.gather({ target, scope, pageNumber, pageText, focus });
+    // A "this page" request that lands on a cover or a caption has too little
+    // to talk about; widen to the document rather than fail the episode.
+    const pageChars = passages.reduce((n, p) => n + String(p?.text || "").length, 0);
+    if (scope === "page" && pageChars < PODCAST_LIMITS.MIN_PAGE_CHARS) {
+      const wider = await deps.gather({ target, scope: "document", pageNumber, pageText: "", focus }).catch(() => []);
+      if (wider.length) passages = wider;
+    }
     if (!passages.length) {
       return fail(scope === "page"
         ? "This page has no readable text yet — extract the document's text first."
@@ -224,7 +232,17 @@ export async function runPodcastJob({ artifactId, target, scope, pageNumber, pag
       if (e?.name === "InsufficientCoins") return fail("You're out of AI credit — top up to make episodes.");
       throw e;
     }
-    const script = shapePodcastScript(json, passages, length);
+    let script = shapePodcastScript(json, passages, length);
+    if (!script.turns.length) {
+      // One retry: an empty/truncated draft is usually the provider, not the
+      // material (the whole-document run of the same page succeeded).
+      try { json = parsePodcastScriptText(await deps.chat(buildPodcastMessages({ docName: target.name, passages, length, focus }), length)); }
+      catch (e) {
+        if (e?.name === "InsufficientCoins") return fail("You're out of AI credit — top up to make episodes.");
+        throw e;
+      }
+      script = shapePodcastScript(json, passages, length);
+    }
     if (!script.turns.length) return fail("Couldn't write an episode from this material — try a different page or focus.");
 
     const { audio, segments, chars } = await narrateTurns(script.turns, { speak: deps.speak });

@@ -25,7 +25,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const read = (p) => readFileSync(join(here, p), "utf8");
 
 const [routesSrc, libSrc, appSrc, manifest, migration, envExample, deepgramSrc,
-  teachSessionSrc, readerSrc, teachModalSrc, playerSrc, recordsApiSrc, courseViewerSrc] = await Promise.all([
+  teachSessionSrc, readerSrc, teachModalSrc, playerSrc, recordsApiSrc, courseViewerSrc, extractionCardSrc] = await Promise.all([
   read("routes.js") + read("access.js") + read("service-transcribe.js"),   // the access rule lives in access.js; the lane in its service
   read("avTranscribeLib.js"),
   read("../../app.js"),
@@ -33,12 +33,16 @@ const [routesSrc, libSrc, appSrc, manifest, migration, envExample, deepgramSrc,
   read("../../migrations/2026-content-cache.sql"),
   read("../../.env.example"),
   read("../voice/deepgram.js"),
-  read("../../../akoro-learner/src/components/library/RecordTeachSession.jsx"),
-  read("../../../akoro-learner/src/components/teaching/SessionReaderModal.jsx"),
-  read("../../../akoro-learner/src/components/teaching/TeachAgentModal.jsx"),
+  read("../../../akoro-learner/src/features/library/components/RecordTeachSession.jsx")
+    + read("../../../akoro-learner/src/features/library/hooks/useRecordSession.js"),
+  read("../../../akoro-learner/src/features/teaching/components/SessionReaderModal.jsx")
+    + read("../../../akoro-learner/src/features/teaching/components/SessionReaderDocument.jsx")
+    + read("../../../akoro-learner/src/features/teaching/hooks/useSessionReader.js"),
+  read("../../../akoro-learner/src/features/teaching/components/TeachAgentModal.jsx"),
   read("../../../akoro-learner/src/components/library/MediaPlayer.jsx"),
   read("../../../akoro-learner/src/services/recordsApi.js"),
-  read("../../../akoro-learner/src/components/courses/AgentSessionViewer.jsx"),
+  read("../../../akoro-learner/src/features/courses/components/AgentSessionViewer.jsx"),
+  read("../../../akoro-learner/src/components/library/ExtractionCard.jsx"),
 ]);
 
 const { parseSceneTimes, shapeSegments, transcriptText } = await import("./avTranscribeLib.js");
@@ -168,7 +172,7 @@ test("the reader offers transcription, grounds from it, and lists segments with 
   assert.match(teachSessionSrc, /startRecordTranscription\(\{ recordId: record\.id, contentKey: record\.contentKey \|\| null \}\)/, "the offer starts the job (shared or own)");
   assert.match(recordsApiSrc, /export async function getSharedTranscript/, "the shared-transcript seam exists");
   assert.match(teachSessionSrc, /getRecordTranscriptionStatus/, "the job is polled");
-  assert.match(teachSessionSrc, /Transcribe this recording\?/, "the av offer overlay exists");
+  assert.match(extractionCardSrc, /Transcribe this recording\?/, "the av offer overlay exists");
   assert.match(teachSessionSrc, /getRecordTranscript\(record\.id\)/, "the cache is consulted before spending money");
   assert.match(teachSessionSrc, /setAvTranscript/, "the transcript state feeds grounding + the panel");
   assert.match(teachSessionSrc, /transcript: avTranscript/, "the content carries it to the reader");

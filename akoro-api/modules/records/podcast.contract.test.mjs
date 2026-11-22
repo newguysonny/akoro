@@ -186,3 +186,34 @@ test("script answers are salvaged like the reader tools': fenced, prose-wrapped,
   assert.deepEqual(parsePodcastScriptText(script.slice(0, 30)), {}, "a truncated answer salvages nothing — the retry's job");
   assert.deepEqual(parsePodcastScriptText(""), {});
 });
+
+test("a cover/thin page widens to the document instead of failing the episode", async () => {
+  const calls = [];
+  const d = deps({
+    gather: async ({ scope }) => {
+      calls.push(scope);
+      return scope === "page"
+        ? [{ n: 1, pageNumber: 2, text: "SECTION 01", where: "page 2" }]
+        : [{ n: 1, pageNumber: 2, text: "The thylakoid membrane carries the light reactions and the stroma fixes carbon.", where: "page 2" }];
+    },
+  });
+  await runPodcastJob(job, d);
+  assert.deepEqual(calls, ["page", "document"]);
+  assert.equal(d.log.at(-1)[2], "ready");
+});
+
+test("an empty first script is retried once before failing", async () => {
+  let calls = 0;
+  const d = deps({
+    chat: async () => {
+      calls += 1;
+      return calls === 1
+        ? JSON.stringify({ title: "x", turns: [] })
+        : JSON.stringify({ title: "Ep", turns: [{ speaker: "Host", text: "Why does it work that way?", source: 1 }, { speaker: "Guest", text: "Because the membrane separates charge.", source: 2 }] });
+    },
+  });
+  await runPodcastJob(job, d);
+  assert.equal(calls, 2);
+  assert.equal(d.log.at(-1)[2], "ready");
+  assert.equal(d.log.at(-1)[3].turns.length, 2);
+});

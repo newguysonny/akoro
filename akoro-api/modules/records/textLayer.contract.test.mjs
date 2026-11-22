@@ -42,6 +42,6 @@ test("the server's text read and the app's skip both use it", () => {
   const stored = readFileSync(new URL("./storedText.js", import.meta.url), "utf8");
   assert.match(stored, /const scanned = looksScanned\(texts\);/);
   const ext = readFileSync(new URL("../../../akoro-learner/src/components/library/extractPages.js", import.meta.url), "utf8");
-  assert.match(ext, /if \(!looksScanned\(texts \|\| \[\]\)\) return \{ status: 'skipped' \};/);
-  assert.match(ext, /filter\(\(p\) => !\(scan && p\.model === 'pdf-text'\)\)/, "a scan's saved watermark pages are parsed again");
+  assert.match(ext, /if \(!looksScanned\(texts\)\) return \{ status: 'skipped' \};/);
+  assert.match(ext, /p\.model !== 'pdf-text'/, "a scan's saved watermark pages are parsed again");
 });

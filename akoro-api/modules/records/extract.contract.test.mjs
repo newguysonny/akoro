@@ -28,16 +28,19 @@ const [routesSrc, libSrc, appSrc, manifest, recordsMigration, teachSessionSrc, e
   read("../../app.js"),
   read("../../migrations/manifest.json"),
   read("../../migrations/2026-content-cache.sql"),
-  read("../../../akoro-learner/src/components/library/RecordTeachSession.jsx"),
+  read("../../../akoro-learner/src/features/library/components/RecordTeachSession.jsx")
+    + read("../../../akoro-learner/src/features/library/hooks/useRecordSession.js"),
   read("../../../akoro-learner/src/components/library/extractPages.js")
     + read("../../../akoro-learner/src/lib/extractRun.js"),
   read("../../../akoro-learner/src/services/recordsApi.js"),
   read("../../../runpod-worker/handler.py"),
   read("../../../akoro-learner/src/components/library/PdfPages.jsx"),
-  read("../../../akoro-learner/src/components/teaching/SessionReaderModal.jsx"),
-  read("../../../akoro-learner/src/components/teaching/TeachAgentModal.jsx"),
+  read("../../../akoro-learner/src/features/teaching/components/SessionReaderModal.jsx")
+    + read("../../../akoro-learner/src/features/teaching/components/sessionReaderModel.js")
+    + read("../../../akoro-learner/src/features/teaching/hooks/useSessionReader.js"),
+  read("../../../akoro-learner/src/features/teaching/components/TeachAgentModal.jsx"),
   read("../../../akoro-learner/src/components/library/ExtractionCard.jsx"),
-  read("../../../akoro-learner/src/components/pharmd/PharmDTopicSession.jsx"),
+  read("../../../akoro-learner/src/features/pharmd/components/PharmDTopicSession.jsx"),
   read("../../../akoro-learner/src/components/library/BlockTextLayer.jsx"),
 ]);
 
@@ -175,7 +178,7 @@ test("the shared content cache: file-keyed rows, single-flight claims", () => {
 test("the reader rasterizes client-side and offers extraction for scans & images", () => {
   assert.match(extractPagesSrc, /from 'pdfjs-dist'/, "PDF pages rasterize with the already-loaded pdf.js");
   assert.match(extractPagesSrc, /TARGET_PIXELS\s*=\s*1_600_000/, "rendered a bit under the model's 2MP cap");
-  assert.match(extractPagesSrc, /BATCH = 8/, "pages go up in ≤8-page batches");
+  assert.match(extractPagesSrc, /EXTRACT_BATCH_PAGES/, "pages go up in bounded batches");
   assert.match(extractionCardSrc, /Extract text/, "the shared offer overlay exists");
   assert.match(teachSessionSrc, /<ExtractionCard/, "the Library reader reuses the shared card");
   assert.match(pharmdReaderSrc, /<ExtractionCard/, "the PHARM.D reader reuses the shared card");
@@ -308,8 +311,9 @@ test("POST /extract submits and returns at once; GET /extract/status collects an
   assert.match(post, /res\.status\(202\)/);
 
   // Validation happens BEFORE the claim — a 400 can no longer leave the file locked.
-  const lastValidation = post.lastIndexOf("return res400(");
-  const claim = post.indexOf("claimContentJob(");
+  const blobStart = post.indexOf("Send at least one rendered page.");
+  const claim = post.indexOf("claimContentJob(", blobStart);
+  const lastValidation = post.lastIndexOf("return res400(", claim);
   assert.ok(lastValidation !== -1 && claim > lastValidation, "every 400 returns before the claim is taken");
   assert.match(post, /await finishContentJob\(contentKey, "parse", "failed"/, "a batch nobody accepted releases the claim");
   assert.match(post, /await updateContentJob\(contentKey, "parse", \{ mode: "async", submittedAt, jobs \}\)/);
@@ -384,8 +388,8 @@ test("a heavy PDF opens before every page is read; selection stays on the PDF la
   assert.match(pdfPagesSrc, /textsReady/, "the full read finishes in the background");
   assert.match(pdfPagesSrc, /new Array\(pdf\.numPages\)\.fill\(''\)/, "page indexes are stable while text fills in");
   assert.match(pdfPagesSrc, /DOC_CACHE_BYTES_MAX/, "the document cache is bounded by bytes");
-  assert.match(extractPagesSrc, /const \{ pdf \} = await loadPdfDocument/, "uploads start rasterising without waiting for text");
-  assert.doesNotMatch(extractPagesSrc, /looksScanned/, "every PDF is model-parsed, text layer or not");
+  assert.match(extractPagesSrc, /\(\{ pdf \} = await loadPdfDocument/, "the PDF opens once for text and rasterising");
+  assert.match(extractPagesSrc, /looksScanned\(texts\)/, "text PDFs still skip the paid parse");
   assert.match(extractPagesSrc, /p\.model !== 'pdf-text'/, "model pages replace the free pdf-text pages");
   assert.doesNotMatch(teachSessionSrc, /selectionOverlay\/>/, "text PDFs keep the pdf.js selectable layer");
   assert.match(readerSrc, /bestRatio = 0\.12/, "a tall page still selects in the pager");

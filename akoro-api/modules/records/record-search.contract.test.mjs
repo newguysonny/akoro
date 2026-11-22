@@ -23,7 +23,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const read = (p) => readFileSync(join(here, p), "utf8");
 
 const [manifest, manifestRaw, migration, searchLibSrc, routesSrc, sweeperSrc,
-  recordsApiSrc, librarySrc] = await Promise.all([
+  recordsApiSrc, librarySrc, libraryHeaderSrc, libraryContentSrc, libraryDataSrc] = await Promise.all([
   read("../../migrations/manifest.json"),
   read("../../migrations/manifest.json"),
   read("../../migrations/2026-record-search.sql"),
@@ -31,7 +31,10 @@ const [manifest, manifestRaw, migration, searchLibSrc, routesSrc, sweeperSrc,
   read("routes.js") + read("service-records.js") + read("service-extract.js") + read("service-transcribe.js"),
   read("../../lib/embeddingSweeper.js"),
   read("../../../akoro-learner/src/services/recordsApi.js"),
-  read("../../../akoro-learner/src/pages/LibraryPage.jsx"),
+  read("../../../akoro-learner/src/features/library/LibraryPage.jsx"),
+  read("../../../akoro-learner/src/features/library/components/LibraryHeader.jsx"),
+  read("../../../akoro-learner/src/features/library/components/LibraryContent.jsx"),
+  read("../../../akoro-learner/src/features/library/hooks/useLibraryData.js"),
 ]);
 
 test("the migration exists, is registered, and keeps the learner-data rules", () => {
@@ -101,19 +104,19 @@ test("the sweeper owns record_chunks like every other store", () => {
 test("the route: learner-scoped, query-honest, degrading safely", () => {
   assert.match(routesSrc, /router\.get\("\/search", authenticateToken/, "learner-authenticated");
   assert.match(routesSrc, /if \(!q\) return res400\(res, "A search query is required\."\)/, "no empty queries");
-  assert.match(searchLibSrc, /Math\.min\(Math\.max\(Number\(limit\) \|\| 12, 1\), 25\)/, "the limit is clamped server-side");
+  assert.match(searchLibSrc, /Math\.min\(Math\.max\(wanted \* 3, wanted\), 96\)/, "the limit is clamped server-side");
   assert.match(routesSrc, /results: \[\], query: q, error: "Search is unavailable right now\."/ , "an outage is an empty page, not a 500");
   assert.match(recordsApiSrc, /export async function searchRecords/, "the learner seam exists");
   assert.ok(recordsApiSrc.includes("} catch { return []; }"), "offline → the shelf stays browsable");
 });
 
 test("the Library search box: debounced, honest, hits open sessions", () => {
-  assert.match(librarySrc, /placeholder="Search inside your records…"/, "the box promises what it does");
-  assert.match(librarySrc, /setTimeout\(async/, "debounced");
-  assert.match(librarySrc, /, 350\)/, "…by 350ms");
-  assert.match(librarySrc, /searchRecords\(query, 20\)/, "server-searched, not a client filter of a capped cache");
-  assert.match(librarySrc, /openSearchHit/, "a hit resolves the record through the normal open flow");
-  assert.match(librarySrc, /That record is no longer on your shelf/, "a stale hit says so");
-  assert.match(librarySrc, /No matches for/, "an empty search says so");
-  assert.match(librarySrc, /setQ\(''\)/, "clearing returns to the shelf");
+  assert.match(libraryHeaderSrc, /placeholder="Search inside your records…"/, "the box promises what it does");
+  assert.match(libraryDataSrc, /setTimeout\(async/, "debounced");
+  assert.match(libraryDataSrc, /, 350\)/, "…by 350ms");
+  assert.match(libraryDataSrc, /searchRecords\(query, qLimit\)/, "server-searched, not a client filter of a capped cache");
+  assert.match(libraryDataSrc, /const openSearchHit =/, "a hit resolves the record through the normal open flow");
+  assert.match(libraryDataSrc, /That record is no longer on your shelf/, "a stale hit says so");
+  assert.match(libraryContentSrc, /No matches for/, "an empty search says so");
+  assert.match(libraryHeaderSrc, /setQ\(''\)/, "clearing returns to the shelf");
 });
