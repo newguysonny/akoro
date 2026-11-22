@@ -273,7 +273,8 @@
     "2026-profile-discipline.sql",
     "2026-record-previews.sql",
     "2026-platform-settings.sql",
-    "2026-retrieval-telemetry.sql"
+    "2026-retrieval-telemetry.sql",
+    "2026-record-chunk-provenance.sql"
   ],
   "demo": [
     "2026-seed-school-passwords.sql",

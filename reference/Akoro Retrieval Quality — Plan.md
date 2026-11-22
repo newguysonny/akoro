@@ -298,6 +298,15 @@ then Discover changes only add a query path.
   vision model over rendered PDF pages (images stay OCR-only); if the fallback also fails the
   OCR answer is kept. Used by the extract lane, upload auto-extraction and the admin backfill.
   Disable with `RECORDS_OCR_FALLBACK=off`. Tests: `modules/records/ocr-fallback.test.mjs`.
+- **H1/H2/H3 baseline** — `searchLib.js` now indexes pages with
+  `chunksFromMarkdown`: heading paths (`sectionPath`), 1200-char leaves with 15% overlap,
+  atomic tables/code/figure sentinels, document-wide boilerplate and page numbers stripped
+  (`cleanForEmbed`, `boilerplateLines`), and exact duplicate chunks dropped by
+  `chunkHash`. Provenance columns (`section_path`, `char_start/end`, `content_hash`,
+  `index_version`) land in `migrations/2026-record-chunk-provenance.sql`. Legacy rows keep
+  `index_version = 0` for a batched reindex. Tests: `chunking.test.mjs` (9).
+  `H6` table *normalisation* (OCR HTML → GFM) is still pending; the chunker already keeps
+  tables atomic.
 - **H4/H5 baseline** — `citationCoverage` (pure, in `askLib`) is computed on every Ask
   answer and returned as `coverage`; retrieval events are written from `searchRecordChunks`
   and generation events from `service-ask`, into `edu.retrieval_events`
