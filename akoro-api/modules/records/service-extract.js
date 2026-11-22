@@ -32,6 +32,7 @@ import { pageSizeOf } from "./rules.js";
 import { res400, okExtract } from "./http.js";
 import * as store from "./store-records.js";
 import { parseRefusalCode, parseRefusalMessage } from "./parseRefusal.js";
+import { readCatalogueFile, catalogueDownloadUrl } from "./catalogueFile.js";
 
 /* recordId | contentKey → { contentKey, name } | { status, message }. */
 export async function resolveAiContent(req) {
@@ -75,7 +76,10 @@ async function submitExtractInner(req, res) {
     const rec = req.body?.recordId
       ? (await store.getRecordWithFile(req.body.recordId)).data
       : (await store.getRecordByFileKey(contentKey)).data;
-    if (!rec?.file_key) return res400(res, "This record has no stored file to recognise.");
+    // A catalogue PHARM.D topic is not a learner record: its bytes live in the
+    // pharmd-courses store under the content key, not under records.file_key.
+    const catalogue = rec?.file_key ? null : await readCatalogueFile(contentKey);
+    if (!rec?.file_key && !catalogue) return res400(res, "This record has no stored file to recognise.");
     // A page-batched client (older builds) submits each ≤16-page batch, and
     // every batch would otherwise re-run the WHOLE document — a 27-page scan
     // paid for two full recognitions. The OCR lane saves all pages or none,
@@ -99,8 +103,8 @@ async function submitExtractInner(req, res) {
     await updateContentJob(contentKey, "parse", batch);
     void (async () => {
       try {
-        const { body } = await readFileObject(rec.file_key);
-        const out = await runDeepseekOcr({ buffer: body, filename: rec.name || "document.pdf" });
+        const body = catalogue ? catalogue.buffer : (await readFileObject(rec.file_key)).body;
+        const out = await runDeepseekOcr({ buffer: body, filename: catalogue?.name || rec.name || "document.pdf" });
         await saveExtractionPages({ contentKey, pages: out.pages, model: out.model });
         void indexByContentKey({ contentKey, pages: out.pages });
         await finishContentJob(contentKey, "parse", "done", { mode: "ocr", model: out.model, pages: out.pages.length });
@@ -340,7 +344,11 @@ export async function extractText(req, res) {
   if (!storedTextKindOf(id.mime, id.name)) return res400(res, "Only PDFs, text files and Word / PowerPoint files are read this way.");
   const existing = await getExtraction(id.contentKey);
   if (existing.pages.length) return okExtract(res, { ...existing, done: true });
-  const fileUrl = await createPresignedDownload(id.contentKey, { downloadName: id.name });
+  // A catalogue topic is not a records.file_key — sign its bucket path.
+  const fileUrl = id.contentKey.startsWith("pharmd:")
+    ? await catalogueDownloadUrl(id.contentKey)
+    : await createPresignedDownload(id.contentKey, { downloadName: id.name });
+  if (!fileUrl) return res400(res, "This file could not be opened for reading.");
   const out = await extractStoredText({ userId: req.user.id, contentKey: id.contentKey, name: id.name, mime: id.mime, fileUrl });
   if (out.status === "running") return res.status(202).json({ success: true, data: { running: true, done: false, pages: [] } });
   if (out.status === "scanned") return res.status(422).json({ success: false, scanned: true, message: "This PDF is a scan — use Extract text in the reader to read it." });

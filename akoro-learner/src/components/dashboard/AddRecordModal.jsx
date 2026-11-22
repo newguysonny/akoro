@@ -15,7 +15,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 import { XIcon, Icon } from '../common/Icons.jsx';
 import {
-  listRecords, uploadRecordFile, createRecord,
+  listRecords, uploadRecordFile, createRecord, generateRecordPreview,
 } from '../../services/recordsApi.js';
 import { extractUpload } from '../library/extractPages.js';
 
@@ -164,6 +164,9 @@ export default function AddRecordModal({ open, onClose, user, onOpenRecord, onRe
       const { fileKey } = await uploadRecordFile(file, setPct);
       const created = await createRecord({ kind: 'upload', fileKey, name: file.name, mime: file.type || '', size: file.size, duration: dur || undefined });
       setFile(null); setDur(null); setPct(0);
+      // The page-1 preview is rendered off the request path; wait for it (a
+      // few hundred ms) so the new card shows its thumbnail without a reload.
+      if (created?.id) { try { await generateRecordPreview(created.id); } catch { /* thumbnail is a nicety */ } }
       await reload();
       // "Always extract" — parse it NOW, in the sheet, so the text (and the
       // search index) is ready before anyone opens it.
@@ -214,8 +217,10 @@ export default function AddRecordModal({ open, onClose, user, onOpenRecord, onRe
     if (!body) { setErr(t('records.nothing_to_paste')); return; }
     setBusy(true); setErr('');
     try {
-      await createRecord({ kind: 'paste', content: body });
-      setText(''); await reload();
+      const created = await createRecord({ kind: 'paste', content: body });
+      setText('');
+      if (created?.id) { try { await generateRecordPreview(created.id); } catch { /* thumbnail is a nicety */ } }
+      await reload();
     } catch (e) {
       setErr(e?.message || t('records.nothing_to_paste'));
     } finally { setBusy(false); }
