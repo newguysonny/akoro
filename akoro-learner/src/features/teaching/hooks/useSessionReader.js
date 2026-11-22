@@ -516,7 +516,7 @@ export function useSessionReader({
   useEffect(() => {
     if (!artifacts) return undefined;
     let alive = true;
-    artifacts.list().then((list) => {
+    const loadSaved = (attempt) => artifacts.list().then((list) => {
       if (!alive) return;
       const open = [];
       const closed = [];
@@ -533,7 +533,15 @@ export function useSessionReader({
       const marks = marksFromArtifacts(list);
       setAnnotations((x) => [...marks.annotations, ...x]);
       setRedactions((x) => [...marks.redactions, ...x]);
-    }).catch(() => { /* saved items are a convenience — the reader still works */ });
+    }).catch((err) => {
+      // One retry: a reopen immediately after closing can race the session/API
+      // and the first list came back empty or failed — the saved tabs then
+      // looked lost until a tool was opened (which lists them again).
+      if (alive && attempt < 1 && !/not found|unauthor/i.test(String(err?.message || ''))) {
+        setTimeout(() => { if (alive) loadSaved(attempt + 1); }, 1200);
+      }
+    });
+    loadSaved(0);
     return () => { alive = false; };
   }, [artifacts]);
 
