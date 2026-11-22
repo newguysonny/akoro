@@ -20,7 +20,7 @@
 //       keeps working through exactly the outage that killed vectors.
 
 import { createHash } from "node:crypto";
-import { canEmbed } from "../../lib/embeddingProvider.js";   // pure — no db, no client
+import { canEmbed, embeddingsProvider, selfHostedModel } from "../../lib/embeddingProvider.js";   // pure — no db, no client
 
 const dbLazy = async () => (await import("../../db.js")).default;
 
@@ -335,7 +335,7 @@ export async function embedMany(texts, { userId = null } = {}) {
  * keeps re-indexing idempotent (an extraction batch that re-runs a page must
  * not leave the page searchable twice).
  */
-export async function replaceRecordChunks({ userId, recordId, contentKey = null, kind, rows, pageNumbers = null, bill = true }, deps = {}) {
+export async function replaceRecordChunks({ userId, recordId, contentKey = null, kind, rows, pageNumbers = null, bill = true, sourceType = null, docAt = null, extractVersion = null }, deps = {}) {
   const embed = deps.embedMany || embedMany;
   const clean = (Array.isArray(rows) ? rows : [])
     .map((r) => ({
@@ -386,6 +386,12 @@ export async function replaceRecordChunks({ userId, recordId, contentKey = null,
     char_end: r.char_end,
     content_hash: r.content_hash,
     index_version: INDEX_VERSION,
+    source_type: sourceType,
+    doc_at: docAt,
+    extract_version: extractVersion,
+    embed_model: embeddings[i]
+      ? (embeddingsProvider() === "runpod" ? selfHostedModel() : "text-embedding-3-small")
+      : null,
     embedding: embeddings[i],
     embedded_at: embeddings[i] ? now : null,
   }));
@@ -400,12 +406,12 @@ export async function replaceRecordChunks({ userId, recordId, contentKey = null,
  * or transcript windows when present. Safe to call for records with none of
  * those — the name chunk alone still makes the record findable.
  */
-export async function indexRecord({ userId, recordId, name, contentKey = null, pasteText = null, pages = null, segments = null, bill = true }) {
+export async function indexRecord({ userId, recordId, name, contentKey = null, pasteText = null, pages = null, segments = null, bill = true, sourceType = null, docAt = null, extractVersion = null }) {
   if (!userId || !recordId) return;
   try {
     let n = 0;
     if (name) {
-      n += await replaceRecordChunks({ userId, recordId, contentKey, kind: "name", rows: [{ text: name }], bill });
+      n += await replaceRecordChunks({ userId, recordId, contentKey, kind: "name", rows: [{ text: name }], bill, sourceType, docAt, extractVersion });
     }
     if (pasteText) {
       // Pasted notes follow the same structural chunker: headings in a note
@@ -417,7 +423,7 @@ export async function indexRecord({ userId, recordId, name, contentKey = null, p
         seen.add(hash);
         return true;
       }).map((c) => ({ ...c, contentHash: chunkHash(c.text) }));
-      n += await replaceRecordChunks({ userId, recordId, contentKey, kind: "paste", bill, rows });
+      n += await replaceRecordChunks({ userId, recordId, contentKey, kind: "paste", bill, rows, sourceType, docAt, extractVersion });
     }
     if (Array.isArray(pages) && pages.length) {
       // H1/H2/H3: heading-aware leaves, document-wide boilerplate removed,
@@ -425,13 +431,13 @@ export async function indexRecord({ userId, recordId, name, contentKey = null, p
       n += await replaceRecordChunks({
         userId, recordId, contentKey, kind: "page", bill,
         pageNumbers: pages.map((p) => p?.pageNumber),
-        rows: chunksForPages(pages),
+        rows: chunksForPages(pages), sourceType, docAt, extractVersion,
       });
     }
     if (Array.isArray(segments) && segments.length) {
       n += await replaceRecordChunks({
         userId, recordId, contentKey, kind: "transcript", bill,
-        rows: windowsFromSegments(segments),
+        rows: windowsFromSegments(segments), sourceType, docAt, extractVersion,
       });
     }
     if (n) console.log(`[record-search] indexed ${n} chunk(s) for record ${recordId}`);
@@ -451,12 +457,15 @@ export async function indexByContentKey({ contentKey, pages = null, segments = n
   try {
     const db = await dbLazy();
     const { data: rec } = await db.schema("edu").from("records")
-      .select("id, user_id, name, file_key").eq("file_key", contentKey)
+      .select("id, user_id, name, file_key, created_at").eq("file_key", contentKey)
       .order("created_at", { ascending: true }).limit(1).maybeSingle();
     if (!rec) return;   // a lesson stream or an orphaned key — nothing to index under
     await indexRecord({
       userId: rec.user_id, recordId: rec.id, name: rec.name,
       contentKey: rec.file_key, pages, segments, bill,
+      sourceType: pages?.length ? "upload" : segments?.length ? "transcript" : null,
+      docAt: rec.created_at || null,
+      extractVersion: pages?.[0]?.model || segments?.[0]?.model || null,
     });
   } catch (e) {
     console.warn("[record-search] indexByContentKey failed:", String(e?.message || e).slice(0, 160));
@@ -531,37 +540,43 @@ export async function searchRecordChunks({ userId, q, limit = 12, recordId = nul
 }
 
 /* ── The platform (Discover) search ─────────────────────────────────────────
-   The library search widened to the community's free notes — the records
-   the Discover feed shows: uploads and pastes, not private, not deleted,
-   not the requester's own, and never a Premium subscriber's (the access.js
-   rule). The hybrid RPC is owner-scoped, so this arm is lexical: chunks
-   carrying the query's significant terms. Every hit is re-verified against
-   its record before it is returned — a chunk outlives nothing its record
-   wouldn't allow. Callers score the hits (studyMaterialCore's term
-   coverage) and rank records exactly like the own-Library tier. */
+   Other learners' public uploads/pastes, hybrid once the RPC exists (lexical
+   fallback before the migration). Every hit is re-verified against its record:
+   private/deleted, requester and Premium-owner rules still apply here. */
 
-const PLATFORM_STOPWORDS = new Set([
-  "the", "and", "for", "from", "with", "this", "that", "what", "about", "into",
-  "quiz", "make", "create", "please", "notes", "note", "material", "materials",
-]);
+const PLATFORM_STOPWORDS = new Set(("the and for from with this that what about into quiz make create please notes note material materials").split(" "));
 
 export async function searchPlatformChunks({ userId, q, limit = 40 }) {
   const query = String(q || "").trim();
   if (!query || !userId) return [];
-  const terms = [...new Set(query.toLowerCase().split(/[^a-z0-9]+/)
-    .filter((t) => t.length >= 3 && !PLATFORM_STOPWORDS.has(t)))].slice(0, 6);
-  if (!terms.length) return [];
-  const db = await dbLazy();
-  const { data: chunks, error } = await db.schema("edu").from("record_chunks")
-    .select("record_id, chunk_text, page_number, kind")
-    .neq("user_id", userId)
-    .or(terms.map((t) => `chunk_text.ilike.%${t}%`).join(","))
-    .limit(Math.min(Math.max(Number(limit) || 40, 1), 80));
-  if (error) throw new Error(error.message);
-  if (!chunks?.length) return [];
-  const ids = [...new Set(chunks.map((c) => c.record_id).filter(Boolean))];
+  const cap = Math.min(Math.max(Number(limit) || 40, 1), 80);
   const { activePremiumUserIds } = await import("./access.js");
   const premium = new Set(await activePremiumUserIds().catch(() => []));
+  const db = await dbLazy();
+  const embedding = hasOpenAI() ? await (await import("../../lib/searchEmbedding.js")).embedForSearch(query, { userId, feature: "platform_search" }) : null;
+  let chunks = null;
+  try {
+    const { data, error } = await db.rpc("match_platform_chunks", {
+      p_user_id: userId, p_query_embedding: embedding, p_query_text: query,
+      p_match_count: cap, p_premium_user_ids: [...premium],
+    });
+    if (error) throw new Error(error.message);
+    chunks = data || [];
+  } catch { /* migration not applied yet — the lexical arm below still works */ }
+  if (!chunks) {
+    const terms = [...new Set(query.toLowerCase().split(/[^a-z0-9]+/)
+      .filter((t) => t.length >= 3 && !PLATFORM_STOPWORDS.has(t)))].slice(0, 6);
+    if (!terms.length) return [];
+    const { data, error } = await db.schema("edu").from("record_chunks")
+      .select("record_id, chunk_text, page_number, kind")
+      .neq("user_id", userId)
+      .or(terms.map((t) => `chunk_text.ilike.%${t}%`).join(","))
+      .limit(cap);
+    if (error) throw new Error(error.message);
+    chunks = data || [];
+  }
+  if (!chunks.length) return [];
+  const ids = [...new Set(chunks.map((c) => c.record_id).filter(Boolean))];
   const { data: recs } = await db.schema("edu").from("records")
     .select("id, user_id, name, kind, private")
     .in("id", ids).is("deleted_at", null).eq("private", false)

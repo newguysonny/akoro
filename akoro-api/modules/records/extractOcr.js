@@ -41,9 +41,11 @@ export function parseOcrPage(text) {
       if (Array.isArray(arr?.[0]) && arr[0].length === 4) bbox = arr[0].map(Number);
       else if (Array.isArray(arr) && arr.length === 4) bbox = arr.map(Number);
     } catch { /* keep the text without a box */ }
-    const body = String(m[3] || "").trim() || String(m[1] || "").trim();
-    if (!body) continue;
-    blocks.push({ bbox_2d: bbox, text_content: body });
+    const label = String(m[1] || "").trim();
+    const body = String(m[3] || "").trim() || label;
+    const figure = FIGURE_TEXT.test(body) || (!String(m[3] || "").trim() && /image|figure|picture|diagram/i.test(label));
+    if (!body && !figure) continue;
+    blocks.push({ bbox_2d: bbox, text_content: figure ? "*[figure]*" : body });
   }
 
   if (!blocks.length) {
@@ -53,8 +55,34 @@ export function parseOcrPage(text) {
   }
   return {
     blocks: blocks.filter((b) => Array.isArray(b.bbox_2d)),
-    markdown: blocks.map((b) => b.text_content).join("\n\n"),
+    markdown: normaliseTables(blocks.map((b) => b.text_content).join("\n\n")),
   };
+}
+
+
+const FIGURE_TEXT = /^\s*(?:\[?(?:figure|fig\.?|image|diagram|chart|graph|photo|illustration)\]?)\s*[.:]?\s*$/i;
+
+/** HTML <table> blocks from the OCR provider → GFM, so grounding cites a
+    table instead of raw <tr><td> soup. Unsafe/irregular tables are kept
+    verbatim (prefixed [table]) rather than guessed. */
+export function normaliseTables(markdown) {
+  const src = String(markdown || "");
+  if (!/<table[\s>]/i.test(src)) return src;
+  return src.replace(/<table[\s\S]*?<\/table>/gi, (table) => {
+    const rows = [];
+    for (const row of table.matchAll(/<tr[\s>][\s\S]*?<\/tr>/gi)) {
+      const cells = [...row[0].matchAll(/<(td|th)[\s>][\s\S]*?<\/\1>/gi)]
+        .map((c) => c[0].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim());
+      if (cells.length) rows.push(cells);
+    }
+    if (!rows.length) return "[table] " + table.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+    const width = Math.max(...rows.map((r) => r.length));
+    if (rows.some((r) => r.length !== width)) {
+      return "[table] " + rows.map((r) => r.join(" | ")).join("; ");
+    }
+    const line = (r) => `| ${r.join(" | ")} |`;
+    return [line(rows[0]), `| ${rows[0].map(() => "---").join(" | ")} |`, ...rows.slice(1).map(line)].join("\n");
+  });
 }
 
 /** Recognise a buffer (PDF/Office/image) page by page. Returns normalised pages. */

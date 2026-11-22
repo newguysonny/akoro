@@ -32,7 +32,7 @@ import { usageSnapshot }                  from "../../lib/usageMeter.js";
 
 const router = Router();
 const adminOnly = [authenticateToken, requireRole(["admin"])];
-import { backfillPreviews, backfillExtractions, readExtractionBackfill, readRetrievalTelemetry, readExtractEngine, writeExtractEngine, compareExtractEngines, extractSaveTest, extractRunTest, startExtractBenchmark, readExtractBenchmark, ocrTest } from "./maintenance.js";
+import { backfillPreviews, backfillExtractions, readExtractionBackfill, readRetrievalTelemetry, reindexChunks, readChunkReindex, readExtractEngine, writeExtractEngine, compareExtractEngines, extractSaveTest, extractRunTest, startExtractBenchmark, readExtractBenchmark, ocrTest } from "./maintenance.js";
 
 const asyncHandler = (fn) => (req, res, next) =>
   Promise.resolve(fn(req, res, next)).catch(next);
@@ -421,6 +421,8 @@ router.post("/records/previews/backfill", adminOnly, asyncHandler(backfillPrevie
 router.post("/records/extractions/backfill", adminOnly, asyncHandler(backfillExtractions));
 router.get("/records/extractions/backfill/:jobId", adminOnly, asyncHandler(readExtractionBackfill));
 router.get("/retrieval/events", adminOnly, asyncHandler(readRetrievalTelemetry));
+router.post("/records/chunks/reindex", adminOnly, asyncHandler(reindexChunks));
+router.get("/records/chunks/reindex/:jobId", adminOnly, asyncHandler(readChunkReindex));
 router.get("/records/extract-engine", adminOnly, asyncHandler(readExtractEngine));
 router.put("/records/extract-engine", adminOnly, asyncHandler(writeExtractEngine));
 router.post("/records/extract-compare", adminOnly, asyncHandler(compareExtractEngines));

@@ -9,6 +9,7 @@ import {
   renderPdfPages, pdfTextsByPage, parsePagesWithModel, parsePageOnRunpod, saveExtractionPage, readRecordFileBytes,
   runDeepseekOcr, ocrConfigured,
   scanExtractionGaps, startExtractionBackfill, getExtractionBackfill,
+  scanStaleChunks, startChunkReindex, getChunkReindex,
 } from "../records/index.js";
 import { readRetrievalEvents } from "../../lib/retrievalTelemetry.js";
 import { getExtractEngine, setExtractEngine, extractModelId } from "../records/index.js";
@@ -75,6 +76,33 @@ export async function readExtractionBackfill(req, res) {
   try {
     const job = await getExtractionBackfill(req.params.jobId);
     if (!job) return res.status(404).json({ success: false, message: "That backfill job was not found." });
+    return res.status(200).json({ success: true, data: job });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: String(err?.message || err) });
+  }
+}
+
+/* POST /api/admin/records/chunks/reindex { dryRun, limit } — H1/M2.
+   Dry run: records/chunks on an older chunker. Otherwise a job id; already-
+   chunked records are re-chunked and re-embedded unmetered. */
+export async function reindexChunks(req, res) {
+  try {
+    if (req.body?.dryRun) {
+      const gap = await scanStaleChunks();
+      return res.status(200).json({ success: true, data: { dryRun: true, ...gap } });
+    }
+    const out = await startChunkReindex({ limit: req.body?.limit });
+    return res.status(200).json({ success: true, data: { dryRun: false, ...out } });
+  } catch (err) {
+    console.error("[admin/reindex] failed:", err?.stack || err);
+    return res.status(500).json({ success: false, message: String(err?.message || err) });
+  }
+}
+
+export async function readChunkReindex(req, res) {
+  try {
+    const job = await getChunkReindex(req.params.jobId);
+    if (!job) return res.status(404).json({ success: false, message: "That reindex job was not found." });
     return res.status(200).json({ success: true, data: job });
   } catch (err) {
     return res.status(500).json({ success: false, message: String(err?.message || err) });

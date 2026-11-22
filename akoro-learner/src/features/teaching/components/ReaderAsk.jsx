@@ -131,7 +131,7 @@ export default function ReaderAsk({ ask, onCite, pin = null, onPinClear }) {
         onStatus: (s) => { if (aliveRef.current && s?.label) setStatus(s.label); },
         onDelta: (d) => { if (aliveRef.current) setStatus(''); patch((x) => ({ ...x, text: x.text + d })); },
       });
-      patch((x) => ({ ...x, text: res?.answer ?? x.text, citations: res?.citations || [], pending: false }));
+      patch((x) => ({ ...x, text: res?.answer ?? x.text, citations: res?.citations || [], coverage: res?.coverage || null, pending: false }));
     } catch (e) {
       const stopped = controller.signal.aborted;
       patch((x) => ({ ...x, pending: false, error: stopped ? null : (e?.message || 'Could not answer — try again.'), stopped }));
@@ -214,6 +214,14 @@ export default function ReaderAsk({ ask, onCite, pin = null, onPinClear }) {
         ) : (
           <div key={m.id} className="mb-4">
             {m.text ? <Answer text={m.text} citations={m.citations || []} onCite={onCite}/> : null}
+            {m.text && m.coverage && (m.coverage.cited < m.coverage.claims || (m.coverage.unknown || []).length > 0) ? (
+              <div role="note" style={{ display: 'flex', alignItems: 'flex-start', gap: 6, marginTop: 6, padding: '7px 10px',
+                borderRadius: 10, background: 'rgba(245,158,11,.10)', color: 'var(--ak-warn-text)', fontSize: 11.5,
+                fontWeight: 700, lineHeight: 1.4 }}>
+                <span aria-hidden="true" style={{ marginTop: 1 }}>ⓘ</span>
+                <span>Some points here aren’t linked to a source — tap the citations that are, or ask again for a tighter answer.</span>
+              </div>
+            ) : null}
             {m.pending && !m.text && <div className="text-xs" style={{ color: 'var(--ak-text-sub)' }}>{status || 'Thinking…'}</div>}
             {m.error && <div className="text-xs" style={{ color: 'var(--ak-danger-text)' }}>{m.error}</div>}
             {m.stopped && <div className="text-xs" style={{ color: 'var(--ak-text-sub)' }}>Stopped.</div>}

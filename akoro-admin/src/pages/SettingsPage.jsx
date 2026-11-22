@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Lock, User, Shield, Megaphone, CreditCard, KeyRound, Webhook, Mail, MessageSquare, Image as ImageIcon, FileSearch, Activity } from 'lucide-react';
+import { Lock, User, Shield, Megaphone, CreditCard, KeyRound, Webhook, Mail, MessageSquare, Image as ImageIcon, FileSearch, Activity, RefreshCw } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { PageLayout } from '../components/Layout.jsx';
 import { Btn, Inp, Toast, PageSkeleton } from '../components/Primitives.jsx';
@@ -23,6 +23,9 @@ export default function SettingsPage() {
   const [exBusy,    setExBusy]    = useState(false);
   const [exResult,  setExResult]  = useState(null);   // dry-run counts
   const [exJob,     setExJob]     = useState(null);   // { status, total, processed, results }
+  const [riBusy,    setRiBusy]    = useState(false);
+  const [ri,        setRi]        = useState(null);   // dry-run counts
+  const [riJob,     setRiJob]     = useState(null);   // reindex job
   const [retBusy,   setRetBusy]   = useState(false);
   const [ret,       setRet]       = useState(null);   // { coverageAvg, zeroQueries, rows }
   const [extract,   setExtract]   = useState(null);   // { engine, model }
@@ -99,6 +102,40 @@ export default function SettingsPage() {
     }
   };
 
+
+  /* H1/M2: bring stale chunks onto the current chunker (unmetered). */
+  const runChunkReindex = async (dryRun) => {
+    setRiBusy(true);
+    try {
+      const r = await apiPost('/api/admin/records/chunks/reindex', dryRun ? { dryRun: true } : { limit: 10 });
+      const d = r?.data ?? r ?? {};
+      if (dryRun) {
+        setRi(d);
+        setToast({ message: `${d.records ?? 0} record(s), ${d.chunks ?? 0} chunk(s) on the old chunker`, type: 'success' });
+        return;
+      }
+      if (!d.total) { setToast({ message: 'No stale chunks — the index is current', type: 'success' }); return; }
+      setRiJob({ status: 'running', total: d.total, processed: 0, results: [] });
+      setToast({ message: `Reindex started (${d.total} record${d.total === 1 ? '' : 's'})`, type: 'success' });
+      for (let i = 0; i < 400; i += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+        const j = await apiGet(`/api/admin/records/chunks/reindex/${d.jobId}`);
+        const job = j?.data ?? j ?? null;
+        if (!job) break;
+        setRiJob(job);
+        if (job.status !== 'running') {
+          const done = (job.results || []).filter((x) => x.status === 'reindexed').length;
+          const failed = (job.results || []).filter((x) => x.status === 'failed').length;
+          setToast({ message: `Reindex: ${done} done, ${failed} failed${job.remaining != null ? `, ${job.remaining} record(s) left` : ''}`, type: failed ? 'error' : 'success' });
+          break;
+        }
+      }
+    } catch (e) {
+      setToast({ message: e?.message || 'Reindex failed', type: 'error' });
+    } finally {
+      setRiBusy(false);
+    }
+  };
   /* H5: retrieval vs generation health from edu.retrieval_events. */
   const loadRetrievalTelemetry = async () => {
     setRetBusy(true);
@@ -512,6 +549,26 @@ export default function SettingsPage() {
               <Btn type="button" disabled={retBusy} onClick={loadRetrievalTelemetry}>
                 {retBusy ? 'Loading…' : 'Refresh telemetry'}
               </Btn>
+            </div>
+          </div>
+          <div style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 16, padding: '16px 18px', margin: '0 16px 12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ width: 38, height: 38, borderRadius: 11, background: `${AMBER}18`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <RefreshCw size={18} color={AMBER}/>
+              </span>
+              <div style={{ flex: 1 }}>
+                <p style={{ margin: 0, fontSize: 14, fontWeight: 800, color: INK }}>Search index</p>
+                <p style={{ margin: 0, fontSize: 12, color: MUTED }}>
+                  Re-chunk and re-embed records written by an older chunker (heading-aware chunks, cleaning, dedupe). Dry run counts first.
+                  {ri ? ` Stale: ${ri.records ?? 0} record(s), ${ri.chunks ?? 0} chunk(s).` : ''}
+                  {riJob?.status === 'running' ? ` Working: ${riJob.processed ?? 0}/${riJob.total ?? 0}…` : ''}
+                  {riJob && riJob.status !== 'running' && riJob.remaining != null ? ` ${riJob.remaining} record(s) still stale.` : ''}
+                </p>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+              <Btn type="button" disabled={riBusy} onClick={() => runChunkReindex(true)}>Dry run</Btn>
+              <Btn type="button" disabled={riBusy} onClick={() => runChunkReindex(false)}>{riBusy ? 'Working…' : 'Reindex search'}</Btn>
             </div>
           </div>
         </SettingsGroup>

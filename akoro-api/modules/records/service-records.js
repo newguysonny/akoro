@@ -276,6 +276,7 @@ export async function createRecord(req, res) {
   void indexRecord({
     userId, recordId: data.id, name: data.name, contentKey: data.file_key,
     pasteText: data.kind === "paste" ? data.content : null,
+    sourceType: data.kind, docAt: data.created_at || null,
   });
   // "Always extract": an audio/video upload transcribes ITSELF, right now —
   // the transcript (and its search chunks) simply exist before anyone opens

@@ -307,6 +307,16 @@ then Discover changes only add a query path.
   `index_version = 0` for a batched reindex. Tests: `chunking.test.mjs` (9).
   `H6` table *normalisation* (OCR HTML → GFM) is still pending; the chunker already keeps
   tables atomic.
+- **H6/M1/M2/M3 done (initial)** — OCR tables normalise to GFM (irregular ones kept as
+  `[table]`) and figures become `*[figure]*` (`normaliseTables`, `extractOcr.js`);
+  chunks stamp `source_type`, `doc_at`, `extract_version`, `embed_model` and
+  `index_version`; the admin **Search index** card runs a dry run and a bounded, unmetered
+  reindex job (`reindexChunks.js`, `POST/GET /api/admin/records/chunks/reindex`), stamping
+  orphaned stale rows so scans never loop; Discover uses `match_platform_chunks` (hybrid
+  RRF, private/deleted/requester/Premium excluded in SQL, re-verified in JS, lexical
+  fallback before the migration). Ask answers now show a "some points aren't cited" note
+  when `coverage` says so. Tests: `ocr-tables.test.mjs`, `platform-hybrid.contract.test.mjs`,
+  `reindex-chunks.contract.test.mjs`.
 - **H4/H5 baseline** — `citationCoverage` (pure, in `askLib`) is computed on every Ask
   answer and returned as `coverage`; retrieval events are written from `searchRecordChunks`
   and generation events from `service-ask`, into `edu.retrieval_events`

@@ -11,6 +11,7 @@ export { searchRecordChunks, indexRecord } from "./searchLib.js";
 export { makeStudyMaterial } from "./studyMaterial.js";
 export { backfillRecordText } from "./textBackfill.js";
 export { scanExtractionGaps, startExtractionBackfill, getExtractionBackfill } from "./extractionBackfill.js";
+export { scanStaleChunks, startChunkReindex, getChunkReindex } from "./reindexChunks.js";
 export { buildToolMessages, toolSchema, shapeToolResult } from "./toolsLib.js";
 export { autoTranscribeContent } from "./avTranscribeLib.js";
 export { mediaWorkerEnabled } from "./mediaClient.js";
