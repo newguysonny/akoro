@@ -19,8 +19,10 @@
 //       fusion treats a missing arm as one unvote, so keyword search
 //       keeps working through exactly the outage that killed vectors.
 
-import { createHash } from "node:crypto";
 import { canEmbed, embeddingsProvider, selfHostedModel } from "../../lib/embeddingProvider.js";   // pure — no db, no client
+import { MAX_CHUNK_CHARS, cleanForEmbed, chunkHash, boilerplateLines, stripBoilerplate, chunksFromMarkdown, chunksForPages } from "./chunking.js";
+import { rerankChunks } from "./rerank.js";
+import { recordRetrieval } from "../../lib/retrievalTelemetry.js";
 
 const dbLazy = async () => (await import("../../db.js")).default;
 
@@ -28,7 +30,7 @@ const dbLazy = async () => (await import("../../db.js")).default;
 export const EMBED_DIM = 1536;
 
 /** Chunks are embedded pieces, not archives — ~a page of speech. */
-export const MAX_CHUNK_CHARS = 1200;
+export { MAX_CHUNK_CHARS, cleanForEmbed, chunkHash, boilerplateLines, stripBoilerplate, chunksFromMarkdown, chunksForPages };
 export const INDEX_VERSION = 2;   // bumped when the chunker/cleaner bundle changes
 
 // Can this server embed? Our RunPod endpoint or OpenAI (lib/embeddingProvider.js).
@@ -61,207 +63,6 @@ export function chunkText(text, maxChars = MAX_CHUNK_CHARS) {
   }
   if (rest) chunks.push(rest);
   return chunks.filter(Boolean);
-}
-
-/* ── Structure-aware chunking (H1/H2/H3) ─────────────────────────────────── */
-
-const HEADING = /^(#{1,6})\s+(.+?)\s*$/;
-const TABLE_ROW = /^\s*\|/;
-const FENCE = /^\s*(```|~~~)/;
-const FIGURE_ONLY = /^\s*(?:\*?\[figure\]\*?|!\[[^\]]*\]\([^)]*\))\s*$/i;
-
-/** Remove layout tokens and whitespace noise; never alters table cells. */
-export function cleanForEmbed(text) {
-  return String(text || "")
-    .replace(/<\|[^>]*\|>/g, " ")
-    .replace(/\uFF5C/g, "|")
-    .replace(/[ \t]+\n/g, "\n")
-    .replace(/[ \t]{2,}/g, " ")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-}
-
-/** Normalised text → content hash (dedupe + embedding reuse). */
-export function chunkHash(text) {
-  const norm = String(text || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ").trim();
-  return createHash("sha256").update(norm).digest("hex");
-}
-
-/**
- * Lines repeated on most pages of ONE document: running headers, footers,
- * watermark stamps. Headings/tables/fences are never treated as boilerplate.
- */
-export function boilerplateLines(pages, { share = 0.6, minPages = 3 } = {}) {
-  const list = (Array.isArray(pages) ? pages : []).filter((p) => p);
-  if (list.length < minPages) return new Set();
-  const counts = new Map();
-  for (const p of list) {
-    const seen = new Set();
-    for (const raw of cleanForEmbed(p?.markdown || "").split("\n")) {
-      const line = raw.trim();
-      if (line.length < 3 || line.length > 120) continue;
-      if (HEADING.test(line) || TABLE_ROW.test(line) || FENCE.test(line)) continue;
-      // A full sentence repeated on every page is content, not furniture.
-      if (/[.!?]$/.test(line) && line.split(/\s+/).length > 4) continue;
-      if (seen.has(line)) continue;
-      seen.add(line);
-      counts.set(line, (counts.get(line) || 0) + 1);
-    }
-  }
-  const threshold = Math.max(minPages, Math.ceil(list.length * share));
-  return new Set([...counts].filter(([, n]) => n >= threshold).map(([line]) => line));
-}
-
-/** Strip boilerplate lines and bare page numbers from a page's text. */
-export function stripBoilerplate(text, boilerplate = new Set()) {
-  return cleanForEmbed(text)
-    .split("\n")
-    .filter((raw) => {
-      const line = raw.trim();
-      if (!line) return true;
-      if (/^\d{1,4}$/.test(line)) return false;                       // page number
-      if (/^(?:page|pg\.?)\s*\d+(?:\s*(?:of|\/)\s*\d+)?$/i.test(line)) return false;
-      if (/^\d+\s*(?:of|\/)\s*\d+$/i.test(line)) return false;
-      if (boilerplate.has(line)) return false;
-      return true;
-    })
-    .join("\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-}
-
-/** Split an oversized prose block at a boundary, with a small overlap. */
-function leaves(text, maxChars, overlap) {
-  const src = String(text || "").trim();
-  if (!src) return [];
-  if (src.length <= maxChars) return [src];
-  const out = [];
-  let at = 0;
-  while (at < src.length) {
-    let end = Math.min(src.length, at + maxChars);
-    if (end < src.length) {
-      const para = src.lastIndexOf("\n\n", end);
-      const sentence = src.lastIndexOf(". ", end);
-      if (para > at + maxChars * 0.4) end = para;
-      else if (sentence > at + maxChars * 0.4) end = sentence + 1;
-    }
-    const piece = src.slice(at, end).trim();
-    if (piece) out.push(piece);
-    if (end >= src.length) break;
-    at = Math.max(end - overlap, at + 1);
-  }
-  return out;
-}
-
-/**
- * Markdown → chunks that follow the document's structure.
- *
- * Headings define sections (their path rides on every chunk); tables, code
- * fences and figure sentinels are ATOMIC — never split across chunks, even
- * when oversized (the item is more useful intact). Figure-only chunks are
- * dropped: a placeholder has nothing to embed. Prose sections split at
- * paragraph/sentence boundaries with a 15% overlap.
- */
-export function chunksFromMarkdown(markdown, { pageNumber = null, maxChars = MAX_CHUNK_CHARS, overlap = Math.round(MAX_CHUNK_CHARS * 0.15) } = {}) {
-  const clean = cleanForEmbed(markdown);
-  if (!clean) return [];
-  const nodes = [];
-  let path = [];
-  let buf = [];
-  let mode = null;         // "table" | "fence" while inside an atomic block
-  let atomic = [];
-
-  const section = () => path.join(" > ");
-  const flushText = () => {
-    const text = buf.join("\n").trim();
-    buf = [];
-    if (text) nodes.push({ text, sectionPath: section() || null, atomic: false });
-  };
-  const flushAtomic = () => {
-    const text = atomic.join("\n").trim();
-    atomic = [];
-    mode = null;
-    if (text) nodes.push({ text, sectionPath: section() || null, atomic: true });
-  };
-
-  for (const raw of clean.split("\n")) {
-    const line = raw.trimEnd();
-    if (mode === "fence") {
-      atomic.push(line);
-      if (FENCE.test(line)) flushAtomic();
-      continue;
-    }
-    if (mode === "table") {
-      if (TABLE_ROW.test(line)) { atomic.push(line); continue; }
-      flushAtomic();
-    }
-    const heading = HEADING.exec(line);
-    if (heading) {
-      flushText();
-      const level = heading[1].length;
-      path = path.slice(0, Math.max(0, level - 1));
-      path[level - 1] = heading[2].trim();
-      continue;
-    }
-    if (FENCE.test(line)) {
-      flushText();
-      mode = "fence";
-      atomic.push(line);
-      continue;
-    }
-    if (TABLE_ROW.test(line)) {
-      flushText();
-      mode = "table";
-      atomic.push(line);
-      continue;
-    }
-    if (!line.trim()) { flushText(); continue; }
-    buf.push(line);
-  }
-  if (mode === "fence" || mode === "table") flushAtomic();
-  flushText();
-
-  const out = [];
-  let cursor = 0;
-  for (const node of nodes) {
-    if (!node.atomic && FIGURE_ONLY.test(node.text)) continue;
-    const pieces = node.atomic ? [node.text] : leaves(node.text, maxChars, overlap);
-    for (const text of pieces) {
-      if (!text || FIGURE_ONLY.test(text)) continue;
-      const at = clean.indexOf(text.slice(0, 40), cursor);
-      const start = at >= 0 ? at : (cursor < clean.length ? cursor : null);
-      const end = start != null ? Math.min(clean.length, start + text.length) : null;
-      if (start != null) cursor = end;
-      out.push({
-        pageNumber, text, sectionPath: node.sectionPath,
-        charStart: start, charEnd: end,
-        oversized: node.atomic && text.length > maxChars,
-      });
-    }
-  }
-  return out;
-}
-
-/**
- * Extraction pages → index rows. Cleans each page, removes document-wide
- * boilerplate, chunks by structure and drops exact duplicates (H3).
- */
-export function chunksForPages(pages) {
-  const list = (Array.isArray(pages) ? pages : []).filter((p) => p);
-  const boilerplate = boilerplateLines(list);
-  const out = [];
-  const seen = new Set();
-  for (const page of list) {
-    const text = stripBoilerplate(page?.markdown || "", boilerplate);
-    if (!text) continue;
-    for (const c of chunksFromMarkdown(text, { pageNumber: page.pageNumber })) {
-      const hash = chunkHash(c.text);
-      if (seen.has(hash)) continue;
-      seen.add(hash);
-      out.push({ ...c, contentHash: hash });
-    }
-  }
-  return out;
 }
 
 /**
@@ -330,6 +131,21 @@ export async function embedMany(texts, { userId = null } = {}) {
 
 /* ── Write path ────────────────────────────────────────────────────────────── */
 
+
+/** Reuse vectors already stored for identical chunk text (same learner only).
+    Returns aligned vectors + the row indexes that still need embedding. */
+export function planEmbeddingReuse(rows, existing = [], model = null) {
+  const usable = new Map();
+  for (const e of Array.isArray(existing) ? existing : []) {
+    if (!e?.content_hash || !Array.isArray(e.embedding)) continue;
+    if (model && e.embed_model && e.embed_model !== model) continue;   // never mix models
+    if (!usable.has(e.content_hash)) usable.set(e.content_hash, e.embedding);
+  }
+  const reused = rows.map((r) => (r?.content_hash ? usable.get(r.content_hash) || null : null));
+  const missing = reused.map((v, i) => (v ? null : i)).filter((i) => i !== null);
+  return { reused, missing };
+}
+
 /**
  * Replace a record's chunks of one kind with fresh ones. Delete-then-insert
  * keeps re-indexing idempotent (an extraction batch that re-runs a page must
@@ -363,8 +179,27 @@ export async function replaceRecordChunks({ userId, recordId, contentKey = null,
   // Embed BEFORE deleting: a failed embed must leave the old chunks in place.
   // bill:false — platform work the owner didn't ask for (the backfill): the
   // embedding is unmetered instead of charged to their wallet.
-  const embeddings = clean.length ? await embed(clean.map((r) => r.text), { userId: bill ? userId : null }) : [];
   const db = deps.db || await dbLazy();
+  const embedModel = embeddingsProvider() === "runpod" ? selfHostedModel() : "text-embedding-3-small";
+  // H3: identical text already embedded for this learner (a re-uploaded
+  // handout, a shared page) reuses its vector — no second embedding call.
+  let existing = [];
+  const hashes = [...new Set(clean.map((r) => r.content_hash).filter(Boolean))];
+  if (hashes.length) {
+    try {
+      const { data } = await db.schema("edu").from("record_chunks")
+        .select("content_hash, embedding, embed_model")
+        .eq("user_id", userId).in("content_hash", hashes).not("embedding", "is", null)
+        .limit(500);
+      existing = data || [];
+    } catch { existing = []; }   // reuse is an optimisation, never a failure
+  }
+  const { reused, missing } = planEmbeddingReuse(clean, existing, embedModel);
+  const fresh = missing.length
+    ? await embed(missing.map((i) => clean[i].text), { userId: bill ? userId : null })
+    : [];
+  const embeddings = reused.slice();
+  missing.forEach((rowIndex, i) => { embeddings[rowIndex] = fresh[i] ?? null; });
   let del = db.schema("edu").from("record_chunks").delete()
     .eq("record_id", recordId).eq("kind", kind);
   if (scopedPages) del = del.in("page_number", scopedPages);
@@ -390,7 +225,7 @@ export async function replaceRecordChunks({ userId, recordId, contentKey = null,
     doc_at: docAt,
     extract_version: extractVersion,
     embed_model: embeddings[i]
-      ? (embeddingsProvider() === "runpod" ? selfHostedModel() : "text-embedding-3-small")
+      ? embedModel
       : null,
     embedding: embeddings[i],
     embedded_at: embeddings[i] ? now : null,

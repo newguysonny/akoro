@@ -317,6 +317,13 @@ then Discover changes only add a query path.
   fallback before the migration). Ask answers now show a "some points aren't cited" note
   when `coverage` says so. Tests: `ocr-tables.test.mjs`, `platform-hybrid.contract.test.mjs`,
   `reindex-chunks.contract.test.mjs`.
+- **H3 complete** — `planEmbeddingReuse` (in `searchLib`, pure) reuses a vector already
+  stored for identical chunk text under the same learner, never mixing embedding models;
+  only genuinely new text is embedded. Chunking/cleaning helpers moved to
+  `modules/records/chunking.js` to keep `searchLib.js` under the size guardrail.
+- **Reindex sweep (opt-in)** — `RECORDS_REINDEX_SWEEP=on` runs a bounded reindex batch at
+  boot and every 6 hours through `startWorkers`; off by default because re-embedding is a
+  platform cost. The admin job remains the explicit path.
 - **H4/H5 baseline** — `citationCoverage` (pure, in `askLib`) is computed on every Ask
   answer and returned as `coverage`; retrieval events are written from `searchRecordChunks`
   and generation events from `service-ask`, into `edu.retrieval_events`

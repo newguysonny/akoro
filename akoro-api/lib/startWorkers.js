@@ -171,6 +171,14 @@ export async function startWorkers() {
       .catch((e) => console.error("[embeddings] sweeper failed to start:", e.message));
   }
 
+  // Opt-in: bring chunks written by an older chunker onto the current one.
+  // Bounded batches; off unless RECORDS_REINDEX_SWEEP=on.
+  if (!skipJob("record reindex sweep")) {
+    import("../modules/records/index.js")
+      .then((m) => m.startChunkReindexSweep())
+      .catch((e) => console.error("[reindex] sweep failed to start:", e.message));
+  }
+
   // Library text backfill — files uploaded before upload-time extraction get
   // their free, server-readable text (PDF text layers, text files, Word /
   // PowerPoint) and pastes their search index. One pass per boot, a few

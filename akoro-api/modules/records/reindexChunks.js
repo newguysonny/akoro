@@ -148,3 +148,31 @@ export async function getChunkReindex(jobId) {
   if (job.status !== "running" && age > JOB_TTL_MS) return null;
   return job;
 }
+
+/**
+ * Opt-in background sweep (RECORDS_REINDEX_SWEEP=on): a small bounded batch at
+ * boot + every 6 hours. Off by default — re-embedding is a platform cost that
+ * an operator should choose. The job row records each pass for the console.
+ */
+let sweepTimer = null;
+export function startChunkReindexSweep() {
+  if (sweepTimer) return sweepTimer;
+  if (process.env.RECORDS_REINDEX_SWEEP !== "on") {
+    console.log("[reindex] sweep off (set RECORDS_REINDEX_SWEEP=on to enable)");
+    return null;
+  }
+  const run = async () => {
+    try {
+      const gap = await scanStaleChunks();
+      if (!gap.records) return;
+      const { jobId, total } = await startChunkReindex({ limit: 5 });
+      console.log(`[reindex] sweep started ${jobId}: ${total} record(s)`);
+    } catch (err) {
+      console.warn("[reindex] sweep failed:", String(err?.message || err).slice(0, 160));
+    }
+  };
+  setTimeout(() => { void run(); }, 10 * 60_000).unref?.();
+  sweepTimer = setInterval(() => { void run(); }, 6 * 60 * 60_000);
+  sweepTimer.unref?.();
+  return sweepTimer;
+}
