@@ -217,7 +217,8 @@ export async function runPodcastJob({ artifactId, target, scope, pageNumber, pag
     // A "this page" request that lands on a cover or a caption has too little
     // to talk about; widen to the document rather than fail the episode.
     const pageChars = passages.reduce((n, p) => n + String(p?.text || "").length, 0);
-    if (scope === "page" && pageChars < PODCAST_LIMITS.MIN_PAGE_CHARS) {
+    const coverPage = Number(pageNumber) <= 1 && target?.kind === "paste";   // a paste's page 1 is the reader's cover
+    if (scope === "page" && (pageChars < PODCAST_LIMITS.MIN_PAGE_CHARS || coverPage)) {
       const wider = await deps.gather({ target, scope: "document", pageNumber, pageText: "", focus }).catch(() => []);
       if (wider.length) passages = wider;
     }

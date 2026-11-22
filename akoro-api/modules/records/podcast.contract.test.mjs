@@ -217,3 +217,18 @@ test("an empty first script is retried once before failing", async () => {
   assert.equal(d.log.at(-1)[2], "ready");
   assert.equal(d.log.at(-1)[3].turns.length, 2);
 });
+
+test("a pasted document's cover page (page 1) widens even if the cover text is long", async () => {
+  const calls = [];
+  const d = deps({
+    gather: async ({ scope }) => {
+      calls.push(scope);
+      return scope === "page"
+        ? [{ n: 1, pageNumber: 1, text: "Cell biology · Prepared for this Akoro learning session ".repeat(20), where: "cover" }]
+        : [{ n: 1, pageNumber: 2, text: "The thylakoid membrane carries the light reactions and the stroma fixes carbon.", where: "page 2" }];
+    },
+  });
+  await runPodcastJob({ ...job, target: { name: "Notes", kind: "paste" }, pageNumber: 1 }, d);
+  assert.deepEqual(calls, ["page", "document"]);
+  assert.equal(d.log.at(-1)[2], "ready");
+});
