@@ -111,6 +111,89 @@ records. Duplicates waste embedding spend and produce redundant search hits.
 
 ---
 
+### H4 — Citation integrity: every claim carries its exact source
+
+**Why:** Ask/tools already ask the model to cite `[n]` and map markers to page, bbox and a
+quote (`extractCitations` in `modules/records/askLib.js`), but nothing checks that citations
+are complete or that unsupported claims are surfaced. Given the product promise ("cite the
+exact source"), this is high value and cheap because the machinery exists.
+
+**Design**
+- Deterministic post-check on every generated answer:
+  - split the answer into sentences/claims, ignoring headings and list labels;
+  - flag claims with no valid `[n]` and any marker that maps to no passage;
+  - require at least one citation per paragraph when passages were supplied.
+- Keep the existing jump targets: page number, bbox/token box or `start_ms/end_ms`, and the
+  quoted passage — the exact source, not just the document.
+- When coverage is incomplete, mark the answer as partially grounded in the UI (a subtle
+  badge, "some points aren't cited") rather than presenting it as fully sourced.
+- Log coverage and unknown-marker counts per surface (see H5); never rewrite the answer
+  silently.
+
+**Touched**
+- `modules/records/askLib.js` (pure `citationCoverage(answer, citations)`), answer route,
+  reader citation UI, study-tool output path.
+- Tests: claim splitter, marker mapping, unknown markers, no-passage case.
+
+**Acceptance**
+- Coverage is recorded for every generated answer.
+- Uncited claims are visibly marked; unknown citation markers are never shown.
+
+### H5 — Measure retrieval and generation separately
+
+**Why:** tuning is guesswork without numbers. Retrieval and generation fail differently: no
+useful passage versus a weak answer over good passages. There is an embedding eval set but no
+query telemetry, and zero-result searches are invisible.
+
+**Design**
+- One bounded event per search/ask (tenant-scoped, retention-limited):
+  - retrieval: surface (library, discover, ask, tool, chat), normalised query, filters,
+    latency, candidate counts, vector-vs-lexical contribution, top fused score,
+    zero/weak-result flag;
+  - generation: passages supplied, citations emitted, coverage (H4), unknown markers, model,
+    prompt version (M2), answer length, latency.
+- Separate views: retrieval health (zero-result rate, citation jumps, "open source" clicks,
+  follow-up rephrase rate) and generation health (citation coverage, unresolved claims,
+  sampled answer↔quote agreement).
+- Every query that returned nothing useful is a row with `zero_result = true` and the
+  normalised query, so gaps (synonyms, metadata, missing catalogue content) are listable.
+- Surface the same data in an admin view; reuse the admin jobs/backfill pattern for reports.
+
+**Touched**
+- New event-table migration; `searchLib.js`, ask/tool routes, Discover search, admin
+  maintenance.
+
+**Acceptance**
+- Zero-result queries can be listed and grouped for any date range.
+- Retrieval and generation are reported independently.
+
+### H6 — Tables, figures and scans as first-class content
+
+**Why:** real inputs are scanned textbooks and notes, not clean prose. The RunPod lane emits
+figure sentinels and the reader expects layout blocks, but the OCR lane joins block text
+verbatim: tables arrive as raw/HTML fragments (seen in Ask quotes) and figures can disappear.
+Character chunking then splits tables across vectors.
+
+**Design**
+- Normalise tables before indexing and grounding: convert OCR HTML/row fragments to GFM
+  tables with a header row; when conversion is unsafe, keep the table as one verbatim block
+  prefixed `[table]`.
+- Preserve figure placeholders in the OCR lane (RunPod already emits `*[figure]*`); never
+  embed a placeholder-only chunk, and exclude placeholders from claim grounding.
+- Keep tables, formulas and figure sentinels unsplit in the H1 chunker; oversized tables ship
+  as a single chunk with a warning.
+- Scans need no OCR-lane change; the point is that everything downstream treats layout
+  content as structured, not prose.
+
+**Touched**
+- `modules/records/extractOcr.js`, `modules/records/extractLib.js` (markdown builder),
+  `searchLib.js` (unsplittable blocks), reader table rendering check.
+- Fixtures: scanned table page, figure-only page, mixed text/table/photo page.
+
+**Acceptance**
+- A scanned table retrieves and cites as a table, not as broken HTML rows.
+- Figure-only pages create no bogus embeddings or unsupported claims.
+
 ## Medium value
 
 ### M1 — Provenance metadata on every chunk
@@ -140,7 +223,28 @@ old it is, which extractor produced it. Enables recency boosts and safe reindexi
 - Every newly written chunk has provenance; queries can filter/boost by `doc_at`.
 - A version bump can be rolled out and completed without downtime.
 
-### M2 — Hybrid vector arm for Discover/platform search
+### M2 — Version embeddings, chunking and prompts together
+
+**Why:** vectors and extractions are attributable only loosely today (`content_parses.model`,
+an in-process embedding cache key). A chunker or prompt change cannot be rolled out or rolled
+back safely. This belongs with M1's provenance work.
+
+**Design**
+- Stamp every write with the bundle it came from: `embed_provider`, `embed_model`,
+  `chunker_version`, `extract_version`, `prompt_version`, and `index_version` (one integer
+  that bumps when any of them changes).
+- Bump the bundle when changing H1/H2/H6, the Ask/tool prompts or the embedding model; the
+  sweeper re-embeds stale rows in bounded batches using M1's reindex mechanism.
+- Keep the embedding cache key `provider:model` (already correct); chunks additionally record
+  which model produced their vector so a mixed-index state is detectable.
+- Reindex jobs are resumable, dry-runnable and report remaining rows (same admin pattern as
+  previews/extraction).
+
+**Acceptance**
+- Any answer can be traced to its chunker/extractor/prompt/embedding bundle.
+- Changing a prompt or the chunker has an explicit, measurable rollout path.
+
+### M3 — Hybrid vector arm for Discover/platform search
 
 **Why:** the Library is already hybrid; Discover (`searchPlatformChunks`) is lexical only,
 so cross-learner discovery misses semantically relevant notes written with different words.
@@ -173,10 +277,12 @@ material.
 
 ## Sequencing
 
-1. **H1 + H2 + H3** in one chunker change (same reindex), behind an `index_version` bump (M1
-   schema can land in the same migration).
-2. **M1 rollout** — provenance fill + sweeper reindex.
-3. **M2** — platform hybrid, after evaluation shows the Library improvements held.
+1. **H4 + H5 first (cheap, read-only)** — citation coverage and query telemetry set the
+   baseline; no reindex.
+2. **H1 + H2 + H3 + H6** in one chunker/extraction change (same reindex), with the M1/M2
+   schema (section path, provenance, version bundle) in the same migration.
+3. **M1 + M2 rollout** — provenance/version fill + batched sweeper reindex.
+4. **M3** — platform hybrid, after evaluation shows the Library improvements held.
 
 This order avoids two re-embeds: chunking, cleaning, dedupe and provenance land together,
 then Discover changes only add a query path.
@@ -191,9 +297,12 @@ grounding). Measure before/after on the same corpus:
 - duplicate-hit rate per query;
 - embedding spend per document (dedupe + reuse effect);
 - p95 search latency;
-- Discover relevance on paraphrased queries (M2 only).
+- citation coverage and unknown-marker rate (H4);
+- zero-result and weak-result query rates, grouped by surface (H5);
+- table/figure fidelity on scanned fixtures (H6);
+- Discover relevance on paraphrased queries (M3 only).
 
-Gate: ship H-series only if recall/MRR improve without a latency regression; ship M2 only if
+Gate: ship H-series only if recall/MRR improve without a latency regression; ship M3 only if
 access checks and latency hold.
 
 ## Risks
@@ -208,6 +317,18 @@ access checks and latency hold.
 - **Discover vectors** — privacy is enforced in SQL; every hit is still re-verified against
   its record before returning.
 
+## Caching (already partly done)
+
+- **Embeddings are cached today**: `lib/embeddingCache.js` keys `provider:model + content
+  hash` in Postgres, and `lib/searchEmbedding.js` shares an identical question's embedding
+  for 60 s. H3 extends this by reusing vectors for identical chunk hashes; no new cache is
+  needed for text.
+- **Frequent-answer caching is deliberately excluded**: answers depend on the passage set,
+  prompt version, model and learner context; a cached answer must preserve citations and be
+  invalidated on every reindex or prompt bump. The gain does not justify the staleness and
+  personalisation risk. Cache retrieval candidates instead (H5 data) if latency ever becomes
+  the bottleneck.
+
 ## Out of scope (deliberately)
 
 - Near-duplicate (Jaccard/shingle) suppression.
@@ -215,3 +336,4 @@ access checks and latency hold.
 - Permissions snapshots stored per chunk.
 - Reranker models and query rewriting.
 - PHARM.D catalogue indexing (its Ask path is separate).
+- Frequent-answer / semantic answer caching (see above).
