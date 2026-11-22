@@ -261,11 +261,16 @@ export async function searchRecordChunks({ userId, q, limit = 12, recordId = nul
     ? await (await import("../../lib/searchEmbedding.js")).embedForSearch(query, { userId, feature: "record_search" })
     : null;
 
+  const wanted = Math.min(Math.max(Number(limit) || 12, 1), 96);   // Library search pages by growing the limit in 12s
+  // The RPC is tuned for recall; a second-stage rerank fixes the ORDER (the
+  // paragraph that answers beats a long page that only mentions the words).
+  // Fetch a wider candidate set than the page needs, then keep `wanted`.
+  const rerankOn = process.env.RECORDS_RERANK !== "off";
   const db = await dbLazy();
   const { data, error } = await db.rpc("match_record_chunks", {
     p_user_id: userId,
     p_query_embedding: embedding,
-    p_match_count: Math.min(Math.max(Number(limit) || 12, 1), 96),   // raised 25 -> 96 (2026-11-17): Library search pages by growing the limit in 12s
+    p_match_count: rerankOn ? Math.min(Math.max(wanted * 3, wanted), 96) : wanted,
     p_query_text: query,
     p_record_id: recordId,
   });
@@ -276,7 +281,11 @@ export async function searchRecordChunks({ userId, q, limit = 12, recordId = nul
     ? await db.schema("edu").from("records").select("id").in("id", ids).not("deleted_at", "is", null)
     : { data: [] };
   const hidden = new Set((gone || []).map((g) => g.id));
-  return (data || []).filter((r) => !hidden.has(r.record_id)).map((r) => ({
+  const live = (data || []).filter((r) => !hidden.has(r.record_id));
+  const ordered = rerankOn
+    ? rerankChunks({ query, chunks: live.map((r) => ({ ...r, text: r.chunk_text })), limit: wanted })
+    : live.slice(0, wanted);
+  return ordered.map((r) => ({
     recordId: r.record_id,
     name: r.record_name,
     kind: r.record_kind,
