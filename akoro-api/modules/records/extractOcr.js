@@ -125,7 +125,7 @@ export function startRecordScanExtraction({ userId = null, contentKey, name = ""
     if (!claimed) return;
     try {
       const { body } = await readFileObject(contentKey);
-      const out = await runDeepseekOcr({ buffer: body, filename: name || "document.pdf" });
+      const out = await runOcrWithFallback({ buffer: body, filename: name || "document.pdf" });
       await saveExtractionPages({ contentKey, pages: out.pages, model: out.model });
       await indexByContentKey({ contentKey, pages: out.pages, bill: false });
       await finishContentJob(contentKey, "parse", "done", { mode: "ocr", model: out.model, pages: out.pages.length });
@@ -134,4 +134,73 @@ export function startRecordScanExtraction({ userId = null, contentKey, name = ""
     }
   })();
   return true;
+}
+
+/** How much usable text an OCR answer actually carries. Exported for tests. */
+export function ocrQuality(pages) {
+  const list = Array.isArray(pages) ? pages : [];
+  const chars = list.reduce((n, p) => n + String(p?.markdown || "").trim().length, 0);
+  const unreadable = list.reduce((n, p) => n + (String(p?.markdown || "").match(/\[unreadable\]/gi) || []).length, 0);
+  const perPage = list.length ? chars / list.length : 0;
+  const unreadableShare = chars ? (unreadable * 12) / chars : 0;
+  return {
+    pages: list.length,
+    chars,
+    perPage: Math.round(perPage),
+    unreadable,
+    unreadableShare: Number(unreadableShare.toFixed(3)),
+    weak: list.length === 0 || perPage < 12 || unreadableShare > 0.08,
+  };
+}
+
+const isPdfBuffer = (buffer, name = "") =>
+  /pdf/i.test(String(name || "")) || buffer?.subarray?.(0, 4)?.toString?.() === "%PDF";
+
+/**
+ * OCR, with a quality gate and a model-lane fallback.
+ *
+ * The provider is a black box: an empty answer, a few characters, or a page
+ * of [unreadable] tokens happens. When that happens AND a vision model is
+ * configured, render the PDF and parse the pages with the model lane; keep the
+ * OCR answer when the fallback is unavailable or also fails (some text beats
+ * none). Images are not rendered here — their OCR answer is returned as-is.
+ * Set RECORDS_OCR_FALLBACK=off to make the lane strictly OCR.
+ */
+export async function runOcrWithFallback({ buffer, filename = "document.pdf", deps = {} } = {}) {
+  const ocr = deps.ocr || runDeepseekOcr;
+  let first = null;
+  let firstErr = null;
+  try { first = await ocr({ buffer, filename }); } catch (err) { firstErr = err; }
+
+  const quality = first ? ocrQuality(first.pages) : null;
+  const enabled = process.env.RECORDS_OCR_FALLBACK !== "off";
+  if (first && (!quality.weak || !enabled)) return { ...first, lane: "ocr", quality };
+  if (!enabled || !isPdfBuffer(buffer, filename)) {
+    if (first) return { ...first, lane: "ocr", quality };
+    throw firstErr || new Error("OCR returned no usable text.");
+  }
+
+  try {
+    const render = deps.render || (await import("./preview.js")).renderPdfPages;
+    const parseModel = deps.parseModel || (await import("./extractModel.js")).parsePagesWithModel;
+    const { extractModelId } = await import("./extractEngine.js");
+    const rendered = await render(buffer, { from: 1, to: 40, width: 1100 });
+    if (!rendered.length) throw new Error("No pages could be rendered for the fallback.");
+    const model = extractModelId();
+    const parsed = await parseModel({
+      pages: rendered.map((p) => ({ pageNumber: p.pageNumber, b64: p.jpeg.toString("base64") })),
+      model,
+    });
+    const pages = parsed.filter((p) => !p.error).map((p) => ({
+      pageNumber: p.pageNumber, blocks: [], markdown: p.markdown || "", model: p.model || model,
+    }));
+    if (!pages.length) throw new Error("The fallback model returned no text.");
+    return {
+      model, pageCount: pages.length, pages, lane: "model-fallback", quality,
+      ocrError: firstErr ? String(firstErr.message || firstErr).slice(0, 200) : null,
+    };
+  } catch (err) {
+    if (first) return { ...first, lane: "ocr", quality, fallbackError: String(err?.message || err).slice(0, 200) };
+    throw firstErr || err;
+  }
 }

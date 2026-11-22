@@ -25,7 +25,7 @@ import {
 import { indexByContentKey } from "./searchLib.js";
 import { getExtractEngine, extractModelId } from "./extractEngine.js";
 import { parsePagesWithModel } from "./extractModel.js";
-import { runDeepseekOcr, ocrConfigured } from "./extractOcr.js";
+import { runOcrWithFallback, ocrConfigured } from "./extractOcr.js";
 import { resolveContentAccess } from "./access.js";
 import { storedTextKindOf, extractStoredText } from "./storedText.js";
 import { pageSizeOf } from "./rules.js";
@@ -104,7 +104,7 @@ async function submitExtractInner(req, res) {
     void (async () => {
       try {
         const body = catalogue ? catalogue.buffer : (await readFileObject(rec.file_key)).body;
-        const out = await runDeepseekOcr({ buffer: body, filename: catalogue?.name || rec.name || "document.pdf" });
+        const out = await runOcrWithFallback({ buffer: body, filename: catalogue?.name || rec.name || "document.pdf" });
         await saveExtractionPages({ contentKey, pages: out.pages, model: out.model });
         void indexByContentKey({ contentKey, pages: out.pages });
         await finishContentJob(contentKey, "parse", "done", { mode: "ocr", model: out.model, pages: out.pages.length });

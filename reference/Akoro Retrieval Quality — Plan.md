@@ -287,6 +287,20 @@ material.
 This order avoids two re-embeds: chunking, cleaning, dedupe and provenance land together,
 then Discover changes only add a query path.
 
+## Implementation status (levers from this plan)
+
+- **Second-stage reranking** — `modules/records/rerank.js` (pure, deterministic) is wired into
+  `searchRecordChunks`: the RPC now fetches up to 3× the page size and reranks before slicing.
+  Signals: term coverage, exact phrase, proximity, heading, table intent, fused prior, length.
+  Disable with `RECORDS_RERANK=off`. Tests: `modules/records/rerank.test.mjs`.
+- **OCR quality gate + model fallback** — `ocrQuality` and `runOcrWithFallback` in
+  `modules/records/extractOcr.js`: empty/sparse/[unreadable]-heavy OCR answers fall back to the
+  vision model over rendered PDF pages (images stay OCR-only); if the fallback also fails the
+  OCR answer is kept. Used by the extract lane, upload auto-extraction and the admin backfill.
+  Disable with `RECORDS_OCR_FALLBACK=off`. Tests: `modules/records/ocr-fallback.test.mjs`.
+- These are the pre-H5 levers: they can ship now, but H5 telemetry is what proves whether they
+  moved recall/citation quality before investing in H1–H3 reindexing.
+
 ## Evaluation
 
 Use `lib/embeddingEvalSet.js` plus real learner queries (Library search, Ask citations, tool

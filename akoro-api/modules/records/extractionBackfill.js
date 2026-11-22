@@ -24,7 +24,7 @@ import {
   parsePageOnRunpod, saveExtractionPages, claimContentJob, finishContentJob,
   MAX_RECORD_PAGES,
 } from "./extractLib.js";
-import { runDeepseekOcr, ocrConfigured } from "./extractOcr.js";
+import { runOcrWithFallback, ocrConfigured } from "./extractOcr.js";
 import { storedTextKindOf, extractStoredText } from "./storedText.js";
 import { indexByContentKey } from "./searchLib.js";
 import { readFileObject, createPresignedDownload } from "./lib/storage.js";
@@ -136,7 +136,7 @@ async function extractOne(row, { engine, maxPages }) {
   if (engine === "ocr") {
     if (!ocrConfigured()) throw new Error("DeepSeek OCR is not configured (DEEPSEEK_API_KEY).");
     const { body } = await readFileObject(contentKey);
-    const out = await runDeepseekOcr({ buffer: body, filename: row.name || "document.pdf" });
+    const out = await runOcrWithFallback({ buffer: body, filename: row.name || "document.pdf" });
     await saveExtractionPages({ contentKey, pages: out.pages, model: out.model });
     await indexByContentKey({ contentKey, pages: out.pages, bill: false });
     return { status: "done", lane: "ocr", pages: out.pages.length };
