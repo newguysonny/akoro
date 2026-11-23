@@ -122,3 +122,9 @@ test("summary point counts in a sentence", () => {
   assert.equal(p.count, 6);
   assert.deepEqual(p.pageNumbers, [2,3,4]);
 });
+
+test("context role is understood from the goal words", () => {
+  assert.equal(parseToolPrompt("find all related questions from the past questions").contextMode, "past_questions");
+  assert.equal(parseToolPrompt("use the syllabus to map the concepts needed").contextMode, "syllabus");
+  assert.equal(parseToolPrompt("explain it more simply").contextMode, null);
+});

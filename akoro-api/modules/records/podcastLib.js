@@ -20,6 +20,7 @@
  */
 import { citeOf, TOOL_LIMITS } from "./toolsLib.js";
 import { passageWhere } from "./askLib.js";
+import { selectContextChunks, contextPromptBlock } from "./toolContext.js";
 
 export const PODCAST_LENGTHS = Object.freeze({
   short:  { id: "short",  minutes: "2–3", chars: 2400, maxTokens: 1500 },
@@ -211,7 +212,7 @@ export function podcastForClient(content, now = Date.now()) {
  * item as { status: "failed", error }. deps: { gather, chat, speak, store,
  * update, charge } — all injected by the route (and the test).
  */
-export async function runPodcastJob({ artifactId, target, scope, pageNumber, pageNumbers = [], pageText, pageTexts = [], focus, length, startedAt, contextText = "", intentNotes = [] }, deps) {
+export async function runPodcastJob({ artifactId, target, scope, pageNumber, pageNumbers = [], pageText, pageTexts = [], focus, length, startedAt, contextText = "", contextItems = [], intentNotes = [] }, deps) {
   const base = { status: "making", length: length.id, startedAt };
   const fail = (error) => deps.update(artifactId, { podcast: { ...base, status: "failed", error } }).catch(() => {});
   try {
@@ -229,8 +230,17 @@ export async function runPodcastJob({ artifactId, target, scope, pageNumber, pag
         ? "This page has no readable text yet — extract the document's text first."
         : "This document isn't readable yet — extract its text (or transcribe the recording) first.");
     }
+    // Reference material is filtered to what touches these passages; a past
+    // paper or syllabus is not read whole.
+    let effectiveContext = contextText;
+    let notes = intentNotes;
+    if (Array.isArray(contextItems) && contextItems.length) {
+      const picked = selectContextChunks({ items: contextItems, passages, prompt: focus, mode: null });
+      effectiveContext = picked.related ? contextPromptBlock(picked.chunks, { mode: picked.mode }) : "";
+      if (!picked.related) notes = [...(notes || []), "No attached reference material matched these passages — ignore the attachments and do not claim to have used them."];
+    }
     let json = {};
-    try { json = parsePodcastScriptText(await deps.chat(buildPodcastMessages({ docName: target.name, passages, length, focus, contextText, intentNotes }), length)); }
+    try { json = parsePodcastScriptText(await deps.chat(buildPodcastMessages({ docName: target.name, passages, length, focus, contextText: effectiveContext, intentNotes: notes }), length)); }
     catch (e) {
       if (e?.name === "InsufficientCoins") return fail("You're out of AI credit — top up to make episodes.");
       throw e;
@@ -239,7 +249,7 @@ export async function runPodcastJob({ artifactId, target, scope, pageNumber, pag
     if (!script.turns.length) {
       // One retry: an empty/truncated draft is usually the provider, not the
       // material (the whole-document run of the same page succeeded).
-      try { json = parsePodcastScriptText(await deps.chat(buildPodcastMessages({ docName: target.name, passages, length, focus, contextText, intentNotes }), length)); }
+      try { json = parsePodcastScriptText(await deps.chat(buildPodcastMessages({ docName: target.name, passages, length, focus, contextText: effectiveContext, intentNotes: notes }), length)); }
       catch (e) {
         if (e?.name === "InsufficientCoins") return fail("You're out of AI credit — top up to make episodes.");
         throw e;

@@ -173,6 +173,7 @@ export function chunkPassages(chunks) {
 /* ── The model call: strict JSON per tool ─────────────────────────────── */
 
 const SOURCE = { type: "integer", description: "The number of the passage this comes from." };
+const CONTEXT_SOURCE = { type: "string", description: "Exact [Context n: name] label an item was shaped by, or empty. Only for attached past questions/syllabus." };
 
 export function toolSchema(tool) {
   if (tool === "summary") {
@@ -183,16 +184,16 @@ export function toolSchema(tool) {
   if (tool === "quiz") {
     return { type: "object", additionalProperties: false, required: ["questions"], properties: {
       questions: { type: "array", items: { type: "object", additionalProperties: false,
-        required: ["prompt", "options", "correctIndex", "explanation", "source"], properties: {
+        required: ["prompt", "options", "correctIndex", "explanation", "source", "contextSource"], properties: {
           prompt: { type: "string" },
           options: { type: "array", items: { type: "string" } },
           correctIndex: { type: "integer" },
           explanation: { type: "string" },
-          source: SOURCE } } } } };
+          source: SOURCE, contextSource: CONTEXT_SOURCE } } } } };
   }
   return { type: "object", additionalProperties: false, required: ["cards"], properties: {
-    cards: { type: "array", items: { type: "object", additionalProperties: false, required: ["front", "back", "source"], properties: {
-      front: { type: "string" }, back: { type: "string" }, source: SOURCE } } } } };
+    cards: { type: "array", items: { type: "object", additionalProperties: false, required: ["front", "back", "source", "contextSource"], properties: {
+      front: { type: "string" }, back: { type: "string" }, source: SOURCE, contextSource: CONTEXT_SOURCE } } } } };
 }
 
 export function buildToolMessages({ tool, docName = "this document", passages = [], values = {}, contextText = "", intentNotes = [] }) {
@@ -261,7 +262,16 @@ export function isMetaQuestion(text) {
  * The model's JSON → the reader's result-tab content. Items naming a passage
  * that doesn't exist, empty items and malformed questions are dropped.
  */
-export function shapeToolResult(tool, json, passages, values = {}) {
+export function shapeToolResult(tool, json, passages, values = {}, contextSources = []) {
+  const norm = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  const allowed = new Map();
+  for (const src of contextSources) {
+    const name = String(src?.name || src || "").slice(0, 120);
+    if (!name) continue;
+    allowed.set(norm(name), name);
+    if (src?.index) allowed.set(norm(`context ${src.index}`), name);
+  }
+  const contextName = (raw) => allowed.get(norm(raw)) || null;
   const byN = new Map(passages.map((p) => [p.n, p]));
   const max = toolCount(tool, values);
   const src = (n) => byN.get(Number(n));
@@ -291,6 +301,7 @@ export function shapeToolResult(tool, json, passages, values = {}) {
         prompt: clip(q.prompt, 400),
         options: options.map((text, i) => ({ key: "ABCD"[i], text, correct: i === correctIndex })),
         explanation: clip(q.explanation || "", 400),
+        ...(contextName(q.contextSource) ? { contextName: contextName(q.contextSource) } : {}),
         cite: src(q.source) ? citeOf(src(q.source)) : null,
       });
       if (questions.length >= max) break;
@@ -304,7 +315,9 @@ export function shapeToolResult(tool, json, passages, values = {}) {
     if (isMetaQuestion(c.front) || String(c.front).includes("|")) continue;
     if (cPassage && isVerbatimCopy(c.front, cPassage.text)) continue;
     if (cPassage && normForCopy(c.back).length >= 80 && isVerbatimCopy(c.back, cPassage.text)) continue;
-    cards.push({ front: clip(c.front, 160), back: clip(c.back, 500), cite: cPassage ? citeOf(cPassage) : null });
+    cards.push({ front: clip(c.front, 160), back: clip(c.back, 500),
+      ...(contextName(c.contextSource) ? { contextName: contextName(c.contextSource) } : {}),
+      cite: cPassage ? citeOf(cPassage) : null });
     if (cards.length >= max) break;
   }
   return { cardSet: cards };

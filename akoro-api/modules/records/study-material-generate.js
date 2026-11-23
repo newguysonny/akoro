@@ -12,6 +12,7 @@ import db from "../../db.js";
 import { openai } from "../../lib/aiModel.js";
 import { TOOL_IDS, TOOL_LIMITS, toolSchema, toolCount, buildToolMessages, shapeToolResult, gatherToolPassages, citeOf } from "./toolsLib.js";
 import { applyPromptIntent } from "./toolPrompt.js";
+import { selectContextChunks, contextPromptBlock } from "./toolContext.js";
 import { searchRecordChunks } from "./searchLib.js";
 import { getExtraction } from "./extractLib.js";
 import { passagesFromExtraction } from "./studyMaterialCore.js";
@@ -43,7 +44,7 @@ async function extractedPassages({ target, scope, pageNumber }) {
   } catch { return []; }
 }
 
-export async function generateToolResult({ userId = null, target, tool, scope = "document", pageNumber = null, pageNumbers = [], pageText = "", pageTexts = [], values = {}, feature = null, contextText = "", contextAttached = false }) {
+export async function generateToolResult({ userId = null, target, tool, scope = "document", pageNumber = null, pageNumbers = [], pageText = "", pageTexts = [], values = {}, feature = null, contextText = "", contextAttached = false, contextItems = [] }) {
   if (!TOOL_IDS.includes(tool)) return { status: 400, message: `tool must be one of: ${TOOL_IDS.join(", ")}.` };
   // The learner's Prompt can request pages, a count, difficulty or an exam
   // board; apply it before anything reads scope/values.
@@ -60,8 +61,19 @@ export async function generateToolResult({ userId = null, target, tool, scope = 
       ? "Those pages have no readable text yet — extract the document's text first."
       : "This document isn't readable yet — extract its text (or transcribe the recording) first." };
   }
+  // Only the attached pieces that actually touch these passages/concepts are
+  // sent to the model; the rest of a past paper or syllabus is noise.
+  let selectedContext = [];
+  let effectiveContextText = contextText;
+  if (Array.isArray(contextItems) && contextItems.length) {
+    const picked = selectContextChunks({ items: contextItems, passages, prompt: values.focus, mode: applied.intent.contextMode });
+    selectedContext = picked.chunks;
+    effectiveContextText = picked.related ? contextPromptBlock(picked.chunks, { mode: picked.mode }) : "";
+    if (!picked.related) applied.notes.push("No attached reference material matched these passages — ignore the attachments and do not claim to have used them.");
+  }
+  const contextNames = selectedContext.map((c) => ({ name: c.name, index: c.index }));
   try {
-    const messages = buildToolMessages({ tool, docName: target.name, passages, values: effValues, contextText, intentNotes: applied.notes });
+    const messages = buildToolMessages({ tool, docName: target.name, passages, values: effValues, contextText: effectiveContextText, intentNotes: applied.notes });
     const base = {
       __role: "background", temperature: 0.3, max_tokens: tool === "quiz" ? 2400 : 1600,
       ...(userId ? { __userId: userId } : {}), ...(feature ? { __feature: feature } : {}),
@@ -107,7 +119,7 @@ export async function generateToolResult({ userId = null, target, tool, scope = 
       }
       throw firstError || new Error("the model returned no JSON");
     }
-    let result = shapeToolResult(tool, json, passages, effValues);
+    let result = shapeToolResult(tool, json, passages, effValues, contextNames);
     let items = result.summaryPoints || result.quizQuestions || result.cardSet || [];
     // Quality top-up: shapeToolResult's gate drops items that copy the source
     // word-for-word or ask about the document itself. When it fired, ask ONCE
@@ -127,7 +139,7 @@ export async function generateToolResult({ userId = null, target, tool, scope = 
         : `You returned ${items.length} items but the learner asked for exactly ${wanted}. Write ${needed} more item(s) in the same JSON shape, covering material the first batch did not. Do not repeat these kept items: ${keptKeys.map((k) => `"${k.slice(0, 80)}"`).join("; ") || "none"}.`;
       const second = await callModel([...messages, { role: "system", content: note }]).catch(() => ({ json: null }));
       if (second.json) {
-        const extra = shapeToolResult(tool, second.json, passages, values);
+        const extra = shapeToolResult(tool, second.json, passages, effValues, contextNames);
         const extraItems = extra.quizQuestions || extra.cardSet || [];
         const seen = new Set(keptKeys);
         const merged = [...items];
@@ -149,7 +161,7 @@ export async function generateToolResult({ userId = null, target, tool, scope = 
       console.warn("[records-tools] empty result", tool, JSON.stringify(json).slice(0, 600));
       return { status: 422, message: "Couldn't build that from this material — try a different page or focus." };
     }
-    return { result: { ...result, passages: passages.length, appliedIntent: { scope: effScope, pageNumbers: effPages, count: effValues.count || null, difficulty: effValues.difficulty || null, exam: applied.intent.exam } } };
+    return { result: { ...result, passages: passages.length, appliedIntent: { scope: effScope, pageNumbers: effPages, count: effValues.count || null, difficulty: effValues.difficulty || null, exam: applied.intent.exam, contextMode: selectedContext.length ? applied.intent.contextMode || null : null, contextChunks: selectedContext.length } } };
   } catch (err) {
     if (err?.name === "InsufficientCoins") return { status: 402, message: "You're out of AI credit — top up to keep generating." };
     console.warn("[records-tools] failed:", String(err?.message || err).slice(0, 200));
@@ -158,7 +170,7 @@ export async function generateToolResult({ userId = null, target, tool, scope = 
 }
 
 /** Start a two-voice episode: the item exists at once ("making"), the episode follows. */
-export async function startPodcast({ userId, target, scope = "document", pageNumber = null, pageNumbers = [], pageText = "", pageTexts = [], values = {}, contextText = "", contextAttached = false, deps }) {
+export async function startPodcast({ userId, target, scope = "document", pageNumber = null, pageNumbers = [], pageText = "", pageTexts = [], values = {}, contextText = "", contextAttached = false, contextItems = [], deps }) {
   const billTo = getAiBillTo();
   const { ok } = await coinsAvailable({ userId, billTo, min: 1 });
   if (!ok) return { status: 402, message: "You're out of AI credit — top up to make episodes.", code: "INSUFFICIENT_COINS" };
@@ -188,7 +200,7 @@ export async function startPodcast({ userId, target, scope = "document", pageNum
   if (created.error) return { status: 409, message: created.error };
   const artifactId = created.artifact.id;
   let spokeWith = PODCAST_LIMITS.TTS_MODEL;
-  void runPodcastJob({ artifactId, target, scope: effScope, pageNumber, pageNumbers: effPages, pageText, pageTexts, focus, length, startedAt, contextText, intentNotes: applied.notes }, {
+  void runPodcastJob({ artifactId, target, scope: effScope, pageNumber, pageNumbers: effPages, pageText, pageTexts, focus, length, startedAt, contextText, contextItems, intentNotes: applied.notes }, {
     gather: (args) => gatherToolPassages({ ...args, search: searchRecordChunks }),
     chat: async (messages, len) => {
       const base = { __role: "background", temperature: 0.7, max_tokens: len.maxTokens, __userId: userId, __billTo: billTo, __feature: "reader_podcast" };

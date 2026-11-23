@@ -101,6 +101,17 @@ function EmptyResult({ reason }) {
   );
 }
 
+function ContextBadge({ name }) {
+  if (!name) return null;
+  return (
+    <span title={`Shaped by the attached “${name}”`}
+      className="inline-flex items-center rounded px-1.5 py-0.5 ml-1 text-[10px] font-semibold align-middle"
+      style={{ background: "rgba(108,59,255,.10)", color: "var(--ak-accent)" }}>
+      From {name.length > 24 ? `${name.slice(0, 24)}…` : name}
+    </span>
+  );
+}
+
 function ResultView({ tab, onUpdate, onCite, onRetryPodcast = null }) {
   const header = (
     <div className="mb-3.5">
@@ -252,6 +263,7 @@ function ResultView({ tab, onUpdate, onCite, onRetryPodcast = null }) {
                   looking it up before trying. */}
               <div className="mt-2 flex">
                 <Citation cite={q.cite} onCite={onCite}/>
+                <ContextBadge name={q.contextName}/>
               </div>
             </div>
           )}
@@ -296,6 +308,7 @@ function ResultView({ tab, onUpdate, onCite, onRetryPodcast = null }) {
                 {/* Citation on the answer side only (Matt, 2026-11-17). */}
                 <span className="absolute bottom-2.5 left-1/2 -translate-x-1/2 flex" onClick={(e) => e.stopPropagation()}>
                   <Citation cite={cardCite} onCite={onCite}/>
+                  <ContextBadge name={card.contextName}/>
                 </span>
               </div>
             </div>

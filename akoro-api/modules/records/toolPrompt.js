@@ -13,6 +13,8 @@ const EXAM_BOARDS = /\b(WAEC|WASSCE|JAMB|UTME|NECO|IGCSE|GCSE|SAT|A[- ]?Level|IB
 const DIFFICULTY = /\b(easy|simple|basic|medium|moderate|hard|difficult|tough|advanced|challenging)\b/i;
 const WHOLE = /\b(whole|entire|full|complete)\s+(document|material|book|text|syllabus)\b|\ball\s+pages\b|\bwhole\s+thing\b/i;
 const LENGTH = /\b(short|brief|quick|long|detailed|in[- ]depth)\b/i;
+const PAST_Q = /\b(past\s+questions?|past\s+papers?|past\s+(?:test|exam)s?|last\s+year'?s?\s+(?:test|exam|paper)|mock(?:\s+exam)?|exam\s+paper|question\s+bank)\b/i;
+const SYLLABUS = /\bsyllabus\b|\bcurriculum\b|\bscheme\s+of\s+work\b/i;
 const CONTEXT_REF = /\b(attached|attachment|attachments|syllabus|past\s+questions?|past\s+papers?|past\s+(?:test|exam)s?|last\s+year'?s?\s+(?:test|exam|paper)|mock(?:\s+exam)?|exam\s+paper|question\s+bank|reference\s+material|the\s+files?\s+i\s+(?:added|uploaded)|uploaded)\b/i;
 
 const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
@@ -40,7 +42,7 @@ function pageList(text) {
 export function parseToolPrompt(prompt = "") {
   const text = String(prompt || "").trim();
   if (!text) {
-    return { count: null, difficulty: null, exam: null, length: null, pageNumbers: [], wholeDocument: false, referencesContext: false, text: "" };
+    return { count: null, difficulty: null, exam: null, length: null, pageNumbers: [], wholeDocument: false, referencesContext: false, contextMode: null, text: "" };
   }
   const countMatch = /(\d{1,2})[\s-]+(?:[a-z][a-z-]*[\s-]+){0,3}(?:mcqs?|multiple[\s-]*choice\s+questions?|quiz\s+questions?|questions?|flashcards?|cards?|points?|bullets?)\b/i.exec(text)
     || /(?:create|make|give me|generate|set)\s+(\d{1,2})\b/i.exec(text);
@@ -58,6 +60,7 @@ export function parseToolPrompt(prompt = "") {
     pageNumbers: pageList(text),
     wholeDocument: WHOLE.test(text),
     referencesContext: CONTEXT_REF.test(text),
+    contextMode: PAST_Q.test(text) ? "past_questions" : SYLLABUS.test(text) ? "syllabus" : null,
     text,
   };
 }
