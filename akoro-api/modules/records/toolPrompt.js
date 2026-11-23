@@ -42,7 +42,7 @@ export function parseToolPrompt(prompt = "") {
   if (!text) {
     return { count: null, difficulty: null, exam: null, length: null, pageNumbers: [], wholeDocument: false, referencesContext: false, text: "" };
   }
-  const countMatch = /(\d{1,2})[\s-]+(?:[a-z][a-z-]*[\s-]+){0,3}(?:mcqs?|multiple[\s-]*choice\s+questions?|quiz\s+questions?|questions?|flashcards?|cards?)\b/i.exec(text)
+  const countMatch = /(\d{1,2})[\s-]+(?:[a-z][a-z-]*[\s-]+){0,3}(?:mcqs?|multiple[\s-]*choice\s+questions?|quiz\s+questions?|questions?|flashcards?|cards?|points?|bullets?)\b/i.exec(text)
     || /(?:create|make|give me|generate|set)\s+(\d{1,2})\b/i.exec(text);
   const difficultyMatch = DIFFICULTY.exec(text);
   const difficulty = difficultyMatch

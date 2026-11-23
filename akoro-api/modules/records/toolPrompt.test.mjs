@@ -116,3 +116,9 @@ test("a prompted summary point count is honoured (not just the Depth dropdown)",
   assert.equal(toolCount("summary", { depth: "Brief" }), 4);
   assert.equal(toolCount("summary", { count: "99" }), 12, "capped");
 });
+
+test("summary point counts in a sentence", () => {
+  const p = parseToolPrompt("Summarise pages 2-4 in 6 points for revision");
+  assert.equal(p.count, 6);
+  assert.deepEqual(p.pageNumbers, [2,3,4]);
+});
