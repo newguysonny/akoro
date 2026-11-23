@@ -152,7 +152,7 @@ export default function ProgrammePage({ programmeId, onClose,
     // reader as Library records — playable and study-tool capable. External
     // links still go to the browser.
     if (m?.file_url) {
-      setReader({ name: m.title, kind: 'upload', mime: m.mime || 'application/pdf', fileUrl: m.file_url, contentKey: m.contentKey || null });
+      setReader({ name: m.title, kind: 'upload', mime: m.mime || 'application/pdf', fileUrl: m.file_url, contentKey: m.contentKey || null, label: "Programme material" });
       return;
     }
     if (m?.url) window.open(m.url, '_blank', 'noopener');

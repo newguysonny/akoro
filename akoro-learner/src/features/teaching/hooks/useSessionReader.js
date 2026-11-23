@@ -6,7 +6,7 @@
 import { useState, useRef, useEffect, useLayoutEffect, useCallback } from "react";
 import { useIsMobileView } from "../../../hooks/useIsMobileView.js";
 import { selectionRects } from "../../../lib/markRects.js";
-import { hydrateReaderTabs, loadReaderTabs, saveReaderTabs } from "../../../lib/readerTabCache.js";
+import { hydrateReaderTabs, loadReaderTabs, saveReaderTabs, dropShadowTabs } from "../../../lib/readerTabCache.js";
 import { TAB_KINDS, artifactToTab, marksFromArtifacts, tabContentPatch, tabToArtifact } from "../../../lib/readerArtifacts.js";
 import { toReaderCite } from "../../../lib/askAnswer.js";
 import {

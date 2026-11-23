@@ -29,6 +29,7 @@ export default function PharmDTopicSession({ topic, course, onClose, chatState =
         mime: mimeFor(topic),
         fileUrl: topic.file_url,
         contentKey: topic.contentKey || null,
+        label: "PHARM.D · catalogue",
       }}
       downloadUrl={topic.file_url}
       onClose={onClose}
