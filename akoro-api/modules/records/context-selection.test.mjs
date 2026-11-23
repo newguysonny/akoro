@@ -80,3 +80,53 @@ test("a reused past question is attributed even when the model leaves contextSou
   const shaped = shapeToolResult("quiz", json, passages, { count: "1" }, ctx);
   assert.equal(shaped.quizQuestions[0].contextName, "WAEC past questions.pdf");
 });
+
+test("cosine similarity is safe and ordered", async () => {
+  const { cosine } = await import("./toolContext.js");
+  assert.equal(cosine([1, 0], [1, 0]), 1);
+  assert.equal(cosine([1, 0], [0, 1]), 0);
+  assert.equal(cosine([], [1]), 0);
+  assert.equal(cosine([1, 0], [1]), 0);
+});
+
+test("embeddings pull in conceptually related context that shares no keywords", async () => {
+  const { selectContextChunksHybrid } = await import("./toolContext.js");
+  const synonym = { name: "Scheme.pdf", text: "Week 4: energy conversion inside plant cells and the release of oxygen." };
+  const embed = async (texts) => texts.map((t) => (
+    /energy conversion|photosynthesis|chloroplast/i.test(t) ? [1, 0.05] : [0.1, 1]
+  ));
+  const out = await selectContextChunksHybrid({
+    items: [synonym], passages, prompt: "use the scheme to plan the quiz", embed,
+  });
+  assert.equal(out.related, true);
+  assert.equal(out.semantic, true);
+  assert.match(out.chunks[0].text, /energy conversion/i);
+});
+
+test("semantic closeness does not admit an unrelated question on its own", async () => {
+  const { selectContextChunksHybrid } = await import("./toolContext.js");
+  const unrelated = { name: "Past questions.pdf", text: "Which reagent tests for starch? A. Iodine B. Limewater C. Benedict's D. Litmus" };
+  const embed = async (texts) => texts.map((t) => (/photosynthesis|chloroplast/i.test(t) ? [1, 0] : [0, 1]));
+  const out = await selectContextChunksHybrid({ items: [unrelated], passages, prompt: "past questions", embed });
+  assert.equal(out.related, false);
+});
+
+test("embeddings can be disabled and failures fall back to lexical", async () => {
+  const { selectContextChunksHybrid } = await import("./toolContext.js");
+  let called = false;
+  const embed = async (texts) => { called = true; return texts.map(() => [1, 0]); };
+  const off = await selectContextChunksHybrid({ items: [pastPaper], passages, prompt: "past questions", embed, embeddingsEnabled: false });
+  assert.equal(called, false);
+  assert.equal(off.related, true, "lexical selection still works");
+  const broken = await selectContextChunksHybrid({ items: [pastPaper], passages, prompt: "past questions", embed: async () => { throw new Error("down"); } });
+  assert.equal(broken.related, true);
+  assert.equal(broken.semantic, undefined);
+});
+
+test("pasted context is labelled by its role, not its first question", async () => {
+  const { contextLabel } = await import("./toolContext.js");
+  assert.equal(contextLabel({ name: "Which organelle…", kind: "paste" }, "Which organelle does photosynthesis use? A. Chloroplast"), "Past questions (pasted note)");
+  assert.equal(contextLabel({ name: "Week 1…", kind: "paste" }, "Week 1: photosynthesis"), "Syllabus (pasted note)");
+  assert.equal(contextLabel({ name: "My revision notes", kind: "paste" }, "Some prose about cells."), "Pasted note — My revision notes");
+  assert.equal(contextLabel({ name: "BIO 111.pdf", kind: "upload" }, "ignored"), "BIO 111.pdf");
+});

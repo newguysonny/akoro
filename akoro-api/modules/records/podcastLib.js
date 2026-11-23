@@ -20,7 +20,7 @@
  */
 import { citeOf, TOOL_LIMITS } from "./toolsLib.js";
 import { passageWhere } from "./askLib.js";
-import { selectContextChunks, contextPromptBlock } from "./toolContext.js";
+import { selectContextChunksHybrid, contextPromptBlock } from "./toolContext.js";
 
 export const PODCAST_LENGTHS = Object.freeze({
   short:  { id: "short",  minutes: "2–3", chars: 2400, maxTokens: 1500 },
@@ -235,7 +235,7 @@ export async function runPodcastJob({ artifactId, target, scope, pageNumber, pag
     let effectiveContext = contextText;
     let notes = intentNotes;
     if (Array.isArray(contextItems) && contextItems.length) {
-      const picked = selectContextChunks({ items: contextItems, passages, prompt: focus, mode: null });
+      const picked = await selectContextChunksHybrid({ items: contextItems, passages, prompt: focus, mode: null, embeddingsEnabled: process.env.TOOL_CONTEXT_EMBEDDINGS !== "off" });
       effectiveContext = picked.related ? contextPromptBlock(picked.chunks, { mode: picked.mode }) : "";
       if (!picked.related) notes = [...(notes || []), "No attached reference material matched these passages — ignore the attachments and do not claim to have used them."];
     }

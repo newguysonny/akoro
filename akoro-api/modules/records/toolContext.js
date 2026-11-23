@@ -13,6 +13,15 @@ const MAX_PER_ITEM = 2600;
 const MAX_TOTAL = 7000;
 const idOk = (v) => /^[0-9a-f-]{36}$/i.test(String(v || ""));
 
+export function contextLabel(rec, text = "") {
+  const name = String(rec?.name || "").trim();
+  if (rec?.kind !== "paste") return name || "Attached material";
+  if (/\?/.test(text) || /(?:^|\s)[A-D][).]\s/.test(text)) return "Past questions (pasted note)";
+  if (/\b(week|unit|module|topic|learning outcome|scheme of work)\b/i.test(text)) return "Syllabus (pasted note)";
+  const head = name.replace(/\s+/g, " ").slice(0, 42).trim();
+  return head ? `Pasted note — ${head}${name.length > 42 ? "…" : ""}` : "Pasted note";
+}
+
 async function recordText(db, rec) {
   if (rec.kind === "paste") return String(rec.content || "");
   if (!rec.file_key) return "";
@@ -55,7 +64,7 @@ export async function resolveToolContext({ userId, recordIds = [], folderIds = [
     if (!text) continue;
     const slice = text.slice(0, Math.min(MAX_PER_ITEM, MAX_TOTAL - total));
     if (!slice) continue;
-    out.push({ name: rec.name || "Attached material", text: slice });
+    out.push({ name: contextLabel(rec, text), kind: rec.kind, text: slice });
     total += slice.length;
   }
   return out;
@@ -176,4 +185,80 @@ export function selectContextChunks({ items = [], passages = [], prompt = "", mo
     chars += c.text.length;
   }
   return { chunks, mode: chosenMode, related: chunks.length > 0, chars };
+}
+
+/** Every candidate piece, before scoring. */
+export function contextPieces(items = []) {
+  const out = [];
+  for (const item of items) {
+    for (const text of splitContext(item.text)) out.push({ name: item.name, text });
+  }
+  return out;
+}
+
+export function cosine(a = [], b = []) {
+  if (!Array.isArray(a) || !Array.isArray(b) || !a.length || a.length !== b.length) return 0;
+  let dot = 0, na = 0, nb = 0;
+  for (let i = 0; i < a.length; i += 1) { dot += a[i] * b[i]; na += a[i] * a[i]; nb += b[i] * b[i]; }
+  if (!na || !nb) return 0;
+  return dot / Math.sqrt(na * nb);
+}
+
+/**
+ * Hybrid selection: lexical (keyword/concept overlap) UNION semantic similarity
+ * (embeddings), so a syllabus phrased with different words still matches.
+ * Embeddings are optional: without a provider (or on any error) this falls back
+ * exactly to the lexical selector. `embed` is injectable for tests.
+ */
+export async function selectContextChunksHybrid({
+  items = [], passages = [], prompt = "", mode = null,
+  maxChunks = 8, maxChars = 3200, embed = null, embeddingsEnabled = true,
+} = {}) {
+  const lexical = selectContextChunks({ items, passages, prompt, mode, maxChunks, maxChars });
+  if (!items.length || !embeddingsEnabled) return lexical;
+  let embedFn = embed;
+  if (!embedFn) {
+    try {
+      const { canEmbed } = await import("../../lib/embeddingProvider.js");
+      if (!canEmbed()) return lexical;
+      embedFn = (await import("../../lib/embed.js")).embed;
+    } catch { return lexical; }
+  }
+  if (typeof embedFn !== "function") return lexical;
+  const pieces = contextPieces(items).slice(0, 60);
+  if (!pieces.length) return lexical;
+  const docText = passages.map((p) => p.text).join("\n").slice(0, 6000);
+  if (!docText.trim()) return lexical;
+  try {
+    const vectors = await embedFn([docText, ...pieces.map((p) => p.text.slice(0, 2000))]);
+    const docVec = vectors?.[0];
+    if (!Array.isArray(docVec)) return lexical;
+    const docTerms = termsOf(docText);
+    const goal = termsOf(prompt);
+    const chosenMode = detectContextMode(items, mode);
+    const scored = [];
+    pieces.forEach((piece, i) => {
+      const vec = vectors[i + 1];
+      const lower = piece.text.toLowerCase();
+      const docHits = docTerms.filter((t) => lower.includes(t)).length;
+      const goalHits = goal.filter((t) => lower.includes(t)).length;
+      const sim = cosine(docVec, vec);
+      // Keep lexically related pieces and semantically close ones; a piece
+      // that is neither is not "related" however exam-shaped it looks.
+      if (!docHits && sim < 0.38) return;
+      const questionish = chosenMode === "past_questions" && (/\?/.test(piece.text) || /(?:^|\s)[A-D][).]\s/.test(piece.text));
+      const syllabusish = chosenMode === "syllabus" && /\b(week|unit|module|topic|outcome|objective)\b/i.test(piece.text);
+      scored.push({ ...piece, score: docHits * 2 + goalHits * 3 + (questionish ? 3 : 0) + (syllabusish ? 2 : 0) + sim * 10, docHits, sim });
+    });
+    scored.sort((a, b) => b.score - a.score || b.sim - a.sim);
+    const chunks = [];
+    let chars = 0;
+    for (const c of scored) {
+      if (chunks.length >= maxChunks || chars + c.text.length > maxChars) continue;
+      chunks.push({ index: chunks.length + 1, name: c.name, text: c.text, similarity: Number(c.sim.toFixed(3)) });
+      chars += c.text.length;
+    }
+    if (!chunks.length) return { ...lexical, related: false, chunks: [] };
+    return { chunks, mode: chosenMode, related: true, chars, semantic: true };
+  } catch { return lexical; }
 }

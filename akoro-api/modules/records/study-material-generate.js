@@ -12,7 +12,7 @@ import db from "../../db.js";
 import { openai } from "../../lib/aiModel.js";
 import { TOOL_IDS, TOOL_LIMITS, toolSchema, toolCount, buildToolMessages, shapeToolResult, gatherToolPassages, citeOf } from "./toolsLib.js";
 import { applyPromptIntent } from "./toolPrompt.js";
-import { selectContextChunks, contextPromptBlock } from "./toolContext.js";
+import { selectContextChunksHybrid, contextPromptBlock } from "./toolContext.js";
 import { searchRecordChunks } from "./searchLib.js";
 import { getExtraction } from "./extractLib.js";
 import { passagesFromExtraction } from "./studyMaterialCore.js";
@@ -66,7 +66,7 @@ export async function generateToolResult({ userId = null, target, tool, scope = 
   let selectedContext = [];
   let effectiveContextText = contextText;
   if (Array.isArray(contextItems) && contextItems.length) {
-    const picked = selectContextChunks({ items: contextItems, passages, prompt: values.focus, mode: applied.intent.contextMode });
+    const picked = await selectContextChunksHybrid({ items: contextItems, passages, prompt: values.focus, mode: applied.intent.contextMode, embeddingsEnabled: process.env.TOOL_CONTEXT_EMBEDDINGS !== "off" });
     selectedContext = picked.chunks;
     effectiveContextText = picked.related ? contextPromptBlock(picked.chunks, { mode: picked.mode }) : "";
     if (!picked.related) applied.notes.push("No attached reference material matched these passages — ignore the attachments and do not claim to have used them.");
