@@ -39,6 +39,7 @@ import Spinner from '../common/Spinner.jsx';
 import { useIsMobileView } from '../../hooks/useIsMobileView.js';
 import { AUTHOR } from '../../features/pharmd/index.js';
 import { fetchProgramme, fetchProgrammeCourse } from '../../services/programmesApi.js';
+import RecordTeachSession from '../../features/library/components/RecordTeachSession.jsx';
 
 /* The admin console's six course-card gradients — the colour the admin
    picked for each course, used wherever there is no cover image. */
@@ -69,6 +70,7 @@ export default function ProgrammePage({ programmeId, onClose,
   const [view, setView] = useState(courseRoute ? 'folder' : 'browse');  // browse | folder
   const [courseId, setCourseId] = useState(courseRoute);  // the open course id
   const [toast, setToast] = useState(null);
+  const [reader, setReader] = useState(null);   // catalogue material opened in the shared reader
 
   /* Real data: the programme tree and the open course. */
   const [p, setP] = useState(null);               // null = still loading
@@ -146,6 +148,13 @@ export default function ProgrammePage({ programmeId, onClose,
 
   /* A material opens its resource URL; without one it is on its way. */
   const openMaterial = (m) => {
+    // Uploaded catalogue files (PDF, video, audio, notes) open in the SAME
+    // reader as Library records — playable and study-tool capable. External
+    // links still go to the browser.
+    if (m?.file_url) {
+      setReader({ name: m.title, kind: 'upload', mime: m.mime || 'application/pdf', fileUrl: m.file_url, contentKey: m.contentKey || null });
+      return;
+    }
     if (m?.url) window.open(m.url, '_blank', 'noopener');
     else setToast({ msg: 'This material has no file yet — check back soon.', color: BRAND });
   };
@@ -311,7 +320,7 @@ export default function ProgrammePage({ programmeId, onClose,
                   </div>
                   <button className="pd-more" aria-label={`Open ${m.title}`}
                     onClick={(e) => { e.stopPropagation(); openMaterial(m); }}>
-                    <Icon name={m.url ? 'ti-external-link' : 'ti-dots-vertical'} size={16}/>
+                    <Icon name={m.url || m.file_url ? 'ti-external-link' : 'ti-dots-vertical'} size={16}/>
                   </button>
                 </div>
               ))}
@@ -320,6 +329,10 @@ export default function ProgrammePage({ programmeId, onClose,
         )}
       </div>
 
+      {reader && (
+        <RecordTeachSession source={reader} downloadUrl={reader.fileUrl}
+          onClose={() => setReader(null)} chatState="ask" />
+      )}
       {toast && <Toast msg={toast.msg} color={toast.color} onDone={() => setToast(null)} />}
     </div>
   );

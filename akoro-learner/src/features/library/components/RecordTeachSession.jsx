@@ -40,6 +40,7 @@
  * shelf's progress bar honest via onProgress.
  */
 
+import { useMemo } from 'react';
 import { useLang } from '../../../contexts/LanguageContext.jsx';
 import { TeachAgentModal } from '../../teaching/index.js';
 import { Icon } from '../../../components/common/Icons.jsx';
@@ -83,7 +84,7 @@ const storeSid = (rid, sid) => {
   catch { /* private mode */ }
 };
 
-export default function RecordTeachSession({ record, onClose, onMinimize, onOpened, onProgress,
+export default function RecordTeachSession({ record: recordProp, source = null, onClose, onMinimize, onOpened, onProgress,
   chatState = 'ask',    // the reader's chat state: 'ask' (default) | 'agent' (opened via Agent session)
   openTool = null,      // a study tool to open the reader on (an Agent Chat link)
   openArtifact = null,  // a saved tab to open the reader on (made in Agent Chat)
@@ -93,6 +94,18 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
                         // folder's contents row (host owns the selection)
 }) {
   const { t } = useLang();
+  // A catalogue/programme document arrives as a SOURCE, not a records row:
+  // same reader, same tools, no shelf record or uploader.
+  const record = useMemo(() => (source ? {
+    id: source.id || null,
+    kind: source.kind || 'upload',
+    name: source.name,
+    mime: source.mime || '',
+    fileUrl: source.fileUrl || null,
+    contentKey: source.contentKey || null,
+    fileMissing: !source.fileUrl,
+  } : recordProp), [source, recordProp]);
+  const sessionKey = record?.id || record?.contentKey || 'x';
   const {
     state, err, pages, pdfParts, reference, extract, setExtract, pdfBlocks, avTranscript, officeErr,
     discussionCommunities, sourceSession, setSourceSession, openSource,
@@ -135,7 +148,7 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
   }
 
   /* ── Ready — the teaching session with the record as its material ── */
-  const dlUrl = downloadUrl || recordDownloadUrl(record.id);
+  const dlUrl = downloadUrl || (record.id ? recordDownloadUrl(record.id) : record.fileUrl || null);
   const media = isMedia ? {
     kind: type,
     src: fileUrl,
@@ -240,7 +253,7 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
      teaching thread instead of always starting cold — same continuation the
      Learn shelf gives teaching sessions. Closing keeps it: the shelf keeps
      the session too. */
-  const priorSid = readStoredSid(record.id);
+  const priorSid = readStoredSid(sessionKey);
 
   /* ── AI extraction overlay — offer / progress / result ─────────────────── */
   const extractOverlay = (
@@ -278,7 +291,7 @@ export default function RecordTeachSession({ record, onClose, onMinimize, onOpen
       content={content}
       onClose={onClose}
       onMinimize={onMinimize}
-      onSessionSaved={(sid) => storeSid(record.id, sid)}
+      onSessionSaved={(sid) => storeSid(sessionKey, sid)}
     />
       {extractOverlay}
       {/* The original source, opened from a citation — its own reader,

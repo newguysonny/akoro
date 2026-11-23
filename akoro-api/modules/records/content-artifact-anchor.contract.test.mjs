@@ -33,10 +33,9 @@ test("podcasts and the PHARM.D reader use the content anchor", () => {
   const start = read("modules", "records", "study-material-generate.js");
   assert.match(start, /\{ contentKey: target\.contentKey \}/);
   const pharmd = learner("features", "pharmd", "components", "PharmDTopicSession.jsx");
-  assert.match(pharmd, /generateRecordTool\(\{ contentKey: catalogueKey/);
-  assert.match(pharmd, /startRecordPodcast\(\{ contentKey: catalogueKey/);
-  assert.match(pharmd, /listRecordArtifacts\(\{ contentKey: catalogueKey \}\)/);
-  assert.match(pharmd, /saveRecordArtifact\(\{ contentKey: catalogueKey \}/);
+  assert.match(pharmd, /RecordTeachSession/);
+  assert.match(pharmd, /contentKey: topic\.contentKey/);
+  assert.match(pharmd, /fileUrl: topic\.file_url/);
 });
 
 test("unified catalogue materials resolve as content keys too", () => {
@@ -56,8 +55,23 @@ test("a catalogue reader can use its own page text without a storage row", () =>
   const tools = read("modules", "records", "toolsLib.js");
   assert.match(tools, /Array\.isArray\(pageTexts\) && pageTexts\.length/);
   const pharmd = learner("features", "pharmd", "components", "PharmDTopicSession.jsx");
-  assert.match(pharmd, /const catalogueKey = `catalogue:/);
-  assert.match(pharmd, /generateRecordTool\(\{ contentKey: catalogueKey/);
-  assert.match(pharmd, /pageTexts: allPageTexts/);
-  assert.match(pharmd, /listRecordArtifacts\(\{ contentKey: catalogueKey \}\)/);
+  assert.match(pharmd, /RecordTeachSession/);
+  assert.match(pharmd, /contentKey: topic\.contentKey/);
+});
+
+test("programme materials open in the same reader (files, video, audio)", () => {
+  const routes = read("modules", "programmes", "routes.js");
+  assert.match(routes, /file_url: m\.file_path \?/);
+  assert.match(routes, /contentKey: m\.file_path \? pharmdContentKey/);
+  assert.match(routes, /type === "video" \? "video\/mp4"/);
+  assert.match(routes, /type === "audio" \? "audio\/mpeg"/);
+  const page = learner("components", "programmes", "ProgrammePage.jsx");
+  assert.match(page, /RecordTeachSession/);
+  assert.match(page, /if \(m\?\.file_url\)/);
+  assert.match(page, /contentKey: m\.contentKey/);
+  const reader = learner("features", "library", "components", "RecordTeachSession.jsx");
+  assert.match(reader, /source = null/);
+  assert.match(reader, /const record = useMemo\(\(\) => \(source \?/);
+  const hook = learner("features", "library", "hooks", "useRecordSession.js");
+  assert.match(hook, /extractRecordPages\(\{ contentKey: record\.contentKey, pages: \[\] \}\)/);
 });

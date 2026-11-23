@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { buildSessionReaderPages } from '../../teaching/index.js';
 import { officeReaderPages } from '../../../lib/officePages.js';
-import { recordFileSrc, generateRecordPreview, extractStoredRecordText, getRecordExtraction, getSharedExtraction, getExtractionStatus, getRecordTranscript, getSharedTranscript, startRecordTranscription, getRecordTranscriptionStatus, getAskHistory, askRecord, generateRecordTool, startRecordPodcast, getRecordPodcast, listRecordArtifacts, saveRecordArtifact, updateRecordArtifact, deleteRecordArtifact, discoverRecordOpen } from '../../../services/recordsApi.js';
+import { recordFileSrc, generateRecordPreview, extractStoredRecordText, getRecordExtraction, getSharedExtraction, getExtractionStatus, getRecordTranscript, getSharedTranscript, extractRecordPages, startRecordTranscription, getRecordTranscriptionStatus, getAskHistory, askRecord, generateRecordTool, startRecordPodcast, getRecordPodcast, listRecordArtifacts, saveRecordArtifact, updateRecordArtifact, deleteRecordArtifact, discoverRecordOpen } from '../../../services/recordsApi.js';
 import { rasterizePdfPages, rasterizeImageFile, runRecordExtraction } from '../../../components/library/extractPages.js';
 import { fetchFileWithRetry } from '../../../lib/fetchFile.js';
 import { fetchItemCommunities } from '../../../services/communityApi.js';
@@ -92,7 +92,33 @@ export function useRecordSession({ record, onOpened, onProgress }) {
 
   const startExtraction = async () => {
     const apply = applyRef.current;
-    if (!apply || !record?.id) return;
+    if (!apply) return;
+    // Catalogue content has no records row: the server reads the stored file
+    // by content key (OCR lane), so there is nothing to rasterize here.
+    if (!record?.id) {
+      if (!record?.contentKey) return;
+      setExtract((s) => ({ ...s, status: 'running', done: 0, error: null }));
+      try {
+        await extractRecordPages({ contentKey: record.contentKey, pages: [] });
+        for (let i = 0; i < 120; i += 1) {
+          await new Promise((r) => setTimeout(r, 3000));
+          if (!aliveRef.current) return;
+          const st = await getExtractionStatus({ contentKey: record.contentKey });
+          if (st?.failed?.length) throw new Error(st.failed[0]?.error || 'Extraction failed.');
+          if (st?.done) break;
+        }
+        const saved = await getSharedExtraction(record.contentKey);
+        const all = saved?.pages || [];
+        if (!all.length) throw new Error('Extraction returned no text — try again.');
+        apply(new Map(all.map((p) => [p.pageNumber, p.markdown])),
+          new Map(all.filter((p) => Array.isArray(p.blocks) && p.blocks.length).map((p) => [p.pageNumber, p.blocks])));
+        setExtract({ status: 'applied', done: all.length, total: all.length, error: null });
+        setTimeout(() => setExtract((s) => (s?.status === 'applied' ? null : s)), 6000);
+      } catch (e) {
+        if (aliveRef.current) setExtract((s) => ({ ...s, status: 'error', error: e?.message || 'Extraction failed.' }));
+      }
+      return;
+    }
     setExtract((s) => ({ ...s, status: 'running', done: 0, error: null }));
     try {
       let rendered;

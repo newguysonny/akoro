@@ -47,6 +47,7 @@
 import { Router }            from "express";
 import db                    from "../../db.js";
 import { authenticateToken, requireRole } from "../auth/index.js";
+import { pharmdContentKey } from "../../lib/contentKey.js";
 
 const edu = () => db.schema("edu");
 const router = Router();
@@ -117,7 +118,7 @@ router.get("/catalogue/courses/:id", asyncHandler(async (req, res) => {
     edu().from("programmes").select("id, name, status").eq("id", c.programme_id).maybeSingle(),
     edu().from("programme_sections").select("id, name").eq("id", c.section_id).maybeSingle(),
     edu().from("programme_materials")
-      .select("id, title, type, meta, url, thumb_url, position")
+      .select("id, title, type, meta, url, thumb_url, position, file_path, file_hash")
       .eq("course_id", c.id).eq("status", "published")
       .order("position").order("created_at"),
   ]);
@@ -126,7 +127,15 @@ router.get("/catalogue/courses/:id", asyncHandler(async (req, res) => {
     ...c,
     programme: { id: p.id, name: p.name },
     section: s ? { id: s.id, name: s.name } : null,
-    materials: materials ?? [],
+    materials: (materials ?? []).map((m) => ({
+      ...m,
+      mime: m.type === "video" ? "video/mp4" : m.type === "audio" ? "audio/mpeg"
+        : m.type === "note" ? "text/plain" : "application/pdf",
+      // Files uploaded to the catalogue play/read in the app's own reader;
+      // external links keep m.url (opened in a new tab by the client).
+      file_url: m.file_path ? `${req.protocol}://${req.get("host")}/api/pharmd/topics/${m.id}/file` : null,
+      contentKey: m.file_path ? pharmdContentKey({ file_path: m.file_path, file_hash: m.file_hash }) : null,
+    })),
   });
 }));
 

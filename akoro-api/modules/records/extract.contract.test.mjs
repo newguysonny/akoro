@@ -181,7 +181,7 @@ test("the reader rasterizes client-side and offers extraction for scans & images
   assert.match(extractPagesSrc, /EXTRACT_BATCH_PAGES/, "pages go up in bounded batches");
   assert.match(extractionCardSrc, /Extract text/, "the shared offer overlay exists");
   assert.match(teachSessionSrc, /<ExtractionCard/, "the Library reader reuses the shared card");
-  assert.match(pharmdReaderSrc, /<ExtractionCard/, "the PHARM.D reader reuses the shared card");
+  assert.match(pharmdReaderSrc, /RecordTeachSession/, "the PHARM.D reader is the shared reader");
   assert.match(teachSessionSrc, /getSharedExtraction\(record\.contentKey\)/, "shared files read the shared cache before spending");
   assert.match(recordsApiSrc, /export async function getSharedExtraction/, "the shared-cache seam exists");
   assert.match(teachSessionSrc, /runRecordExtraction/, "the reader drives the batched run");
@@ -373,13 +373,10 @@ test("PHARM.D topics share one extraction key and pass the access rule", () => {
   assert.match(routesSrc, /parsePharmdKey\(contentKey\)/, "access parses the versioned key");
   assert.match(routesSrc, /contentKey\.startsWith\(PHARMD_PREFIX\)\) return resolvePharmdContent/, "pharmd keys resolve as shared content");
   assert.match(routesSrc, /from\("pharmd_topics"\)/, "the topic row is the authority for the file");
-  assert.match(pharmdReaderSrc, /getSharedExtraction\(contentKey\)/, "the PHARM.D reader reads the shared cache");
-  assert.match(pharmdReaderSrc, /pageBlocks: pages\.map/, "blocks feed the citation flash as an array");
-  assert.match(pharmdReaderSrc, /pharmdContentKey\(topic\)/, "the key is derived even from a stale course payload");
-  assert.match(pharmdReaderSrc, /hasPharmdParsedMark\(contentKey\)/, "a finished extraction is never offered again on this device");
-  assert.match(pharmdReaderSrc, /setExtract\(\{ status: 'offer'/, "every topic can be extracted from its card");
-  assert.doesNotMatch(pharmdReaderSrc, /looksScanned/, "no text-PDF skip on topics");
-  assert.match(pharmdReaderSrc, /bboxForQuote\(pageBlocks, c\.pageNumber, c\.quote\)/, "Ask citations get the exact block bbox");
+  // One reader: the PHARM.D adapter hands the shared reader a document SOURCE.
+  assert.match(pharmdReaderSrc, /RecordTeachSession/, "the topic opens the Library reader");
+  assert.match(pharmdReaderSrc, /contentKey: topic\.contentKey/, "the shared key rides on the source");
+  assert.match(pharmdReaderSrc, /fileUrl: topic\.file_url/, "the catalogue file rides on the source");
 });
 
 test("a heavy PDF opens before every page is read; selection stays on the PDF layer", () => {
