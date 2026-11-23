@@ -38,3 +38,12 @@ test("podcasts and the PHARM.D reader use the content anchor", () => {
   assert.match(pharmd, /listRecordArtifacts\(\{ contentKey: readerKey \}\)/);
   assert.match(pharmd, /saveRecordArtifact\(\{ contentKey: readerKey \}/);
 });
+
+test("unified catalogue materials resolve as content keys too", () => {
+  const access = read("modules", "records", "access.js");
+  assert.match(access, /from\("programme_materials"\)/);
+  assert.match(access, /file_path: data\.file_path/);
+  const catalogue = read("modules", "records", "catalogueFile.js");
+  assert.match(catalogue, /from\("programme_materials"\)/);
+  assert.match(catalogue, /pharmd-courses/);
+});

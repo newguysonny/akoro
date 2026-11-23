@@ -21,9 +21,21 @@ const edu = async () => (await dbLazy()).schema("edu");
 async function resolvePharmdContent(contentKey) {
   const parsed = parsePharmdKey(contentKey);
   if (!parsed?.path) return { status: 400, message: "A PHARM.D content key is required." };
-  const { data: topic, error } = await (await edu()).from("pharmd_topics")
-    .select("title, file_path, file_mime, file_hash").eq("file_path", parsed.path).maybeSingle();
-  if (error) throw error;
+  const db = await edu();
+  let topic = null;
+  {
+    const { data, error } = await db.from("pharmd_topics")
+      .select("title, file_path, file_mime, file_hash").eq("file_path", parsed.path).maybeSingle();
+    if (error) throw error;
+    topic = data;
+  }
+  // Unified catalogue: topics can be programme_materials rows instead.
+  if (!topic) {
+    const { data, error } = await db.from("programme_materials")
+      .select("title, type, file_path, file_hash, source_topic_id").eq("file_path", parsed.path).maybeSingle();
+    if (error) throw error;
+    if (data) topic = { title: data.title, file_path: data.file_path, file_hash: data.file_hash, file_mime: data.type === "pdf" ? "application/pdf" : null };
+  }
   if (!topic) return { status: 404, message: "Content not found." };
   // A client holding an old version must reopen the topic and use the new key.
   if (parsed.hash && topic.file_hash && parsed.hash !== topic.file_hash) {

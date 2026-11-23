@@ -20,6 +20,13 @@ export async function catalogueFileFor(contentKey) {
     const { data } = await db.schema("edu").from("pharmd_topics")
       .select("title, file_bucket, file_path, file_mime").eq("file_path", parsed.path).maybeSingle();
     topic = data;
+    // Unified catalogue rows live in programme_materials (no bucket column;
+    // their PDFs are in the pharmd-courses bucket / R2).
+    if (!topic) {
+      const { data: material } = await db.schema("edu").from("programme_materials")
+        .select("title, type, file_path").eq("file_path", parsed.path).maybeSingle();
+      if (material) topic = { title: material.title, file_path: material.file_path, file_mime: material.type === "pdf" ? "application/pdf" : null };
+    }
   } catch { /* a lookup hiccup still lets R2 answer by path */ }
   const path = topic?.file_path || parsed.path;
   const base = String(topic?.title || "PHARMD topic").replace(/[\\/:*?"<>|]+/g, " ").trim().slice(0, 120);
