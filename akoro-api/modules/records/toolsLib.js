@@ -72,7 +72,10 @@ const isContentText = (t) => !isFrontMatter(t) && !isBareHeading(t);
 /** How many items each tool makes, from the form's values. */
 export function toolCount(tool, values = {}) {
   const n = parseInt(values.count, 10);
-  if (tool === "summary") return /detailed/i.test(String(values.depth || "")) ? 8 : 4;
+  if (tool === "summary") {
+    if (Number.isInteger(n) && n > 0) return Math.min(n, 12);   // a Prompt can ask for N points
+    return /detailed/i.test(String(values.depth || "")) ? 8 : 4;
+  }
   if (tool === "quiz") return Number.isInteger(n) && n > 0 ? Math.min(n, 50) : 5;   // any count the learner types (1–50)
   if (tool === "flashcards") return Number.isInteger(n) && n > 0 ? Math.min(n, 50) : 6;   // any count the learner types
   return 0;

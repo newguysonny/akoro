@@ -83,3 +83,36 @@ test("podcasts receive the same intent and reference block", async () => {
   assert.ok(sys.includes("CTX2") && sys.includes("WAEC2"));
   assert.ok(sys.indexOf("CTX2") < sys.indexOf("Passages:"));
 });
+
+test("more learner phrasings", () => {
+  const jamb = parseToolPrompt("Make a 10-question JAMB-style quiz on the whole document");
+  assert.equal(jamb.count, 10);
+  assert.equal(jamb.exam, "JAMB");
+  assert.equal(jamb.wholeDocument, true);
+
+  const syllabusCards = parseToolPrompt("Use the attached syllabus to build 12 flashcards covering the whole document");
+  assert.equal(syllabusCards.count, 12);
+  assert.equal(syllabusCards.referencesContext, true);
+  assert.equal(syllabusCards.wholeDocument, true);
+
+  const lastYear = parseToolPrompt("I uploaded last year's test; make 15 similar questions from the whole document");
+  assert.equal(lastYear.count, 15);
+  assert.equal(lastYear.referencesContext, true);
+
+  const pageOnly = parseToolPrompt("Only pages 8-10, hard, 12 questions");
+  assert.deepEqual(pageOnly.pageNumbers, [8,9,10]);
+  assert.equal(pageOnly.difficulty, "Hard");
+  assert.equal(pageOnly.count, 12);
+
+  const podcast = parseToolPrompt("Make a short episode on pages 4-6 using the syllabus");
+  assert.equal(podcast.length, "Short · 2–3 min");
+  assert.deepEqual(podcast.pageNumbers, [4,5,6]);
+  assert.equal(podcast.referencesContext, true);
+});
+
+test("a prompted summary point count is honoured (not just the Depth dropdown)", async () => {
+  const { toolCount } = await import("./toolsLib.js");
+  assert.equal(toolCount("summary", { count: "6", depth: "Brief" }), 6);
+  assert.equal(toolCount("summary", { depth: "Brief" }), 4);
+  assert.equal(toolCount("summary", { count: "99" }), 12, "capped");
+});
