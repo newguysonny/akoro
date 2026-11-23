@@ -70,3 +70,12 @@ test("the Prompt box advertises what it can drive", () => {
   assert.match(doc, /The prompt can set pages, count, difficulty and exam style/);
   assert.match(hook, /appliedIntent/, "the tab reflects what the server applied");
 });
+
+test("the context results list closes on an outside click or Escape", () => {
+  const picker = readFileSync(new URL("./ContextPicker.jsx", import.meta.url), "utf8");
+  assert.match(picker, /pointerdown/);
+  assert.match(picker, /contains\(e\.target\)/);
+  assert.match(picker, /Escape/);
+  assert.match(picker, /ref=\{boxRef\}/);
+  assert.match(picker, /removeEventListener\("pointerdown"/);
+});

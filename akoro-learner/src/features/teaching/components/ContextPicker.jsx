@@ -15,6 +15,7 @@ export default function ContextPicker({ value = [], onChange }) {
   const [busy, setBusy] = useState(false);
   const timer = useRef(null);
   const alive = useRef(true);
+  const boxRef = useRef(null);
 
   useEffect(() => {
     alive.current = true;
@@ -22,6 +23,20 @@ export default function ContextPicker({ value = [], onChange }) {
     listRecords().then((r) => { if (alive.current) setRecords(Array.isArray(r) ? r.slice(0, 12) : []); }).catch(() => {});
     return () => { alive.current = false; clearTimeout(timer.current); };
   }, []);
+
+  /* Click/tap anywhere outside the picker (or press Escape) closes the
+     results list — it must not trap the learner until they choose. */
+  useEffect(() => {
+    if (!open) return undefined;
+    const down = (e) => { if (boxRef.current && !boxRef.current.contains(e.target)) setOpen(false); };
+    const key = (e) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("pointerdown", down, true);
+    document.addEventListener("keydown", key);
+    return () => {
+      document.removeEventListener("pointerdown", down, true);
+      document.removeEventListener("keydown", key);
+    };
+  }, [open]);
 
   useEffect(() => {
     clearTimeout(timer.current);
@@ -63,7 +78,7 @@ export default function ContextPicker({ value = [], onChange }) {
   const totalShown = visibleFolders.length + visibleRecords.length;
 
   return (
-    <div className="flex flex-col gap-1.5">
+    <div ref={boxRef} className="flex flex-col gap-1.5">
       <div className="flex items-center justify-between">
         <span className="text-xs font-medium" style={{ color: "var(--ak-text-sub)" }}>Context (optional)</span>
         <span className="text-[11px]" style={{ color: "var(--ak-text-sub)" }}>{chosen.length}/{MAX_ITEMS}</span>
