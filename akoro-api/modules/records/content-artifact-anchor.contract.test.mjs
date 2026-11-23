@@ -33,10 +33,10 @@ test("podcasts and the PHARM.D reader use the content anchor", () => {
   const start = read("modules", "records", "study-material-generate.js");
   assert.match(start, /\{ contentKey: target\.contentKey \}/);
   const pharmd = learner("features", "pharmd", "components", "PharmDTopicSession.jsx");
-  assert.match(pharmd, /generateRecordTool\(\{ contentKey: readerKey/);
-  assert.match(pharmd, /startRecordPodcast\(\{ contentKey: readerKey/);
-  assert.match(pharmd, /listRecordArtifacts\(\{ contentKey: readerKey \}\)/);
-  assert.match(pharmd, /saveRecordArtifact\(\{ contentKey: readerKey \}/);
+  assert.match(pharmd, /generateRecordTool\(\{ contentKey: catalogueKey/);
+  assert.match(pharmd, /startRecordPodcast\(\{ contentKey: catalogueKey/);
+  assert.match(pharmd, /listRecordArtifacts\(\{ contentKey: catalogueKey \}\)/);
+  assert.match(pharmd, /saveRecordArtifact\(\{ contentKey: catalogueKey \}/);
 });
 
 test("unified catalogue materials resolve as content keys too", () => {
@@ -46,4 +46,17 @@ test("unified catalogue materials resolve as content keys too", () => {
   const catalogue = read("modules", "records", "catalogueFile.js");
   assert.match(catalogue, /from\("programme_materials"\)/);
   assert.match(catalogue, /pharmd-courses/);
+});
+
+test("a catalogue reader can use its own page text without a storage row", () => {
+  const access = read("modules", "records", "access.js");
+  assert.match(access, /contentKey\.startsWith\("catalogue:"\)/);
+  assert.match(access, /synthetic: true/);
+  const tools = read("modules", "records", "toolsLib.js");
+  assert.match(tools, /Array\.isArray\(pageTexts\) && pageTexts\.length/);
+  const pharmd = learner("features", "pharmd", "components", "PharmDTopicSession.jsx");
+  assert.match(pharmd, /const catalogueKey = `catalogue:/);
+  assert.match(pharmd, /generateRecordTool\(\{ contentKey: catalogueKey/);
+  assert.match(pharmd, /pageTexts: allPageTexts/);
+  assert.match(pharmd, /listRecordArtifacts\(\{ contentKey: catalogueKey \}\)/);
 });

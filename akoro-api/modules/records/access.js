@@ -63,6 +63,11 @@ export async function activePremiumUserIds() {
 export async function resolveContentAccess({ userId, recordId: rawRecordId, contentKey: rawContentKey }) {
   const recordId   = String(rawRecordId || "");
   const contentKey = String(rawContentKey || "");
+  // Catalogue reader without a resolvable storage row: the reader sends its
+  // own page text, so tools/artifacts can still be anchored to this document.
+  if (!recordId && contentKey.startsWith("catalogue:")) {
+    return { contentKey, name: "Catalogue material", mime: "application/pdf", synthetic: true };
+  }
   if (recordId) {
     if (!/^[0-9a-f-]{36}$/i.test(recordId)) return { status: 400, message: "A valid recordId is required." };
     const { data: rec, error } = await (await edu()).from("records")

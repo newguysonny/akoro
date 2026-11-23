@@ -478,6 +478,13 @@ export async function gatherToolPassages({ target, scope, pageNumber = null, pag
   if (pasted.size) return samplePassages(pasted);
   const chunks = await loadChunks(target.recordId);
   if (chunks.length) return chunkPassages(chunks);
+  // Catalogue readers supply their page text (no content key/rows to load).
+  if (Array.isArray(pageTexts) && pageTexts.length) {
+    return finalize(pageTexts.flatMap((t) => {
+      const n = Number(t?.pageNumber);
+      return Number.isInteger(n) ? textPassages(n, String(t?.text || "")) : [];
+    }));
+  }
   return pageText ? textPassages(Number.isInteger(pageNumber) ? pageNumber : null, pageText) : [];
 }
 
