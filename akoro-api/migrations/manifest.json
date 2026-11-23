@@ -276,7 +276,8 @@
     "2026-capability-requests.sql",
     "2026-retrieval-telemetry.sql",
     "2026-record-chunk-provenance.sql",
-    "2026-platform-hybrid-search.sql"
+    "2026-platform-hybrid-search.sql",
+    "2026-record-content-artifact-anchor.sql"
   ],
   "demo": [
     "2026-seed-school-passwords.sql",

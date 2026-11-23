@@ -176,7 +176,9 @@ export async function startPodcast({ userId, target, scope = "document", pageNum
   const billTo = getAiBillTo();
   const { ok } = await coinsAvailable({ userId, billTo, min: 1 });
   if (!ok) return { status: 402, message: "You're out of AI credit — top up to make episodes.", code: "INSUFFICIENT_COINS" };
-  const anchor = target.folderId ? { folderId: target.folderId } : { recordId: target.recordId };
+  const anchor = target.folderId ? { folderId: target.folderId }
+    : target.recordId ? { recordId: target.recordId }
+      : { contentKey: target.contentKey };
   const existing = await listArtifacts({ userId, ...anchor });
   if (existing.some((a) => a.kind === "podcast" && podcastInFlight(a.content))) {
     return { status: 409, message: "An episode for this document is already being made — it'll be ready in a minute or two." };

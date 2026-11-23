@@ -108,4 +108,10 @@ export const cleanSelection = (sel) => {
 };
 
 /** The history/artifact anchor for a resolved target: folder or record. */
-export const anchorOf = (target) => (target.folderId ? { folderId: target.folderId } : { recordId: target.recordId });
+export const anchorOf = (target) => (target.folderId
+  ? { folderId: target.folderId }
+  : target.recordId
+    ? { recordId: target.recordId }
+    : target.contentKey
+      ? { contentKey: target.contentKey }
+      : { recordId: target.recordId });

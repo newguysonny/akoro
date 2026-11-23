@@ -67,24 +67,28 @@ const dbLazy = async () => (await import("../../db.js")).default;
 const table = async () => (await dbLazy()).schema("edu").from("record_artifacts");
 const COLS = "id, kind, page_number, params, content, open, created_at, updated_at";
 
-export async function listArtifacts({ userId, recordId, folderId = null }) {
+export async function listArtifacts({ userId, recordId, folderId = null, contentKey = null }) {
   let q = (await table()).select(COLS).eq("user_id", userId);
-  q = folderId ? q.eq("folder_id", folderId) : q.eq("record_id", recordId);
+  q = folderId ? q.eq("folder_id", folderId)
+    : contentKey ? q.eq("content_key", contentKey)
+      : q.eq("record_id", recordId);
   const { data, error } = await q
     .order("created_at", { ascending: true }).limit(ARTIFACT_LIMITS.LIST_LIMIT);
   if (error) throw error;
   return (data || []).map(toApiArtifact);
 }
 
-export async function createArtifact({ userId, recordId, folderId = null, row }) {
+export async function createArtifact({ userId, recordId, folderId = null, contentKey = null, row }) {
   let countQ = (await table()).select("id", { count: "exact", head: true }).eq("user_id", userId);
-  countQ = folderId ? countQ.eq("folder_id", folderId) : countQ.eq("record_id", recordId);
+  countQ = folderId ? countQ.eq("folder_id", folderId)
+    : contentKey ? countQ.eq("content_key", contentKey)
+      : countQ.eq("record_id", recordId);
   const { count } = await countQ;
   if ((count || 0) >= ARTIFACT_LIMITS.MAX_PER_DOCUMENT) {
     return { error: `You've saved ${ARTIFACT_LIMITS.MAX_PER_DOCUMENT} items on this document — delete some to save more.` };
   }
   const { data, error } = await (await table())
-    .insert({ user_id: userId, ...(folderId ? { folder_id: folderId } : { record_id: recordId }), ...row }).select(COLS).single();
+    .insert({ user_id: userId, ...(folderId ? { folder_id: folderId } : contentKey ? { content_key: contentKey } : { record_id: recordId }), ...row }).select(COLS).single();
   if (error) throw error;
   return { artifact: toApiArtifact(data) };
 }

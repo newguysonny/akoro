@@ -35,7 +35,10 @@ import { Icon } from '../../../components/common/Icons.jsx';
 import { BRAND } from '../../../constants.js';
 import { APP_HOME } from '../../../config/target.js';
 import { askPharmd } from '../../../services/pharmdApi.js';
-import { getSharedExtraction } from '../../../services/recordsApi.js';
+import {
+  getSharedExtraction, generateRecordTool, startRecordPodcast, getRecordPodcast,
+  listRecordArtifacts, saveRecordArtifact, updateRecordArtifact, deleteRecordArtifact,
+} from '../../../services/recordsApi.js';
 import { pharmdContentKey, markPharmdParsed, hasPharmdParsedMark } from '../../../lib/pharmdContent.js';
 
 const MAX_REFERENCE_CHARS = 12_000;   // the server's reference cap
@@ -291,6 +294,7 @@ export default function PharmDTopicSession({ topic, course, onClose, chatState =
     return null;
   };
 
+  const readerKey = pharmdContentKey(topic);
   const content = {
     state: 'ready',
     box: {
@@ -312,6 +316,22 @@ export default function PharmDTopicSession({ topic, course, onClose, chatState =
     pageBlocks: pages.map((_, i) => pageBlocks?.get(i + 1) || null),
     // "Ask about this" + the Ask tool, exactly like the Library reader. The
     // topic PDFs aren't indexed, so the reader sends the text it already has.
+    // Same server tools as a Library record: the catalogue file is addressed
+    // by its content key, so scopes, selected pages and attached context work.
+    tools: readerKey ? {
+      generate: (tool, args) => generateRecordTool({ contentKey: readerKey, tool, ...args }),
+      podcast: {
+        start: (args) => startRecordPodcast({ contentKey: readerKey, ...args }),
+        get: (id) => getRecordPodcast(id),
+      },
+    } : null,
+    // Saved tabs are anchored to the content key (migration 2026-record-content-artifact-anchor).
+    artifacts: readerKey ? {
+      list: () => listRecordArtifacts({ contentKey: readerKey }),
+      save: (body) => saveRecordArtifact({ contentKey: readerKey }, body),
+      update: (id, patch) => updateRecordArtifact(id, patch),
+      remove: (id) => deleteRecordArtifact(id),
+    } : null,
     ask: {
       load: async () => [],
       send: async (opts) => {
