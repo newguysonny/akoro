@@ -319,6 +319,12 @@ export function shapeToolResult(tool, json, passages, values = {}, contextSource
   if (tool === "summary") {
     const points = (json?.points || [])
       .filter((p) => String(p?.text || "").trim())
+      .filter((p) => {
+        if (isMetaQuestion(p.text)) return false;                 // "this document covers…"
+        const source = src(p.source);
+        if (source && isCoverPassage(source.text)) return false;  // the cover is not a finding
+        return true;
+      })
       .slice(0, max)
       .map((p) => ({ text: clip(p.text, 600), cite: src(p.source) ? citeOf(src(p.source)) : null }));
     return { summaryPoints: points };
@@ -506,15 +512,19 @@ export async function gatherToolPassages({ target, scope, pageNumber = null, pag
   if (target.contentKey) {
     const pages = await loadPages(target.contentKey);
     if (pages.size) {
+      // A cover/title block is not study material: every tool (summary, quiz,
+      // flashcards, podcast) grounds on the content pages when they exist.
+      const contentPages = new Map([...pages].filter(([, p]) => !isCoverPassage(p.markdown)));
+      const usable = contentPages.size ? contentPages : pages;
       const words = contentWords(focus);
       if (words.size) {
-        const hits = new Map([...pages].filter(([, p]) => {
+        const hits = new Map([...usable].filter(([, p]) => {
           const text = String(p?.markdown || "").toLowerCase();
           return [...words].some((w) => text.includes(w));
         }));
         if (hits.size) return samplePassages(hits);
       }
-      return samplePassages(pages);
+      return samplePassages(usable);
     }
   }
   // No extracted pages (a transcript/paste): search the indexed text.
@@ -524,7 +534,10 @@ export async function gatherToolPassages({ target, scope, pageNumber = null, pag
   }
   // A paste: its pages as the reader cuts them, so every item cites a real page.
   const pasted = await pastedPagesFor(target);
-  if (pasted.size) return samplePassages(pasted);
+  if (pasted.size) {
+    const contentPages = new Map([...pasted].filter(([, p]) => !isCoverPassage(p.markdown)));
+    return samplePassages(contentPages.size ? contentPages : pasted);
+  }
   const chunks = await loadChunks(target.recordId);
   if (chunks.length) return chunkPassages(chunks);
   // Catalogue readers supply their page text (no content key/rows to load).

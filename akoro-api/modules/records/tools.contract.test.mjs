@@ -257,3 +257,24 @@ test("course/cover meta questions never become quiz items", async () => {
   assert.equal(shaped.quizQuestions.length, 2, "cover-sourced/meta question is dropped");
   assert.ok(shaped.quizQuestions.every((q) => q.cite?.pageNumber === 2));
 });
+
+test("summary points cannot summarise the cover or the document itself", async () => {
+  const { isCoverPassage, shapeToolResult } = await import("./toolsLib.js");
+  const cover = "# PHARM.D 100 Level\nBIO 111 — curriculum: cell biology\nDesigned for first-year students.";
+  assert.equal(isCoverPassage(cover), true);
+  const passages = [{ n: 1, pageNumber: 1, text: cover }, { n: 2, pageNumber: 2, text: "Cells transform matter and energy; the thylakoid carries light reactions." }];
+  const json = { points: [
+    { text: "The document covers the BIO 111 curriculum for 100-level students.", source: 1 },
+    { text: "This document is a textbook-level lecture note.", source: 1 },
+    { text: "Cells transform matter and energy, and the thylakoid carries the light reactions.", source: 2 },
+  ] };
+  const out = shapeToolResult("summary", json, passages, { count: "6" });
+  assert.equal(out.summaryPoints.length, 1);
+  assert.equal(out.summaryPoints[0].cite.pageNumber, 2);
+});
+
+test("podcast prompts also forbid cover/curriculum talk", async () => {
+  const { buildPodcastMessages, PODCAST_LENGTHS } = await import("./podcastLib.js");
+  const messages = buildPodcastMessages({ docName: "BIO 111", passages: [{ n: 1, text: "Cells.", pageNumber: 2 }], length: PODCAST_LENGTHS.short });
+  assert.match(messages[0].content, /never spend the episode on its cover, course code/);
+});

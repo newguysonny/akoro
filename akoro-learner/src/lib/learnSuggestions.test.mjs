@@ -61,3 +61,12 @@ test("placeholder dashes never become a suggestion topic", () => {
   for (const item of s) assert.doesNotMatch(item.label, /---/);
   assert.match(s[0].label, /Cell Structure and Organization/);
 });
+
+test("cover/curriculum suggestions are filtered", async () => {
+  const { isMetaSuggestion, shapeLearnSuggestions } = await import("./learnSuggestions.js");
+  assert.equal(isMetaSuggestion("Explain the BIO 111 curriculum"), true);
+  assert.equal(isMetaSuggestion("Which topic opens the PHARM.D 100-level course?"), true);
+  assert.equal(isMetaSuggestion("Explain the thylakoid membrane"), false);
+  const shaped = shapeLearnSuggestions(["Summarise the curriculum", "Explain the Calvin cycle", "Quiz me on the course code", "Example of the stroma"]);
+  assert.deepEqual(shaped.map((x) => x.label), ["Explain the Calvin cycle", "Example of the stroma"]);
+});

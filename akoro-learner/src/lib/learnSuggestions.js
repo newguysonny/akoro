@@ -73,7 +73,7 @@ export function localLearnSuggestions({ topic = '', subject = '', title = '', te
     { id: 'explain', icon: ICONS.explain, label: `Explain ${t1} in simple words` },
     { id: 'quiz',    icon: ICONS.quiz,    label: `Quiz me on ${t2}` },
     { id: 'example', icon: ICONS.example, label: `Give a real-life example of ${t1}` },
-  ];
+  ].filter((x) => !isMetaSuggestion(x.label));
 }
 
 /** The body for the AI suggestions: a spread of the material, never all of it. */
@@ -104,6 +104,11 @@ const STRUCTURAL_ASK = /\b(?:\d+(?:st|nd|rd|th)|first|second|third|fourth|fifth|
 const STRUCT_OBJECT = /\b(?:row|column)\s+(?:elements|items|values|data|numbers|entries)\b/i;
 export const isStructuralSuggestion = (s) => STRUCTURAL_ASK.test(s) || STRUCT_OBJECT.test(s);
 
+/* Cover/curriculum talk is not a study question — the Ask suggestions must
+   not lead the learner into asking about the course code or 100-level. */
+const META_SUGGESTION = /\b(curriculum|syllabus|course\s+(code|outline)|100-level|200-level|300-level|which (topic|subject|course) (opens|begins|comes first|is covered first)|what is the title of|this document (covers|is about))\b/i;
+export const isMetaSuggestion = (s) => META_SUGGESTION.test(String(s || ''));
+
 export function shapeLearnSuggestions(list, cited = null) {
   const pageOf = new Map((Array.isArray(cited) ? cited : []).map((c) => [clean(c?.text).toLowerCase(), c?.citation || null]));
   const kinds = ['summary', 'explain', 'quiz', 'example'];
@@ -112,7 +117,7 @@ export function shapeLearnSuggestions(list, cited = null) {
   for (const s of Array.isArray(list) ? list : []) {
     const raw = clean(s);
     const label = raw ? raw[0].toUpperCase() + raw.slice(1) : '';   // the model sometimes starts lowercase
-    if (!label || label.length > 90 || seen.has(label.toLowerCase()) || isStructuralSuggestion(label)) continue;
+    if (!label || label.length > 90 || seen.has(label.toLowerCase()) || isStructuralSuggestion(label) || isMetaSuggestion(label)) continue;
     seen.add(label.toLowerCase());
     const id = kinds[out.length] || `more-${out.length}`;
     const citation = pageOf.get(raw.toLowerCase()) || null;
