@@ -70,3 +70,12 @@ test("cover/curriculum suggestions are filtered", async () => {
   const shaped = shapeLearnSuggestions(["Summarise the curriculum", "Explain the Calvin cycle", "Quiz me on the course code", "Example of the stroma"]);
   assert.deepEqual(shaped.map((x) => x.label), ["Explain the Calvin cycle", "Example of the stroma"]);
 });
+
+test("follow-up suggestions continue from the answer's own terms", async () => {
+  const { followUpSuggestions } = await import("./learnSuggestions.js");
+  const s = followUpSuggestions({ question: "What is a cell?", answer: "A cell is bounded by a plasma membrane; the thylakoid carries light reactions and the stroma fixes carbon." });
+  assert.equal(s.length, 3);
+  assert.ok(s.some((x) => /Explain (thylakoid|stroma|plasma membrane)/.test(x)));
+  assert.ok(!s.some((x) => /cell\b/i.test(x) && /Explain cell/i.test(x)), "does not just repeat the asked term");
+  assert.deepEqual(followUpSuggestions({ answer: "Yes." }), ["Give me a concrete example", "Quiz me on this page"]);
+});

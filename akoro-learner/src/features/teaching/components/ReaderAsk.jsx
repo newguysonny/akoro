@@ -20,6 +20,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Icon } from '../../../components/common/Icons.jsx';
 import { answerBlocks, citeLabel, toReaderCite } from '../../../lib/askAnswer.js';
+import { followUpSuggestions } from '../../../lib/learnSuggestions.js';
 
 function CiteChip({ cite, onCite }) {
   const target = toReaderCite(cite);
@@ -163,6 +164,7 @@ export default function ReaderAsk({ ask, onCite, pin = null, onPinClear }) {
     }
   };
 
+  const lastAnswerIndex = messages.reduce((last, m, i) => (m.role === 'assistant' && m.text && !m.pending ? i : last), -1);
   const suggItems = (ask.suggestions || [])
     .map((sg) => (typeof sg === 'string' ? { label: sg } : sg))
     .filter((sg) => sg?.label);
@@ -222,7 +224,7 @@ export default function ReaderAsk({ ask, onCite, pin = null, onPinClear }) {
           </div>
         )}
 
-        {messages.map((m) => (m.role === 'user' ? (
+        {messages.map((m, idx) => (m.role === 'user' ? (
           <div key={m.id} className="flex justify-end mb-3">
             <div className="rounded-2xl px-3 py-2 text-sm max-w-[85%]" style={{ background: 'var(--ak-tag-bg)', color: 'var(--ak-text)' }}>
               {m.selection?.text && (
@@ -247,6 +249,18 @@ export default function ReaderAsk({ ask, onCite, pin = null, onPinClear }) {
             {m.pending && !m.text && <div className="text-xs" style={{ color: 'var(--ak-text-sub)' }}>{status || 'Thinking…'}</div>}
             {m.error && <div className="text-xs" style={{ color: 'var(--ak-danger-text)' }}>{m.error}</div>}
             {m.stopped && <div className="text-xs" style={{ color: 'var(--ak-text-sub)' }}>Stopped.</div>}
+            {/* Continue the conversation from THIS answer (latest only). */}
+            {!running && !m.pending && !m.error && !m.stopped && m.text && idx === lastAnswerIndex ? (
+              <div className="flex flex-wrap gap-1.5" style={{ marginTop: 10 }}>
+                {followUpSuggestions({ answer: m.text, question: messages[idx - 1]?.text || '' }).map((label) => (
+                  <button key={label} type="button" onClick={() => send(label)}
+                    className="rounded-full px-2.5 py-1 text-[11px] font-bold"
+                    style={{ border: '1px solid var(--ak-border2)', background: 'var(--ak-surface)', color: 'var(--ak-text)' }}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            ) : null}
           </div>
         )))}
       </div>

@@ -126,3 +126,31 @@ export function shapeLearnSuggestions(list, cited = null) {
   }
   return out;
 }
+
+/**
+ * Continue-the-conversation prompts after an Ask answer: grounded in the
+ * answer's own key terms (never the cover/curriculum, never a duplicate of
+ * the question that was just asked).
+ */
+export function followUpSuggestions({ answer = "", question = "" } = {}) {
+  const asked = new Set(keyTerms(question, 8));
+  const VERBISH = new Set('bounded carries carried called means makes allows produces occurs happens helps begins starts shows gives uses used known simply basically usually often important actually between within through because however therefore'.split(' '));
+  const bad = (w) => w.length < 6 || STOP.has(w) || VERBISH.has(w) || asked.has(w)
+    || /(ed|ing|ly|al|ive|ous|ic|ary|able|ible|ful|less)$/.test(w) || isMetaSuggestion(w);
+  const tokens = clean(answer).toLowerCase().replace(/[^a-z0-9À-ɏ\s-]/g, ' ').split(/\s+/).filter(Boolean);
+  const good = tokens.map((w) => (bad(w) ? null : w)).filter(Boolean);
+  // Prefer the first two-word concept phrase (plasma membrane, light reactions);
+  // fall back to the longest single term. One focus keeps the follow-ups
+  // grammatical and coherent instead of stitching adjectives to nouns.
+  let phrase = null;
+  for (let i = 0; i < tokens.length - 1; i += 1) {
+    if (!bad(tokens[i]) && !bad(tokens[i + 1])) { phrase = `${tokens[i]} ${tokens[i + 1]}`; break; }
+  }
+  if (!phrase) phrase = [...good].sort((a, b) => b.length - a.length)[0] || null;
+  if (!phrase) return ['Give me a concrete example', 'Quiz me on this page'];
+  return [
+    `Explain ${phrase} in more detail`,
+    `Give an example of ${phrase}`,
+    `Quiz me on ${phrase}`,
+  ];
+}

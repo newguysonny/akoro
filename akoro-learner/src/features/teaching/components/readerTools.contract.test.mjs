@@ -79,3 +79,11 @@ test("the context results list closes on an outside click or Escape", () => {
   assert.match(picker, /ref=\{boxRef\}/);
   assert.match(picker, /removeEventListener\("pointerdown"/);
 });
+
+test("every latest Ask answer offers continue suggestions", () => {
+  const src = readFileSync(new URL("./ReaderAsk.jsx", import.meta.url), "utf8");
+  assert.match(src, /followUpSuggestions/);
+  assert.match(src, /lastAnswerIndex/);
+  assert.match(src, /idx === lastAnswerIndex/);
+  assert.match(src, /onClick=\{\(\) => send\(label\)\}/);
+});
