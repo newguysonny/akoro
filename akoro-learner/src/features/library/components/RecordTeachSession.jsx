@@ -69,7 +69,7 @@ function PlainCard({ icon, color, title, body, action }) {
   );
 }
 
-const BOX_ICON = { pdf: 'ti-file-text', docx: 'ti-file-text', pptx: 'ti-presentation', text: 'ti-file-text', paste: 'ti-clipboard', image: 'ti-photo', audio: 'ti-headphones', video: 'ti-video', other: 'ti-file-download', missing: 'ti-cloud-off' };
+const BOX_ICON = { link: 'ti-link', pdf: 'ti-file-text', docx: 'ti-file-text', pptx: 'ti-presentation', text: 'ti-file-text', paste: 'ti-clipboard', image: 'ti-photo', audio: 'ti-headphones', video: 'ti-video', other: 'ti-file-download', missing: 'ti-cloud-off' };
 
 /* sessionStorage continuation — one teaching thread per record, 24h. */
 const sidKey = (rid) => `akoro_teach_sid_${rid || 'x'}`;
@@ -173,6 +173,20 @@ export default function RecordTeachSession({ record: recordProp, source = null, 
     if (type === 'image') {
       return <ImagePage src={fileUrl} alt={record.name} blocks={pdfBlocks.get(1)}/>;
     }
+    if (type === 'link' && !record.content) {
+      return (
+        <PlainCard icon="ti-link" color={BRAND}
+          title={record.linkTitle || record.name}
+          body={record.linkError || 'Saved as a bookmark. Open the original page to read it.'}
+          action={(
+            <a href={record.url} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 14,
+              background: `linear-gradient(135deg, ${BRAND}, #4C1DCC)`, color: '#fff', fontSize: 12.5, fontWeight: 800,
+              padding: '11px 20px', borderRadius: 100, textDecoration: 'none', fontFamily: "'Nunito',sans-serif" }}>
+              <Icon name="ti-external-link" size={14}/> Open original
+            </a>
+          )}/>
+      );
+    }
     if (record.kind === 'upload' && record.fileMissing) {
       return (
         <PlainCard icon="ti-cloud-off" color="#F59E0B"
@@ -220,7 +234,10 @@ export default function RecordTeachSession({ record: recordProp, source = null, 
     },
     pct: record.progress || 0,
     docTitle: record.name,
-    sourceName: source ? (source.label || "Catalogue material") : `Library record · ${record.kind}`,
+    sourceName: record.kind === "link"
+      ? `Web page · ${(() => { try { return new URL(record.url).hostname.replace(/^www\./, ""); } catch { return "link"; } })()}`
+      : source ? (source.label || "Catalogue material") : `Library record · ${record.kind}`,
+    linkUrl: record.kind === "link" ? record.url || null : null,
     media,
     pages,
     renderPageContent,

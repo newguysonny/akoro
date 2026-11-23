@@ -59,7 +59,7 @@ export default function SessionReaderChrome({ reader }) {
   const {
     docTitle, sourceName, onClose, chatState, split, isMobile,
     allTabs, activeTabId, activeResultTab, switchTabTo, closeTab, onOpenChat,
-    folderNav,
+    folderNav, linkUrl,
   } = reader;
   const safeTop = "env(safe-area-inset-top, 0px)";
 
@@ -80,6 +80,13 @@ export default function SessionReaderChrome({ reader }) {
               </div>
             </div>
           </div>
+          {linkUrl ? (
+            <a href={linkUrl} target="_blank" rel="noopener noreferrer" aria-label="Open original page" title="Open original page"
+              className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"
+              style={{ color: "var(--ak-accent)", background: "rgba(108,59,255,.10)" }}>
+              <Icon name="ti-external-link" size={16}/>
+            </a>
+          ) : null}
           <button
             type="button"
             onClick={onClose}

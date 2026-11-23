@@ -278,7 +278,8 @@
     "2026-record-chunk-provenance.sql",
     "2026-platform-hybrid-search.sql",
     "2026-record-content-artifact-anchor.sql",
-    "2026-record-chat-content-anchor.sql"
+    "2026-record-chat-content-anchor.sql",
+    "2026-record-link-snapshots.sql"
   ],
   "demo": [
     "2026-seed-school-passwords.sql",

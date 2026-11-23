@@ -18,6 +18,7 @@ import { activePremiumUserIds } from "./access.js";
 import { storedTextKindOf, extractStoredText } from "./storedText.js";
 import { getExtractEngine } from "./extractEngine.js";
 import { startRecordScanExtraction } from "./extractOcr.js";
+import { snapshotLinkRecord } from "./linkSnapshot.js";
 import {
   MAX_FILE_BYTES, MAX_TEXT_CHARS, MAX_RECORDS, MAX_COVER_BYTES,
   pageParams, encodeCursor, detectType,
@@ -41,7 +42,12 @@ const toApi = async (r) => ({
   hasPreview: !!r.preview_key,
   fileMissing: r.kind === "upload" && !r.file_key,
   url: r.url || null,
-  content: r.kind === "paste" ? (r.content || "") : undefined,
+  content: r.kind === "paste" || (r.kind === "link" && r.content) ? (r.content || "") : undefined,
+  linkStatus: r.link_status || null,
+  linkTitle: r.link_title || null,
+  linkDescription: r.link_description || null,
+  linkImage: r.link_image || null,
+  linkError: r.link_error || null,
   // A gathered content's citation map (marker → the original Discover
   // record), so the reader can open a citation's source and come back.
   sources: Array.isArray(r.sources) && r.sources.length ? r.sources : undefined,
@@ -62,7 +68,7 @@ export async function generatePreviewForRecord(r, onError = null) {
   if (!r?.id) return null;
   // A pasted note has no file: its page is drawn from the text itself, the
   // same way a text upload is. Everything else needs the stored object.
-  const isPaste = r.kind === "paste";
+  const isPaste = r.kind === "paste" || (r.kind === "link" && r.content);
   if (!isPaste && !r.file_key) return null;
   try {
     let body, mime, name = r.name;
@@ -250,7 +256,7 @@ export async function createRecord(req, res) {
     if (!/^https?:\/\/\S+\.\S+/i.test(url)) return res400(res, "That link looks incomplete — include https://");
     let host = url;
     try { host = new URL(url).hostname.replace(/^www\./, ""); } catch { /* keep raw */ }
-    row = { user_id: userId, kind: "link", name: name || host.slice(0, 255), url: url.slice(0, 2000), size: 0 };
+    row = { user_id: userId, kind: "link", name: name || host.slice(0, 255), url: url.slice(0, 2000), size: 0, link_status: "fetching" };
   } else if (body.kind === "paste") {
     const text = String(body.content || body.text || "").trim();
     if (!text) return res400(res, "Paste some text first.");
@@ -270,6 +276,13 @@ export async function createRecord(req, res) {
   // page takes ~200 ms and the learner should not wait for a thumbnail.
   if ((data.kind === "upload" && data.file_key) || data.kind === "paste") {
     void generatePreviewForRecord(data).catch(() => {});
+  }
+  if (data.kind === "link" && data.url) {
+    // Readable link: fetch the page, store its text, then draw a text preview.
+    void snapshotLinkRecord(data).then((updated) => {
+      if (updated?.content) return generatePreviewForRecord(updated).catch(() => {});
+      return null;
+    }).catch(() => {});
   }
   // Semantic search index — the name always, pasted text too. Fire-and-forget:
   // an embedding hiccup must not fail a create; the sweeper repairs gaps.

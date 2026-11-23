@@ -65,7 +65,7 @@ export function useRecordSession({ record, onOpened, onProgress }) {
   // reader's Ask tab reloads its thread when this object changes.
   const askTarget = record?.contentKey
     ? { contentKey: record.contentKey }
-    : (record?.id && (record.kind === 'paste' || (record.kind === 'upload' && !record.fileMissing)) ? { recordId: record.id } : null);
+    : (record?.id && (record.kind === 'paste' || record.kind === 'link' || (record.kind === 'upload' && !record.fileMissing)) ? { recordId: record.id } : null);
   const askKey = askTarget ? (askTarget.contentKey || askTarget.recordId) : null;
   const ask = useMemo(() => (askKey ? {
     key: askKey,
@@ -255,7 +255,17 @@ export function useRecordSession({ record, onOpened, onProgress }) {
         }), null, text ? { name: record.name, text: text.slice(0, MAX_REFERENCE_CHARS) } : null);
         return;
       }
-      if (record.kind === 'link') { return fail('Links open in a new tab.'); }
+      if (record.kind === 'link') {
+        const text = String(record.content || '');
+        // A link snapshot reads like a pasted document; a bare bookmark keeps
+        // the "open original" card and offers no grounding.
+        ready(buildSessionReaderPages({
+          topic: record.linkTitle || record.name,
+          subject: 'Web page',
+          reference: text ? { name: record.linkTitle || record.name, text } : null,
+        }), null, text ? { name: record.linkTitle || record.name, text: text.slice(0, MAX_REFERENCE_CHARS) } : null);
+        return;
+      }
       if (record.kind !== 'upload' || !fileUrl) return fail('This record has no saved file.');
 
       try {

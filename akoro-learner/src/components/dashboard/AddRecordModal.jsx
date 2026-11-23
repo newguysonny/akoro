@@ -223,7 +223,13 @@ export default function AddRecordModal({ open, onClose, user, onOpenRecord, onRe
     setBusy(true); setErr('');
     try {
       await createRecord({ kind: 'link', url });
-      setLink(''); await reload();
+      setLink('');
+      await reload();
+      // The page snapshot is fetched server-side just after save; refresh the
+      // shelf as it lands so the title/thumbnail appear without a manual pull.
+      setTimeout(() => { void reload(); }, 3000);
+      setTimeout(() => { void reload(); }, 8000);
+      onClose?.();
     } catch (e) {
       setErr(e?.message || t('records.bad_link'));
     } finally { setBusy(false); }

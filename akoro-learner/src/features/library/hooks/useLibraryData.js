@@ -307,10 +307,12 @@ export function useLibraryData() {
     nowActs.setCurrent({
       type: 'record', id: r.id, title: r.name, sub: kindLabel,
       emoji: r.kind === 'link' ? 'ti-link' : r.kind === 'paste' ? 'ti-clipboard' : 'ti-paperclip',
-      hasPreview: r.kind !== 'link' && !!r.hasPreview,
+      hasPreview: !!r.hasPreview,
       progress: r.progress || 0,
     });
-    if (r.kind === 'link' && r.url) { try { window.open(r.url, '_blank', 'noopener'); } catch { /* popup blocked */ } }
+    // Links open in the reader: a snapshot reads like a document, a bare
+    // bookmark shows the "open original" card (no silent popup blocking).
+    if (r.kind === 'link') setViewer(r);
     else if (r.kind === 'upload' && !r.fileMissing) setViewer(r);
     else if (r.kind === 'paste') setViewer(r);
     else if (r.kind === 'upload') setViewer(r);     // missing file → the viewer explains itself

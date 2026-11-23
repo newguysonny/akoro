@@ -6,7 +6,9 @@ const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingm
 const PPTX_MIME = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
 
 export const recordFileType = (r) => {
-  if (!r || r.kind !== 'upload') return null;
+  if (!r) return null;
+  if (r.kind === 'link') return 'link';
+  if (r.kind !== 'upload') return null;
   const mime = r.mime || '', name = r.name || '';
   if (mime === 'application/pdf' || /\.pdf$/i.test(name)) return 'pdf';
   if (AUDIO_RE.test(mime) || AUDIO_EXT.test(name)) return 'audio';
