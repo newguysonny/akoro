@@ -137,7 +137,7 @@ export async function generateToolResult({ userId = null, target, tool, scope = 
       const needed = wanted - items.length;
       const keptKeys = items.map((it) => String(it.prompt || it.front || "").toLowerCase().trim()).filter(Boolean);
       const note = rejected > 0
-        ? `${rejected} of your items were rejected: they copied the source text word-for-word or asked about the document itself (its sections, title or structure) instead of the material. Write ${needed} replacement item(s) that test the material in your own words, in the same JSON shape, with only the replacements. Do not repeat these kept items: ${keptKeys.map((k) => `"${k.slice(0, 80)}"`).join("; ") || "none"}.`
+        ? `${rejected} of your items were rejected: they copied the source text word-for-word, asked about the cover/course/curriculum (course code, level, which topic opens the course) instead of the material, or asked about the document itself (its sections, title or structure). Write ${needed} replacement item(s) that test the material in your own words, in the same JSON shape, with only the replacements. Do not repeat these kept items: ${keptKeys.map((k) => `"${k.slice(0, 80)}"`).join("; ") || "none"}.`
         : `You returned ${items.length} items but the learner asked for exactly ${wanted}. Write ${needed} more item(s) in the same JSON shape, covering material the first batch did not. Do not repeat these kept items: ${keptKeys.map((k) => `"${k.slice(0, 80)}"`).join("; ") || "none"}.`;
       const second = await callModel([...messages, { role: "system", content: note }]).catch(() => ({ json: null }));
       if (second.json) {

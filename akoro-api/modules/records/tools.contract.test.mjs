@@ -235,3 +235,25 @@ test("tool and podcast routes resolve library attachments into the prompt", asyn
   assert.match(tools, /contextText/);
   assert.match(artifacts, /contextText: contextPromptBlock\(attachments\)/);
 });
+
+test("course/cover meta questions never become quiz items", async () => {
+  const { isMetaQuestion, isCoverPassage, shapeToolResult } = await import("./toolsLib.js");
+  assert.equal(isMetaQuestion("In the Pharm.D 100-level curriculum, which subject opens the BIO 111 course?"), true);
+  assert.equal(isMetaQuestion("Which topic begins this course?"), true);
+  assert.equal(isMetaQuestion("What does the curriculum cover?"), true);
+  assert.equal(isMetaQuestion("What is the function of the thylakoid membrane?"), false);
+  const cover = "# PHARM.D 100 Level\nBIO 111 GENERAL BIOLOGY I\nTextbook-level lecture note · Curriculum: cell biology\nDesigned for first-year students.";
+  const content = "The thylakoid membrane carries the light reactions; the stroma fixes carbon into sugar.";
+  assert.equal(isCoverPassage(cover), true);
+  assert.equal(isCoverPassage(content), false);
+
+  const passages = [{ n: 1, pageNumber: 1, text: cover }, { n: 2, pageNumber: 2, text: content }];
+  const json = { questions: [
+    { prompt: "Which subject opens the BIO 111 course?", options: ["Cell structure", "Biochemistry", "Pharmacology", "Pathology"], correctIndex: 0, explanation: "", source: 1, contextSource: "" },
+    { prompt: "Where do the light reactions take place?", options: ["Thylakoid membrane", "Nucleus", "Ribosome", "Golgi"], correctIndex: 0, explanation: "", source: 2, contextSource: "" },
+    { prompt: "What fixes carbon into sugar?", options: ["Stroma", "Nucleus", "Ribosome", "Golgi"], correctIndex: 0, explanation: "", source: 2, contextSource: "" },
+  ] };
+  const shaped = shapeToolResult("quiz", json, passages, { count: "5" });
+  assert.equal(shaped.quizQuestions.length, 2, "cover-sourced/meta question is dropped");
+  assert.ok(shaped.quizQuestions.every((q) => q.cite?.pageNumber === 2));
+});

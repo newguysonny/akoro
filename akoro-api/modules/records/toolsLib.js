@@ -209,7 +209,7 @@ export function buildToolMessages({ tool, docName = "this document", passages = 
     `You are an experienced teacher creating study material from the document "${String(docName).slice(0, 160)}" to prepare a learner for an exam on this material.`,
     "Use ONLY the numbered passages below; every item must name the passage it comes from as `source`.",
     "Never invent facts that are not in the passages. Use the learner's language (the passages' language).",
-    "Test the MATERIAL ITSELF — the facts, ideas and processes it teaches. Never ask about the document as an object: no questions about its sections, headings, pages, title or structure, and never write \"in the passage\", \"according to the text\" or \"the document says\" — write as if the material is simply what the learner is studying. Never copy a passage's wording as a question or card front; phrase everything in your own words.",
+    "Test the MATERIAL ITSELF — the facts, ideas and processes it teaches. Never ask about the document as an object or about its course/curriculum: no questions about sections, headings, pages, titles, course codes, level (100-level), syllabus, which topic comes first, or what the course covers. Never write \"in the passage\", \"according to the text\" or \"the document says\" — write as if the material is simply what the learner is studying. Never copy a passage's wording as a question or card front; phrase everything in your own words. Every item must be answerable from a passage's academic content.",
     focus ? `Concentrate on: ${focus}.` : "",
     ...(Array.isArray(intentNotes) ? intentNotes : [intentNotes]).filter(Boolean),
     contextText || "",
@@ -252,7 +252,29 @@ const META_QUESTION = [
   /\bthe (passage|document|text|author) (says|states|describes|mentions|covers|is titled)\b/i,
   /\b(described as covering|is titled|covers? which topic)\b/i,
   /\bwhat is the title of\b/i,
+  // Course/curriculum metadata is not the subject matter.
+  /\b(curriculum|syllabus|course\s+(code|outline|structure)|scheme of work)\b/i,
+  /\b(in|of|from) the (course|curriculum|programme|program)\b/i,
+  /\b(100|200|300|400|500)[- ]level\b/i,
+  /\b(pharm\.?d|bio|chm|phy|mth|gst|csc|eng)\s*\d{3}\b/i,
+  /\bwhich (subject|course|topic|module|chapter) (opens|begins|starts|comes first|is (covered|taught) first)\b/i,
+  /\bwhat (subject|course|topic) (opens|begins|starts)\b/i,
+  /\bopens the [a-z0-9 ]{1,40}(course|curriculum|programme)\b/i,
 ];
+
+/** A first page that is a cover/title block, not study material. */
+export function isCoverPassage(text) {
+  const t = String(text || "").replace(/\s+/g, " ").trim();
+  if (!t) return false;
+  const words = t.split(" ").length;
+  const hits = [
+    /\bcurriculum\b/i, /\bsyllabus\b/i, /\bcourse (code|outline)\b/i, /\bprogramme\b/i,
+    /\blecture note\b/i, /\btextbook[- ]level\b/i, /\bpharm\.?d\b/i,
+    /\b(BIO|CHM|PHY|MTH|GST|CSC|ENG)\s*\d{3}\b/i, /\b\d{3}[- ]level\b/i,
+    /\bdesigned for\b/i, /\bprepared for\b/i,
+  ].filter((re) => re.test(t)).length;
+  return (hits >= 2 && words < 260) || (hits >= 1 && words < 70);
+}
 /** True when the text asks about the document itself instead of the material. */
 export function isMetaQuestion(text) {
   return META_QUESTION.some((re) => re.test(String(text || "")));
@@ -315,7 +337,15 @@ export function shapeToolResult(tool, json, passages, values = {}, contextSource
       if (!String(q?.prompt || "").trim() || options.length !== 4 || new Set(options.map((o) => o.toLowerCase())).size !== 4) continue;
       if (!Number.isInteger(correctIndex) || correctIndex < 0 || correctIndex > 3) continue;
       const qPassage = src(q.source);
-      if (isMetaQuestion(q.prompt) || (qPassage && isVerbatimCopy(q.prompt, qPassage.text))) continue;
+      // A question with no source is only salvageable when there is exactly
+      // one passage; with several it is unverifiable (a generic/model question).
+      if (!qPassage) {
+        if (passages.length !== 1 || isCoverPassage(passages[0]?.text)) continue;
+      } else {
+        if (isMetaQuestion(q.prompt) || isCoverPassage(qPassage.text)) continue;
+        if (isVerbatimCopy(q.prompt, qPassage.text)) continue;
+      }
+      if (isMetaQuestion(q.prompt)) continue;
       questions.push({
         prompt: clip(q.prompt, 400),
         options: options.map((text, i) => ({ key: "ABCD"[i], text, correct: i === correctIndex })),
@@ -332,9 +362,14 @@ export function shapeToolResult(tool, json, passages, values = {}, contextSource
   for (const c of json?.cards || []) {
     if (!String(c?.front || "").trim() || !String(c?.back || "").trim()) continue;
     const cPassage = src(c.source);
+    if (!cPassage) {
+      if (passages.length !== 1 || isCoverPassage(passages[0]?.text)) continue;
+    } else {
+      if (isCoverPassage(cPassage.text)) continue;
+      if (isVerbatimCopy(c.front, cPassage.text)) continue;
+      if (normForCopy(c.back).length >= 80 && isVerbatimCopy(c.back, cPassage.text)) continue;
+    }
     if (isMetaQuestion(c.front) || String(c.front).includes("|")) continue;
-    if (cPassage && isVerbatimCopy(c.front, cPassage.text)) continue;
-    if (cPassage && normForCopy(c.back).length >= 80 && isVerbatimCopy(c.back, cPassage.text)) continue;
     cards.push({ front: clip(c.front, 160), back: clip(c.back, 500),
       ...(contextName(c.contextSource) ? { contextName: contextName(c.contextSource) }
         : autoContext(`${c.front} ${c.back}`) ? { contextName: autoContext(`${c.front} ${c.back}`) } : {}),
@@ -435,19 +470,33 @@ export async function gatherToolPassages({ target, scope, pageNumber = null, pag
     return out.length ? finalize(out) : [];
   }
   if (scope === "page" && Number.isInteger(pageNumber)) {
-    if (target.contentKey) {
-      const pages = await loadPages(target.contentKey, [pageNumber]);
-      const fromBoxes = pagePassages(pageNumber, pages.get(pageNumber));
+    const allPages = target.contentKey ? await loadPages(target.contentKey) : null;
+    const pasted = allPages ? null : await pastedPagesFor(target).catch(() => new Map());
+    const pageMap = allPages && allPages.size ? allPages : pasted;
+    const currentPage = pageMap?.get(pageNumber) || null;
+    const currentText = String(currentPage?.markdown || "") || String(pageText || "");
+    // Page 1 of a course note is usually a COVER (course code, curriculum,
+    // "100-level", title block). A tool must test the material, not the cover:
+    // widen to the next pages that carry actual content.
+    if (isCoverPassage(currentText)) {
+      const next = [];
+      for (const n of [pageNumber + 1, pageNumber + 2, pageNumber + 3]) {
+        const p = pageMap?.get(n);
+        const text = String(p?.markdown || "") || String((pageTexts || []).find((t) => Number(t?.pageNumber) === n)?.text || "");
+        if (!text || isCoverPassage(text)) continue;
+        next.push(...(p ? pagePassages(n, p) : textPassages(n, text)));
+        if (next.length >= 3) break;
+      }
+      if (next.length) return finalize(next);
+    }
+    if (currentPage) {
+      const fromBoxes = pagePassages(pageNumber, currentPage);
       if (fromBoxes.length) return fromBoxes;
     }
     if (pageText) return textPassages(pageNumber, pageText);
-    // The page carries no text (a paste's cover page, a blank scan page): a
-    // tool asked for "this page" should still build from the document it sits
-    // in, rather than refuse with "no readable text yet".
-    const pastedPage = await pastedPagesFor(target).catch(() => new Map());
-    if (pastedPage.size) {
-      const own = pagePassages(pageNumber, pastedPage.get(pageNumber));
-      return own.length ? own : samplePassages(pastedPage);
+    if (pageMap?.size) {
+      const own = pagePassages(pageNumber, pageMap.get(pageNumber));
+      return own.length ? own : samplePassages(pageMap);
     }
     return [];
   }
