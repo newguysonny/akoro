@@ -127,6 +127,10 @@ export async function resolveAskTargetFor({ userId, recordId: rawRecordId, conte
   if (contentKey) {
     const id = await resolveContentAccess({ userId, contentKey });
     if (id.status) return id;
+    // Catalogue content has no records row: the resolved key IS the target.
+    if (id.synthetic || contentKey.startsWith(PHARMD_PREFIX)) {
+      return { contentKey: id.contentKey || contentKey, name: id.name, mime: id.mime };
+    }
     const { data: rec, error } = await (await edu()).from("records")
       .select("id, user_id, name, kind, file_key").eq("file_key", contentKey).is("deleted_at", null)
       .order("created_at", { ascending: true }).limit(1).maybeSingle();

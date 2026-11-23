@@ -51,6 +51,7 @@ test("unified catalogue materials resolve as content keys too", () => {
 test("a catalogue reader can use its own page text without a storage row", () => {
   const access = read("modules", "records", "access.js");
   assert.match(access, /contentKey\.startsWith\("catalogue:"\)/);
+  assert.match(access, /id\.synthetic \|\| contentKey\.startsWith\(PHARMD_PREFIX\)/);
   assert.match(access, /synthetic: true/);
   const tools = read("modules", "records", "toolsLib.js");
   assert.match(tools, /Array\.isArray\(pageTexts\) && pageTexts\.length/);
