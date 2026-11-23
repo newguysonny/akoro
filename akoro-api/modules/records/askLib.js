@@ -362,13 +362,15 @@ const noChannel = (error) => error?.code === "42703" || error?.code === "PGRST20
 
 /** One thread per learner per document per channel: "ask" (the Ask tab) or "guide" (Learning with Guide).
  *  A folder thread anchors on folder_id instead of record_id. */
-export async function loadAskHistory({ userId, recordId, folderId = null, limit = ASK_LIMITS.HISTORY_LIMIT, channel = "ask" }) {
+export async function loadAskHistory({ userId, recordId, folderId = null, contentKey = null, limit = ASK_LIMITS.HISTORY_LIMIT, channel = "ask" }) {
   const db = await dbLazy();
   const query = (withChannel) => {
     let q = db.schema("edu").from("record_chat_messages")
       .select("id, role, text, citations, selection, created_at")
       .eq("user_id", userId);
-    q = folderId ? q.eq("folder_id", folderId) : q.eq("record_id", recordId);
+    q = folderId ? q.eq("folder_id", folderId)
+      : contentKey ? q.eq("content_key", contentKey)
+        : q.eq("record_id", recordId);
     if (withChannel) q = q.eq("channel", channel);
     return q.order("created_at", { ascending: false }).limit(limit);
   };
@@ -384,21 +386,21 @@ export async function loadAskHistory({ userId, recordId, folderId = null, limit 
 }
 
 /** The two rows of one turn — the same columns in both (see saveAskTurn). */
-export function turnRows({ userId, recordId, folderId = null, question, selection = null, answer, citations = [], channel = null, now = Date.now() }) {
-  const base = { user_id: userId, ...(folderId ? { folder_id: folderId } : { record_id: recordId }), ...(channel ? { channel } : {}) };
+export function turnRows({ userId, recordId, folderId = null, contentKey = null, question, selection = null, answer, citations = [], channel = null, now = Date.now() }) {
+  const base = { user_id: userId, ...(folderId ? { folder_id: folderId } : contentKey ? { content_key: contentKey } : { record_id: recordId }), ...(channel ? { channel } : {}) };
   return [
     { ...base, role: "user", text: question, citations: [], selection: selection || null, created_at: new Date(now).toISOString() },
     { ...base, role: "assistant", text: answer, citations: Array.isArray(citations) ? citations : [], selection: null, created_at: new Date(now + 1).toISOString() },
   ];
 }
 
-export async function saveAskTurn({ userId, recordId, folderId = null, question, selection, answer, citations, channel = "ask" }) {
+export async function saveAskTurn({ userId, recordId, folderId = null, contentKey = null, question, selection, answer, citations, channel = "ask" }) {
   const db = await dbLazy();
   const now = Date.now();
   // Both rows carry every column: a batch insert fills a column one row
   // leaves out with NULL (not its default), and citations is NOT NULL — the
   // learner's row without citations made every turn fail to save.
-  const rows = (withChannel) => turnRows({ userId, recordId, folderId, question, selection, answer, citations, channel: withChannel ? channel : null, now });
+  const rows = (withChannel) => turnRows({ userId, recordId, folderId, contentKey, question, selection, answer, citations, channel: withChannel ? channel : null, now });
   let { data, error } = await db.schema("edu").from("record_chat_messages").insert(rows(true)).select("id, role");
   // Without the column an Ask turn saves as before; a guide turn must not land in Ask's thread.
   if (error && noChannel(error) && channel === "ask") ({ data, error } = await db.schema("edu").from("record_chat_messages").insert(rows(false)).select("id, role"));

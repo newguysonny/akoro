@@ -55,3 +55,9 @@ test('shapeLearnSuggestions starts each with a capital', () => {
   assert.deepEqual(shapeLearnSuggestions(['summarise the cell wall section', 'explain mitochondria simply']).map((x) => x.label),
     ['Summarise the cell wall section', 'Explain mitochondria simply']);
 });
+
+test("placeholder dashes never become a suggestion topic", () => {
+  const s = localLearnSuggestions({ title: "Cell Structure and Organization", text: "--- --- ----- --- --- ----- 12 34", subtopics: [] });
+  for (const item of s) assert.doesNotMatch(item.label, /---/);
+  assert.match(s[0].label, /Cell Structure and Organization/);
+});

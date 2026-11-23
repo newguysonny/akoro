@@ -75,3 +75,18 @@ test("programme materials open in the same reader (files, video, audio)", () => 
   const hook = learner("features", "library", "hooks", "useRecordSession.js");
   assert.match(hook, /extractRecordPages\(\{ contentKey: record\.contentKey, pages: \[\] \}\)/);
 });
+
+test("Ask threads anchor on the content key for catalogue documents", async () => {
+  const manifest = JSON.parse(read("migrations", "manifest.json"));
+  assert.ok(manifest.schema.includes("2026-record-chat-content-anchor.sql"));
+  const sql = read("migrations", "2026-record-chat-content-anchor.sql");
+  assert.match(sql, /record_chat_messages ADD COLUMN IF NOT EXISTS content_key/);
+  assert.match(sql, /num_nonnulls\(record_id, folder_id, content_key\) = 1/);
+  const lib = read("modules", "records", "askLib.js");
+  assert.match(lib, /contentKey \? q\.eq\("content_key", contentKey\)/);
+  assert.match(lib, /contentKey \? \{ content_key: contentKey \}/);
+  const { turnRows } = await import("./askLib.js");
+  const rows = turnRows({ userId: "u", contentKey: "pharmd:BIO 111/x.pdf#h", question: "q", answer: "a" });
+  assert.equal(rows[0].content_key, "pharmd:BIO 111/x.pdf#h");
+  assert.equal(rows[0].record_id, undefined);
+});

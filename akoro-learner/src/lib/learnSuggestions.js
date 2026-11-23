@@ -41,7 +41,7 @@ export function materialText({ content = null, reference = null } = {}) {
  */
 export function keyTerms(text, max = 3) {
   const words = clean(text).toLowerCase().replace(/[^a-z0-9À-ɏ\s-]/g, ' ').split(/\s+/)
-    .filter((w) => w.length > 2 && !/^\d+$/.test(w) && !/^\d+(st|nd|rd|th)$/.test(w));
+    .filter((w) => w.length > 2 && /[a-z0-9À-ɏ]/i.test(w) && !/^[\d\-–—]+$/.test(w) && !/^\d+(st|nd|rd|th)$/.test(w));
   const pairs = new Map(), singles = new Map();
   for (let i = 0; i < words.length; i++) {
     const w = words[i];
