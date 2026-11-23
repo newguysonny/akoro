@@ -27,6 +27,7 @@ function TeachAgentModal(props) {
   const readerProps = content ? {
     docTitle: content.docTitle || `${subject} — ${topic}`,
     sourceName: content.sourceName || 'Session material',
+    linkUrl: content.linkUrl || null,
     docKey: content.docKey || null,
     pages: content.pages || [],
     media: content.media || null,

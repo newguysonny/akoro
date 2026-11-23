@@ -17,6 +17,7 @@ import {
 export function useSessionReader({
   docTitle,
   sourceName = "Session guide",
+  linkUrl = null,   // the original page for a readable link snapshot
   docKey = null,   // stable identity for remembering the reader's place (page + zoom)
   pages = [],
   onClose,
@@ -914,7 +915,7 @@ export function useSessionReader({
   const allTabs = [{ id: "reader" }, ...communityTabsOpen.map((id) => ({ id })), ...kindPills];
 
   return {
-    docTitle, sourceName, docKey, pages, onClose, chatNode, onOpenChat, onExplainSelection,
+    docTitle, sourceName, docKey, pages, linkUrl, onClose, chatNode, onOpenChat, onExplainSelection,
     renderPageContent, media, rawPages, pageBlocks, transcript, onTranscribe, transcribeState,
     transcribeError, discussion, ask, chatState, tools, artifacts, jumpTo, sourceCitations,
     folderNav, folderHome, onForeignCite,

@@ -43,10 +43,15 @@ test("the shared reader renders snapshots and lets a bare link open the original
   assert.match(session, /Open original/);
   assert.match(session, /linkUrl: record\.kind === "link"/);
   const chrome = learner("features", "teaching", "components", "SessionReaderChrome.jsx");
+  assert.match(chrome, /linkUrl/);
+  const teachModal = learner("features", "teaching", "components", "TeachAgentModal.jsx");
+  assert.match(teachModal, /linkUrl: content\.linkUrl/);
+  const readerHook = learner("features", "teaching", "hooks", "useSessionReader.js");
+  assert.match(readerHook, /sourceName = "Session guide",\n  linkUrl = null/);
   assert.match(chrome, /aria-label="Open original page"/);
   const data = learner("features", "library", "hooks", "useLibraryData.js");
   assert.match(data, /if \(r\.kind === 'link'\) setViewer\(r\)/);
-  const modal = learner("components", "dashboard", "AddRecordModal.jsx");
-  assert.match(modal, /kind: 'link', url/);
-  assert.match(modal, /setTimeout\(\(\) => \{ void reload\(\); \}, 3000\)/);
+  const addModal = learner("components", "dashboard", "AddRecordModal.jsx");
+  assert.match(addModal, /kind: 'link', url/);
+  assert.match(addModal, /setTimeout\(\(\) => \{ void reload\(\); \}, 3000\)/);
 });
