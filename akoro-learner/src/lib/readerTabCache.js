@@ -57,3 +57,14 @@ export function hydrateReaderTabs(cached) {
     savedItems: Array.isArray(cached?.savedItems) ? cached.savedItems : [],
   };
 }
+
+/** The identity a cached local tab shares with its saved artifact. */
+export const tabContentKey = (tab) => `${tab?.toolId || ""}|${(Number(tab?.createdPage) || 0) + 1}|${String(tab?.values?.focus || "").slice(0, 60)}`;
+export const artifactContentKey = (a) => `${a?.kind || ""}|${a?.pageNumber ?? null}|${String(a?.params?.focus || "").slice(0, 60)}`;
+
+/** A cached tab that never got its artifactId (the save was in flight when
+    the reader closed) must not shadow the server's copy on reopen. */
+export function dropShadowTabs(tabs = [], openArtifacts = []) {
+  const saved = new Set((openArtifacts || []).map(artifactContentKey));
+  return (tabs || []).filter((t) => t?.artifactId || !saved.has(tabContentKey(t)));
+}

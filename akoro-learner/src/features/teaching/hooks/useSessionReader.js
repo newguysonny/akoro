@@ -568,7 +568,7 @@ export function useSessionReader({
       const openById = new Map(open.map((a) => [a.id, a]));
       setResultTabs((rt) => {
         const kept = [];
-        for (const t of rt) {
+        for (const t of dropShadowTabs(rt, open)) {
           if (!t.artifactId) { kept.push(t); continue; }
           const a = openById.get(t.artifactId);
           if (a) kept.push({ ...artifactToTab(a, t.id), loading: false });

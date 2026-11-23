@@ -30,3 +30,14 @@ test("non-result active ids (ask/reader) survive hydration", () => {
   assert.equal(hydrateReaderTabs({ resultTabs: [], activeTabId: "ask" }).activeTabId, "ask");
   assert.equal(hydrateReaderTabs({ resultTabs: [], activeTabId: "reader" }).activeTabId, "reader");
 });
+
+test("a cached tab without an artifactId does not shadow the saved copy", async () => {
+  const { dropShadowTabs } = await import("./readerTabCache.js");
+  const local = { toolId: "quiz", createdPage: 0, values: { focus: "two easy questions" } };
+  const saved = { kind: "quiz", pageNumber: 1, params: { focus: "two easy questions" } };
+  assert.deepEqual(dropShadowTabs([local], [saved]), []);
+  const other = { ...local, values: { focus: "something else" } };
+  assert.deepEqual(dropShadowTabs([other], [saved]), [other]);
+  const withId = { ...local, artifactId: "a1" };
+  assert.deepEqual(dropShadowTabs([withId], [saved]), [withId], "already-linked tabs stay");
+});
