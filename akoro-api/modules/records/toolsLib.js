@@ -74,7 +74,7 @@ export function toolCount(tool, values = {}) {
   const n = parseInt(values.count, 10);
   if (tool === "summary") return /detailed/i.test(String(values.depth || "")) ? 8 : 4;
   if (tool === "quiz") return Number.isInteger(n) && n > 0 ? Math.min(n, 50) : 5;   // any count the learner types (1–50)
-  if (tool === "flashcards") return [3, 6, 10].includes(n) ? n : 6;
+  if (tool === "flashcards") return Number.isInteger(n) && n > 0 ? Math.min(n, 50) : 6;   // any count the learner types
   return 0;
 }
 
@@ -89,7 +89,7 @@ function finalize(raw) {
     out.push({ ...p, text });
     chars += text.length;
   }
-  return out.map((p, i) => ({ n: i + 1, ...p }));
+  return out.map((p, i) => ({ ...p, n: i + 1 }));   // pooling pages keeps one numbering
 }
 
 /** One page's boxes as passages (reading order). */
@@ -359,7 +359,7 @@ export function mergeToolFolderPassages(perDoc = []) {
   return out.map((p, i) => ({ ...p, n: i + 1 }));
 }
 
-export async function gatherToolPassages({ target, scope, pageNumber = null, pageText = "", focus = "", search }) {
+export async function gatherToolPassages({ target, scope, pageNumber = null, pageNumbers = [], pageText = "", pageTexts = [], focus = "", search }) {
   // A folder target: passages from every document in the folder, pooled.
   // Page scope has no meaning over a folder — always the whole documents.
   if (Array.isArray(target?.folderTargets)) {
@@ -371,6 +371,29 @@ export async function gatherToolPassages({ target, scope, pageNumber = null, pag
       }
     }
     return mergeToolFolderPassages(perDoc);
+  }
+  // Chosen pages: the same grounding as "this page", pooled in page order so
+  // citations still name the page each item came from.
+  if (scope === "pages" && Array.isArray(pageNumbers) && pageNumbers.length) {
+    const wanted = [...new Set(pageNumbers.map(Number).filter(Number.isInteger))]
+      .filter((n) => n >= 1).sort((a, b) => a - b).slice(0, 30);
+    const out = [];
+    if (target.contentKey && wanted.length) {
+      const pages = await loadPages(target.contentKey, wanted);
+      for (const n of wanted) out.push(...pagePassages(n, pages.get(n)));
+    }
+    if (!out.length) {
+      const pasted = await pastedPagesFor(target).catch(() => new Map());
+      for (const n of wanted) out.push(...pagePassages(n, pasted.get(n)));
+    }
+    if (!out.length && Array.isArray(pageTexts) && pageTexts.length) {
+      for (const item of pageTexts) {
+        const n = Number(item?.pageNumber);
+        if (!Number.isInteger(n) || !wanted.includes(n)) continue;
+        out.push(...textPassages(n, String(item?.text || "")));
+      }
+    }
+    return out.length ? finalize(out) : [];
   }
   if (scope === "page" && Number.isInteger(pageNumber)) {
     if (target.contentKey) {
@@ -419,3 +442,14 @@ export async function gatherToolPassages({ target, scope, pageNumber = null, pag
   return pageText ? textPassages(Number.isInteger(pageNumber) ? pageNumber : null, pageText) : [];
 }
 
+
+/** Reader "Selected pages" → validated page numbers + their page texts. */
+export function parsePageSelection(body = {}) {
+  const pageNumbers = [...new Set((Array.isArray(body?.pageNumbers) ? body.pageNumbers : [])
+    .map(Number).filter((n) => Number.isInteger(n) && n >= 1 && n <= 60))].sort((a, b) => a - b).slice(0, 30);
+  const pageTexts = (Array.isArray(body?.pageTexts) ? body.pageTexts : [])
+    .map((t) => ({ pageNumber: Number(t?.pageNumber), text: String(t?.text || "").slice(0, TOOL_LIMITS.MAX_PAGE_TEXT_CHARS) }))
+    .filter((t) => Number.isInteger(t.pageNumber) && t.pageNumber >= 1 && t.text)
+    .slice(0, 30);
+  return { pageNumbers, pageTexts };
+}

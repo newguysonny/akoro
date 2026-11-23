@@ -86,6 +86,13 @@ test("dedupe: an identical request returns the saved tab; any knob changed makes
   assert.ok(studyMaterial.indexOf("findDuplicateArtifact(arts") < studyMaterial.indexOf("generateToolResult({ userId, target, tool, scope: docScope"));
 });
 
+test("the requested number is a contract: short tool results are topped up", () => {
+  const gen = studyMaterial;
+  assert.match(gen, /items\.length < wanted/);
+  assert.match(gen, /You returned \$\{items\.length\} items but the learner asked for exactly/);
+  assert.match(gen, /const needed = wanted - items\.length/);
+});
+
 test("extraction fallback: a record whose text is only an extraction still gives passages", () => {
   const pages = [
     { pageNumber: 1, markdown: "Organic chemistry is the study of carbon compounds and their reactions in living and non-living systems.", blocks: [] },
@@ -99,7 +106,7 @@ test("extraction fallback: a record whose text is only an extraction still gives
   assert.deepEqual(passagesFromExtraction({ pages: [], scope: "document" }), []);
   assert.deepEqual(passagesFromExtraction({ pages, scope: "page", pageNumber: 9 }), []);
   // Wiring: generateToolResult falls back to the extraction when the gather is empty.
-  assert.match(studyMaterial, /if \(!passages\.length\) passages = await extractedPassages\(\{ target, scope, pageNumber \}\)/);
+  assert.match(studyMaterial, /if \(!passages\.length && scope !== "pages"\) passages = await extractedPassages\(\{ target, scope, pageNumber \}\)/);
   assert.match(studyMaterial, /getExtraction\(key\)/);
 });
 

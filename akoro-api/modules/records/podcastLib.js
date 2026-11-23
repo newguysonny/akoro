@@ -209,11 +209,11 @@ export function podcastForClient(content, now = Date.now()) {
  * item as { status: "failed", error }. deps: { gather, chat, speak, store,
  * update, charge } — all injected by the route (and the test).
  */
-export async function runPodcastJob({ artifactId, target, scope, pageNumber, pageText, focus, length, startedAt }, deps) {
+export async function runPodcastJob({ artifactId, target, scope, pageNumber, pageNumbers = [], pageText, pageTexts = [], focus, length, startedAt }, deps) {
   const base = { status: "making", length: length.id, startedAt };
   const fail = (error) => deps.update(artifactId, { podcast: { ...base, status: "failed", error } }).catch(() => {});
   try {
-    let passages = await deps.gather({ target, scope, pageNumber, pageText, focus });
+    let passages = await deps.gather({ target, scope, pageNumber, pageNumbers, pageText, pageTexts, focus });
     // A "this page" request that lands on a cover or a caption has too little
     // to talk about; widen to the document rather than fail the episode.
     const pageChars = passages.reduce((n, p) => n + String(p?.text || "").length, 0);

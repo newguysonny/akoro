@@ -6,7 +6,7 @@ process.env.SUPABASE_URL ||= "http://localhost:59999";
 process.env.SUPABASE_SERVICE_KEY ||= "test-service-key";
 
 const {
-  TOOL_IDS, TOOL_LIMITS, toolCount, pagePassages, textPassages, samplePassages, chunkPassages,
+  TOOL_IDS, TOOL_LIMITS, toolCount, parsePageSelection, pagePassages, textPassages, samplePassages, chunkPassages,
   toolSchema, buildToolMessages, shapeToolResult, gatherToolPassages, mergeToolFolderPassages, citeOf,
   isFrontMatter, isBareHeading, isVerbatimCopy, isMetaQuestion,
 } = await import("./toolsLib.js");
@@ -24,6 +24,11 @@ test("form values → item counts", () => {
   assert.equal(toolCount("quiz", { count: "10" }), 10);
   assert.equal(toolCount("quiz", { count: "999" }), 50, "the server caps a large count");
   assert.equal(toolCount("flashcards", { count: "3" }), 3);
+  assert.equal(toolCount("flashcards", { count: "8" }), 8, "cards follow the typed number");
+  assert.equal(toolCount("flashcards", { count: "999" }), 50, "capped like quiz");
+  const sel = parsePageSelection({ pageNumbers: [3, "2", 3, 1, 99], pageTexts: [{ pageNumber: 2, text: "Two" }, { pageNumber: 3, text: "" }] });
+  assert.deepEqual(sel.pageNumbers, [1, 2, 3], "deduped, sorted, bounded");
+  assert.deepEqual(sel.pageTexts, [{ pageNumber: 2, text: "Two" }], "empty page texts are dropped");
   assert.deepEqual(TOOL_IDS, ["summary", "quiz", "flashcards"]);
 });
 
@@ -188,4 +193,18 @@ test("quality gate: meta questions and verbatim copies are dropped, real items k
     { front: "Mitochondria", back: "The organelle that produces most of the cell's ATP, its main energy supply.", source: 1 },
   ] }, ps, { count: "6" });
   assert.deepEqual(cards.cardSet.map((c) => c.front), ["Mitochondria"], "the title card and the copied card are dropped");
+});
+
+test("selected pages keep their page numbers and get one passage numbering", async () => {
+  const ps = await gatherToolPassages({
+    target: { name: "Doc" }, scope: "pages", pageNumbers: [3, 1],
+    pageTexts: [
+      { pageNumber: 1, text: "Photosynthesis converts light energy into chemical energy in the chloroplast." },
+      { pageNumber: 3, text: "The Calvin cycle fixes carbon dioxide into sugar using ATP and NADPH." },
+      { pageNumber: 9, text: "Not selected, so it must not appear." },
+    ],
+  });
+  assert.deepEqual([...new Set(ps.map((p) => p.pageNumber))], [1, 3]);
+  assert.deepEqual(ps.map((p) => p.n), ps.map((_, i) => i + 1));
+  assert.ok(!ps.some((p) => /Not selected/.test(p.text)));
 });

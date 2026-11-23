@@ -3,7 +3,7 @@
  * quiz, flashcards) over numbered passages, each item carrying the citation
  * of the passage it came from.
  */
-import { TOOL_IDS, TOOL_LIMITS } from "./toolsLib.js";
+import { TOOL_IDS, TOOL_LIMITS, parsePageSelection } from "./toolsLib.js";
 import { generateToolResult } from "./studyMaterial.js";
 import { res400 } from "./http.js";
 import { resolveAskTarget } from "./service-ask.js";
@@ -21,7 +21,9 @@ export async function runTool(req, res) {
   const target = await resolveAskTarget(req, req.body);
   if (target.status) return res.status(target.status).json({ success: false, message: target.message });
 
-  const scope = req.body?.scope === "document" ? "document" : "page";
+  const scope = ["document", "pages"].includes(req.body?.scope) ? req.body.scope : "page";
+  const { pageNumbers, pageTexts } = parsePageSelection(req.body);
+  if (scope === "pages" && !pageNumbers.length) return res400(res, "Choose at least one page.");
   const pageNumber = Number(req.body?.pageNumber);
   const pageText = typeof req.body?.pageText === "string" ? req.body.pageText.slice(0, TOOL_LIMITS.MAX_PAGE_TEXT_CHARS) : "";
   const raw = req.body?.values && typeof req.body.values === "object" ? req.body.values : {};
@@ -32,7 +34,7 @@ export async function runTool(req, res) {
     difficulty: typeof raw.difficulty === "string" ? raw.difficulty.slice(0, 10) : "",
   };
 
-  const g = await generateToolResult({ target, tool, scope, pageNumber: Number.isInteger(pageNumber) && pageNumber >= 1 ? pageNumber : null, pageText, values });
+  const g = await generateToolResult({ target, tool, scope, pageNumber: Number.isInteger(pageNumber) && pageNumber >= 1 ? pageNumber : null, pageNumbers, pageText, pageTexts, values });
   if (g.status) return res.status(g.status).json({ success: false, message: g.message });
   return res.json({ success: true, data: { tool, scope, ...g.result } });
 }

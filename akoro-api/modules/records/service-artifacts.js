@@ -7,7 +7,7 @@
  */
 import { speakBuffer } from "../voice/index.js";
 import { createPresignedDownload, removeRecordFile, ownsRecordFileKey, putRecordObject } from "./lib/storage.js";
-import { TOOL_LIMITS } from "./toolsLib.js";
+import { TOOL_LIMITS, parsePageSelection } from "./toolsLib.js";
 import { startPodcast } from "./studyMaterial.js";
 import {
   validateArtifactInput, validateArtifactPatch, listArtifacts as listArtifactRows,
@@ -46,13 +46,15 @@ export async function createPodcast(req, res) {
   if (target.status) return res.status(target.status).json({ success: false, message: target.message });
 
   const userId = req.user.id;
-  const scope = req.body?.scope === "document" ? "document" : "page";
+  const scope = ["document", "pages"].includes(req.body?.scope) ? req.body.scope : "page";
+  const { pageNumbers, pageTexts } = parsePageSelection(req.body);
+  if (scope === "pages" && !pageNumbers.length) return res400(res, "Choose at least one page.");
   const pageNumber = Number(req.body?.pageNumber);
   const page = Number.isInteger(pageNumber) && pageNumber >= 1 ? pageNumber : null;
   const pageText = typeof req.body?.pageText === "string" ? req.body.pageText.slice(0, TOOL_LIMITS.MAX_PAGE_TEXT_CHARS) : "";
   const raw = req.body?.values && typeof req.body.values === "object" ? req.body.values : {};
   // The episode is written, narrated and stored after the response (studyMaterial.startPodcast).
-  const out = await startPodcast({ userId, target, scope, pageNumber: page, pageText, values: raw, deps: { speakBuffer, putRecordObject } });
+  const out = await startPodcast({ userId, target, scope, pageNumber: page, pageNumbers, pageText, pageTexts, values: raw, deps: { speakBuffer, putRecordObject } });
   if (out.status) return res.status(out.status).json({ success: false, message: out.message, ...(out.code ? { code: out.code } : {}) });
   res.status(202).json({ success: true, data: { artifact: await withPodcastAudio(out.artifact, userId) } });
 }

@@ -34,3 +34,16 @@ test("focus prefill strips OCR markdown and layout tokens", async () => {
   assert.equal(cleanFocusText("  "), "");
   assert.ok(cleanFocusText("x".repeat(400)).length <= 160);
 });
+
+test("reader forms: prompt wording, typed card count and selected pages", () => {
+  const model = readFileSync(new URL("./sessionReaderModel.js", import.meta.url), "utf8");
+  const doc = readFileSync(new URL("./SessionReaderDocument.jsx", import.meta.url), "utf8");
+  assert.doesNotMatch(model, /Focus \(optional\)/, "renamed to Prompt (optional)");
+  assert.match(model, /label: "Prompt \(optional\)"/);
+  assert.match(model, /id: "count", label: "Number of cards", type: "number"/, "cards are typed, not a dropdown");
+  assert.match(model, /options: \["This page", "Whole document", "Selected pages"\]/);
+  assert.match(model, /pagesLabel/);
+  assert.match(doc, /withScope && values\.scope === "Selected pages"/, "the page picker renders for the new scope");
+  assert.match(doc, /Choose at least one page\./, "submitting with no pages is refused");
+  assert.match(doc, /pageCount=\{pages\.length\} currentPage=\{currentPage\}/, "the picker knows the document length");
+});

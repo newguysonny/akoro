@@ -21,7 +21,7 @@ export const toolById = (id) => TOOL_DEFS.find((t) => t.id === id);
 export const SERVER_TOOLS = new Set(["summary", "quiz", "flashcards"]);
 /* Made by the server after the request (the reader polls the saved item). */
 export const isServerPodcast = (tools, id) => id === "podcast" && !!tools?.podcast;
-export const SCOPE_FIELD = { id: "scope", label: "From", type: "select", options: ["This page", "Whole document"] };
+export const SCOPE_FIELD = { id: "scope", label: "From", type: "select", options: ["This page", "Whole document", "Selected pages"] };
 
 /* Selected page text → a short, human focus line. A selection can come from
    the OCR/text layer, where it carries markdown headings ("# 5 The
@@ -41,28 +41,28 @@ export const FORM_DEFS = {
   podcast: {
     title: "Podcast", sub: "Turn this page into a short audio episode",
     fields: [
-      { id: "focus", label: "Focus (optional)", type: "text", placeholder: "e.g. the key argument" },
+      { id: "focus", label: "Prompt (optional)", type: "text", placeholder: "e.g. the key argument" },
       { id: "length", label: "Length", type: "select", options: ["Short · 2–3 min", "Medium · 5–6 min", "Long · 8–10 min"] },
     ],
   },
   video: {
     title: "Video", sub: "Generate an illustrated walkthrough",
     fields: [
-      { id: "focus", label: "Focus (optional)", type: "text", placeholder: "e.g. the worked example" },
+      { id: "focus", label: "Prompt (optional)", type: "text", placeholder: "e.g. the worked example" },
       { id: "style", label: "Style", type: "select", options: ["Whiteboard", "Animated", "Narrated slides"] },
     ],
   },
   summary: {
     title: "Summary", sub: "A quick digest of this page",
     fields: [
-      { id: "focus", label: "Focus (optional)", type: "text", placeholder: "e.g. only the definitions" },
+      { id: "focus", label: "Prompt (optional)", type: "text", placeholder: "e.g. only the definitions" },
       { id: "depth", label: "Depth", type: "select", options: ["Brief", "Detailed"] },
     ],
   },
   quiz: {
     title: "Quiz", sub: "Test yourself on this page",
     fields: [
-      { id: "focus", label: "Focus (optional)", type: "text", placeholder: "e.g. the definitions" },
+      { id: "focus", label: "Prompt (optional)", type: "text", placeholder: "e.g. the definitions" },
       { id: "count", label: "Questions", type: "number", min: 1, max: 50, default: "5", placeholder: "e.g. 8" },
       { id: "difficulty", label: "Difficulty", type: "select", options: ["Easy", "Medium", "Hard"] },
     ],
@@ -70,13 +70,13 @@ export const FORM_DEFS = {
   flashcards: {
     title: "Flashcards", sub: "Key terms from this page",
     fields: [
-      { id: "focus", label: "Focus (optional)", type: "text", placeholder: "e.g. the vocabulary" },
-      { id: "count", label: "Number of cards", type: "select", options: ["3", "6", "10"] },
+      { id: "focus", label: "Prompt (optional)", type: "text", placeholder: "e.g. the vocabulary" },
+      { id: "count", label: "Number of cards", type: "number", min: 1, max: 50, default: "6", placeholder: "e.g. 10" },
     ],
   },
   notes: {
     title: "Notes", sub: "Start a note for this page",
-    fields: [{ id: "focus", label: "Starting point (optional)", type: "text", placeholder: "What do you want to capture?" }],
+    fields: [{ id: "focus", label: "Prompt (optional)", type: "text", placeholder: "What do you want to capture?" }],
   },
 };
 
@@ -438,7 +438,17 @@ export const focusLabelOf = (tab) => (tab.values?.focus && String(tab.values.foc
 export const rowTitleOf = (tab) => (tab.toolId === "podcast" && tab.podcast?.title) || focusLabelOf(tab);
 
 
-export const whereFrom = (tab) => (tab.values?.scope === "Whole document" ? "whole document" : `page ${tab.createdPage + 1}`);
+export const pagesLabel = (pages = []) => {
+  const list = [...new Set(pages.map(Number).filter(Number.isInteger))].sort((a, b) => a - b);
+  if (!list.length) return "selected pages";
+  const head = list.slice(0, 4).join(", ");
+  return list.length > 4 ? `pages ${head} +${list.length - 4}` : `pages ${head}`;
+};
+export const whereFrom = (tab) => tab.values?.scope === "Whole document"
+  ? "whole document"
+  : tab.values?.scope === "Selected pages"
+    ? pagesLabel(tab.values.pages)
+    : `page ${tab.createdPage + 1}`;
 
 export function resultSub(tab) {
   switch (tab.toolId) {

@@ -42,13 +42,15 @@ async function extractedPassages({ target, scope, pageNumber }) {
   } catch { return []; }
 }
 
-export async function generateToolResult({ userId = null, target, tool, scope = "document", pageNumber = null, pageText = "", values = {}, feature = null }) {
+export async function generateToolResult({ userId = null, target, tool, scope = "document", pageNumber = null, pageNumbers = [], pageText = "", pageTexts = [], values = {}, feature = null }) {
   if (!TOOL_IDS.includes(tool)) return { status: 400, message: `tool must be one of: ${TOOL_IDS.join(", ")}.` };
-  let passages = await gatherToolPassages({ target, scope, pageNumber, pageText, focus: values.focus, search: searchRecordChunks });
-  if (!passages.length) passages = await extractedPassages({ target, scope, pageNumber });
+  let passages = await gatherToolPassages({ target, scope, pageNumber, pageNumbers, pageText, pageTexts, focus: values.focus, search: searchRecordChunks });
+  if (!passages.length && scope !== "pages") passages = await extractedPassages({ target, scope, pageNumber });
   if (!passages.length) {
     return { status: 409, message: scope === "page"
       ? "This page has no readable text yet — extract the document's text first."
+      : scope === "pages"
+      ? "Those pages have no readable text yet — extract the document's text first."
       : "This document isn't readable yet — extract its text (or transcribe the recording) first." };
   }
   try {
@@ -105,9 +107,17 @@ export async function generateToolResult({ userId = null, target, tool, scope = 
     // for replacements that fix the fault — a shorter, honest set beats a
     // padded one, but a fixable rejection shouldn't shrink the set either.
     const wanted = toolCount(tool, values);
-    if (tool !== "summary" && itemsOf(tool, json).length > items.length && items.length < wanted) {
+    // The learner's number is a contract (10 questions means 10): top up when
+    // the model returns fewer, whether they were rejected by the quality gate
+    // or simply never written.
+    if (tool !== "summary" && items.length < wanted) {
+      const fromModel = itemsOf(tool, json).length;
+      const rejected = Math.max(0, fromModel - items.length);
+      const needed = wanted - items.length;
       const keptKeys = items.map((it) => String(it.prompt || it.front || "").toLowerCase().trim()).filter(Boolean);
-      const note = `${itemsOf(tool, json).length - items.length} of your items were rejected: they copied the source text word-for-word or asked about the document itself (its sections, title or structure) instead of the material. Write ${wanted - items.length} replacement item(s) that test the material in your own words, in the same JSON shape, with only the replacements. Do not repeat these kept items: ${keptKeys.map((k) => `"${k.slice(0, 80)}"`).join("; ") || "none"}.`;
+      const note = rejected > 0
+        ? `${rejected} of your items were rejected: they copied the source text word-for-word or asked about the document itself (its sections, title or structure) instead of the material. Write ${needed} replacement item(s) that test the material in your own words, in the same JSON shape, with only the replacements. Do not repeat these kept items: ${keptKeys.map((k) => `"${k.slice(0, 80)}"`).join("; ") || "none"}.`
+        : `You returned ${items.length} items but the learner asked for exactly ${wanted}. Write ${needed} more item(s) in the same JSON shape, covering material the first batch did not. Do not repeat these kept items: ${keptKeys.map((k) => `"${k.slice(0, 80)}"`).join("; ") || "none"}.`;
       const second = await callModel([...messages, { role: "system", content: note }]).catch(() => ({ json: null }));
       if (second.json) {
         const extra = shapeToolResult(tool, second.json, passages, values);
@@ -141,7 +151,7 @@ export async function generateToolResult({ userId = null, target, tool, scope = 
 }
 
 /** Start a two-voice episode: the item exists at once ("making"), the episode follows. */
-export async function startPodcast({ userId, target, scope = "document", pageNumber = null, pageText = "", values = {}, deps }) {
+export async function startPodcast({ userId, target, scope = "document", pageNumber = null, pageNumbers = [], pageText = "", pageTexts = [], values = {}, deps }) {
   const billTo = getAiBillTo();
   const { ok } = await coinsAvailable({ userId, billTo, min: 1 });
   if (!ok) return { status: 402, message: "You're out of AI credit — top up to make episodes.", code: "INSUFFICIENT_COINS" };
@@ -164,7 +174,7 @@ export async function startPodcast({ userId, target, scope = "document", pageNum
   if (created.error) return { status: 409, message: created.error };
   const artifactId = created.artifact.id;
   let spokeWith = PODCAST_LIMITS.TTS_MODEL;
-  void runPodcastJob({ artifactId, target, scope, pageNumber, pageText, focus, length, startedAt }, {
+  void runPodcastJob({ artifactId, target, scope, pageNumber, pageNumbers, pageText, pageTexts, focus, length, startedAt }, {
     gather: (args) => gatherToolPassages({ ...args, search: searchRecordChunks }),
     chat: async (messages, len) => {
       const base = { __role: "background", temperature: 0.7, max_tokens: len.maxTokens, __userId: userId, __billTo: billTo, __feature: "reader_podcast" };

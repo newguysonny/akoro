@@ -100,7 +100,7 @@ function ToolHeader({ label, sub, onBack }) {
   );
 }
 
-function CreationForm({ toolId, initialFocus, onBack, onSubmit, withScope = false }) {
+function CreationForm({ toolId, initialFocus, onBack, onSubmit, withScope = false, pageCount = 0, currentPage = 0 }) {
   const base = FORM_DEFS[toolId];
   const def = withScope ? { ...base, fields: [SCOPE_FIELD, ...base.fields] } : base;
   const [values, setValues] = useState(() => {
@@ -110,12 +110,22 @@ function CreationForm({ toolId, initialFocus, onBack, onSubmit, withScope = fals
         : f.type === "number" ? (f.default ?? "")
         : (f.id === "focus" ? initialFocus || "" : "");
     });
+    if (withScope) v.pages = [];
     return v;
   });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const pickedPages = Array.isArray(values.pages) ? values.pages : [];
+  const pickPage = (n) => setValues((v) => {
+    const cur = Array.isArray(v.pages) ? v.pages : [];
+    return { ...v, pages: cur.includes(n) ? cur.filter((x) => x !== n) : [...cur, n].sort((a, b) => a - b) };
+  });
 
   function handleSubmit() {
+    if (withScope && values.scope === "Selected pages" && !pickedPages.length) {
+      setError("Choose at least one page.");
+      return;
+    }
     setSubmitting(true);
     setError("");
     // done() on success; fail(msg) keeps the form open with the reason.
@@ -153,7 +163,9 @@ function CreationForm({ toolId, initialFocus, onBack, onSubmit, withScope = fals
             ) : (
               <select
                 value={values[f.id]}
-                onChange={(e) => setValues((v) => ({ ...v, [f.id]: e.target.value }))}
+                onChange={(e) => setValues((v) => (f.id === "scope" && e.target.value === "Selected pages" && !(v.pages || []).length
+                  ? { ...v, [f.id]: e.target.value, pages: [currentPage + 1] }
+                  : { ...v, [f.id]: e.target.value }))}
                 className="folio-form-field border rounded-lg px-2.5 py-2 text-sm focus:outline-none"
                 style={{ color: "var(--ak-text)" }}
               >
@@ -162,6 +174,32 @@ function CreationForm({ toolId, initialFocus, onBack, onSubmit, withScope = fals
             )}
           </label>
         ))}
+        {withScope && values.scope === "Selected pages" && pageCount > 0 && (
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium" style={{ color: "var(--ak-text-sub)" }}>Pages ({pickedPages.length} selected)</span>
+              <div className="flex gap-2">
+                <button type="button" className="text-[11px] font-semibold" style={{ background: "none", border: "none", color: "var(--ak-accent)", cursor: "pointer" }}
+                  onClick={() => setValues((v) => ({ ...v, pages: Array.from({ length: pageCount }, (_, i) => i + 1) }))}>All</button>
+                <button type="button" className="text-[11px] font-semibold" style={{ background: "none", border: "none", color: "var(--ak-text-sub)", cursor: "pointer" }}
+                  onClick={() => setValues((v) => ({ ...v, pages: [] }))}>Clear</button>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-1.5" style={{ maxHeight: 132, overflowY: "auto" }}>
+              {Array.from({ length: pageCount }, (_, i) => i + 1).map((n) => {
+                const on = pickedPages.includes(n);
+                return (
+                  <button key={n} type="button" onClick={() => pickPage(n)} aria-pressed={on}
+                    className="rounded-md text-xs font-semibold"
+                    style={{ width: 34, height: 30, border: `1px solid ${on ? "var(--ak-accent)" : "var(--ak-border)"}`,
+                      background: on ? "var(--ak-accent)" : "transparent", color: on ? "#fff" : "var(--ak-text)" }}>
+                    {n}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
         {error && (
           <div role="alert" className="text-xs leading-relaxed rounded-lg p-2.5" style={{ color: "var(--ak-danger-text)", background: "rgba(239,68,68,.08)", border: "1px solid rgba(239,68,68,.25)" }}>
             {error}
@@ -309,7 +347,8 @@ export default function SessionReaderDocument({ reader }) {
                 <div className="sreader-menu absolute right-0 top-full mt-2 w-72 rounded-lg z-50 overflow-hidden" style={{ maxHeight: "70vh", overflowY: "auto" }}>
                   {formTool ? (
                     <div className="p-3">
-                      <CreationForm key={formTool} toolId={formTool} initialFocus={prefillFocus} onBack={() => setFormTool(null)} onSubmit={handleFormSubmit} withScope={!folderHome && !!tools && (SERVER_TOOLS.has(formTool) || isServerPodcast(tools, formTool))}/>
+                      <CreationForm key={formTool} toolId={formTool} initialFocus={prefillFocus} onBack={() => setFormTool(null)} onSubmit={handleFormSubmit} withScope={!folderHome && !!tools && (SERVER_TOOLS.has(formTool) || isServerPodcast(tools, formTool))}
+                        pageCount={pages.length} currentPage={currentPage}/>
                     </div>
                   ) : (
                     <GenerateGrid onPick={handleToolPick} discussion={discussion} askEnabled={!!ask} serverOnly={!!folderHome}

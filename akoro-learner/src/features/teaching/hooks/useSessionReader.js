@@ -453,6 +453,15 @@ export function useSessionReader({
 
   function handleFormSubmit(values, done, fail) {
     const toolId = formTool;
+    // "Selected pages" is a real scope for the server tools: page numbers ride
+    // with their text so pages without an extraction still ground the request.
+    const picked = Array.isArray(values.pages) ? [...values.pages].sort((a, b) => a - b) : [];
+    const scopeArg = values.scope === "Whole document" ? "document"
+      : values.scope === "Selected pages" ? "pages" : "page";
+    const pageNumbers = scopeArg === "pages" ? picked : undefined;
+    const pageTexts = scopeArg === "pages"
+      ? picked.map((n) => ({ pageNumber: n, text: pages[n - 1]?.text || "" })).filter((t) => t.text)
+      : undefined;
     // A real podcast episode: the server makes the saved item at once
     // ("making") and fills it in a minute or two — the tab opens now and
     // polls; the learner keeps reading meanwhile.
@@ -460,10 +469,12 @@ export function useSessionReader({
       const createdPage = currentPage;
       const { scope, ...podcastValues } = values;
       tools.podcast.start({
-        scope: scope === "Whole document" ? "document" : "page",
+        scope: scopeArg,
         pageNumber: createdPage + 1,
+        ...(pageNumbers ? { pageNumbers } : {}),
+        ...(pageTexts ? { pageTexts } : {}),
         pageText: pages[createdPage]?.text || "",
-        values: podcastValues,
+        values: { ...podcastValues, scope: values.scope, pages: pageNumbers || [] },
       }).then((a) => {
         if (!a?.id) throw new Error("Couldn't start the episode — try again.");
         const tab = artifactToTab(a, "r" + nextResultId.current++);
@@ -481,10 +492,12 @@ export function useSessionReader({
       const createdPage = currentPage;
       const { scope, ...toolValues } = values;
       tools.generate(toolId, {
-        scope: scope === "Whole document" ? "document" : "page",
+        scope: scopeArg,
         pageNumber: createdPage + 1,
+        ...(pageNumbers ? { pageNumbers } : {}),
+        ...(pageTexts ? { pageTexts } : {}),
         pageText: pages[createdPage]?.text || "",
-        values: toolValues,
+        values: { ...toolValues, pages: pageNumbers || [] },
       }).then((r) => {
         openResultTab(toolId, values, createdPage, toTabContent(toolId, r));
         done();
