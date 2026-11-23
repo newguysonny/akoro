@@ -71,7 +71,7 @@ export async function generateToolResult({ userId = null, target, tool, scope = 
     effectiveContextText = picked.related ? contextPromptBlock(picked.chunks, { mode: picked.mode }) : "";
     if (!picked.related) applied.notes.push("No attached reference material matched these passages — ignore the attachments and do not claim to have used them.");
   }
-  const contextNames = selectedContext.map((c) => ({ name: c.name, index: c.index }));
+  const contextNames = selectedContext.map((c) => ({ name: c.name, index: c.index, text: c.text }));
   try {
     const messages = buildToolMessages({ tool, docName: target.name, passages, values: effValues, contextText: effectiveContextText, intentNotes: applied.notes });
     const base = {

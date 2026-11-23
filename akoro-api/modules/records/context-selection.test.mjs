@@ -69,3 +69,14 @@ test("only a real attached source name is carried onto an item", () => {
   assert.equal(shaped.quizQuestions[0].contextName, "WAEC past questions.pdf");
   assert.equal(shaped.quizQuestions[1].contextName, undefined, "hallucinated sources are dropped");
 });
+
+test("a reused past question is attributed even when the model leaves contextSource empty", () => {
+  const json = { questions: [{
+    prompt: "In which organelle does photosynthesis take place?",
+    options: ["Nucleus", "Chloroplast", "Ribosome", "Vacuole"], correctIndex: 1,
+    explanation: "The chloroplast carries the light reactions.", source: 1, contextSource: "",
+  }] };
+  const ctx = [{ name: "WAEC past questions.pdf", index: 1, text: "In which organelle does photosynthesis take place? A. Nucleus B. Chloroplast C. Ribosome D. Vacuole" }];
+  const shaped = shapeToolResult("quiz", json, passages, { count: "1" }, ctx);
+  assert.equal(shaped.quizQuestions[0].contextName, "WAEC past questions.pdf");
+});

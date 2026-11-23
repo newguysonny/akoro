@@ -271,7 +271,26 @@ export function shapeToolResult(tool, json, passages, values = {}, contextSource
     allowed.set(norm(name), name);
     if (src?.index) allowed.set(norm(`context ${src.index}`), name);
   }
+  const ctx = (Array.isArray(contextSources) ? contextSources : []).map((src) => ({
+    name: String(src?.name || src || "").slice(0, 120),
+    tokens: new Set(String(src?.text || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").split(" ").filter((t) => t.length >= 5)),
+  })).filter((c) => c.name);
   const contextName = (raw) => allowed.get(norm(raw)) || null;
+  // Models often reuse a past question without labelling it. Attribute it
+  // deterministically when the item shares enough distinctive words with a
+  // selected piece of context.
+  const autoContext = (itemText) => {
+    const tokens = new Set(String(itemText || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").split(" ").filter((t) => t.length >= 5));
+    let best = null, bestScore = 0;
+    for (const c of ctx) {
+      if (!c.tokens.size) continue;
+      let shared = 0;
+      for (const t of tokens) if (c.tokens.has(t)) shared += 1;
+      const score = shared / Math.min(10, c.tokens.size);
+      if (shared >= 3 && score > bestScore) { best = c.name; bestScore = score; }
+    }
+    return bestScore >= 0.3 ? best : null;
+  };
   const byN = new Map(passages.map((p) => [p.n, p]));
   const max = toolCount(tool, values);
   const src = (n) => byN.get(Number(n));
@@ -301,7 +320,8 @@ export function shapeToolResult(tool, json, passages, values = {}, contextSource
         prompt: clip(q.prompt, 400),
         options: options.map((text, i) => ({ key: "ABCD"[i], text, correct: i === correctIndex })),
         explanation: clip(q.explanation || "", 400),
-        ...(contextName(q.contextSource) ? { contextName: contextName(q.contextSource) } : {}),
+        ...(contextName(q.contextSource) ? { contextName: contextName(q.contextSource) }
+          : autoContext(`${q.prompt} ${options.join(" ")}`) ? { contextName: autoContext(`${q.prompt} ${options.join(" ")}`) } : {}),
         cite: src(q.source) ? citeOf(src(q.source)) : null,
       });
       if (questions.length >= max) break;
@@ -316,7 +336,8 @@ export function shapeToolResult(tool, json, passages, values = {}, contextSource
     if (cPassage && isVerbatimCopy(c.front, cPassage.text)) continue;
     if (cPassage && normForCopy(c.back).length >= 80 && isVerbatimCopy(c.back, cPassage.text)) continue;
     cards.push({ front: clip(c.front, 160), back: clip(c.back, 500),
-      ...(contextName(c.contextSource) ? { contextName: contextName(c.contextSource) } : {}),
+      ...(contextName(c.contextSource) ? { contextName: contextName(c.contextSource) }
+        : autoContext(`${c.front} ${c.back}`) ? { contextName: autoContext(`${c.front} ${c.back}`) } : {}),
       cite: cPassage ? citeOf(cPassage) : null });
     if (cards.length >= max) break;
   }
