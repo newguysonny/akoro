@@ -359,7 +359,7 @@ export async function guideReply({ recordId, contentKey, message, selection = nu
 }
 
 /** Generate a study tool (summary | quiz | flashcards) from the document — grounded, cited. */
-export async function generateRecordTool({ recordId, contentKey, folderId, tool, scope = 'page', pageNumber = null, pageNumbers = null, pageText = '', pageTexts = null, values = {} }) {
+export async function generateRecordTool({ recordId, contentKey, folderId, tool, scope = 'page', pageNumber = null, pageNumbers = null, pageText = '', pageTexts = null, contextRecordIds = null, contextFolderIds = null, values = {} }) {
   // Grounded generation runs the model over the page: measured ~40 s on a
   // real page. The 30 s default aborted it and the sheet said "timed out"
   // while the server was still writing a perfectly good quiz.
@@ -369,6 +369,8 @@ export async function generateRecordTool({ recordId, contentKey, folderId, tool,
     ...(Array.isArray(pageNumbers) && pageNumbers.length ? { pageNumbers } : {}),
     ...(Array.isArray(pageTexts) && pageTexts.length ? { pageTexts: pageTexts.map((t) => ({ pageNumber: t.pageNumber, text: String(t.text || '').slice(0, 8000) })) } : {}),
     ...(pageText ? { pageText: String(pageText).slice(0, 8000) } : {}),
+    ...(Array.isArray(contextRecordIds) && contextRecordIds.length ? { contextRecordIds } : {}),
+    ...(Array.isArray(contextFolderIds) && contextFolderIds.length ? { contextFolderIds } : {}),
     values,
   }, { timeout: 90_000 });
   return d?.data ?? {};
@@ -376,13 +378,15 @@ export async function generateRecordTool({ recordId, contentKey, folderId, tool,
 
 /** Start a podcast episode → its saved item ({ id, content: { podcast: { status: 'making' } } }).
     The server writes, narrates and stores it; poll getRecordPodcast(id). */
-export async function startRecordPodcast({ recordId, contentKey, folderId, scope = 'page', pageNumber = null, pageNumbers = null, pageText = '', pageTexts = null, values = {} }) {
+export async function startRecordPodcast({ recordId, contentKey, folderId, scope = 'page', pageNumber = null, pageNumbers = null, pageText = '', pageTexts = null, contextRecordIds = null, contextFolderIds = null, values = {} }) {
   const d = await apiPost('/api/records/podcast', {
     ...(folderId ? { folderId } : contentKey ? { contentKey } : { recordId }),
     scope, ...(Number.isInteger(pageNumber) ? { pageNumber } : {}),
     ...(Array.isArray(pageNumbers) && pageNumbers.length ? { pageNumbers } : {}),
     ...(Array.isArray(pageTexts) && pageTexts.length ? { pageTexts: pageTexts.map((t) => ({ pageNumber: t.pageNumber, text: String(t.text || '').slice(0, 8000) })) } : {}),
     ...(pageText ? { pageText: String(pageText).slice(0, 8000) } : {}),
+    ...(Array.isArray(contextRecordIds) && contextRecordIds.length ? { contextRecordIds } : {}),
+    ...(Array.isArray(contextFolderIds) && contextFolderIds.length ? { contextFolderIds } : {}),
     values,
   });
   return d?.data?.artifact ?? null;

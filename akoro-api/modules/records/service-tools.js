@@ -4,6 +4,7 @@
  * of the passage it came from.
  */
 import { TOOL_IDS, TOOL_LIMITS, parsePageSelection } from "./toolsLib.js";
+import { resolveToolContext, contextPromptBlock } from "./toolContext.js";
 import { generateToolResult } from "./studyMaterial.js";
 import { res400 } from "./http.js";
 import { resolveAskTarget } from "./service-ask.js";
@@ -34,7 +35,13 @@ export async function runTool(req, res) {
     difficulty: typeof raw.difficulty === "string" ? raw.difficulty.slice(0, 10) : "",
   };
 
-  const g = await generateToolResult({ target, tool, scope, pageNumber: Number.isInteger(pageNumber) && pageNumber >= 1 ? pageNumber : null, pageNumbers, pageText, pageTexts, values });
+  const attachments = await resolveToolContext({
+    userId: req.user.id,
+    recordIds: req.body?.contextRecordIds,
+    folderIds: req.body?.contextFolderIds,
+  }).catch(() => []);
+  const contextText = contextPromptBlock(attachments);
+  const g = await generateToolResult({ target, tool, scope, pageNumber: Number.isInteger(pageNumber) && pageNumber >= 1 ? pageNumber : null, pageNumbers, pageText, pageTexts, values, contextText });
   if (g.status) return res.status(g.status).json({ success: false, message: g.message });
   return res.json({ success: true, data: { tool, scope, ...g.result } });
 }

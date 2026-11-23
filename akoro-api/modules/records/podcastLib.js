@@ -77,7 +77,7 @@ export function podcastSchema() {
  * the moves that make YouLearn's episodes work: a hook opening, the
  * material's confusing points raised as questions, an analogy per major
  * idea, short alternating turns, and a real recap. */
-export function buildPodcastMessages({ docName = "this document", passages = [], length = PODCAST_LENGTHS.medium, focus = "" }) {
+export function buildPodcastMessages({ docName = "this document", passages = [], length = PODCAST_LENGTHS.medium, focus = "", contextText = "" }) {
   const words = Math.round(length.chars / 6);
   const system = [
     `You write a short study podcast about the document "${clip(docName, 160)}" for a learner — a real conversation, not a lecture read aloud.`,
@@ -95,6 +95,7 @@ export function buildPodcastMessages({ docName = "this document", passages = [],
     "Host: 'Okay, that actually makes sense. So the coronary arteries are the tap?'",
     "Guest: 'Exactly. And when that tap gets blocked, the muscle downstream starves — that is a heart attack.'",
     focus ? `Concentrate on: ${clip(focus, TOOL_LIMITS.MAX_FOCUS_CHARS)}.` : "",
+    contextText || "",
     "",
     "Passages:",
     passages.map((p) => `[${p.n}] (${passageWhere(p)})\n${p.text}`).join("\n\n"),
@@ -209,7 +210,7 @@ export function podcastForClient(content, now = Date.now()) {
  * item as { status: "failed", error }. deps: { gather, chat, speak, store,
  * update, charge } — all injected by the route (and the test).
  */
-export async function runPodcastJob({ artifactId, target, scope, pageNumber, pageNumbers = [], pageText, pageTexts = [], focus, length, startedAt }, deps) {
+export async function runPodcastJob({ artifactId, target, scope, pageNumber, pageNumbers = [], pageText, pageTexts = [], focus, length, startedAt, contextText = "" }, deps) {
   const base = { status: "making", length: length.id, startedAt };
   const fail = (error) => deps.update(artifactId, { podcast: { ...base, status: "failed", error } }).catch(() => {});
   try {
@@ -228,7 +229,7 @@ export async function runPodcastJob({ artifactId, target, scope, pageNumber, pag
         : "This document isn't readable yet — extract its text (or transcribe the recording) first.");
     }
     let json = {};
-    try { json = parsePodcastScriptText(await deps.chat(buildPodcastMessages({ docName: target.name, passages, length, focus }), length)); }
+    try { json = parsePodcastScriptText(await deps.chat(buildPodcastMessages({ docName: target.name, passages, length, focus, contextText }), length)); }
     catch (e) {
       if (e?.name === "InsufficientCoins") return fail("You're out of AI credit — top up to make episodes.");
       throw e;
@@ -237,7 +238,7 @@ export async function runPodcastJob({ artifactId, target, scope, pageNumber, pag
     if (!script.turns.length) {
       // One retry: an empty/truncated draft is usually the provider, not the
       // material (the whole-document run of the same page succeeded).
-      try { json = parsePodcastScriptText(await deps.chat(buildPodcastMessages({ docName: target.name, passages, length, focus }), length)); }
+      try { json = parsePodcastScriptText(await deps.chat(buildPodcastMessages({ docName: target.name, passages, length, focus, contextText }), length)); }
       catch (e) {
         if (e?.name === "InsufficientCoins") return fail("You're out of AI credit — top up to make episodes.");
         throw e;

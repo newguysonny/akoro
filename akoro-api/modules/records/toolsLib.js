@@ -192,7 +192,7 @@ export function toolSchema(tool) {
       front: { type: "string" }, back: { type: "string" }, source: SOURCE } } } } };
 }
 
-export function buildToolMessages({ tool, docName = "this document", passages = [], values = {} }) {
+export function buildToolMessages({ tool, docName = "this document", passages = [], values = {}, contextText = "" }) {
   const count = toolCount(tool, values);
   const focus = clip(values.focus || "", TOOL_LIMITS.MAX_FOCUS_CHARS);
   const difficulty = ["Easy", "Medium", "Hard"].includes(values.difficulty) ? values.difficulty : "Medium";

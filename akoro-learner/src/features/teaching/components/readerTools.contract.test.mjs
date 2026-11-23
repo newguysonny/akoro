@@ -47,3 +47,19 @@ test("reader forms: prompt wording, typed card count and selected pages", () => 
   assert.match(doc, /Choose at least one page\./, "submitting with no pages is refused");
   assert.match(doc, /pageCount=\{pages\.length\} currentPage=\{currentPage\}/, "the picker knows the document length");
 });
+
+test("generation tools can attach library context (searchable files/folders)", () => {
+  const picker = readFileSync(new URL("./ContextPicker.jsx", import.meta.url), "utf8");
+  const doc = readFileSync(new URL("./SessionReaderDocument.jsx", import.meta.url), "utf8");
+  const hook = readFileSync(new URL("../hooks/useSessionReader.js", import.meta.url), "utf8");
+  const api = readFileSync(new URL("../../../services/recordsApi.js", import.meta.url), "utf8");
+  assert.match(picker, /searchRecords\(q, 12\)/);
+  assert.match(picker, /listFolders\(\)/);
+  assert.match(picker, /Search files and folders to attach/);
+  assert.match(picker, /MAX_ITEMS = 6/);
+  assert.match(doc, /<ContextPicker/, "the form offers attachments");
+  assert.match(hook, /contextRecordIds/, "record attachments ride to the server");
+  assert.match(hook, /contextFolderIds/, "folder attachments ride to the server");
+  assert.match(api, /contextRecordIds/);
+  assert.match(api, /contextFolderIds/);
+});

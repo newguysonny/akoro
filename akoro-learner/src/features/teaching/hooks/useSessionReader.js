@@ -462,6 +462,9 @@ export function useSessionReader({
     const pageTexts = scopeArg === "pages"
       ? picked.map((n) => ({ pageNumber: n, text: pages[n - 1]?.text || "" })).filter((t) => t.text)
       : undefined;
+    const attached = Array.isArray(values.context) ? values.context : [];
+    const contextRecordIds = attached.filter((c) => c.type === "record").map((c) => c.id);
+    const contextFolderIds = attached.filter((c) => c.type === "folder").map((c) => c.id);
     // A real podcast episode: the server makes the saved item at once
     // ("making") and fills it in a minute or two — the tab opens now and
     // polls; the learner keeps reading meanwhile.
@@ -473,6 +476,8 @@ export function useSessionReader({
         pageNumber: createdPage + 1,
         ...(pageNumbers ? { pageNumbers } : {}),
         ...(pageTexts ? { pageTexts } : {}),
+        ...(contextRecordIds.length ? { contextRecordIds } : {}),
+        ...(contextFolderIds.length ? { contextFolderIds } : {}),
         pageText: pages[createdPage]?.text || "",
         values: { ...podcastValues, scope: values.scope, pages: pageNumbers || [] },
       }).then((a) => {
@@ -496,6 +501,8 @@ export function useSessionReader({
         pageNumber: createdPage + 1,
         ...(pageNumbers ? { pageNumbers } : {}),
         ...(pageTexts ? { pageTexts } : {}),
+        ...(contextRecordIds.length ? { contextRecordIds } : {}),
+        ...(contextFolderIds.length ? { contextFolderIds } : {}),
         pageText: pages[createdPage]?.text || "",
         values: { ...toolValues, pages: pageNumbers || [] },
       }).then((r) => {

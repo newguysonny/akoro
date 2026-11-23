@@ -8,6 +8,7 @@
 import { speakBuffer } from "../voice/index.js";
 import { createPresignedDownload, removeRecordFile, ownsRecordFileKey, putRecordObject } from "./lib/storage.js";
 import { TOOL_LIMITS, parsePageSelection } from "./toolsLib.js";
+import { resolveToolContext, contextPromptBlock } from "./toolContext.js";
 import { startPodcast } from "./studyMaterial.js";
 import {
   validateArtifactInput, validateArtifactPatch, listArtifacts as listArtifactRows,
@@ -54,7 +55,13 @@ export async function createPodcast(req, res) {
   const pageText = typeof req.body?.pageText === "string" ? req.body.pageText.slice(0, TOOL_LIMITS.MAX_PAGE_TEXT_CHARS) : "";
   const raw = req.body?.values && typeof req.body.values === "object" ? req.body.values : {};
   // The episode is written, narrated and stored after the response (studyMaterial.startPodcast).
-  const out = await startPodcast({ userId, target, scope, pageNumber: page, pageNumbers, pageText, pageTexts, values: raw, deps: { speakBuffer, putRecordObject } });
+  const attachments = await resolveToolContext({
+    userId,
+    recordIds: req.body?.contextRecordIds,
+    folderIds: req.body?.contextFolderIds,
+  }).catch(() => []);
+  const out = await startPodcast({ userId, target, scope, pageNumber: page, pageNumbers, pageText, pageTexts, values: raw,
+    contextText: contextPromptBlock(attachments), deps: { speakBuffer, putRecordObject } });
   if (out.status) return res.status(out.status).json({ success: false, message: out.message, ...(out.code ? { code: out.code } : {}) });
   res.status(202).json({ success: true, data: { artifact: await withPodcastAudio(out.artifact, userId) } });
 }

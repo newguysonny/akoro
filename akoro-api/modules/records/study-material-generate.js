@@ -42,7 +42,7 @@ async function extractedPassages({ target, scope, pageNumber }) {
   } catch { return []; }
 }
 
-export async function generateToolResult({ userId = null, target, tool, scope = "document", pageNumber = null, pageNumbers = [], pageText = "", pageTexts = [], values = {}, feature = null }) {
+export async function generateToolResult({ userId = null, target, tool, scope = "document", pageNumber = null, pageNumbers = [], pageText = "", pageTexts = [], values = {}, feature = null, contextText = "" }) {
   if (!TOOL_IDS.includes(tool)) return { status: 400, message: `tool must be one of: ${TOOL_IDS.join(", ")}.` };
   let passages = await gatherToolPassages({ target, scope, pageNumber, pageNumbers, pageText, pageTexts, focus: values.focus, search: searchRecordChunks });
   if (!passages.length && scope !== "pages") passages = await extractedPassages({ target, scope, pageNumber });
@@ -54,7 +54,7 @@ export async function generateToolResult({ userId = null, target, tool, scope = 
       : "This document isn't readable yet — extract its text (or transcribe the recording) first." };
   }
   try {
-    const messages = buildToolMessages({ tool, docName: target.name, passages, values });
+    const messages = buildToolMessages({ tool, docName: target.name, passages, values, contextText });
     const base = {
       __role: "background", temperature: 0.3, max_tokens: tool === "quiz" ? 2400 : 1600,
       ...(userId ? { __userId: userId } : {}), ...(feature ? { __feature: feature } : {}),
@@ -151,7 +151,7 @@ export async function generateToolResult({ userId = null, target, tool, scope = 
 }
 
 /** Start a two-voice episode: the item exists at once ("making"), the episode follows. */
-export async function startPodcast({ userId, target, scope = "document", pageNumber = null, pageNumbers = [], pageText = "", pageTexts = [], values = {}, deps }) {
+export async function startPodcast({ userId, target, scope = "document", pageNumber = null, pageNumbers = [], pageText = "", pageTexts = [], values = {}, contextText = "", deps }) {
   const billTo = getAiBillTo();
   const { ok } = await coinsAvailable({ userId, billTo, min: 1 });
   if (!ok) return { status: 402, message: "You're out of AI credit — top up to make episodes.", code: "INSUFFICIENT_COINS" };
@@ -174,7 +174,7 @@ export async function startPodcast({ userId, target, scope = "document", pageNum
   if (created.error) return { status: 409, message: created.error };
   const artifactId = created.artifact.id;
   let spokeWith = PODCAST_LIMITS.TTS_MODEL;
-  void runPodcastJob({ artifactId, target, scope, pageNumber, pageNumbers, pageText, pageTexts, focus, length, startedAt }, {
+  void runPodcastJob({ artifactId, target, scope, pageNumber, pageNumbers, pageText, pageTexts, focus, length, startedAt, contextText }, {
     gather: (args) => gatherToolPassages({ ...args, search: searchRecordChunks }),
     chat: async (messages, len) => {
       const base = { __role: "background", temperature: 0.7, max_tokens: len.maxTokens, __userId: userId, __billTo: billTo, __feature: "reader_podcast" };

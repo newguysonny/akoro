@@ -5,6 +5,7 @@ import { BRAND, GREEN, GOLD, RED } from '../../../constants.js';
 import { Icon } from '../../../components/common/Icons.jsx';
 import MediaPlayer from '../../../components/library/MediaPlayer.jsx';
 import { artifactToTab } from '../../../lib/readerArtifacts.js';
+import ContextPicker from './ContextPicker.jsx';
 import {
   TOOL_DEFS, toolById, SERVER_TOOLS, isServerPodcast, FORM_DEFS, SCOPE_FIELD, mediaTime,
 } from './sessionReaderModel.js';
@@ -110,7 +111,7 @@ function CreationForm({ toolId, initialFocus, onBack, onSubmit, withScope = fals
         : f.type === "number" ? (f.default ?? "")
         : (f.id === "focus" ? initialFocus || "" : "");
     });
-    if (withScope) v.pages = [];
+    if (withScope) { v.pages = []; v.context = []; }
     return v;
   });
   const [submitting, setSubmitting] = useState(false);
@@ -199,6 +200,9 @@ function CreationForm({ toolId, initialFocus, onBack, onSubmit, withScope = fals
               })}
             </div>
           </div>
+        )}
+        {withScope && (
+          <ContextPicker value={values.context || []} onChange={(next) => setValues((v) => ({ ...v, context: next }))}/>
         )}
         {error && (
           <div role="alert" className="text-xs leading-relaxed rounded-lg p-2.5" style={{ color: "var(--ak-danger-text)", background: "rgba(239,68,68,.08)", border: "1px solid rgba(239,68,68,.25)" }}>
