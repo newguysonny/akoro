@@ -61,7 +61,7 @@ export async function createPodcast(req, res) {
     folderIds: req.body?.contextFolderIds,
   }).catch(() => []);
   const out = await startPodcast({ userId, target, scope, pageNumber: page, pageNumbers, pageText, pageTexts, values: raw,
-    contextText: contextPromptBlock(attachments), deps: { speakBuffer, putRecordObject } });
+    contextText: contextPromptBlock(attachments), contextAttached: attachments.length > 0, deps: { speakBuffer, putRecordObject } });
   if (out.status) return res.status(out.status).json({ success: false, message: out.message, ...(out.code ? { code: out.code } : {}) });
   res.status(202).json({ success: true, data: { artifact: await withPodcastAudio(out.artifact, userId) } });
 }

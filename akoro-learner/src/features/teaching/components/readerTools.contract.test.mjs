@@ -63,3 +63,10 @@ test("generation tools can attach library context (searchable files/folders)", (
   assert.match(api, /contextRecordIds/);
   assert.match(api, /contextFolderIds/);
 });
+
+test("the Prompt box advertises what it can drive", () => {
+  const doc = readFileSync(new URL("./SessionReaderDocument.jsx", import.meta.url), "utf8");
+  const hook = readFileSync(new URL("../hooks/useSessionReader.js", import.meta.url), "utf8");
+  assert.match(doc, /The prompt can set pages, count, difficulty and exam style/);
+  assert.match(hook, /appliedIntent/, "the tab reflects what the server applied");
+});

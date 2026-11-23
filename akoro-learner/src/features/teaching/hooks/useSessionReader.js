@@ -506,7 +506,17 @@ export function useSessionReader({
         pageText: pages[createdPage]?.text || "",
         values: { ...toolValues, pages: pageNumbers || [] },
       }).then((r) => {
-        openResultTab(toolId, values, createdPage, toTabContent(toolId, r));
+        // The server may have applied page/count/difficulty/exam intent from
+        // the Prompt — reflect what it actually did in the tab subtitle.
+        const applied = r?.appliedIntent;
+        const tabValues = applied ? {
+          ...values,
+          ...(applied.scope === "document" ? { scope: "Whole document", pages: [] }
+            : applied.scope === "pages" ? { scope: "Selected pages", pages: applied.pageNumbers || [] } : {}),
+          ...(applied.count ? { count: String(applied.count) } : {}),
+          ...(applied.difficulty ? { difficulty: applied.difficulty } : {}),
+        } : values;
+        openResultTab(toolId, tabValues, createdPage, toTabContent(toolId, r));
         done();
       }).catch((e) => fail?.(e?.message || "Couldn't build that — try again."));
       return;

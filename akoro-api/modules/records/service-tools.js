@@ -41,7 +41,7 @@ export async function runTool(req, res) {
     folderIds: req.body?.contextFolderIds,
   }).catch(() => []);
   const contextText = contextPromptBlock(attachments);
-  const g = await generateToolResult({ target, tool, scope, pageNumber: Number.isInteger(pageNumber) && pageNumber >= 1 ? pageNumber : null, pageNumbers, pageText, pageTexts, values, contextText });
+  const g = await generateToolResult({ target, tool, scope, pageNumber: Number.isInteger(pageNumber) && pageNumber >= 1 ? pageNumber : null, pageNumbers, pageText, pageTexts, values, contextText, contextAttached: attachments.length > 0 });
   if (g.status) return res.status(g.status).json({ success: false, message: g.message });
   return res.json({ success: true, data: { tool, scope, ...g.result } });
 }

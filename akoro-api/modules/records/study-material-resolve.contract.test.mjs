@@ -106,7 +106,7 @@ test("extraction fallback: a record whose text is only an extraction still gives
   assert.deepEqual(passagesFromExtraction({ pages: [], scope: "document" }), []);
   assert.deepEqual(passagesFromExtraction({ pages, scope: "page", pageNumber: 9 }), []);
   // Wiring: generateToolResult falls back to the extraction when the gather is empty.
-  assert.match(studyMaterial, /if \(!passages\.length && scope !== "pages"\) passages = await extractedPassages\(\{ target, scope, pageNumber \}\)/);
+  assert.match(studyMaterial, /if \(!passages\.length && effScope !== "pages"\) passages = await extractedPassages\(\{ target, scope: effScope, pageNumber \}\)/);
   assert.match(studyMaterial, /getExtraction\(key\)/);
 });
 

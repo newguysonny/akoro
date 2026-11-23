@@ -192,7 +192,7 @@ export function toolSchema(tool) {
       front: { type: "string" }, back: { type: "string" }, source: SOURCE } } } } };
 }
 
-export function buildToolMessages({ tool, docName = "this document", passages = [], values = {}, contextText = "" }) {
+export function buildToolMessages({ tool, docName = "this document", passages = [], values = {}, contextText = "", intentNotes = [] }) {
   const count = toolCount(tool, values);
   const focus = clip(values.focus || "", TOOL_LIMITS.MAX_FOCUS_CHARS);
   const difficulty = ["Easy", "Medium", "Hard"].includes(values.difficulty) ? values.difficulty : "Medium";
@@ -207,6 +207,8 @@ export function buildToolMessages({ tool, docName = "this document", passages = 
     "Never invent facts that are not in the passages. Use the learner's language (the passages' language).",
     "Test the MATERIAL ITSELF — the facts, ideas and processes it teaches. Never ask about the document as an object: no questions about its sections, headings, pages, title or structure, and never write \"in the passage\", \"according to the text\" or \"the document says\" — write as if the material is simply what the learner is studying. Never copy a passage's wording as a question or card front; phrase everything in your own words.",
     focus ? `Concentrate on: ${focus}.` : "",
+    ...(Array.isArray(intentNotes) ? intentNotes : [intentNotes]).filter(Boolean),
+    contextText || "",
     task,
     "",
     "Passages:",

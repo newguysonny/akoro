@@ -11,6 +11,7 @@
 import db from "../../db.js";
 import { openai } from "../../lib/aiModel.js";
 import { TOOL_IDS, TOOL_LIMITS, toolSchema, toolCount, buildToolMessages, shapeToolResult, gatherToolPassages, citeOf } from "./toolsLib.js";
+import { applyPromptIntent } from "./toolPrompt.js";
 import { searchRecordChunks } from "./searchLib.js";
 import { getExtraction } from "./extractLib.js";
 import { passagesFromExtraction } from "./studyMaterialCore.js";
@@ -42,19 +43,25 @@ async function extractedPassages({ target, scope, pageNumber }) {
   } catch { return []; }
 }
 
-export async function generateToolResult({ userId = null, target, tool, scope = "document", pageNumber = null, pageNumbers = [], pageText = "", pageTexts = [], values = {}, feature = null, contextText = "" }) {
+export async function generateToolResult({ userId = null, target, tool, scope = "document", pageNumber = null, pageNumbers = [], pageText = "", pageTexts = [], values = {}, feature = null, contextText = "", contextAttached = false }) {
   if (!TOOL_IDS.includes(tool)) return { status: 400, message: `tool must be one of: ${TOOL_IDS.join(", ")}.` };
-  let passages = await gatherToolPassages({ target, scope, pageNumber, pageNumbers, pageText, pageTexts, focus: values.focus, search: searchRecordChunks });
-  if (!passages.length && scope !== "pages") passages = await extractedPassages({ target, scope, pageNumber });
+  // The learner's Prompt can request pages, a count, difficulty or an exam
+  // board; apply it before anything reads scope/values.
+  const applied = applyPromptIntent({ prompt: values.focus, scope, pageNumbers, values, contextAttached });
+  const effScope = applied.scope;
+  const effPages = applied.pageNumbers;
+  const effValues = applied.values;
+  let passages = await gatherToolPassages({ target, scope: effScope, pageNumber, pageNumbers: effPages, pageText, pageTexts, focus: values.focus, search: searchRecordChunks });
+  if (!passages.length && effScope !== "pages") passages = await extractedPassages({ target, scope: effScope, pageNumber });
   if (!passages.length) {
-    return { status: 409, message: scope === "page"
+    return { status: 409, message: effScope === "page"
       ? "This page has no readable text yet — extract the document's text first."
-      : scope === "pages"
+      : effScope === "pages"
       ? "Those pages have no readable text yet — extract the document's text first."
       : "This document isn't readable yet — extract its text (or transcribe the recording) first." };
   }
   try {
-    const messages = buildToolMessages({ tool, docName: target.name, passages, values, contextText });
+    const messages = buildToolMessages({ tool, docName: target.name, passages, values: effValues, contextText, intentNotes: applied.notes });
     const base = {
       __role: "background", temperature: 0.3, max_tokens: tool === "quiz" ? 2400 : 1600,
       ...(userId ? { __userId: userId } : {}), ...(feature ? { __feature: feature } : {}),
@@ -100,13 +107,13 @@ export async function generateToolResult({ userId = null, target, tool, scope = 
       }
       throw firstError || new Error("the model returned no JSON");
     }
-    let result = shapeToolResult(tool, json, passages, values);
+    let result = shapeToolResult(tool, json, passages, effValues);
     let items = result.summaryPoints || result.quizQuestions || result.cardSet || [];
     // Quality top-up: shapeToolResult's gate drops items that copy the source
     // word-for-word or ask about the document itself. When it fired, ask ONCE
     // for replacements that fix the fault — a shorter, honest set beats a
     // padded one, but a fixable rejection shouldn't shrink the set either.
-    const wanted = toolCount(tool, values);
+    const wanted = toolCount(tool, effValues);
     // The learner's number is a contract (10 questions means 10): top up when
     // the model returns fewer, whether they were rejected by the quality gate
     // or simply never written.
@@ -142,7 +149,7 @@ export async function generateToolResult({ userId = null, target, tool, scope = 
       console.warn("[records-tools] empty result", tool, JSON.stringify(json).slice(0, 600));
       return { status: 422, message: "Couldn't build that from this material — try a different page or focus." };
     }
-    return { result: { ...result, passages: passages.length } };
+    return { result: { ...result, passages: passages.length, appliedIntent: { scope: effScope, pageNumbers: effPages, count: effValues.count || null, difficulty: effValues.difficulty || null, exam: applied.intent.exam } } };
   } catch (err) {
     if (err?.name === "InsufficientCoins") return { status: 402, message: "You're out of AI credit — top up to keep generating." };
     console.warn("[records-tools] failed:", String(err?.message || err).slice(0, 200));
@@ -151,7 +158,7 @@ export async function generateToolResult({ userId = null, target, tool, scope = 
 }
 
 /** Start a two-voice episode: the item exists at once ("making"), the episode follows. */
-export async function startPodcast({ userId, target, scope = "document", pageNumber = null, pageNumbers = [], pageText = "", pageTexts = [], values = {}, contextText = "", deps }) {
+export async function startPodcast({ userId, target, scope = "document", pageNumber = null, pageNumbers = [], pageText = "", pageTexts = [], values = {}, contextText = "", contextAttached = false, deps }) {
   const billTo = getAiBillTo();
   const { ok } = await coinsAvailable({ userId, billTo, min: 1 });
   if (!ok) return { status: 402, message: "You're out of AI credit — top up to make episodes.", code: "INSUFFICIENT_COINS" };
@@ -161,20 +168,27 @@ export async function startPodcast({ userId, target, scope = "document", pageNum
     return { status: 409, message: "An episode for this document is already being made — it'll be ready in a minute or two." };
   }
   const focus = clean(values.focus, TOOL_LIMITS.MAX_FOCUS_CHARS);
+  // "Summarise the whole document" / "pages 5–15" in the Prompt overrides the
+  // form, exactly as it does for the other tools.
+  const applied = applyPromptIntent({ prompt: focus, scope, pageNumbers, values: {}, contextAttached });
+  const effScope = applied.scope;
+  const effPages = applied.pageNumbers;
   const length = lengthOf(values.length);
   const startedAt = new Date().toISOString();
   const created = await createArtifact({
     userId, ...anchor,
     row: {
       kind: "podcast", page_number: pageNumber, open: true,
-      params: { focus, length: typeof values.length === "string" ? values.length.slice(0, 40) : length.id, scope: scope === "document" ? "Whole document" : "This page" },
+      params: { focus, length: typeof values.length === "string" ? values.length.slice(0, 40) : length.id,
+        scope: effScope === "document" ? "Whole document" : effScope === "pages" ? `Pages ${effPages.slice(0, 8).join(", ")}${effPages.length > 8 ? "…" : ""}` : "This page",
+        pages: effPages },
       content: { podcast: { status: "making", length: length.id, startedAt } },
     },
   });
   if (created.error) return { status: 409, message: created.error };
   const artifactId = created.artifact.id;
   let spokeWith = PODCAST_LIMITS.TTS_MODEL;
-  void runPodcastJob({ artifactId, target, scope, pageNumber, pageNumbers, pageText, pageTexts, focus, length, startedAt, contextText }, {
+  void runPodcastJob({ artifactId, target, scope: effScope, pageNumber, pageNumbers: effPages, pageText, pageTexts, focus, length, startedAt, contextText, intentNotes: applied.notes }, {
     gather: (args) => gatherToolPassages({ ...args, search: searchRecordChunks }),
     chat: async (messages, len) => {
       const base = { __role: "background", temperature: 0.7, max_tokens: len.maxTokens, __userId: userId, __billTo: billTo, __feature: "reader_podcast" };

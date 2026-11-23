@@ -140,7 +140,7 @@ test("routes: made by the server, polled, never client-writable, audio deleted w
   assert.match(routes, /router\.get\("\/podcast\/:id", authenticateToken/);
   const post = routes.slice(routes.indexOf("export async function createPodcast"), routes.indexOf("export async function getPodcast"));
   assert.match(post, /resolveAskTarget\(req, req\.body\)/);
-  assert.match(post, /startPodcast\(\{ userId, target, scope, pageNumber: page, pageNumbers, pageText, pageTexts, values: raw,\n    contextText: contextPromptBlock\(attachments\), deps: \{ speakBuffer, putRecordObject \} \}\)/);
+  assert.match(post, /startPodcast\(\{ userId, target, scope, pageNumber: page, pageNumbers, pageText, pageTexts, values: raw,\n    contextText: contextPromptBlock\(attachments\), contextAttached: attachments.length > 0, deps: \{ speakBuffer, putRecordObject \} \}\)/);
   assert.match(post, /res\.status\(202\)/);                                         // answers first
   const start = shared.slice(shared.indexOf("export async function startPodcast"), shared.indexOf("async function podcastDeps"));
   assert.match(start, /coinsAvailable\(/);                       // hard block before any spend

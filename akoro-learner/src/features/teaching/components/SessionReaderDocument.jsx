@@ -173,6 +173,11 @@ function CreationForm({ toolId, initialFocus, onBack, onSubmit, withScope = fals
                 {f.options.map((o) => <option key={o}>{o}</option>)}
               </select>
             )}
+            {f.id === "focus" && (
+              <span className="text-[11px] leading-relaxed" style={{ color: "var(--ak-text-sub)" }}>
+                The prompt can set pages, count, difficulty and exam style — e.g. “20 hard WAEC questions from pages 5–15 using the attached past questions”.
+              </span>
+            )}
           </label>
         ))}
         {withScope && values.scope === "Selected pages" && pageCount > 0 && (
