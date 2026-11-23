@@ -64,10 +64,12 @@ export async function generateToolResult({ userId = null, target, tool, scope = 
   // Only the attached pieces that actually touch these passages/concepts are
   // sent to the model; the rest of a past paper or syllabus is noise.
   let selectedContext = [];
+  let selectedSemantic = false;
   let effectiveContextText = contextText;
   if (Array.isArray(contextItems) && contextItems.length) {
     const picked = await selectContextChunksHybrid({ items: contextItems, passages, prompt: values.focus, mode: applied.intent.contextMode, embeddingsEnabled: process.env.TOOL_CONTEXT_EMBEDDINGS !== "off" });
     selectedContext = picked.chunks;
+    selectedSemantic = !!picked.semantic;
     effectiveContextText = picked.related ? contextPromptBlock(picked.chunks, { mode: picked.mode }) : "";
     if (!picked.related) applied.notes.push("No attached reference material matched these passages — ignore the attachments and do not claim to have used them.");
   }
@@ -161,7 +163,7 @@ export async function generateToolResult({ userId = null, target, tool, scope = 
       console.warn("[records-tools] empty result", tool, JSON.stringify(json).slice(0, 600));
       return { status: 422, message: "Couldn't build that from this material — try a different page or focus." };
     }
-    return { result: { ...result, passages: passages.length, appliedIntent: { scope: effScope, pageNumbers: effPages, count: effValues.count || null, difficulty: effValues.difficulty || null, exam: applied.intent.exam, contextMode: selectedContext.length ? applied.intent.contextMode || null : null, contextChunks: selectedContext.length } } };
+    return { result: { ...result, passages: passages.length, appliedIntent: { scope: effScope, pageNumbers: effPages, count: effValues.count || null, difficulty: effValues.difficulty || null, exam: applied.intent.exam, contextMode: selectedContext.length ? applied.intent.contextMode || null : null, contextChunks: selectedContext.length, contextSemantic: selectedSemantic } } };
   } catch (err) {
     if (err?.name === "InsufficientCoins") return { status: 402, message: "You're out of AI credit — top up to keep generating." };
     console.warn("[records-tools] failed:", String(err?.message || err).slice(0, 200));
