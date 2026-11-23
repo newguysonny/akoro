@@ -51,8 +51,10 @@ async function assertPublicUrl(raw) {
   if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal")) {
     throw new Error("That address is not public.");
   }
-  const literal = privateAddress(host);
-  if (literal) throw new Error("That address is not public.");
+  if (net.isIP(host)) {
+    const literal = privateAddress(host);
+    if (literal) throw new Error("That address is not public.");
+  }
   let addresses = [];
   try { addresses = await dns.lookup(host, { all: true }); }
   catch { throw new Error("That site could not be reached."); }
@@ -83,7 +85,7 @@ async function readCapped(res) {
   return Buffer.concat(chunks).toString("utf8");
 }
 
-async function fetchPage(rawUrl) {
+export async function fetchPage(rawUrl) {
   let url = await assertPublicUrl(rawUrl);
   for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {
     const ctrl = new AbortController();

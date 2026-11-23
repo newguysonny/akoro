@@ -45,3 +45,10 @@ test("plain text pages pass through", () => {
   const out = extractReadable(text, "https://example.com/notes.txt");
   assert.match(out.text, /Line one/);
 });
+
+test("hostnames are resolved, not treated as IP literals", async () => {
+  const { fetchPage } = await import("./linkSnapshot.js");
+  await assert.rejects(fetchPage("http://localhost:9/secret"), /not public/);
+  await assert.rejects(fetchPage("http://10.0.0.5/secret"), /not public/);
+  await assert.rejects(fetchPage("http://169.254.169.254/latest/meta-data"), /not public/);
+});
