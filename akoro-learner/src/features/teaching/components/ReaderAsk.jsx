@@ -21,6 +21,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Icon } from '../../../components/common/Icons.jsx';
 import { answerBlocks, citeLabel, toReaderCite } from '../../../lib/askAnswer.js';
 import { followUpSuggestions } from '../../../lib/learnSuggestions.js';
+import Spinner from '../../../components/common/Spinner.jsx';
 
 function CiteChip({ cite, onCite }) {
   const target = toReaderCite(cite);
@@ -246,7 +247,25 @@ export default function ReaderAsk({ ask, onCite, pin = null, onPinClear }) {
                 <span>Some points here aren’t linked to a source — tap the citations that are, or ask again for a tighter answer.</span>
               </div>
             ) : null}
-            {m.pending && !m.text && <div className="text-xs" style={{ color: 'var(--ak-text-sub)' }}>{status || 'Thinking…'}</div>}
+            {m.pending && !m.text && (
+              <div role="status" aria-live="polite" className="rounded-2xl px-3 py-2.5"
+                style={{ background: 'var(--ak-surface)', border: '1px solid var(--ak-border2)', maxWidth: 320 }}>
+                <div className="flex items-center gap-2 text-xs font-semibold" style={{ color: 'var(--ak-text-sub)' }}>
+                  <Spinner size={13} color="var(--ak-accent)"/>
+                  <span>{status || 'Searching this document…'}</span>
+                </div>
+                <div className="animate-pulse" style={{ marginTop: 8 }}>
+                  {[92, 74, 54].map((w, i) => (
+                    <div key={i} style={{ height: 7, width: `${w}%`, borderRadius: 4, marginBottom: 6, background: 'var(--ak-border2)' }}/>
+                  ))}
+                </div>
+              </div>
+            )}
+            {m.pending && m.text ? (
+              <div className="flex items-center gap-1.5 text-[11px] font-semibold" style={{ marginTop: 6, color: 'var(--ak-text-sub)' }}>
+                <Spinner size={11} color="var(--ak-accent)"/> Writing…
+              </div>
+            ) : null}
             {m.error && <div className="text-xs" style={{ color: 'var(--ak-danger-text)' }}>{m.error}</div>}
             {m.stopped && <div className="text-xs" style={{ color: 'var(--ak-text-sub)' }}>Stopped.</div>}
             {/* Continue the conversation from THIS answer (latest only). */}

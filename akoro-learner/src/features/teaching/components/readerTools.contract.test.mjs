@@ -67,7 +67,7 @@ test("generation tools can attach library context (searchable files/folders)", (
 test("the Prompt box advertises what it can drive", () => {
   const doc = readFileSync(new URL("./SessionReaderDocument.jsx", import.meta.url), "utf8");
   const hook = readFileSync(new URL("../hooks/useSessionReader.js", import.meta.url), "utf8");
-  assert.match(doc, /The prompt can set pages, count, difficulty and exam style/);
+  assert.match(doc, /name pages, a count, difficulty or exam style/);
   assert.match(hook, /appliedIntent/, "the tab reflects what the server applied");
 });
 
@@ -86,4 +86,20 @@ test("every latest Ask answer offers continue suggestions", () => {
   assert.match(src, /lastAnswerIndex/);
   assert.match(src, /idx === lastAnswerIndex/);
   assert.match(src, /onClick=\{\(\) => send\(label\)\}/);
+});
+
+test("field explanations live behind a ?, and Ask has a real loading state", () => {
+  const doc = readFileSync(new URL("./SessionReaderDocument.jsx", import.meta.url), "utf8");
+  const picker = readFileSync(new URL("./ContextPicker.jsx", import.meta.url), "utf8");
+  const help = readFileSync(new URL("./HelpTip.jsx", import.meta.url), "utf8");
+  const ask = readFileSync(new URL("./ReaderAsk.jsx", import.meta.url), "utf8");
+  assert.match(help, /aria-label=\{label\}/);
+  assert.match(help, /pointerdown/);
+  assert.match(doc, /<HelpTip text=\{FIELD_HELP\[f\.id\]\}\/>/);
+  assert.doesNotMatch(doc, /The prompt can set pages, count, difficulty and exam style/);
+  assert.match(picker, /<HelpTip text="Attach past questions/);
+  assert.doesNotMatch(picker, /Citations stay on this document\.<\/p>/);
+  assert.match(ask, /role="status" aria-live="polite"/);
+  assert.match(ask, /animate-pulse/);
+  assert.match(ask, /<Spinner size=\{13\}/);
 });

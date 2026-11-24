@@ -6,6 +6,7 @@ import { Icon } from '../../../components/common/Icons.jsx';
 import MediaPlayer from '../../../components/library/MediaPlayer.jsx';
 import { artifactToTab } from '../../../lib/readerArtifacts.js';
 import ContextPicker from './ContextPicker.jsx';
+import HelpTip from './HelpTip.jsx';
 import {
   TOOL_DEFS, toolById, SERVER_TOOLS, isServerPodcast, FORM_DEFS, SCOPE_FIELD, mediaTime,
 } from './sessionReaderModel.js';
@@ -101,6 +102,16 @@ function ToolHeader({ label, sub, onBack }) {
   );
 }
 
+const FIELD_HELP = {
+  scope: "This page uses the page you are on. Selected pages lets you tick several pages. Whole document uses every page.",
+  focus: "Tell the tool what you want in your own words. You can name pages, a count, difficulty or exam style here — e.g. “20 hard WAEC questions from pages 5–15 using the attached past questions”.",
+  count: "How many items to create. Quiz questions and flashcards are 1–50.",
+  difficulty: "How hard the items should be for this learner.",
+  depth: "Brief gives the key points; Detailed explains the reasoning and connections.",
+  length: "How long the episode should run.",
+  style: "The look of the generated walkthrough.",
+};
+
 function CreationForm({ toolId, initialFocus, onBack, onSubmit, withScope = false, pageCount = 0, currentPage = 0 }) {
   const base = FORM_DEFS[toolId];
   const def = withScope ? { ...base, fields: [SCOPE_FIELD, ...base.fields] } : base;
@@ -138,12 +149,16 @@ function CreationForm({ toolId, initialFocus, onBack, onSubmit, withScope = fals
       <ToolHeader label={def.title} sub={withScope && values.scope === "Whole document" ? def.sub.replace("this page", "the whole document") : def.sub} onBack={onBack}/>
       <div className="flex flex-col gap-3.5">
         {def.fields.map((f) => (
-          <label key={f.id} className="flex flex-col gap-1.5">
-            <span className="text-xs font-medium" style={{ color: "var(--ak-text-sub)" }}>{f.label}</span>
+          <div key={f.id} className="flex flex-col gap-1.5">
+            <span className="flex items-center gap-1.5 text-xs font-medium" style={{ color: "var(--ak-text-sub)" }}>
+              {f.label}
+              <HelpTip text={FIELD_HELP[f.id]}/>
+            </span>
             {f.type === "number" ? (
               <input
                 type="number"
                 inputMode="numeric"
+                aria-label={f.label}
                 min={f.min ?? 1}
                 max={f.max ?? 100}
                 value={values[f.id]}
@@ -155,6 +170,7 @@ function CreationForm({ toolId, initialFocus, onBack, onSubmit, withScope = fals
             ) : f.type === "text" ? (
               <input
                 type="text"
+                aria-label={f.label}
                 value={values[f.id]}
                 placeholder={f.placeholder}
                 onChange={(e) => setValues((v) => ({ ...v, [f.id]: e.target.value }))}
@@ -163,6 +179,7 @@ function CreationForm({ toolId, initialFocus, onBack, onSubmit, withScope = fals
               />
             ) : (
               <select
+                aria-label={f.label}
                 value={values[f.id]}
                 onChange={(e) => setValues((v) => (f.id === "scope" && e.target.value === "Selected pages" && !(v.pages || []).length
                   ? { ...v, [f.id]: e.target.value, pages: [currentPage + 1] }
@@ -173,12 +190,7 @@ function CreationForm({ toolId, initialFocus, onBack, onSubmit, withScope = fals
                 {f.options.map((o) => <option key={o}>{o}</option>)}
               </select>
             )}
-            {f.id === "focus" && (
-              <span className="text-[11px] leading-relaxed" style={{ color: "var(--ak-text-sub)" }}>
-                The prompt can set pages, count, difficulty and exam style — e.g. “20 hard WAEC questions from pages 5–15 using the attached past questions”.
-              </span>
-            )}
-          </label>
+          </div>
         ))}
         {withScope && values.scope === "Selected pages" && pageCount > 0 && (
           <div className="flex flex-col gap-1.5">

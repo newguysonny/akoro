@@ -4,6 +4,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "../../../components/common/Icons.jsx";
 import { listFolders, listRecords, searchRecords } from "../../../services/recordsApi.js";
+import HelpTip from "./HelpTip.jsx";
 
 const MAX_ITEMS = 6;
 
@@ -80,7 +81,10 @@ export default function ContextPicker({ value = [], onChange }) {
   return (
     <div ref={boxRef} className="flex flex-col gap-1.5">
       <div className="flex items-center justify-between">
-        <span className="text-xs font-medium" style={{ color: "var(--ak-text-sub)" }}>Context (optional)</span>
+        <span className="flex items-center gap-1.5 text-xs font-medium" style={{ color: "var(--ak-text-sub)" }}>
+          Context (optional)
+          <HelpTip text="Attach past questions, a syllabus or a related handout from your library. Only the parts related to this material are used; the tool follows their style and scope, while citations stay on this document."/>
+        </span>
         <span className="text-[11px]" style={{ color: "var(--ak-text-sub)" }}>{chosen.length}/{MAX_ITEMS}</span>
       </div>
       {chosen.length > 0 && (
@@ -132,9 +136,6 @@ export default function ContextPicker({ value = [], onChange }) {
           )}
         </div>
       )}
-      <p className="text-[11px] leading-relaxed" style={{ color: "var(--ak-text-sub)" }}>
-        Attach past questions, a syllabus or a related handout — the tool follows their style and scope. Citations stay on this document.
-      </p>
     </div>
   );
 }
