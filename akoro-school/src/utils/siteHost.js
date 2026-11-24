@@ -10,7 +10,7 @@
  *                 owns the host (404) it falls back to the portal, so a mis-listed portal host can never lock admins out.
  */
 export const RESERVED_SUBDOMAINS = Object.freeze([
-  'www', 'app', 'api', 'admin', 'instructor', 'instructors', 'school', 'akoro-school', 'akoro-instructor', 'akoro-admin', 'learn', 'learner',
+  'www', 'app', 'api', 'admin', 'instructor', 'instructors', 'school', 'schools', 'akoro-school', 'akoro-instructor', 'akoro-admin', 'learn', 'learner',
 ]);
 
 /** Bare registrable host from a URL or host string (drops scheme, path, port and one leading www./api./app.). */
@@ -23,7 +23,7 @@ export function baseHostOf(url) {
 const csv = (v) => String(v || '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
 
 /** → 'portal' | 'candidate' */
-export function classifyHost(rawHost, { baseDomains = ['akoro.name.ng'], portalHosts = [], reserved = RESERVED_SUBDOMAINS } = {}) {
+export function classifyHost(rawHost, { baseDomains = ['akoro.ng', 'akoro.name.ng'], portalHosts = [], reserved = RESERVED_SUBDOMAINS } = {}) {
   const host = String(rawHost || '').toLowerCase().split(':')[0].trim();
   if (!host) return 'portal';
   if (host === 'localhost' || host === '127.0.0.1' || host.endsWith('.localhost') || host.endsWith('.local')) return 'portal';
@@ -47,7 +47,13 @@ export const PUBLIC_PORTAL_PATH = /^\/(apply|pay|results)(\/|$)/;
 
 /** Config from Vite env → classifyHost options. */
 export function siteHostConfig(env = {}) {
-  const base = baseHostOf(env.VITE_SITE_BASE_DOMAIN || env.VITE_LEARNER_URL || env.VITE_API_URL) || 'akoro.name.ng';
-  const portal = csv(env.VITE_PORTAL_HOSTS || `akoro-school.${base},school.${base},school.akoro.app`);
-  return { baseDomains: csv(env.VITE_SITE_BASE_DOMAIN || base), portalHosts: portal };
+  const rawBase = baseHostOf(env.VITE_SITE_BASE_DOMAIN || env.VITE_LEARNER_URL || env.VITE_API_URL) || 'akoro.ng';
+  const base = rawBase.replace(/akoro\.name\.ng$/i, 'akoro.ng');
+  const portal = csv(env.VITE_PORTAL_HOSTS || `schools.${base},akoro-school.${base},school.${base},akoro-school.akoro.name.ng,school.akoro.name.ng`);
+  // Both brand domains classify as school hosts: old links keep working while
+  // every tenant is migrated to <slug>.akoro.ng. A custom base keeps only its own.
+  const explicit = csv(env.VITE_SITE_BASE_DOMAIN);
+  const baseDomains = explicit.length ? explicit
+    : (/akoro\.(ng|name\.ng)$/i.test(base) ? [base, base.endsWith('akoro.name.ng') ? 'akoro.ng' : 'akoro.name.ng'] : [base]);
+  return { baseDomains, portalHosts: portal };
 }

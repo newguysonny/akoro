@@ -32,14 +32,15 @@ test('the app host moving to app.<base> and reserved names are never schools', (
 
 test('config from env: base domain from the learner URL (app. ignored), default portal hosts, explicit lists win', () => {
   const a = siteHostConfig({ VITE_LEARNER_URL: 'https://app.akoro.name.ng' });
-  assert.deepEqual(a.baseDomains, ['akoro.name.ng']);
+  assert.deepEqual(a.baseDomains, ['akoro.ng', 'akoro.name.ng']);
+  assert.ok(a.portalHosts.includes('schools.akoro.ng'));
   assert.ok(a.portalHosts.includes('akoro-school.akoro.name.ng'));
   const b = siteHostConfig({ VITE_SITE_BASE_DOMAIN: 'example.ng,example.com', VITE_PORTAL_HOSTS: 'portal.example.ng' });
   assert.deepEqual(b.baseDomains, ['example.ng', 'example.com']);
   assert.deepEqual(b.portalHosts, ['portal.example.ng']);
   assert.equal(classifyHost('portal.example.ng', b), 'portal');
   assert.equal(classifyHost('school1.example.com', b), 'candidate');
-  assert.deepEqual(siteHostConfig({}).baseDomains, ['akoro.name.ng']);
+  assert.deepEqual(siteHostConfig({}).baseDomains, ['akoro.ng', 'akoro.name.ng']);
 });
 
 test('the portal-only page families are forwarded to the API', () => {
