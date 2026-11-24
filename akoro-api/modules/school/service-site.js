@@ -309,7 +309,8 @@ const schoolNotFoundHtml = (host) => `<!doctype html>
 // Public tenant HTML is identical for every visitor of a host+path, and a
 // render costs ~10 DB round trips. A short in-process cache plus CDN headers
 // turns repeat loads (and link previews) from seconds into milliseconds.
-const SITE_HTML_TTL_MS = 30_000;
+const SITE_HTML_TTL_MS = 60_000;
+const SITE_HTML_STALE_MS = 120_000;   // serve stale while re-rendering in the background
 const SITE_HTML_MAX = 240;
 const siteHtmlCache = new Map();
 const siteHtmlInFlight = new Map();
@@ -317,8 +318,8 @@ const cacheKeyOf = (host, path, apiOrigin) => `${host}|${path}|${apiOrigin}`;
 function siteCacheGet(key) {
   const hit = siteHtmlCache.get(key);
   if (!hit) return null;
-  if (hit.expires < Date.now()) { siteHtmlCache.delete(key); return null; }
-  return hit;
+  if (hit.expires + SITE_HTML_STALE_MS < Date.now()) { siteHtmlCache.delete(key); return null; }
+  return { ...hit, stale: hit.expires < Date.now() };
 }
 function siteCacheSet(key, value) {
   if (siteHtmlCache.size >= SITE_HTML_MAX) {
@@ -337,19 +338,28 @@ export async function siteByHost(req, res) {
     const key = cacheKeyOf(host, path, apiOrigin);
     const cached = preview ? null : siteCacheGet(key);
     let out = cached;
+    const render = () => (async () => {
+      const school = await resolveSchoolByHost(host);
+      if (!school) return { status: 404, html: schoolNotFoundHtml(host), missing: true };
+      return renderSchoolSiteHtml(school, { preview, path, apiOrigin });
+    })();
     if (!out) {
       const pending = preview ? null : siteHtmlInFlight.get(key);
       if (pending) out = await pending;
       else {
-        const work = (async () => {
-          const school = await resolveSchoolByHost(host);
-          if (!school) return { status: 404, html: schoolNotFoundHtml(host), missing: true };
-          return renderSchoolSiteHtml(school, { preview, path, apiOrigin });
-        })();
+        const work = render();
         if (!preview) siteHtmlInFlight.set(key, work);
         try { out = await work; } finally { if (!preview) siteHtmlInFlight.delete(key); }
         if (!preview && out.status === 200) siteCacheSet(key, out);
       }
+    } else if (cached.stale && !preview && !siteHtmlInFlight.has(key)) {
+      // Return the stale page instantly; refresh behind it. A school edit is
+      // visible within ~1–3 minutes without ever showing a white screen.
+      const work = render();
+      siteHtmlInFlight.set(key, work);
+      void work.then((fresh) => { if (fresh?.status === 200) siteCacheSet(key, fresh); })
+        .catch(() => {})
+        .finally(() => siteHtmlInFlight.delete(key));
     }
     const etag = '"' + createHash("sha1").update(String(out.html)).digest("hex").slice(0, 24) + '"';
     res.set("ETag", etag);
