@@ -103,3 +103,18 @@ test("field explanations live behind a ?, and Ask has a real loading state", () 
   assert.match(ask, /animate-pulse/);
   assert.match(ask, /<Spinner size=\{13\}/);
 });
+
+test("quiz and flashcards finish on a result screen with analytics and reset", () => {
+  const src = readFileSync(new URL("./SessionReaderResult.jsx", import.meta.url), "utf8");
+  assert.match(src, /function StudyResult/);
+  assert.match(src, /Start again/);
+  assert.match(src, /Return to content/);
+  assert.match(src, /quizDone/);
+  assert.match(src, /cardDone/);
+  assert.match(src, /cardRatings/);
+  assert.match(src, /How well did you know this\?/);
+  assert.match(src, /See results/);
+  assert.match(src, /onReturnToContent=\{\(\) => switchTabTo\("reader"\)\}/);
+  const artifacts = readFileSync(new URL("../../../lib/readerArtifacts.js", import.meta.url), "utf8");
+  for (const k of ["quizDone", "cardRatings", "cardDone"]) assert.match(artifacts, new RegExp(k), `${k} must persist`);
+});

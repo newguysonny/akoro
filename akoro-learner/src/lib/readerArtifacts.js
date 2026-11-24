@@ -10,7 +10,7 @@ import { cleanRects } from './markRects.js';
 
 export const TAB_KINDS = new Set(['summary', 'quiz', 'flashcards', 'notes', 'podcast']);
 const CONTENT_KEYS = ['summaryPoints', 'quizQuestions', 'cardSet', 'notesValue', 'emptyReason', 'podcast', 'podcastBlurb'];
-const UI_KEYS = ['quizAnswers', 'quizIndex', 'cardIndex'];
+const UI_KEYS = ['quizAnswers', 'quizIndex', 'quizDone', 'cardIndex', 'cardRatings', 'cardDone'];
 const TOOL_LABELS = { summary: 'Summary', quiz: 'Quiz', flashcards: 'Flashcards', notes: 'Notes', podcast: 'Podcast' };
 
 /** A tab → the artifact body the API stores. */

@@ -112,7 +112,42 @@ function ContextBadge({ name }) {
   );
 }
 
-function ResultView({ tab, onUpdate, onCite, onRetryPodcast = null }) {
+/* Completion screen for a quiz/flashcard run: a short, honest summary and
+   the two things a learner wants next — start again, or go back to reading. */
+function StudyResult({ done, noun = "cards", stats = [], score = null, onReset, onReturn }) {
+  return (
+    <div className="py-3 text-center">
+      <div className="flex items-center justify-center mb-30" style={{ marginBottom: 14 }}>
+        <span className="flex items-center justify-center rounded-full" style={{ width: 54, height: 54, background: `${GOLD}18`, border: `1px solid ${GOLD}44` }}>
+          <Icon name="ti-confetti" size={26} color={GREEN}/>
+        </span>
+      </div>
+      <div className="font-display text-lg font-semibold" style={{ color: "var(--ak-text)" }}>Great job!</div>
+      <div className="text-xs mt-1" style={{ color: "var(--ak-text-sub)" }}>You've completed {done} {noun}</div>
+      {score != null && <div className="text-sm font-bold mt-1" style={{ color: GREEN }}>{score}% correct</div>}
+      {stats.length > 0 && (
+        <div className="grid grid-cols-4 gap-1.5 mt-4">
+          {stats.map((st) => (
+            <div key={st.label} className="rounded-lg py-2" style={{ background: st.bg || "var(--ak-tag-bg)", border: `1px solid ${st.color}33` }}>
+              <div className="text-sm font-extrabold" style={{ color: st.color }}>{st.value}</div>
+              <div className="text-[10px] font-semibold" style={{ color: st.color }}>{st.label}</div>
+            </div>
+          ))}
+        </div>
+      )}
+      <button type="button" onClick={onReset} className="folio-primary-btn w-full py-2.5 rounded-lg text-sm font-bold mt-4">
+        Start again
+      </button>
+      {onReturn && (
+        <button type="button" onClick={onReturn} className="folio-btn-outline w-full py-2.5 rounded-lg text-xs font-bold mt-2">
+          Return to content
+        </button>
+      )}
+    </div>
+  );
+}
+
+function ResultView({ tab, onUpdate, onCite, onRetryPodcast = null, onReturnToContent = null }) {
   const header = (
     <div className="mb-3.5">
       <div className="font-display text-base font-semibold mb-0.5" style={{ color: "var(--ak-text)" }}>{tab.title}</div>
@@ -189,6 +224,28 @@ function ResultView({ tab, onUpdate, onCite, onRetryPodcast = null }) {
       const idx = Math.min(tab.quizIndex ?? 0, total - 1);
       const q = questions[idx];
       const answers = tab.quizAnswers || questions.map(() => ({ selected: null, checked: false, dontKnow: false }));
+      const correctCount = questions.reduce((n, qq, i) => {
+        const a = answers[i];
+        return n + (a?.checked && !a.dontKnow && qq.options.some((o) => o.correct && o.key === a.selected) ? 1 : 0);
+      }, 0);
+      const skippedCount = answers.filter((a) => a?.dontKnow).length;
+      const wrongCount = Math.max(0, questions.filter((_, i) => answers[i]?.checked).length - correctCount - skippedCount);
+      if (tab.quizDone) {
+        return (
+          <>
+            {header}
+            <StudyResult done={total} noun="questions" score={Math.round((correctCount / total) * 100)}
+              stats={[
+                { label: "Correct", value: correctCount, color: GREEN, bg: `${GREEN}0f` },
+                { label: "Wrong", value: wrongCount, color: RED, bg: `${RED}0f` },
+                { label: "Skipped", value: skippedCount, color: GOLD, bg: `${GOLD}0f` },
+                { label: "Total", value: total, color: BRAND, bg: `${BRAND}0f` },
+              ]}
+              onReset={() => onUpdate({ quizAnswers: [], quizIndex: 0, quizHint: null, quizDone: false })}
+              onReturn={onReturnToContent}/>
+          </>
+        );
+      }
       const ans = answers[idx] || { selected: null, checked: false, dontKnow: false };
       const revealed = ans.checked || ans.dontKnow;
       const selectedOpt = q.options.find((o) => o.key === ans.selected);
@@ -203,8 +260,11 @@ function ResultView({ tab, onUpdate, onCite, onRetryPodcast = null }) {
       return (
         <div>
           {header}
-          <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center justify-between mb-2">
             <span className="font-ui-mono text-xs" style={{ color: "var(--ak-text-sub)" }}>Question {idx + 1} of {total}</span>
+          </div>
+          <div style={{ height: 3, borderRadius: 3, background: "var(--ak-border2)", marginBottom: 12, overflow: "hidden" }}>
+            <div style={{ width: `${Math.round(((idx + (revealed ? 1 : 0)) / total) * 100)}%`, height: "100%", background: BRAND, transition: "width .2s" }}/>
           </div>
           <div className="font-display text-sm font-medium mb-3.5" style={{ color: "var(--ak-text)" }}>{q.prompt}</div>
           <div className="mb-1.5">
@@ -273,7 +333,9 @@ function ResultView({ tab, onUpdate, onCite, onRetryPodcast = null }) {
               Next question
             </button>
           ) : (
-            <div className="text-center text-sm font-bold py-2 mt-1" style={{ color: GREEN }}>Quiz complete 🎉</div>
+            <button type="button" onClick={() => onUpdate({ quizDone: true })} className="folio-primary-btn w-full py-2.5 rounded-lg text-sm font-bold mt-3">
+              See results
+            </button>
           ))}
         </div>
       );
@@ -285,11 +347,33 @@ function ResultView({ tab, onUpdate, onCite, onRetryPodcast = null }) {
       const cardIdx = Math.min(tab.cardIndex ?? 0, cards.length - 1);
       const card = cards[cardIdx];
       const cardCite = card.cite || sentenceCiteFor(tab.createdPage);
+      const ratings = Array.isArray(tab.cardRatings) ? tab.cardRatings : [];
+      if (tab.cardDone) {
+        const count = (label) => ratings.filter((r) => r === label).length;
+        return (
+          <>
+            {header}
+            <StudyResult done={cards.length} noun="cards"
+              stats={[
+                { label: "Again", value: count("again"), color: RED, bg: `${RED}0f` },
+                { label: "Hard", value: count("hard"), color: GOLD, bg: `${GOLD}0f` },
+                { label: "Good", value: count("good"), color: GREEN, bg: `${GREEN}0f` },
+                { label: "Easy", value: count("easy"), color: BRAND, bg: `${BRAND}0f` },
+              ]}
+              onReset={() => onUpdate({ cardRatings: [], cardIndex: 0, flipped: false, cardDone: false })}
+              onReturn={onReturnToContent}/>
+          </>
+        );
+      }
       return (
         <div>
           {header}
-          <div className="flex items-center justify-center gap-2 text-center text-xs mb-3" style={{ color: "var(--ak-text-sub)" }}>
+          <div className="flex items-center justify-between text-xs mb-2" style={{ color: "var(--ak-text-sub)" }}>
+            <span>Card {cardIdx + 1} of {cards.length}</span>
             <span>Tap the card to flip</span>
+          </div>
+          <div style={{ height: 3, borderRadius: 3, background: "var(--ak-border2)", marginBottom: 12, overflow: "hidden" }}>
+            <div style={{ width: `${Math.round(((cardIdx + 1) / cards.length) * 100)}%`, height: "100%", background: BRAND, transition: "width .2s" }}/>
           </div>
           <div className="w-full mb-3.5" style={{ perspective: "1000px", aspectRatio: "4 / 3" }}>
             <div
@@ -313,22 +397,43 @@ function ResultView({ tab, onUpdate, onCite, onRetryPodcast = null }) {
               </div>
             </div>
           </div>
-          <div className="flex items-center justify-between">
+          {tab.flipped && (
+            <div className="mb-3">
+              <div className="text-[11px] font-semibold mb-1.5" style={{ color: "var(--ak-text-sub)" }}>How well did you know this?</div>
+              <div className="grid grid-cols-4 gap-1.5">
+                {[["again", "Again", RED], ["hard", "Hard", GOLD], ["good", "Good", GREEN], ["easy", "Easy", BRAND]].map(([id, label, color]) => {
+                  const on = ratings[cardIdx] === id;
+                  return (
+                    <button key={id} type="button"
+                      onClick={() => { const next = ratings.slice(); next[cardIdx] = id; onUpdate({ cardRatings: next }); }}
+                      className="rounded-lg py-1.5 text-[11px] font-bold"
+                      style={{ border: `1px solid ${on ? color : "var(--ak-border2)"}`, background: on ? `${color}16` : "transparent", color: on ? color : "var(--ak-text-sub)" }}>
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={() => onUpdate({ cardIndex: (cardIdx - 1 + cards.length) % cards.length, flipped: false })}
-              className="folio-btn-outline w-7 h-7 rounded-full border flex items-center justify-center"
+              className="folio-btn-outline w-10 h-9 rounded-lg border flex items-center justify-center flex-shrink-0"
             >
               <Icon name="ti-chevron-left" size={14}/>
             </button>
-            <span className="font-ui-mono text-xs" style={{ color: "var(--ak-text-sub)" }}>{cardIdx + 1} / {cards.length}</span>
-            <button
-              type="button"
-              onClick={() => onUpdate({ cardIndex: (cardIdx + 1) % cards.length, flipped: false })}
-              className="folio-btn-outline w-7 h-7 rounded-full border flex items-center justify-center"
-            >
-              <Icon name="ti-chevron-right" size={14}/>
-            </button>
+            {cardIdx < cards.length - 1 ? (
+              <button type="button" onClick={() => onUpdate({ cardIndex: cardIdx + 1, flipped: false })}
+                className="folio-primary-btn flex-1 py-2.5 rounded-lg text-sm font-bold">
+                Next card
+              </button>
+            ) : (
+              <button type="button" onClick={() => onUpdate({ cardDone: true })}
+                className="folio-primary-btn flex-1 py-2.5 rounded-lg text-sm font-bold">
+                See results
+              </button>
+            )}
           </div>
         </div>
       );
@@ -572,7 +677,8 @@ export default function SessionReaderResult({ reader }) {
               </button>
             </div>
             <ResultView tab={activeResultTab} onUpdate={(patch) => updateResultTab(activeResultTab.id, patch)} onCite={citeJump}
-              onRetryPodcast={tools?.podcast ? retryPodcast : null}/>
+              onRetryPodcast={tools?.podcast ? retryPodcast : null}
+              onReturnToContent={() => switchTabTo("reader")}/>
           </div>
         )}
     </>
