@@ -8,6 +8,7 @@
  */
 
 import bcrypt from "bcrypt";
+import { createHash } from "node:crypto";
 import { issueTokenPair, signHandoff, verifyHandoff } from "../auth/index.js";
 import {
   renderMiniTemplate, renderThemePage, renderSitePage, renderThemeDocument, buildContext,
@@ -147,35 +148,41 @@ export async function buildSiteCtx(school, website) {
   // stored in the website config, so School Settings edits show up on the
   // site immediately. Mutates `school`/`website` in place because the same
   // objects flow on into the theme renderer (w.hero_title / w.meta_title).
-  let contactEmail = null;
-  if (website.sync_school_info) {
-    const { data: full } = await store.schoolProfileFull(school.id);
-    if (full) {
-      const { admin_user_id, ...profile } = full;
-      Object.assign(school, profile);
-      website.hero_title = full.name;
-      website.meta_title = full.name;
-      if (admin_user_id) {
-        const { data: admin } = await store.userEmailById(admin_user_id);
-        contactEmail = admin?.email || null;
-      }
-    }
-  }
-
-  const { data: teacherLinks } = await store.teacherSiteLinks(school.id);
-  const teacherIds = (teacherLinks || []).map((t) => t.users?.id).filter(Boolean);
-  const { data: courseRows } = teacherIds.length
-    ? await store.coursesForSite(teacherIds)
-    : { data: [] };
-  const { data: classRows } = await store.classroomsBySite(school.id);
-
   const today = new Date().toISOString().slice(0, 10);
-  const [{ data: adm }, gateway, { data: noticeRows }, { data: eventRows }] = await Promise.all([
+  // One parallel wave for everything independent; only courses wait on the
+  // teacher list. This is the difference between ~10 serialised DB round trips
+  // and two, which is most of the render's first-byte time.
+  const [profileRes, teacherRes, classRes, admRes, gateway, noticesRes, eventsRes, menus] = await Promise.all([
+    website.sync_school_info ? store.schoolProfileFull(school.id) : Promise.resolve({ data: null }),
+    store.teacherSiteLinks(school.id),
+    store.classroomsBySite(school.id),
     siteStore.admissionEnabled(school.id),
     getSchoolGateway(school.id),
     siteStore.siteNotices(school.id, today),
     siteStore.siteEvents(school.id, today),
+    buildSiteMenus(school.id),
   ]);
+  let contactEmail = null;
+  const full = profileRes?.data;
+  if (full) {
+    const { admin_user_id, ...profile } = full;
+    Object.assign(school, profile);
+    website.hero_title = full.name;
+    website.meta_title = full.name;
+    if (admin_user_id) {
+      const { data: admin } = await store.userEmailById(admin_user_id);
+      contactEmail = admin?.email || null;
+    }
+  }
+  const teacherLinks = teacherRes?.data;
+  const teacherIds = (teacherLinks || []).map((t) => t.users?.id).filter(Boolean);
+  const { data: courseRows } = teacherIds.length
+    ? await store.coursesForSite(teacherIds)
+    : { data: [] };
+  const classRows = classRes?.data;
+  const adm = admRes?.data;
+  const noticeRows = noticesRes?.data;
+  const eventRows = eventsRes?.data;
 
   const fmtDate = (d) => d ? new Date(d).toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric" }) : "";
   return buildContext(school, website, {
@@ -187,7 +194,7 @@ export async function buildSiteCtx(school, website) {
     notices: (noticeRows || []).filter((n) => !n.publish_on || n.publish_on <= today)
       .map((n) => ({ title: n.title, body: n.body || "", date: fmtDate(n.publish_on), pinned: !!n.pinned })),
     events: (eventRows || []).map((e) => ({ title: e.title, description: e.description || "", type: e.event_type || "", date: fmtDate(e.starts_on) })),
-    menus: await buildSiteMenus(school.id),
+    menus,
     portal: { apply: !!adm?.enabled, pay: !!gateway.ok, results: true },
   });
 }
@@ -197,13 +204,16 @@ export async function buildSiteCtx(school, website) {
 const apiOriginOf = (req) => `${(req.headers["x-forwarded-proto"] || req.protocol || "https").split(",")[0]}://${req.get("host")}`;
 
 export async function renderSchoolSiteHtml(school, { preview = false, path = "/", apiOrigin = "" } = {}) {
-  const website = await getWebsiteConfig(school.id);
+  // Independent reads: fetch them together instead of stacking round trips.
+  const [website, portalSettings] = await Promise.all([
+    getWebsiteConfig(school.id),
+    getPortalSettings(school.id).catch(() => null),
+  ]);
   // Public visitors only see a published site; preview mode (admin "Preview
   // Website" button) renders it even while unpublished, with a notice banner.
   if (!website.enabled && !preview) return { status: 404, html: "<h1>This school website is not published yet.</h1>" };
 
   // Maintenance Mode (Settings → Privacy & Security) shows a banner on the site.
-  const portalSettings = await getPortalSettings(school.id).catch(() => null);
   const maintenance = !!portalSettings?.security?.maintenanceMode;
 
   const addBanner = (raw) => {
@@ -296,14 +306,61 @@ const schoolNotFoundHtml = (host) => `<!doctype html>
 // ── GET /api/school/site/by-host  (PUBLIC — tenant from hostname) ────────────
 // The frontend forwards its hostname (?host=…); direct hits fall back to the
 // request's own forwarded host. Must be registered BEFORE /site/:slug.
+// Public tenant HTML is identical for every visitor of a host+path, and a
+// render costs ~10 DB round trips. A short in-process cache plus CDN headers
+// turns repeat loads (and link previews) from seconds into milliseconds.
+const SITE_HTML_TTL_MS = 30_000;
+const SITE_HTML_MAX = 240;
+const siteHtmlCache = new Map();
+const siteHtmlInFlight = new Map();
+const cacheKeyOf = (host, path, apiOrigin) => `${host}|${path}|${apiOrigin}`;
+function siteCacheGet(key) {
+  const hit = siteHtmlCache.get(key);
+  if (!hit) return null;
+  if (hit.expires < Date.now()) { siteHtmlCache.delete(key); return null; }
+  return hit;
+}
+function siteCacheSet(key, value) {
+  if (siteHtmlCache.size >= SITE_HTML_MAX) {
+    const oldest = siteHtmlCache.keys().next().value;
+    if (oldest) siteHtmlCache.delete(oldest);
+  }
+  siteHtmlCache.set(key, { ...value, expires: Date.now() + SITE_HTML_TTL_MS });
+}
+
 export async function siteByHost(req, res) {
   try {
-    const host = req.query.host || req.headers["x-forwarded-host"] || req.hostname;
-    const school = await resolveSchoolByHost(host);
-    if (!school) return res.status(404).type("html").send(schoolNotFoundHtml(host));
+    const host = String(req.query.host || req.headers["x-forwarded-host"] || req.hostname || "").toLowerCase();
+    const path = String(req.query.path || "/");
     const preview = req.query.preview === "1" || req.query.preview === "true";
-    const { status, html } = await renderSchoolSiteHtml(school, { preview, path: req.query.path || "/", apiOrigin: apiOriginOf(req) });
-    res.status(status).type("html").send(html);
+    const apiOrigin = apiOriginOf(req);
+    const key = cacheKeyOf(host, path, apiOrigin);
+    const cached = preview ? null : siteCacheGet(key);
+    let out = cached;
+    if (!out) {
+      const pending = preview ? null : siteHtmlInFlight.get(key);
+      if (pending) out = await pending;
+      else {
+        const work = (async () => {
+          const school = await resolveSchoolByHost(host);
+          if (!school) return { status: 404, html: schoolNotFoundHtml(host), missing: true };
+          return renderSchoolSiteHtml(school, { preview, path, apiOrigin });
+        })();
+        if (!preview) siteHtmlInFlight.set(key, work);
+        try { out = await work; } finally { if (!preview) siteHtmlInFlight.delete(key); }
+        if (!preview && out.status === 200) siteCacheSet(key, out);
+      }
+    }
+    const etag = '"' + createHash("sha1").update(String(out.html)).digest("hex").slice(0, 24) + '"';
+    res.set("ETag", etag);
+    res.set("Vary", "Accept-Encoding");
+    if (preview) res.set("Cache-Control", "no-store");
+    else {
+      res.set("Cache-Control", "public, max-age=20, s-maxage=120, stale-while-revalidate=600");
+      res.set("CDN-Cache-Control", "public, s-maxage=120, stale-while-revalidate=600");
+    }
+    if (req.headers["if-none-match"] === etag) return res.status(304).end();
+    res.status(out.status).type("html").send(out.html);
   } catch (e) {
     console.error("[site render by-host]", e);
     res.status(500).type("html").send("<h1>Something went wrong rendering this page.</h1>");
