@@ -402,6 +402,7 @@ export async function siteByHost(req, res) {
     else {
       res.set("Cache-Control", "public, max-age=20, s-maxage=120, stale-while-revalidate=600");
       res.set("CDN-Cache-Control", "public, s-maxage=120, stale-while-revalidate=600");
+      res.set("Cloudflare-CDN-Cache-Control", "public, max-age=120, stale-while-revalidate=600");
     }
     if (req.headers["if-none-match"] === etag) return res.status(304).end();
     res.status(out.status).type("html").send(out.html);
