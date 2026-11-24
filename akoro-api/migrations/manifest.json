@@ -281,7 +281,8 @@
     "2026-record-chat-content-anchor.sql",
     "2026-record-link-snapshots.sql",
     "2026-school-site-context.sql",
-    "2026-school-site-context-fix.sql"
+    "2026-school-site-context-fix.sql",
+    "2026-school-site-context-reload.sql"
   ],
   "demo": [
     "2026-seed-school-passwords.sql",
