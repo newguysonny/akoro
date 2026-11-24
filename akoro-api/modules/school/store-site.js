@@ -172,3 +172,7 @@ export const admissionFieldDelete = (schoolId, fieldId) => edu()
 
 export const admissionEnabled = (schoolId) => edu()
   .from("school_admission_settings").select("enabled").eq("school_id", schoolId).maybeSingle();
+
+/** One round trip for a public site render (see 2026-school-site-context.sql). */
+export const siteContextRpc = (schoolId, today) =>
+  db.rpc("school_site_context", { p_school_id: schoolId, p_today: today });

@@ -142,13 +142,35 @@ export async function syncAiChatPage(schoolId, enabled) {
 // Assemble the full render context (variables, section data, menus, portal
 // links) exactly as the live site uses — shared by the public renderer and the
 // authenticated live-preview endpoint so previews are pixel-identical.
-export async function buildSiteCtx(school, website) {
+export async function buildSiteCtx(school, website, bundle = null, today = new Date().toISOString().slice(0, 10)) {
+  const fmtDate = (d) => d ? new Date(d).toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric" }) : "";
+  // Fast path: the whole context arrived in one RPC.
+  if (bundle) {
+    let contactEmail = bundle.contact_email || null;
+    const full = bundle.profile;
+    if (website.sync_school_info && full) {
+      const { admin_user_id, ...profile } = full;
+      Object.assign(school, profile);
+      website.hero_title = full.name;
+      website.meta_title = full.name;
+    }
+    return buildContext(school, website, {
+      email: contactEmail,
+      year: new Date().getFullYear(),
+      teachers: (bundle.teachers || []).filter((t) => t?.name),
+      courses: (bundle.courses || []).map((c) => ({ title: c.title, subject: c.subject, level: c.level, price: c.is_free ? "Free" : `₦${Number(c.price || 0).toLocaleString("en-NG")}` })),
+      classes: (bundle.classes || []).map((c) => ({ name: c.name })),
+      notices: (bundle.notices || []).map((n) => ({ title: n.title, body: n.body || "", date: fmtDate(n.publish_on), pinned: !!n.pinned })),
+      events: (bundle.events || []).map((e) => ({ title: e.title, description: e.description || "", type: e.event_type || "", date: fmtDate(e.starts_on) })),
+      menus: { primary: bundle.menus?.primary || [], footer: bundle.menus?.footer || [], social: bundle.menus?.social || [] },
+      portal: { apply: !!bundle.admission?.enabled, pay: !!bundle.gateway_ok, results: true },
+    });
+  }
   // Sync toggle (Website Settings): when on, the website's identity always
   // follows School Settings — freshest profile fields win over the copies
   // stored in the website config, so School Settings edits show up on the
   // site immediately. Mutates `school`/`website` in place because the same
   // objects flow on into the theme renderer (w.hero_title / w.meta_title).
-  const today = new Date().toISOString().slice(0, 10);
   // One parallel wave for everything independent; only courses wait on the
   // teacher list. This is the difference between ~10 serialised DB round trips
   // and two, which is most of the render's first-byte time.
@@ -183,8 +205,6 @@ export async function buildSiteCtx(school, website) {
   const adm = admRes?.data;
   const noticeRows = noticesRes?.data;
   const eventRows = eventsRes?.data;
-
-  const fmtDate = (d) => d ? new Date(d).toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric" }) : "";
   return buildContext(school, website, {
     email: contactEmail,
     year: new Date().getFullYear(),
@@ -204,11 +224,17 @@ export async function buildSiteCtx(school, website) {
 const apiOriginOf = (req) => `${(req.headers["x-forwarded-proto"] || req.protocol || "https").split(",")[0]}://${req.get("host")}`;
 
 export async function renderSchoolSiteHtml(school, { preview = false, path = "/", apiOrigin = "" } = {}) {
-  // Independent reads: fetch them together instead of stacking round trips.
-  const [website, portalSettings] = await Promise.all([
-    getWebsiteConfig(school.id),
-    getPortalSettings(school.id).catch(() => null),
-  ]);
+  const today = new Date().toISOString().slice(0, 10);
+  // One RPC carries the whole render context; if it is unavailable (older DB)
+  // the code falls back to the individual reads below.
+  const bundle = await siteStore.siteContextRpc(school.id, today)
+    .then(({ data }) => data || null).catch(() => null);
+  const [website, portalSettings] = bundle?.website
+    ? [bundle.website, bundle.portal || null]
+    : await Promise.all([
+        getWebsiteConfig(school.id),
+        getPortalSettings(school.id).catch(() => null),
+      ]);
   // Public visitors only see a published site; preview mode (admin "Preview
   // Website" button) renders it even while unpublished, with a notice banner.
   if (!website.enabled && !preview) return { status: 404, html: "<h1>This school website is not published yet.</h1>" };
@@ -244,7 +270,7 @@ export async function renderSchoolSiteHtml(school, { preview = false, path = "/"
     return html.includes("</body>") ? html.replace("</body>", `${banner}</body>`) : html + banner;
   };
 
-  const ctx = await buildSiteCtx(school, website);
+  const ctx = await buildSiteCtx(school, website, bundle, today);
 
   // Page routing: a non-root path is a published-page slug (e.g. /about-us).
   const slug = String(path || "/").split("?")[0].replace(/^\/+|\/+$/g, "");
