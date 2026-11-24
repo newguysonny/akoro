@@ -1,4 +1,5 @@
--- One round trip for a public school site render.
+-- One round trip for a public school site render (corrected).: notices and school events live in the
+-- mgmt schema (see modules/school/store-site.js), not public.
 --
 -- Rendering a tenant page used to make ~10 separate PostgREST calls (website,
 -- portal settings, profile, teachers, courses, classes, admission, gateway,
@@ -59,7 +60,7 @@ as $function$
       ) order by coalesce(x.pinned, false) desc, x.publish_on desc)
       from (
         select n.title, n.body, n.publish_on, n.pinned
-        from public.notices n
+        from mgmt.notices n
         where n.school_id = p_school_id
           and (n.expires_on is null or n.expires_on >= p_today)
           and (n.publish_on is null or n.publish_on <= p_today)
@@ -73,7 +74,7 @@ as $function$
       ) order by x.starts_on)
       from (
         select e.title, e.description, e.event_type, e.starts_on
-        from public.school_events e
+        from mgmt.school_events e
         where e.school_id = p_school_id and e.starts_on >= p_today
         order by e.starts_on limit 6
       ) x
