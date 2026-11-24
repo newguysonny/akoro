@@ -223,12 +223,16 @@ export async function buildSiteCtx(school, website, bundle = null, today = new D
 // injected widgets. Derived from the request, so it needs no extra env.
 const apiOriginOf = (req) => `${(req.headers["x-forwarded-proto"] || req.protocol || "https").split(",")[0]}://${req.get("host")}`;
 
-export async function renderSchoolSiteHtml(school, { preview = false, path = "/", apiOrigin = "" } = {}) {
+export async function renderSchoolSiteHtml(school, { preview = false, path = "/", apiOrigin = "", stats = null } = {}) {
   const today = new Date().toISOString().slice(0, 10);
   // One RPC carries the whole render context; if it is unavailable (older DB)
   // the code falls back to the individual reads below.
+  const rpcStart = Date.now();
   const bundle = await siteStore.siteContextRpc(school.id, today)
-    .then(({ data }) => data || null).catch(() => null);
+    .then(({ data, error }) => { if (error) console.warn("[site] context RPC unavailable:", error.message); return data || null; })
+    .catch((e) => { console.warn("[site] context RPC failed:", e?.message || e); return null; });
+  const rpcMs = Date.now() - rpcStart;
+  if (stats) { stats.rpc = !!bundle; stats.rpcMs = rpcMs; }
   const [website, portalSettings] = bundle?.website
     ? [bundle.website, bundle.portal || null]
     : await Promise.all([
@@ -367,7 +371,9 @@ export async function siteByHost(req, res) {
     const render = () => (async () => {
       const school = await resolveSchoolByHost(host);
       if (!school) return { status: 404, html: schoolNotFoundHtml(host), missing: true };
-      return renderSchoolSiteHtml(school, { preview, path, apiOrigin });
+      const stats = {};
+      const rendered = await renderSchoolSiteHtml(school, { preview, path, apiOrigin, stats });
+      return { ...rendered, contextMode: stats.rpc ? "rpc" : "fallback", rpcMs: stats.rpcMs };
     })();
     if (!out) {
       const pending = preview ? null : siteHtmlInFlight.get(key);
@@ -390,6 +396,8 @@ export async function siteByHost(req, res) {
     const etag = '"' + createHash("sha1").update(String(out.html)).digest("hex").slice(0, 24) + '"';
     res.set("ETag", etag);
     res.set("Vary", "Accept-Encoding");
+    if (out.contextMode) res.set("X-Site-Context", out.contextMode);
+    if (Number.isFinite(out.rpcMs)) res.set("X-Site-Rpc-Ms", String(out.rpcMs));
     if (preview) res.set("Cache-Control", "no-store");
     else {
       res.set("Cache-Control", "public, max-age=20, s-maxage=120, stale-while-revalidate=600");
