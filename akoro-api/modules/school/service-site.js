@@ -229,8 +229,8 @@ export async function renderSchoolSiteHtml(school, { preview = false, path = "/"
   // the code falls back to the individual reads below.
   const rpcStart = Date.now();
   const bundle = await siteStore.siteContextRpc(school.id, today)
-    .then(({ data, error }) => { if (error) console.warn("[site] context RPC unavailable:", error.message); return data || null; })
-    .catch((e) => { console.warn("[site] context RPC failed:", e?.message || e); return null; });
+    .then(({ data, error }) => { if (error) { console.warn("[site] context RPC unavailable:", error.message); if (stats) stats.rpcError = error.message; } return data || null; })
+    .catch((e) => { console.warn("[site] context RPC failed:", e?.message || e); if (stats) stats.rpcError = String(e?.message || e); return null; });
   const rpcMs = Date.now() - rpcStart;
   if (stats) { stats.rpc = !!bundle; stats.rpcMs = rpcMs; }
   const [website, portalSettings] = bundle?.website
@@ -373,7 +373,7 @@ export async function siteByHost(req, res) {
       if (!school) return { status: 404, html: schoolNotFoundHtml(host), missing: true };
       const stats = {};
       const rendered = await renderSchoolSiteHtml(school, { preview, path, apiOrigin, stats });
-      return { ...rendered, contextMode: stats.rpc ? "rpc" : "fallback", rpcMs: stats.rpcMs };
+      return { ...rendered, contextMode: stats.rpc ? "rpc" : "fallback", rpcMs: stats.rpcMs, rpcError: stats.rpcError || null };
     })();
     if (!out) {
       const pending = preview ? null : siteHtmlInFlight.get(key);
@@ -398,6 +398,7 @@ export async function siteByHost(req, res) {
     res.set("Vary", "Accept-Encoding");
     if (out.contextMode) res.set("X-Site-Context", out.contextMode);
     if (Number.isFinite(out.rpcMs)) res.set("X-Site-Rpc-Ms", String(out.rpcMs));
+    if (out.rpcError) res.set("X-Site-Rpc-Error", String(out.rpcError).slice(0, 160));
     if (preview) res.set("Cache-Control", "no-store");
     else {
       res.set("Cache-Control", "public, max-age=20, s-maxage=120, stale-while-revalidate=600");
