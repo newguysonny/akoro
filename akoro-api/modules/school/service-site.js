@@ -398,7 +398,6 @@ export async function siteByHost(req, res) {
     res.set("Vary", "Accept-Encoding");
     if (out.contextMode) res.set("X-Site-Context", out.contextMode);
     if (Number.isFinite(out.rpcMs)) res.set("X-Site-Rpc-Ms", String(out.rpcMs));
-    if (out.rpcError) res.set("X-Site-Rpc-Error", String(out.rpcError).slice(0, 160));
     if (preview) res.set("Cache-Control", "no-store");
     else {
       res.set("Cache-Control", "public, max-age=20, s-maxage=120, stale-while-revalidate=600");
