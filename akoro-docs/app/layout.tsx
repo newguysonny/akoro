@@ -1,5 +1,7 @@
 import type { Metadata } from 'next';
 import { RootProvider } from 'fumadocs-ui/provider/next';
+import { Analytics } from '@vercel/analytics/next';
+import { SpeedInsights } from '@vercel/speed-insights/next';
 import 'fumadocs-ui/style.css';
 import './global.css';
 
@@ -16,6 +18,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     <html lang="en" suppressHydrationWarning>
       <body>
         <RootProvider>{children}</RootProvider>
+        <Analytics />
+        <SpeedInsights />
       </body>
     </html>
   );
