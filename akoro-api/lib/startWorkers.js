@@ -161,12 +161,15 @@ export async function startWorkers() {
   // Not behind skipJob(): course encoding is user-facing work, so the
   // background-jobs kill switch must not leave uploads queued forever.
   if (process.env.REDIS_URL) {
-    import("../modules/courses/index.js")
-      .then((m) => {
-        const worker = m.startMediaEncodeWorker();
-        if (worker) console.log("[media-queue] fan-out coordinator started at boot");
-      })
-      .catch((e) => console.error("[media-queue] failed to start:", e.message));
+    // Awaited: the listener opens after startWorkers(), so no upload can
+    // arrive in the gap before the coordinator exists and fall back direct.
+    try {
+      const m = await import("../modules/courses/index.js");
+      const worker = m.startMediaEncodeWorker();
+      if (worker) console.log("[media-queue] fan-out coordinator started at boot");
+    } catch (e) {
+      console.error("[media-queue] failed to start:", e.message);
+    }
   }
 
   // Keeps the vector stores current. Rows arrive without embeddings (SQL seeds,
