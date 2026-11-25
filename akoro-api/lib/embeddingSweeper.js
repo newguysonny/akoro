@@ -170,9 +170,10 @@ export async function sweepOnce({ batch = BATCH } = {}) {
       selection = applyStoreFilter(selection, s);
       const { data: rows } = await selection.is("embedding", null).is("embedded_at", null).limit(batch);
 
+      const key = storeKey(s);
+      const embeddable = [];
       for (const r of (rows ?? [])) {
         const text = s.text(r);
-        const key = storeKey(s);
         // A row with no text cannot be embedded and must not be retried
         // forever. Stamping it takes it out of the queue without pretending it
         // was indexed.
@@ -189,27 +190,40 @@ export async function sweepOnce({ batch = BATCH } = {}) {
           }
           continue;
         }
+        embeddable.push({ row: r, text });
+      }
+      // ONE provider call per store (its input is an array). On the RunPod
+      // endpoint every row used to be a separate job, which cold-started extra
+      // workers 16+ times per sweep and left them idle-billed.
+      if (embeddable.length) {
         try {
-          const embedding = await embedText(text);
-          if (!embedding) { failed++; continue; }
-          let update = db.schema(s.schema).from(s.table)
-            .update({ embedding, embedded_at: new Date().toISOString() }).eq(key, r[key]);
-          update = applyStoreFilter(update, s);
-          const { error: updateError } = await update;
-          if (updateError) {
-            // The embedding was paid for but the row is still queued; without
-            // this check it would be re-embedded on every pass, invisibly.
-            failed++;
-            console.warn(`[embeddings] ${s.table}: update failed after embedding (${updateError.message}) — store parked ${FAILED_STORE_BACKOFF_MS / 3600000}h`);
-            storeBackoffUntil.set(s.table, Date.now() + FAILED_STORE_BACKOFF_MS);
-            break;
+          const res = await openai.embeddings.create({
+            model: "text-embedding-3-small",
+            input: embeddable.map((e) => e.text.slice(0, 8000)),
+            __feature: "embedding_sweep",
+          });
+          const vectors = Array.isArray(res?.data) ? res.data : [];
+          for (let i = 0; i < embeddable.length; i += 1) {
+            const vector = vectors.find((v) => v.index === i)?.embedding;
+            if (!Array.isArray(vector)) { failed++; continue; }
+            let update = db.schema(s.schema).from(s.table)
+              .update({ embedding: vector, embedded_at: new Date().toISOString() }).eq(key, embeddable[i].row[key]);
+            update = applyStoreFilter(update, s);
+            const { error: updateError } = await update;
+            if (updateError) {
+              // The embedding was paid for but the row is still queued; without
+              // this check it would be re-embedded on every pass, invisibly.
+              failed++;
+              console.warn(`[embeddings] ${s.table}: update failed after embedding (${updateError.message}) — store parked ${FAILED_STORE_BACKOFF_MS / 3600000}h`);
+              storeBackoffUntil.set(s.table, Date.now() + FAILED_STORE_BACKOFF_MS);
+              break;
+            }
+            filled++;
           }
-          filled++;
-        } catch (e) {
-          failed++;
-          // Rate limits and outages are the common case, and grinding through
-          // the rest of the batch would just collect more of the same.
-          if (/rate|429|quota/i.test(e.message)) break;
+        } catch {
+          // Rate limits and outages fail the whole batch; retrying row by row
+          // would multiply the bill without changing the outcome.
+          failed += embeddable.length;
         }
       }
     } catch (e) {
