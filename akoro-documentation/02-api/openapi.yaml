@@ -1,0 +1,583 @@
+openapi: 3.1.0
+info:
+  title: Akoro API
+  version: 0.1.0-skeleton
+  description: |
+    Phase 1 OpenAPI skeleton for the Akoro public/core API.
+
+    This is not full Tier-1 coverage. It contains verified seeds for auth,
+    library, public catalogue and intake endpoints. Admin, school ERP, agent
+    console, verification and internal routes are intentionally excluded.
+
+    Canonical `/api/v1` versioning is proposed but not yet implemented. The
+    current server base path is `/api`.
+  x-akoro-doc-status: skeleton
+  x-akoro-owner: TBD
+servers:
+  - url: https://api.akoro.ng/api
+    description: Production (current)
+  - url: https://sandbox.akoro.ng/api
+    description: Sandbox
+tags:
+  - name: Auth
+  - name: Records
+  - name: Courses
+  - name: Programmes
+  - name: PharmD
+  - name: Content
+  - name: Contact
+  - name: Pilot
+paths:
+  /auth/login:
+    post:
+      tags: [Auth]
+      operationId: login
+      summary: Sign in with email and password
+      description: Issues portal-scoped session cookies and returns access/refresh tokens.
+      parameters:
+        - $ref: '#/components/parameters/PortalHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  minLength: 1
+      responses:
+        '200':
+          description: Signed in, or a verification/2FA challenge
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessAuth'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      operationId: refreshSession
+      summary: Rotate the refresh token
+      parameters:
+        - $ref: '#/components/parameters/PortalHeader'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                refreshToken:
+                  type: string
+      responses:
+        '200':
+          description: New access and refresh tokens
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessAuth'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /records:
+    get:
+      tags: [Records]
+      operationId: listRecords
+      summary: List the caller's Library records
+      security:
+        - cookieAccess: []
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PortalHeader'
+        - name: paged
+          in: query
+          schema: { type: boolean }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 12 }
+        - name: cursor
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: A record array or a paged record envelope
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: object
+                    required: [success, data]
+                    properties:
+                      success: { type: boolean, const: true }
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Record'
+                  - type: object
+                    required: [success, data]
+                    properties:
+                      success: { type: boolean, const: true }
+                      data:
+                        $ref: '#/components/schemas/RecordPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /records/upload-url:
+    post:
+      tags: [Records]
+      operationId: requestRecordUploadUrl
+      summary: Presign a Library file upload
+      security:
+        - cookieAccess: []
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PortalHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UploadUrlRequest'
+      responses:
+        '200':
+          description: Presigned upload URL and storage key
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data]
+                properties:
+                  success: { type: boolean, const: true }
+                  data:
+                    $ref: '#/components/schemas/UploadUrlResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          description: Storage is not configured for this file size
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /courses/published:
+    get:
+      tags: [Courses]
+      operationId: listPublishedCourses
+      summary: List published courses
+      parameters:
+        - name: q
+          in: query
+          schema: { type: string }
+        - name: type
+          in: query
+          schema: { type: string, enum: [live, video] }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 50, default: 12 }
+      responses:
+        '200':
+          description: Published course cards
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, courses, count]
+                properties:
+                  success: { type: boolean, const: true }
+                  courses:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/CourseCard'
+                  count: { type: integer }
+
+  /programmes/catalogue:
+    get:
+      tags: [Programmes]
+      operationId: listPublishedProgrammes
+      summary: List published programmes
+      responses:
+        '200':
+          description: Published programmes
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data]
+                properties:
+                  success: { type: boolean, const: true }
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ProgrammeSummary'
+
+  /pharmd/programme:
+    get:
+      tags: [PharmD]
+      operationId: getPharmdProgramme
+      summary: Get the PharmD programme tree
+      responses:
+        '200':
+          description: Programme, years and courses
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessPharmdProgramme'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /content/blog/posts:
+    get:
+      tags: [Content]
+      operationId: listBlogPosts
+      summary: List published blog posts
+      parameters:
+        - name: category
+          in: query
+          schema: { type: string }
+        - name: search
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 24 }
+        - name: offset
+          in: query
+          schema: { type: integer, minimum: 0, default: 0 }
+      responses:
+        '200':
+          description: Published blog cards and pagination metadata
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data]
+                properties:
+                  success: { type: boolean, const: true }
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/BlogCard'
+                  meta:
+                    type: object
+                    properties:
+                      total: { type: integer, nullable: true }
+                      limit: { type: integer }
+                      offset: { type: integer }
+
+  /contact:
+    post:
+      tags: [Contact]
+      operationId: submitContact
+      summary: Submit a contact or partner message
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ContactRequest'
+      responses:
+        '201':
+          description: Message accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success]
+                properties:
+                  success: { type: boolean, const: true }
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
+  /public/pilot-applications:
+    post:
+      tags: [Pilot]
+      operationId: submitPilotApplication
+      summary: Submit a pilot-school application
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PilotApplicationRequest'
+      responses:
+        '201':
+          description: Application accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, message]
+                properties:
+                  success: { type: boolean, const: true }
+                  message: { type: string }
+        '409':
+          description: Duplicate application within 24 hours
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Error'
+                  - type: object
+                    properties:
+                      code: { type: string, const: duplicate_application }
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
+components:
+  securitySchemes:
+    cookieAccess:
+      type: apiKey
+      in: cookie
+      name: akoro_access_student
+      description: Portal-scoped access cookie; use X-Akoro-Portal to select the portal.
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    PortalHeader:
+      name: X-Akoro-Portal
+      in: header
+      required: false
+      schema:
+        type: string
+        enum: [student, instructor, admin, school, site, agent, business]
+        default: student
+
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Unauthorized:
+      description: Missing or invalid session
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    ValidationFailed:
+      description: Validation failed
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ValidationError' }
+    RateLimited:
+      description: Rate limit exceeded
+      headers:
+        Retry-After:
+          schema: { type: integer }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    ServerError:
+      description: Unexpected server error
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+
+  schemas:
+    Error:
+      type: object
+      required: [success]
+      properties:
+        success: { type: boolean, const: false }
+        message: { type: string }
+        code: { type: string }
+        error: { type: string }
+    ValidationError:
+      type: object
+      required: [success]
+      properties:
+        success: { type: boolean, const: false }
+        message: { type: string }
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              field: { type: string }
+              message: { type: string }
+        fields:
+          type: object
+          additionalProperties: { type: string }
+    User:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        username: { type: string }
+        fullName: { type: string, nullable: true }
+        avatarUrl: { type: string, nullable: true }
+        role: { type: string }
+        onboardingCompleted: { type: boolean }
+    AuthSession:
+      type: object
+      required: [accessToken, refreshToken, accessExpiresAt, user]
+      properties:
+        accessToken: { type: string }
+        refreshToken: { type: string }
+        accessExpiresAt: { type: integer }
+        user: { $ref: '#/components/schemas/User' }
+    SuccessAuth:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, const: true }
+        data: { $ref: '#/components/schemas/AuthSession' }
+    UploadUrlRequest:
+      type: object
+      required: [name, mime, size]
+      properties:
+        name: { type: string, maxLength: 255 }
+        mime: { type: string }
+        size: { type: integer, minimum: 1 }
+        purpose:
+          type: string
+          enum: [record, folder-cover]
+          default: record
+    UploadUrlResponse:
+      type: object
+      required: [uploadUrl, fileKey, store]
+      properties:
+        uploadUrl: { type: string, format: uri }
+        fileKey: { type: string }
+        store:
+          type: string
+          enum: [r2, supabase]
+    Record:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        kind: { type: string, enum: [upload, paste, link] }
+        name: { type: string }
+        mime: { type: string }
+        size: { type: integer }
+        duration: { type: number, nullable: true }
+        progress: { type: number }
+        hasPreview: { type: boolean }
+        fileMissing: { type: boolean }
+        url: { type: string, nullable: true }
+        fileUrl: { type: string, nullable: true }
+        linkStatus: { type: string, nullable: true }
+        linkTitle: { type: string, nullable: true }
+        linkDescription: { type: string, nullable: true }
+        linkImage: { type: string, nullable: true }
+        linkError: { type: string, nullable: true }
+    RecordPage:
+      type: object
+      required: [records]
+      properties:
+        records:
+          type: array
+          items: { $ref: '#/components/schemas/Record' }
+        total: { type: integer }
+        nextCursor: { type: string, nullable: true }
+    CourseCard:
+      type: object
+      properties:
+        id: { type: string }
+        slug: { type: string, nullable: true }
+        type: { type: string }
+        cat: { type: string }
+        emoji: { type: string }
+        grad: { type: array, items: { type: string } }
+        title: { type: string }
+        subject: { type: string }
+        img: { type: string, nullable: true }
+        dur: { type: string }
+        rating: { type: string }
+        ratingNum: { type: number }
+        rev: { type: string }
+        students: { type: integer }
+        level: { type: string }
+        price: { type: string }
+        priceNum: { type: number }
+        syllabus:
+          type: array
+          items: { type: string }
+    ProgrammeSummary:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        code: { type: string, nullable: true }
+        description: { type: string, nullable: true }
+        duration_label: { type: string, nullable: true }
+        cover_url: { type: string, nullable: true }
+        source: { type: string, nullable: true }
+        course_count: { type: integer }
+    PharmdProgramme:
+      type: object
+      properties:
+        programme:
+          type: object
+          properties:
+            code: { type: string }
+            name: { type: string }
+            subtitle: { type: string, nullable: true }
+        years:
+          type: array
+          items:
+            type: object
+            properties:
+              number: { type: integer }
+              label: { type: string }
+              courses:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id: { type: string }
+                    code: { type: string }
+                    title: { type: string }
+                    topics: { type: integer }
+    SuccessPharmdProgramme:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, const: true }
+        data: { $ref: '#/components/schemas/PharmdProgramme' }
+    BlogCard:
+      type: object
+      properties:
+        id: { type: string }
+        slug: { type: string }
+        title: { type: string }
+        excerpt: { type: string, nullable: true }
+        category: { type: string, nullable: true }
+        image: { type: string, nullable: true }
+        author: { type: string, nullable: true }
+        author_role: { type: string, nullable: true }
+        read_min: { type: integer, nullable: true }
+        featured: { type: boolean }
+        published_at: { type: string, format: date-time, nullable: true }
+    ContactRequest:
+      type: object
+      required: [name, email, message]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 200 }
+        email: { type: string, format: email }
+        message: { type: string, minLength: 1, maxLength: 5000 }
+        kind: { type: string, enum: [contact, partner], default: contact }
+        organisation: { type: string, maxLength: 200 }
+        subject: { type: string, maxLength: 200 }
+    PilotApplicationRequest:
+      type: object
+      required: [school_name, state_city, est_students]
+      description: The canonical validator in lib/tiersModel.js is authoritative; add all fields during Phase 2.
+      properties:
+        school_name: { type: string, minLength: 1, maxLength: 200 }
+        state_city: { type: string, minLength: 1, maxLength: 120 }
+        est_students: { type: integer, minimum: 1 }

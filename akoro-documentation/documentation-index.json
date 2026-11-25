@@ -1,0 +1,103 @@
+{
+  "schema_version": "1.0",
+  "updated": "2026-11-25",
+  "entrypoint": "README.md",
+  "agent_guide": "AGENTS.md",
+  "capability_registry": "capability-registry.yaml",
+  "openapi": "02-api/openapi.yaml",
+  "features": {
+    "authentication": {
+      "description": "Portal-scoped sign-in, sessions, 2FA, OAuth and password reset.",
+      "tier": 1,
+      "status": "implemented",
+      "docs": [
+        "01-features/auth/overview.md",
+        "02-api/authentication.md"
+      ],
+      "capabilities": [
+        "auth.login",
+        "auth.refresh"
+      ]
+    },
+    "records": {
+      "description": "Library uploads, extraction, reading, search and grounded questions.",
+      "tier": 1,
+      "status": "implemented",
+      "docs": [
+        "01-features/records/overview.md"
+      ],
+      "capabilities": [
+        "records.list",
+        "records.request_upload",
+        "records.ask"
+      ]
+    },
+    "courses": {
+      "description": "Published course catalogue, course access, lessons and HLS media.",
+      "tier": 1,
+      "status": "beta",
+      "docs": [
+        "01-features/courses/overview.md"
+      ],
+      "capabilities": [
+        "courses.list_published",
+        "courses.get_published"
+      ]
+    },
+    "programmes": {
+      "description": "Published programme catalogue with sections, courses and materials.",
+      "tier": 1,
+      "status": "implemented",
+      "docs": [
+        "01-features/programmes/overview.md"
+      ],
+      "capabilities": [
+        "programmes.list_catalogue"
+      ]
+    },
+    "pharmd": {
+      "description": "PharmD programme tree, topic reading, progress and grounded questions.",
+      "tier": 1,
+      "status": "beta",
+      "docs": [
+        "01-features/pharmd/overview.md"
+      ],
+      "capabilities": [
+        "pharmd.get_programme"
+      ]
+    },
+    "public_content": {
+      "description": "Public blog and careers content plus subscription and application intake.",
+      "tier": 1,
+      "status": "implemented",
+      "docs": [
+        "01-features/content/overview.md"
+      ],
+      "capabilities": [
+        "content.list_blog_posts"
+      ]
+    },
+    "contact": {
+      "description": "Public contact and partner enquiry intake.",
+      "tier": 1,
+      "status": "implemented",
+      "docs": [
+        "01-features/contact/overview.md"
+      ],
+      "capabilities": [
+        "contact.submit"
+      ]
+    },
+    "pilot_applications": {
+      "description": "Public pilot-school application intake.",
+      "tier": 1,
+      "status": "implemented",
+      "docs": [
+        "01-features/pilot-applications/overview.md"
+      ],
+      "capabilities": [
+        "pilot.apply"
+      ]
+    }
+  }
+}

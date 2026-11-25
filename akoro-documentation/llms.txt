@@ -1,0 +1,61 @@
+# Akoro Documentation
+
+> Akoro is an education platform with learner, instructor, school and admin
+> applications, an AI protégé/agent runtime, a library and extraction pipeline,
+> courses and media, curriculum and assessments, and a school ERP. This
+> repository is the canonical platform knowledge base.
+
+Status: Phase 1 foundation. Content is being populated from the Phase 0 audit.
+Use `capability-registry.yaml` for availability; do not infer it from prose.
+
+## Start
+
+- [README](README.md): structure and source-of-truth rules
+- [AGENTS.md](AGENTS.md): how agents research and operate
+- [Platform overview](00-platform/platform-overview.md)
+- [Terminology](00-platform/terminology.md)
+- [Phase 0 documentation audit](../docs/audits/phase-0-documentation-audit.md)
+
+## Machine-readable
+
+- [Documentation index](documentation-index.json)
+- [Capability registry](capability-registry.yaml)
+- [OpenAPI skeleton](02-api/openapi.yaml)
+- [Capability registry schema](_schemas/capability-registry.schema.json)
+- [Documentation index schema](_schemas/documentation-index.schema.json)
+
+## Features
+
+- [Authentication](01-features/auth/overview.md)
+- [Library and records](01-features/records/overview.md)
+- [Courses and media](01-features/courses/overview.md)
+- [Programmes](01-features/programmes/overview.md)
+- [PharmD](01-features/pharmd/overview.md)
+- [Public content](01-features/content/overview.md)
+- [Contact](01-features/contact/overview.md)
+- [Pilot applications](01-features/pilot-applications/overview.md)
+
+## API
+
+- [API overview](02-api/README.md)
+- [Authentication](02-api/authentication.md)
+- [Errors](02-api/errors.md)
+- [OpenAPI](02-api/openapi.yaml)
+
+## Agents
+
+- [Agent documentation](06-agents/README.md)
+
+## Engineering and operations
+
+- [Engineering](08-engineering/README.md)
+- [Security and governance](09-security-governance/README.md)
+- [Testing and quality](10-testing-quality/README.md)
+- [Changes and releases](11-changes-releases/README.md)
+
+## Notes
+
+- Public docs are an allow-listed subset of this repository.
+- Planned capabilities are not callable.
+- Documentation explains permissions; the backend enforces them.
+- Use only demo accounts and sandbox data in examples.

@@ -21,6 +21,14 @@ public subplan, and keep the master as the source of truth.
 
 Supporting data: `docs/audits/phase-0/*.csv`.
 
+## Canonical knowledge base
+
+The platform documentation system now lives at
+[`akoro-documentation/`](../akoro-documentation/README.md). It contains the
+agent guide, capability registry, documentation index, API skeleton, feature
+overviews and templates. This `docs/` folder remains the planning, audit and
+internal-operations workspace.
+
 ## Current reference documents
 
 - [Engineering guarantees](ENGINEERING_GUARANTEES.md)
