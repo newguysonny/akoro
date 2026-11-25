@@ -34,6 +34,30 @@ export class MediaContainer extends Container {
   onStart()    { console.log("[media-worker] container started"); }
   onStop()     { console.log("[media-worker] container stopped"); }
   onError(err) { console.error("[media-worker] container error:", err); }
+
+  // An encode runs entirely inside the container: after the 202 there are
+  // no more inbound requests, so the 10m idle timer would SIGTERM a long
+  // encode. On expiry, ask the container whether a job is still running;
+  // if it is, renew the window. When the lane is idle, stop as usual.
+  async onActivityExpired() {
+    try {
+      const res = await this.containerFetch("http://container/jobs", {
+        headers: { "x-internal-secret": this.env.INTERNAL_SECRET ?? "" },
+      }, this.defaultPort);
+      if (res.ok) {
+        const { data } = await res.json();
+        const running = (data?.jobs || []).some((job) => job.state === "running");
+        if (running) {
+          console.log("[media-worker] activity expired, but a job is running — staying up");
+          this.renewActivityTimeout();
+          return;
+        }
+      }
+    } catch (err) {
+      console.warn("[media-worker] activity check failed:", err?.message || err);
+    }
+    await this.stop();
+  }
 }
 
 export default {

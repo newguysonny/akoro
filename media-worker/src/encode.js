@@ -125,6 +125,7 @@ export async function runEncodeJob({ videoId, courseId, sourceKey }, { onLog = (
   await fs.mkdir(jobTempDir, { recursive: true });
   await fs.mkdir(outputDir, { recursive: true });
 
+  let completed = false;
   try {
     const ext = path.extname(sourceKey) || ".mp4";
     const sourcePath = path.join(jobTempDir, `source${ext}`);
@@ -151,8 +152,19 @@ export async function runEncodeJob({ videoId, courseId, sourceKey }, { onLog = (
       variants: JSON.stringify(result.variants),
       sourceKey: null,   // staging is deleted
     });
+    completed = true;
     onLog(`[encode] ${videoId} complete`);
     return { videoUrl, variants: result.variants };
+  } catch (err) {
+    // The old BullMQ "failed" listener told the API. Without this the
+    // video sits at "encoding" forever after an ffmpeg/R2/API failure.
+    if (!completed) {
+      await updateVideoStatus(videoId, {
+        encodingStatus: "failed",
+        errorMessage: String(err?.message || err).slice(0, 500),
+      }).catch(() => {});
+    }
+    throw err;
   } finally {
     await fs.rm(jobTempDir, { recursive: true, force: true }).catch(() => {});
     await fs.rm(outputDir, { recursive: true, force: true }).catch(() => {});

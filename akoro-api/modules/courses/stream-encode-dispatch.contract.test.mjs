@@ -31,7 +31,7 @@ const [streamSrc, mediaClientSrc, envExample, mwReadme, dispatchSrc] = await Pro
 ]);
 
 test("container mode dispatches to /jobs/encode and opens NO BullMQ queue", () => {
-  assert.match(streamSrc, /import \{ mediaWorkerEnabled \}\s+from "\.\.\/records\/mediaClient\.js";/, "the shared gate");
+  assert.match(streamSrc, /import \{ mediaWorkerEnabled \}\s+from "\.\.\/records\/index\.js";/, "the shared gate (records' module entry)");
   assert.match(streamSrc, /import \{ dispatchEncode \}\s+from "\.\/encodeDispatch\.js";/, "the dispatch lives in its own bcrypt-free seam");
   assert.match(dispatchSrc, /export async function dispatchEncode\(/, "the dispatch helper exists");
   assert.match(streamSrc, /const encodingQueue = mediaWorkerEnabled\(\) \? null : new Queue\("video-encoding"/, "container mode constructs no Redis encode queue");

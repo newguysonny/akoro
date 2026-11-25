@@ -27,13 +27,14 @@ const here = dirname(fileURLToPath(import.meta.url));
 /* ── source pins ─────────────────────────────────────────────────────────── */
 
 const read = (p) => readFileSync(join(here, p), "utf8");
-const [ffmpegSrc, encodeSrc, indexSrc, jobsSrc, r2Src,
+const [ffmpegSrc, encodeSrc, indexSrc, jobsSrc, r2Src, cfSrc,
   avLibSrc, mediaClientSrc, apiEnvExample] = await Promise.all([
   read("../src/ffmpeg.js"),
   read("../src/encode.js"),
   read("../src/index.js"),
   read("../src/jobs.js"),
   read("../src/r2.js"),
+  read("../cf/worker.js"),
   read("../../akoro-api/modules/records/avTranscribeLib.js"),
   read("../../akoro-api/modules/records/mediaClient.js"),
   read("../../akoro-api/.env.example"),
@@ -200,4 +201,18 @@ test("the container is wired: docs, health, R2, and the API knows the URL", () =
   assert.match(r2Src, /ACL: "public-read"/, "HLS artifacts stay publicly streamable");
   assert.match(jobsSrc, /MAX_CONCURRENT_JOBS/, "the lane is bounded");
   assert.match(apiEnvExample, /MEDIA_WORKER_URL=/, "the API's env documents the worker");
+});
+
+test("a running encode renews the container instead of the 10m idle stop", () => {
+  assert.match(cfSrc, /async onActivityExpired\(\)/, "the edge DO owns the expiry decision");
+  assert.match(cfSrc, /containerFetch\([^)]*\/jobs/, "it asks the container for the lane state");
+  assert.match(cfSrc, /state === "running"/, "a live encode counts as activity");
+  assert.match(cfSrc, /renewActivityTimeout\(\)/, "a live encode keeps the container up");
+  assert.match(cfSrc, /await this\.stop\(\)/, "an idle lane still stops");
+});
+
+test("a failed encode reports failed to the API — it cannot sit at encoding forever", () => {
+  assert.match(encodeSrc, /encodingStatus: "failed"/, "the failure callback exists");
+  assert.match(encodeSrc, /errorMessage: String\(err\?\.message \|\| err\)\.slice\(0, 500\)/, "the reason is bounded and sent");
+  assert.match(encodeSrc, /if \(!completed\)/, "a completed job is never overwritten by the catch");
 });
