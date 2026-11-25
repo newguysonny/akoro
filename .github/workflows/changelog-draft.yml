@@ -1,0 +1,98 @@
+name: Changelog draft
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  draft:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Comment a changelog draft
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const labels = pr.labels.map((label) => label.name);
+            const relevant = labels.filter((label) =>
+              label.startsWith('changelog:') || label.startsWith('api:') || label === 'docs'
+            );
+            if (relevant.length === 0) {
+              core.info('No changelog/API/docs label; skipping.');
+              return;
+            }
+
+            const marker = '<!-- changelog-draft -->';
+            const comments = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pr.number,
+              per_page: 100,
+            });
+            if (comments.data.some((comment) => comment.body?.includes(marker))) {
+              core.info('Draft already posted.');
+              return;
+            }
+
+            const type = labels.includes('changelog:security') ? 'security'
+              : labels.includes('api:breaking') ? 'api'
+              : labels.includes('changelog:feature') ? 'feature'
+              : labels.includes('changelog:improvement') ? 'improvement'
+              : labels.includes('changelog:fix') ? 'fix'
+              : 'docs';
+
+            const api = labels.includes('api:breaking') ? 'breaking'
+              : labels.includes('api:deprecation') ? 'deprecation'
+              : labels.includes('api:additive') ? 'additive'
+              : 'none';
+
+            const date = new Date().toISOString().slice(0, 10);
+            const slug = `${date}-${pr.number}`;
+            const summary = (pr.body || '')
+              .replace(/\r/g, '')
+              .split('\n')
+              .map((line) => line.trim())
+              .filter(Boolean)
+              .slice(0, 3)
+              .join(' ')
+              .slice(0, 280) || 'Describe the change in one or two sentences.';
+
+            const entry = {
+              slug,
+              title: pr.title,
+              date,
+              type,
+              summary,
+              body: summary,
+            };
+
+            const body = `${marker}
+            ### Changelog draft
+
+            This PR is merged. Add a curated entry to `akoro-docs/content/changelog.json`
+            and the changelog page after editing the wording.
+
+            Labels: ${relevant.map((label) => `\`${label}\``).join(', ')}
+
+            \`\`\`json
+            ${JSON.stringify(entry, null, 2)}
+            \`\`\`
+
+            Checklist:
+            - [ ] Impact is clear for the intended audience.
+            - [ ] Breaking/API migration link is included if needed.
+            - [ ] Security wording is approved before publishing.
+            - [ ] Entry is added to the changelog.`;
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pr.number,
+              body,
+            });

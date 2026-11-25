@@ -50,21 +50,34 @@ The OpenAPI spec is synced from
 (runs automatically before `dev` and `build`). Fumadocs generates one operation
 page per OpenAPI operation under `/docs/api-reference/<operationId>`.
 
-## Changelog feeds
+## Changelog feeds and automation
 
 - `/changelog/rss.xml`
 - `/changelog/feed.json`
+- Page: `/docs/changelog`
+- PR labels produce a changelog draft comment via
+  `.github/workflows/changelog-draft.yml`; an editor still approves and adds the
+  entry.
 
-The page is `/docs/changelog`; entries are currently curated. PR-label automation
-is not wired yet.
+## Status page
+
+See [STATUS.md](STATUS.md). Instatus Starter is selected; `/status` shows a setup
+notice until `NEXT_PUBLIC_STATUS_URL` is set, then redirects to the managed page.
+
+## Deployment
+
+See [DEPLOYMENT.md](DEPLOYMENT.md) for the Vercel project, `docs.akoro.ng`
+domain, environment variables and post-deploy checks.
 
 ## CI
 
 `.github/workflows/docs.yml` installs `akoro-docs`, syncs OpenAPI, builds the
-site, and runs the internal docs validator.
+site, and runs the internal docs validator. `prebuild` also runs
+`validate-public-docs.mjs` for local links, generated operation routes, changelog
+JSON and OpenAPI freshness.
 
 ## Not started
 
-- Public status page (managed provider) and incident history.
-- Changelog PR-label automation.
+- Instatus Starter account, monitors, incident templates and subscriber setup.
+- Vercel project creation and DNS for `docs.akoro.ng`.
 - Search analytics and feedback.
