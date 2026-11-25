@@ -1,0 +1,10 @@
+[
+  {
+    "slug": "2026-11-25-public-docs-preview",
+    "title": "Public docs preview",
+    "date": "2026-11-25",
+    "type": "docs",
+    "summary": "The first public Akoro documentation surface is live: getting started, authentication, errors, uploads, API overview and a generated OpenAPI reference.",
+    "body": "The public docs now cover the verified auth, Library and public catalogue surfaces. School ERP, admin and agent-internal routes remain internal."
+  }
+]

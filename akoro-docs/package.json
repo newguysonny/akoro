@@ -6,12 +6,18 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "predev": "node scripts/sync-openapi.mjs",
+    "prebuild": "node scripts/sync-openapi.mjs",
+    "sync:openapi": "node scripts/sync-openapi.mjs"
   },
   "dependencies": {
+    "@scalar/api-client-react": "^2.0.73",
     "fumadocs-core": "16.19.7",
     "fumadocs-mdx": "15.6.4",
+    "fumadocs-openapi": "^12.6.7",
     "fumadocs-ui": "16.19.7",
+    "json-schema-typed": "^8.0.2",
     "next": "16.4.6",
     "react": "19.3.1",
     "react-dom": "19.3.1"
@@ -21,5 +27,8 @@
     "@types/react": "19.2.7",
     "@types/react-dom": "19.2.3",
     "typescript": "5.9.3"
+  },
+  "engines": {
+    "node": ">=22"
   }
 }

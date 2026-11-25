@@ -17,7 +17,7 @@ import path from "node:path";
 import { createRequire } from "node:module";
 
 const root = path.resolve("akoro-documentation");
-const require = createRequire(path.resolve("akoro-api/package.json"));
+const require = createRequire(path.resolve("akoro-docs/package.json"));
 const YAML = require("yaml");
 
 const errors = [];

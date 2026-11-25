@@ -8,7 +8,7 @@
 | Scope | Public documentation site, API reference, product/API changelog, public status page |
 | Related | `AGENTS.md`, `reference/Grand Plan.md`, `docs/`, `akoro-api/modules/*/README.md` |
 | Target surfaces | `docs.akoro.ng`, `status.akoro.ng`, changelog route under docs or `akoro.ng` |
-| Implementation | `akoro-docs/` (Next.js + Fumadocs) |
+| Implementation | `akoro-docs/` (Next.js + Fumadocs); generated OpenAPI operation pages under `/docs/api-reference/<operationId>`; changelog RSS/JSON feeds; docs CI |
 | Parent plan | `docs/PLATFORM-DOCUMENTATION-SYSTEM-PLAN.md` — this document is the public-surface detail of the larger Platform Documentation System |
 
 > This plan is the public presentation layer of the Platform Documentation
