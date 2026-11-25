@@ -1,0 +1,264 @@
+schema_version: "1.0"
+platform: Akoro
+updated: "2026-11-25"
+
+# Seed registry for Phase 1. Every entry is code-observed from the Phase 0
+# audit; live sandbox verification is still pending. Do not mark a capability
+# `implemented` here without a real route/operation and a linked document.
+capabilities:
+  - id: auth.login
+    name: Sign in
+    category: auth
+    status: implemented
+    description: >
+      Signs a user in with email and password and issues portal-scoped session
+      tokens and cookies. A 2FA challenge may follow.
+    documentation:
+      - 01-features/auth/overview.md
+      - 02-api/authentication.md
+    api_reference:
+      - 02-api/openapi.yaml
+    access:
+      - public
+    requires_confirmation: false
+    side_effects:
+      - issues an access token and a rotating refresh token
+      - sets portal-scoped auth cookies
+    verification:
+      - the response contains user, accessToken, refreshToken and accessExpiresAt
+      - the access cookie is present for the selected portal
+    verification_status: code-observed
+    last_verified: "2026-11-25"
+
+  - id: auth.refresh
+    name: Refresh a session
+    category: auth
+    status: implemented
+    description: >
+      Rotates the refresh token and issues a new access token for the selected
+      portal.
+    documentation:
+      - 01-features/auth/overview.md
+      - 02-api/authentication.md
+    api_reference:
+      - 02-api/openapi.yaml
+    access:
+      - authenticated_session
+    requires_confirmation: false
+    side_effects:
+      - rotates the refresh token
+      - replaces the portal access cookie
+    verification:
+      - the refresh token is new
+      - the access token expiry is in the future
+    verification_status: code-observed
+    last_verified: "2026-11-25"
+
+  - id: records.list
+    name: List library records
+    category: records
+    status: implemented
+    description: >
+      Lists the authenticated learner's own library records, optionally paged.
+    documentation:
+      - 01-features/records/overview.md
+    api_reference:
+      - 02-api/openapi.yaml
+    access:
+      - learner
+    requires_confirmation: false
+    side_effects: []
+    verification:
+      - the response includes only records owned by the caller
+      - paged responses include records, total and nextCursor
+    verification_status: code-observed
+    last_verified: "2026-11-25"
+
+  - id: records.request_upload
+    name: Request a library upload URL
+    category: records
+    status: implemented
+    description: >
+      Creates a presigned upload URL for a Library file so the browser can send
+      bytes directly to object storage.
+    documentation:
+      - 01-features/records/overview.md
+    api_reference:
+      - 02-api/openapi.yaml
+    access:
+      - learner
+    requires_confirmation: false
+    side_effects:
+      - creates a presigned storage URL and key
+    verification:
+      - the returned key is under the caller's own storage prefix
+      - the URL can be used for a single PUT before expiry
+    verification_status: code-observed
+    last_verified: "2026-11-25"
+
+  - id: records.ask
+    name: Ask about a record
+    category: records
+    status: implemented
+    description: >
+      Answers a learner's question grounded in a record's extracted content,
+      with citations.
+    documentation:
+      - 01-features/records/overview.md
+    api_reference:
+      - 02-api/openapi.yaml
+    access:
+      - learner
+    requires_confirmation: false
+    side_effects:
+      - stores the question and answer history for the record
+    verification:
+      - the answer cites passages from the selected record
+      - the record belongs to the authenticated learner
+    verification_status: code-observed
+    last_verified: "2026-11-25"
+
+  - id: courses.list_published
+    name: List published courses
+    category: courses
+    status: implemented
+    description: >
+      Returns published courses for the public catalogue.
+    documentation:
+      - 01-features/courses/overview.md
+    api_reference:
+      - 02-api/openapi.yaml
+    access:
+      - public
+    requires_confirmation: false
+    side_effects: []
+    verification:
+      - only published courses are returned
+      - private fields are absent
+    verification_status: code-observed
+    last_verified: "2026-11-25"
+
+  - id: courses.get_published
+    name: Get a published course
+    category: courses
+    status: implemented
+    description: >
+      Returns a published course detail page by id or slug.
+    documentation:
+      - 01-features/courses/overview.md
+    api_reference:
+      - 02-api/openapi.yaml
+    access:
+      - public
+    requires_confirmation: false
+    side_effects: []
+    verification:
+      - unpublished courses return not found
+      - private fields are absent
+    verification_status: code-observed
+    last_verified: "2026-11-25"
+
+  - id: programmes.list_catalogue
+    name: List published programmes
+    category: programmes
+    status: implemented
+    description: >
+      Returns published programmes with published course counts.
+    documentation:
+      - 01-features/programmes/overview.md
+    api_reference:
+      - 02-api/openapi.yaml
+    access:
+      - public
+    requires_confirmation: false
+    side_effects: []
+    verification:
+      - draft programmes are excluded
+      - only published courses are counted
+    verification_status: code-observed
+    last_verified: "2026-11-25"
+
+  - id: pharmd.get_programme
+    name: Get the PharmD programme
+    category: pharmd
+    status: beta
+    description: >
+      Returns the PharmD programme tree with years, courses and topic counts.
+      Some learner-side course content may still be marked coming soon.
+    documentation:
+      - 01-features/pharmd/overview.md
+    api_reference:
+      - 02-api/openapi.yaml
+    access:
+      - public
+    requires_confirmation: false
+    side_effects: []
+    verification:
+      - the programme code is PHARMD
+      - years and courses are ordered
+      - topic counts match the stored topics
+    verification_status: code-observed
+    last_verified: "2026-11-25"
+
+  - id: content.list_blog_posts
+    name: List blog posts
+    category: content
+    status: implemented
+    description: >
+      Returns published blog post cards for the public blog.
+    documentation:
+      - 01-features/content/overview.md
+    api_reference:
+      - 02-api/openapi.yaml
+    access:
+      - public
+    requires_confirmation: false
+    side_effects: []
+    verification:
+      - only published posts are returned
+      - pagination metadata is present
+    verification_status: code-observed
+    last_verified: "2026-11-25"
+
+  - id: contact.submit
+    name: Submit a contact message
+    category: contact
+    status: implemented
+    description: >
+      Accepts a public contact or partner enquiry.
+    documentation:
+      - 01-features/contact/overview.md
+    api_reference:
+      - 02-api/openapi.yaml
+    access:
+      - public
+    requires_confirmation: false
+    side_effects:
+      - stores a contact message for the admin inbox
+    verification:
+      - the response is 201
+      - the message is visible to an admin
+    verification_status: code-observed
+    last_verified: "2026-11-25"
+
+  - id: pilot.apply
+    name: Apply for the pilot programme
+    category: pilot-applications
+    status: implemented
+    description: >
+      Accepts a public pilot-school application after validating school and
+      contact details.
+    documentation:
+      - 01-features/pilot-applications/overview.md
+    api_reference:
+      - 02-api/openapi.yaml
+    access:
+      - public
+    requires_confirmation: false
+    side_effects:
+      - stores a pilot application for admin review
+    verification:
+      - the response is 201
+      - duplicate applications within 24 hours return 409
+    verification_status: code-observed
+    last_verified: "2026-11-25"
