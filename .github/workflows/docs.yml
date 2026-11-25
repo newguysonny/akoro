@@ -1,0 +1,32 @@
+name: Docs build
+
+on:
+  push:
+    paths:
+      - 'akoro-docs/**'
+      - 'akoro-documentation/**'
+      - '.github/workflows/docs.yml'
+  pull_request:
+    paths:
+      - 'akoro-docs/**'
+      - 'akoro-documentation/**'
+      - '.github/workflows/docs.yml'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: akoro-docs
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: akoro-docs/package-lock.json
+      - run: npm ci
+      - run: npm run build
+      - name: Validate internal docs references
+        working-directory: .
+        run: node akoro-documentation/scripts/validate-docs.mjs
