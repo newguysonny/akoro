@@ -858,7 +858,12 @@ paths:
           description: Blog post
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/SuccessGenericData' }
+              schema:
+                type: object
+                required: [success, data]
+                properties:
+                  success: { type: boolean, const: true }
+                  data: { $ref: '#/components/schemas/BlogPost' }
         '404':
           description: Post not found
           content:
@@ -954,7 +959,12 @@ paths:
           description: Job detail
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/SuccessGenericData' }
+              schema:
+                type: object
+                required: [success, data]
+                properties:
+                  success: { type: boolean, const: true }
+                  data: { $ref: '#/components/schemas/CareerJob' }
         '404':
           description: Role not found or closed
           content:
@@ -1441,8 +1451,101 @@ components:
         students: { type: integer }
     CourseDetail:
       type: object
-      additionalProperties: true
-      description: Published course detail; full field list is completed in Phase 2.
+      properties:
+        id: { type: string, format: uuid }
+        slug: { type: string, nullable: true }
+        title: { type: string }
+        description: { type: string, nullable: true }
+        subject: { type: string, nullable: true }
+        platform: { type: string, nullable: true }
+        type: { type: string, enum: [video, live] }
+        level: { type: string }
+        rating: { type: number, nullable: true }
+        rating_count: { type: string }
+        total_students: { type: integer }
+        total_hours: { type: number }
+        instructor_name: { type: string, nullable: true }
+        is_free: { type: boolean }
+        price: { type: number }
+        emoji: { type: string }
+        enrolled: { type: boolean }
+        modules:
+          type: array
+          items:
+            type: object
+            properties:
+              title: { type: string }
+              lessons:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id: { type: string }
+                    title: { type: string }
+                    type: { type: string, enum: [video, quiz] }
+                    duration: { type: string }
+                    isPreview: { type: boolean }
+                    done: { type: boolean }
+        schedule:
+          type: array
+          items: { type: object, additionalProperties: true }
+        reviews:
+          type: array
+          items: { type: object, additionalProperties: true }
+        teachers:
+          type: array
+          items: { type: object, additionalProperties: true }
+        battles:
+          type: array
+          items: { type: object, additionalProperties: true }
+        leaderboard:
+          type: array
+          items: { type: object, additionalProperties: true }
+        revisions:
+          type: array
+          items: { type: object, additionalProperties: true }
+    BlogPost:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        slug: { type: string }
+        title: { type: string }
+        excerpt: { type: string, nullable: true }
+        category: { type: string }
+        image: { type: string, nullable: true }
+        author: { type: string }
+        author_role: { type: string, nullable: true }
+        read_min: { type: integer }
+        body:
+          type: array
+          items: { type: object, additionalProperties: true }
+        featured: { type: boolean }
+        status: { type: string }
+        published_at: { type: string, format: date-time, nullable: true }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        related:
+          type: array
+          items: { $ref: '#/components/schemas/BlogCard' }
+    CareerJob:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        department_id: { type: string, format: uuid, nullable: true }
+        title: { type: string }
+        location: { type: string, nullable: true }
+        type: { type: string, nullable: true }
+        summary: { type: string, nullable: true }
+        description: { type: string, nullable: true }
+        status: { type: string, enum: [open, closed] }
+        posted_at: { type: string, format: date-time }
+        job_departments:
+          type: object
+          nullable: true
+          properties:
+            id: { type: string, format: uuid }
+            name: { type: string }
+            color: { type: string, nullable: true }
     CareerDepartment:
       type: object
       properties:

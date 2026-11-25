@@ -16,6 +16,11 @@ The generated OpenAPI reference is the canonical field list.
 | `POST /api/records` | [Create a record](records-create.md) |
 | `GET /api/records/extract/status` | [Extraction status](records-extract-status.md) |
 | `POST /api/records/ask` | [Ask about a record](records-ask.md) |
+| Public course catalogue | [Courses](courses-public.md) |
+| Public programme catalogue | [Programmes](programmes-public.md) |
+| Public PharmD catalogue | [PharmD](pharmd-public.md) |
+| Public blog and careers | [Content](content-public.md) |
+| Contact and pilot intake | [Contact/pilot](contact-pilot.md) |
 
 ## Conventions
 
