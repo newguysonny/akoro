@@ -122,6 +122,47 @@
       "capabilities": [
         "pilot.apply"
       ]
+    },
+    "learning": {
+      "description": "Study Prep, teaching, exam prep, practice, assessments, memory and concept state.",
+      "tier": 2,
+      "status": "beta",
+      "docs": [
+        "01-features/learning/overview.md",
+        "13-examples/workflows/study-prep.md",
+        "05-data-models/learning-session.md",
+        "05-data-models/concept.md"
+      ],
+      "capabilities": []
+    },
+    "instructor": {
+      "description": "Course creation, live/on-demand teaching, students, assignments, grading and earnings.",
+      "tier": 2,
+      "status": "beta",
+      "docs": [
+        "01-features/instructor/overview.md",
+        "05-data-models/course.md"
+      ],
+      "capabilities": []
+    },
+    "school": {
+      "description": "School portal and ERP: admissions, students, attendance, academics, exams, fees, HR, operations and website.",
+      "tier": 2,
+      "status": "beta",
+      "docs": [
+        "01-features/school/overview.md"
+      ],
+      "capabilities": []
+    },
+    "ai_agent": {
+      "description": "AI protégé, agent runtime, private tool gateway, memory, autonomy, proposals and verification.",
+      "tier": 3,
+      "status": "beta",
+      "docs": [
+        "01-features/ai/overview.md",
+        "06-agents/README.md"
+      ],
+      "capabilities": []
     }
   }
 }

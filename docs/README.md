@@ -21,6 +21,7 @@ public subplan, and keep the master as the source of truth.
 | [Phase 1 Capability Verification](audits/phase-1-verification.md) | Partial | Sandbox blocked by hibernation rate limit; production non-destructive smoke passed for 9 capabilities. |
 | [Phase 2 Public API Verification](audits/phase-2-verification.md) | Partial | 16 public GET operations passed on production; write paths and sandbox remain pending. |
 | [Phase 2 OpenAPI Coverage](audits/phase-2-coverage.md) | Partial | 20 of 35 operations production-verified; 2 validation-only; 13 not yet exercised. |
+| [Phase 2 Write-Path Fixtures](audits/phase-2-write-fixtures.md) | Planned | Disposable-data plan for sandbox write tests; blocked by the sandbox limiter. |
 
 Supporting data: `docs/audits/phase-0/*.csv`.
 

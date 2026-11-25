@@ -35,6 +35,13 @@ Use `capability-registry.yaml` for availability; do not infer it from prose.
 - [Contact](01-features/contact/overview.md)
 - [Pilot applications](01-features/pilot-applications/overview.md)
 
+## Product areas
+
+- [Learning and assessment](01-features/learning/overview.md)
+- [Instructor](01-features/instructor/overview.md)
+- [School platform](01-features/school/overview.md)
+- [AI and agent runtime](01-features/ai/overview.md)
+
 ## API
 
 - [API overview](02-api/README.md)
