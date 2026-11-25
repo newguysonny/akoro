@@ -74,8 +74,8 @@ export async function uploadChatFile(file, { onProgress, signal } = {}) {
 
 async function uploadChatFileOnce(file, { onProgress, signal } = {}) {
 
-  if (!up?.uploadUrl) throw new Error('The Library is not taking uploads right now.');
   const up = await uploadRecordFile(file, onProgress, { signal });
+  if (!up?.fileKey) throw new Error('The Library is not taking uploads right now.');
   const created = await createRecord({ kind: 'upload', fileKey: up.fileKey, name: file.name, mime: file.type || '', size: file.size });
   const record = created?.record || created;
   if (!record?.id) throw new Error('Nothing could be saved.');
