@@ -1,0 +1,65 @@
+---
+title: API reference
+description: Public and core Akoro API operations.
+---
+
+# API reference
+
+The machine-readable contract is the OpenAPI specification in the documentation
+repository. This page lists the verified public/core surface.
+
+## Auth
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| POST | `/api/auth/register` | Create an account |
+| POST | `/api/auth/login` | Sign in |
+| POST | `/api/auth/verify-email` | Complete signup verification |
+| POST | `/api/auth/verify-login` | Complete login challenge |
+| POST | `/api/auth/resend-code` | Resend a code |
+| POST | `/api/auth/refresh` | Rotate tokens |
+| POST | `/api/auth/2fa/login` | Complete 2FA |
+| POST | `/api/auth/2fa/setup` | Begin 2FA setup |
+| POST | `/api/auth/forgot-password` | Start reset |
+| POST | `/api/auth/reset-password` | Finish reset |
+
+## Library
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET | `/api/records` | List the caller's records |
+| POST | `/api/records` | Create upload/link/paste record |
+| POST | `/api/records/upload-url` | Presign a file upload |
+| GET | `/api/records/extract/status` | Extraction status |
+| POST | `/api/records/ask` | Ask with citations |
+
+## Catalogues
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET | `/api/courses/published` | Published courses |
+| GET | `/api/courses/{idOrSlug}/full` | Course detail |
+| GET | `/api/live-sessions` | Live/scheduled/recorded sessions |
+| GET | `/api/instructors/featured` | Featured instructors |
+| GET | `/api/programmes/catalogue` | Published programmes |
+| GET | `/api/programmes/catalogue/{id}` | Programme detail |
+| GET | `/api/programmes/catalogue/courses/{id}` | Programme course |
+| GET | `/api/pharmd/programme` | PharmD programme |
+| GET | `/api/pharmd/courses/{code}` | PharmD course |
+
+## Content and intake
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET | `/api/content/blog/posts` | Blog posts |
+| GET | `/api/content/blog/posts/{slug}` | Blog post |
+| GET | `/api/content/careers/jobs` | Open jobs |
+| POST | `/api/content/careers/jobs/{id}/apply` | Apply |
+| POST | `/api/contact` | Contact intake |
+| POST | `/api/public/pilot-applications` | Pilot application |
+
+## Notes
+
+- Admin, school ERP and agent-internal routes are not public API.
+- See [Errors](/docs/start/errors) before retrying failures.
+- The canonical `/api/v1` policy is planned.

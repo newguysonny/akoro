@@ -1,0 +1,27 @@
+# Akoro Docs
+
+> Public documentation for the Akoro education platform.
+
+## Start
+
+- /docs
+- /docs/start/getting-started
+- /docs/start/authentication
+- /docs/start/environments
+- /docs/start/errors
+
+## Build
+
+- /docs/build/api-overview
+- /docs/build/uploads
+
+## Reference
+
+- /docs/reference/api
+- /docs/changelog
+
+## Notes
+
+- Public API base: https://api.akoro.ng/api
+- Public docs exclude admin, school ERP and agent-internal routes.
+- Sandbox: https://sandbox.akoro.ng/api
