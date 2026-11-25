@@ -27,7 +27,8 @@ capabilities:
     verification:
       - the response contains user, accessToken, refreshToken and accessExpiresAt
       - the access cookie is present for the selected portal
-    verification_status: code-observed
+      - production smoke passed on 2026-11-25
+    verification_status: production-verified
     last_verified: "2026-11-25"
 
   - id: auth.refresh
@@ -51,7 +52,8 @@ capabilities:
     verification:
       - the refresh token is new
       - the access token expiry is in the future
-    verification_status: code-observed
+      - production smoke passed on 2026-11-25
+    verification_status: production-verified
     last_verified: "2026-11-25"
 
   - id: records.list
@@ -71,7 +73,8 @@ capabilities:
     verification:
       - the response includes only records owned by the caller
       - paged responses include records, total and nextCursor
-    verification_status: code-observed
+      - production smoke passed on 2026-11-25
+    verification_status: production-verified
     last_verified: "2026-11-25"
 
   - id: records.request_upload
@@ -93,7 +96,8 @@ capabilities:
     verification:
       - the returned key is under the caller's own storage prefix
       - the URL can be used for a single PUT before expiry
-    verification_status: code-observed
+      - production smoke passed on 2026-11-25
+    verification_status: production-verified
     last_verified: "2026-11-25"
 
   - id: records.ask
@@ -135,7 +139,8 @@ capabilities:
     verification:
       - only published courses are returned
       - private fields are absent
-    verification_status: code-observed
+      - production smoke passed on 2026-11-25
+    verification_status: production-verified
     last_verified: "2026-11-25"
 
   - id: courses.get_published
@@ -155,7 +160,8 @@ capabilities:
     verification:
       - unpublished courses return not found
       - private fields are absent
-    verification_status: code-observed
+      - production smoke passed on 2026-11-25
+    verification_status: production-verified
     last_verified: "2026-11-25"
 
   - id: programmes.list_catalogue
@@ -175,7 +181,8 @@ capabilities:
     verification:
       - draft programmes are excluded
       - only published courses are counted
-    verification_status: code-observed
+      - production smoke passed on 2026-11-25
+    verification_status: production-verified
     last_verified: "2026-11-25"
 
   - id: pharmd.get_programme
@@ -197,7 +204,8 @@ capabilities:
       - the programme code is PHARMD
       - years and courses are ordered
       - topic counts match the stored topics
-    verification_status: code-observed
+      - production smoke passed on 2026-11-25
+    verification_status: production-verified
     last_verified: "2026-11-25"
 
   - id: content.list_blog_posts
@@ -217,7 +225,8 @@ capabilities:
     verification:
       - only published posts are returned
       - pagination metadata is present
-    verification_status: code-observed
+      - production smoke passed on 2026-11-25
+    verification_status: production-verified
     last_verified: "2026-11-25"
 
   - id: contact.submit
