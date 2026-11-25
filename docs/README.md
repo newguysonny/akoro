@@ -13,6 +13,14 @@ published separately, but the plans and source notes live here.
 Do not create a third plan for the same system. Add detail to the master or its
 public subplan, and keep the master as the source of truth.
 
+## Audits
+
+| Audit | Status | Role |
+| --- | --- | --- |
+| [Phase 0 Documentation Audit](audits/phase-0-documentation-audit.md) | Complete | Inventories routes, apps, features, data models, integrations and gaps before documentation begins. |
+
+Supporting data: `docs/audits/phase-0/*.csv`.
+
 ## Current reference documents
 
 - [Engineering guarantees](ENGINEERING_GUARANTEES.md)
