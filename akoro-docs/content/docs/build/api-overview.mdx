@@ -1,0 +1,52 @@
+---
+title: API overview
+description: Conventions, auth, pagination, limits and async jobs.
+---
+
+# API overview
+
+## Base and format
+
+- Base: `https://api.akoro.ng/api`.
+- JSON requests and responses.
+- Portal-scoped auth via `X-Akoro-Portal` and cookies, or a bearer token.
+
+## Pagination
+
+Some list endpoints return an array; paged endpoints return:
+
+```json
+{
+  "success": true,
+  "data": {
+    "records": [],
+    "total": 0,
+    "nextCursor": null
+  }
+}
+```
+
+Use the cursor; do not calculate offsets.
+
+## Rate limits
+
+Auth and expensive endpoints are rate-limited. A `429` includes retry
+information where available. Do not retry in a tight loop.
+
+## Async work
+
+Extraction, transcription and course-video encoding are asynchronous. Start the
+job, poll status with backoff, and do not assume immediate completion.
+
+## Public versus internal
+
+- Public: auth, published catalogue, blog/careers, contact and pilot intake.
+- Authenticated: Library, course access and progress.
+- Internal: admin, school ERP, agent gateway, verification and secret-guarded
+  callbacks. These are not public API.
+
+## Related
+
+- [Authentication](/docs/start/authentication)
+- [Uploads](/docs/build/uploads)
+- [API reference](/docs/reference/api)

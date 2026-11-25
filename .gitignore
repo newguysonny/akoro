@@ -7,3 +7,7 @@ dist/
 dump.rdb
 extracted/
 node_modules/
+
+# Public docs have a content section named "build"; root build/ must not ignore it.
+!akoro-docs/content/docs/build/
+!akoro-docs/content/docs/build/**
