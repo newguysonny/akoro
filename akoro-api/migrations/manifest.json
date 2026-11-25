@@ -1,5 +1,5 @@
 {
-  "//": "Ordered migration manifest for scripts/apply-migrations.mjs. 'schema' runs on every deploy (structural + platform-catalog seeds, all idempotent). 'demo' is opt-in sample data and must never run against production. 2026-run-all.sql is intentionally excluded \u2014 it is a manual copy-paste bundle that duplicates the files below.",
+  "//": "Ordered migration manifest for scripts/apply-migrations.mjs. 'schema' runs on every deploy (structural + platform-catalog seeds, all idempotent). 'demo' is opt-in sample data and must never run against production. 2026-run-all.sql is intentionally excluded — it is a manual copy-paste bundle that duplicates the files below.",
   "schema": [
     "2026-base-schema.sql",
     "2026-migration-log.sql",
@@ -116,7 +116,8 @@
     "2026-knowledge-map.sql",
     "2026-fix-adaptive-session-agent-fk.sql",
     "2026-communities.sql",
-    "2026-community-activities.sql"
+    "2026-community-activities.sql",
+    "2026-cleanup-docs-smoke-users.sql"
   ],
   "demo": [
     "2026-seed-school.sql",
