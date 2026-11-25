@@ -53,6 +53,7 @@
       "status": "beta",
       "docs": [
         "01-features/courses/overview.md",
+        "02-api/endpoints/courses-public.md",
         "13-examples/workflows/course-video-publish.md",
         "05-data-models/course.md"
       ],
@@ -67,6 +68,7 @@
       "status": "implemented",
       "docs": [
         "01-features/programmes/overview.md",
+        "02-api/endpoints/programmes-public.md",
         "05-data-models/programme.md"
       ],
       "capabilities": [
@@ -78,7 +80,8 @@
       "tier": 1,
       "status": "beta",
       "docs": [
-        "01-features/pharmd/overview.md"
+        "01-features/pharmd/overview.md",
+        "02-api/endpoints/pharmd-public.md"
       ],
       "capabilities": [
         "pharmd.get_programme"
@@ -89,7 +92,8 @@
       "tier": 1,
       "status": "implemented",
       "docs": [
-        "01-features/content/overview.md"
+        "01-features/content/overview.md",
+        "02-api/endpoints/content-public.md"
       ],
       "capabilities": [
         "content.list_blog_posts"
@@ -100,7 +104,8 @@
       "tier": 1,
       "status": "implemented",
       "docs": [
-        "01-features/contact/overview.md"
+        "01-features/contact/overview.md",
+        "02-api/endpoints/contact-pilot.md"
       ],
       "capabilities": [
         "contact.submit"
@@ -111,7 +116,8 @@
       "tier": 1,
       "status": "implemented",
       "docs": [
-        "01-features/pilot-applications/overview.md"
+        "01-features/pilot-applications/overview.md",
+        "02-api/endpoints/contact-pilot.md"
       ],
       "capabilities": [
         "pilot.apply"
