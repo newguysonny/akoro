@@ -1,0 +1,33 @@
+---
+title: Uploads
+description: Library files and course video use presigned direct-to-storage uploads.
+---
+
+# Uploads
+
+## Library files
+
+1. `POST /api/records/upload-url` with `{ name, mime, size }`.
+2. PUT the file bytes to the returned `uploadUrl`.
+3. `POST /api/records` with `kind: "upload"`, `fileKey`, `name`, `mime` and
+   `size`.
+4. Poll extraction status if the document needs OCR or transcription.
+5. Ask or read once the document is searchable.
+
+Limits: regular records up to 500 MB; the Supabase fallback is capped at 5 MB.
+
+## Course video
+
+1. `POST /api/stream/upload-url` with the course, title, file name, MIME and
+   size.
+2. PUT to the returned upload URL.
+3. `POST /api/stream/upload-complete`.
+4. Poll `/api/stream/status/{videoId}` until encoding completes.
+5. Play from `/api/stream/videos/{videoId}`.
+
+Encoding is queued and asynchronous. Do not assume immediate playback.
+
+## Related
+
+- [API reference](/docs/reference/api)
+- [Errors](/docs/start/errors)

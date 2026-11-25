@@ -9,3 +9,7 @@ extracted/
 node_modules/
 
 __pycache__/
+
+# Public docs have a content section named "build"; root build/ must not ignore it.
+!akoro-docs/content/docs/build/
+!akoro-docs/content/docs/build/**
