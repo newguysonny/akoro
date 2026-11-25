@@ -7,8 +7,9 @@
 | Paths | 34 |
 | Operations | 35 |
 | Production-verified | 20 |
+| Sandbox-verified | 21 (19 read/auth + 2 record writes) |
 | Validation-only | 2 |
-| Not yet exercised | 13 |
+| Not fully exercised | 11 |
 
 This is a manual verification matrix, not yet a runtime route-coverage test. It
 must be replaced by the runtime Express route comparison in Phase 3.
@@ -57,16 +58,15 @@ must be replaced by the runtime Express route comparison in Phase 3.
 | `twoFactorSetup` | Requires an eligible session/setup token |
 | `forgotPassword` | Would send email; needs disposable account |
 | `resetPassword` | Requires a reset code/token |
-| `createRecord` | Requires a small upload + cleanup |
-| `getExtractionStatus` | Requires a disposable record |
-| `askRecord` | Creates ask history; needs cleanup |
+| `getExtractionStatus` | Polled on sandbox, but `done` was not observed; ask succeeded |
 | `subscribeToBlog` | Writes subscriber; needs cleanup |
 | `applyToCareerJob` | Writes application; needs cleanup |
 
 ## Next
 
-1. Add disposable test fixtures and cleanup endpoints/scripts.
-2. Run the write matrix on sandbox when the hibernation limiter clears.
+1. Run the remaining write tests with cleanup: course video, blog subscription,
+   job application, and auth challenge/2FA/password-reset flows.
+2. Run `getCareerJob` on sandbox when a job exists.
 3. Replace this matrix with runtime route-table coverage.
 4. Add response-schema assertions to the verification gate.
 
@@ -86,3 +86,10 @@ The current substitute is:
 
 Phase 3 should add a boot-safe route extractor (for example, a separate router
 module that does not run migrations or listen) and compare it with OpenAPI in CI.
+
+## Sandbox follow-up
+
+On 2026-11-25 the sandbox came back at build
+`8083074ae47b10348f19e64448f5869f9abfa404`. The disposable write smoke created a
+paste record, received a cited answer, deleted the record, and verified cleanup.
+See `docs/audits/phase-2-sandbox-verification.md`.

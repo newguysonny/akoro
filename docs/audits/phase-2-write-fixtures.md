@@ -2,10 +2,10 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Planned — not yet executed |
+| Status | Records paste path executed 2026-11-25; course video and shared-write paths pending |
 | Target | Sandbox `https://sandbox.akoro.ng` |
 | Requirement | Every write uses disposable data and a cleanup path |
-| Blocker | Sandbox currently returns `429 hibernate-rate-limited` |
+| Blocker | None for the records path; sandbox was live at build `8083074a` |
 
 ---
 
@@ -13,7 +13,7 @@
 
 ### 1.1 Library paste → extract → ask → delete
 
-Use the demo learner `stu.jss11@demo.akoro.app`.
+Use the demo learner `stu.jss11@demo.akoro.app`. Executed successfully with the script `akoro-documentation/scripts/sandbox-write-smoke.mjs --confirm`; cleanup was verified.
 
 1. `POST /api/records` with a unique paste name and a short factual note.
 2. Poll `GET /api/records/extract/status?recordId=...`.
