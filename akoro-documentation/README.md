@@ -94,6 +94,14 @@ Phase 2.
 
 ## Current phase
 
-Phase 1 establishes the repository, templates, index and registry schemas. It
-does not claim full API coverage. Tier-1 content is filled in Phase 2 after the
-public allow-list and `/api/v1` policy are approved.
+Phase 2 is in progress. The repository now has:
+
+- auth and records endpoint pages;
+- five end-to-end workflows;
+- core learner, record, course, programme, learning-session and concept models;
+- 34 OpenAPI paths / 35 operations covering auth, records, public catalogue,
+  blog/careers, contact and pilot intake;
+- a validator that checks registry/index/OpenAPI/link integrity.
+
+Still pending: live sandbox re-verification, write-capability cleanup tests,
+runtime route-table coverage, and Tier-2/3 documentation.

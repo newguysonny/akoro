@@ -42,6 +42,16 @@ Use `capability-registry.yaml` for availability; do not infer it from prose.
 - [Errors](02-api/errors.md)
 - [OpenAPI](02-api/openapi.yaml)
 
+## Workflows and data models
+
+- [Workflows](13-examples/workflows/README.md)
+- [Learner model](05-data-models/learner.md)
+- [Record model](05-data-models/record.md)
+- [Course model](05-data-models/course.md)
+- [Programme model](05-data-models/programme.md)
+- [Learning session model](05-data-models/learning-session.md)
+- [Concept model](05-data-models/concept.md)
+
 ## Agents
 
 - [Agent documentation](06-agents/README.md)

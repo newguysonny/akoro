@@ -86,6 +86,7 @@ capabilities:
       bytes directly to object storage.
     documentation:
       - 01-features/records/overview.md
+      - 02-api/endpoints/records-upload-url.md
     api_reference:
       - 02-api/openapi.yaml
     access:
@@ -100,6 +101,31 @@ capabilities:
     verification_status: production-verified
     last_verified: "2026-11-25"
 
+  - id: records.create
+    name: Create a library record
+    category: records
+    status: implemented
+    description: >
+      Registers an uploaded file, a pasted note or a saved link in the
+      learner's Library after the upload has landed.
+    documentation:
+      - 01-features/records/overview.md
+      - 02-api/endpoints/records-create.md
+      - 13-examples/workflows/records-upload-and-ask.md
+    api_reference:
+      - 02-api/openapi.yaml
+    access:
+      - learner
+    requires_confirmation: false
+    side_effects:
+      - creates a Library record
+      - may start preview, index, extraction or transcription jobs
+    verification:
+      - the record appears in GET /api/records
+      - fileKey belongs to the caller
+    verification_status: code-observed
+    last_verified: "2026-11-25"
+
   - id: records.ask
     name: Ask about a record
     category: records
@@ -109,6 +135,8 @@ capabilities:
       with citations.
     documentation:
       - 01-features/records/overview.md
+      - 02-api/endpoints/records-ask.md
+      - 13-examples/workflows/records-upload-and-ask.md
     api_reference:
       - 02-api/openapi.yaml
     access:
