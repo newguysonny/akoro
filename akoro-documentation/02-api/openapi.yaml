@@ -743,7 +743,12 @@ paths:
           description: Published programme detail
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/SuccessGenericData' }
+              schema:
+                type: object
+                required: [success, data]
+                properties:
+                  success: { type: boolean, const: true }
+                  data: { $ref: '#/components/schemas/ProgrammeDetail' }
         '404':
           description: Programme not found or not published
           content:
@@ -1171,6 +1176,38 @@ components:
         syllabus:
           type: array
           items: { type: string }
+    ProgrammeDetail:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        code: { type: string, nullable: true }
+        description: { type: string, nullable: true }
+        duration_label: { type: string, nullable: true }
+        cover_url: { type: string, nullable: true }
+        source: { type: string, nullable: true }
+        published_courses: { type: integer }
+        sections:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string, format: uuid }
+              name: { type: string }
+              position: { type: integer }
+              courses:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id: { type: string, format: uuid }
+                    section_id: { type: string, format: uuid }
+                    code: { type: string }
+                    title: { type: string, nullable: true }
+                    instructor: { type: string, nullable: true }
+                    color: { type: integer }
+                    cover_url: { type: string, nullable: true }
+                    materials_count: { type: integer }
     ProgrammeSummary:
       type: object
       properties:

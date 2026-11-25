@@ -13,7 +13,11 @@
       "docs": [
         "01-features/auth/overview.md",
         "02-api/authentication.md",
+        "02-api/endpoints/auth-register.md",
         "02-api/endpoints/auth-login.md",
+        "02-api/endpoints/auth-verification.md",
+        "02-api/endpoints/auth-2fa.md",
+        "02-api/endpoints/auth-password-reset.md",
         "02-api/endpoints/auth-refresh.md",
         "13-examples/workflows/auth-sign-in.md"
       ],
