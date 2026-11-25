@@ -2,8 +2,8 @@
 
 Capability-centred documentation for Akoro features.
 
-Status: Phase 1 foundation. Tier-1 overviews exist; Tier-2 and Tier-3 content
-is added in later phases.
+Status: Phase 2 in progress. Tier-1 pages are verified against the public API;
+Tier-2/3 pages are overviews and need module-level detail.
 
 ## Tier 1
 
@@ -16,6 +16,16 @@ is added in later phases.
 - [Contact](contact/overview.md)
 - [Pilot applications](pilot-applications/overview.md)
 
+## Tier 2
+
+- [Learning and assessment](learning/overview.md)
+- [Instructor](instructor/overview.md)
+- [School platform](school/overview.md)
+
+## Tier 3 / internal
+
+- [AI and agent runtime](ai/overview.md)
+
 ## Rules
 
 - Use `_templates/feature.md`.
@@ -27,11 +37,8 @@ is added in later phases.
 
 ## Not yet documented
 
-- Learner AI/teaching/study/exam/practice/memory.
-- Instructor course building and grading.
-- School ERP.
+- Learner communities, battles and agent network.
+- Self-study assignment detail.
 - Admin operations.
-- Agent runtime and proposals.
-- Payments, wallets and vouchers beyond the public contract.
-
-These are Tier 2/3 and require module-level grouping, not one page per route.
+- Payments/wallet/vouchers beyond the public contract.
+- School ERP module groups.

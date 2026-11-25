@@ -69,3 +69,20 @@ must be replaced by the runtime Express route comparison in Phase 3.
 2. Run the write matrix on sandbox when the hibernation limiter clears.
 3. Replace this matrix with runtime route-table coverage.
 4. Add response-schema assertions to the verification gate.
+
+## Runtime route coverage status
+
+A true `app._router.stack` extractor is not run in this phase. `akoro-api/app.js`
+performs top-level migrations, context preflight and `httpServer.listen`, so
+importing it in a docs script would boot the service instead of only reading its
+route table.
+
+The current substitute is:
+
+- the Phase 0 static route inventory (`docs/audits/phase-0/route-inventory.csv`);
+- the explicit Tier-1 public allow-list (`public-route-candidates.csv`);
+- real HTTP smoke against production for read operations;
+- the manual 35-operation matrix above.
+
+Phase 3 should add a boot-safe route extractor (for example, a separate router
+module that does not run migrations or listen) and compare it with OpenAPI in CI.
