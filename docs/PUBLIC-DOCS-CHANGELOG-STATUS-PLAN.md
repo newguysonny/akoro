@@ -8,6 +8,12 @@
 | Scope | Public documentation site, API reference, product/API changelog, public status page |
 | Related | `AGENTS.md`, `reference/Grand Plan.md`, `docs/`, `akoro-api/modules/*/README.md` |
 | Target surfaces | `docs.akoro.ng`, `status.akoro.ng`, changelog route under docs or `akoro.ng` |
+| Parent plan | `docs/PLATFORM-DOCUMENTATION-SYSTEM-PLAN.md` — this document is the public-surface detail of the larger Platform Documentation System |
+
+> This plan is the public presentation layer of the Platform Documentation
+> System. The canonical repository, feature templates, capability registry,
+> agent context-loading model and self-validation rules are defined in
+> `docs/PLATFORM-DOCUMENTATION-SYSTEM-PLAN.md`.
 
 ---
 
