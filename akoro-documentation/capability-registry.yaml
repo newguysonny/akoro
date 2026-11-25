@@ -28,6 +28,7 @@ capabilities:
       - the response contains user, accessToken, refreshToken and accessExpiresAt
       - the access cookie is present for the selected portal
       - production smoke passed on 2026-11-25
+      - sandbox smoke passed on 2026-11-25
     verification_status: production-verified
     last_verified: "2026-11-25"
 
@@ -53,6 +54,7 @@ capabilities:
       - the refresh token is new
       - the access token expiry is in the future
       - production smoke passed on 2026-11-25
+      - sandbox smoke passed on 2026-11-25
     verification_status: production-verified
     last_verified: "2026-11-25"
 
@@ -74,6 +76,7 @@ capabilities:
       - the response includes only records owned by the caller
       - paged responses include records, total and nextCursor
       - production smoke passed on 2026-11-25
+      - sandbox smoke passed on 2026-11-25
     verification_status: production-verified
     last_verified: "2026-11-25"
 
@@ -98,6 +101,7 @@ capabilities:
       - the returned key is under the caller's own storage prefix
       - the URL can be used for a single PUT before expiry
       - production smoke passed on 2026-11-25
+      - sandbox smoke passed on 2026-11-25
     verification_status: production-verified
     last_verified: "2026-11-25"
 
@@ -123,7 +127,8 @@ capabilities:
     verification:
       - the record appears in GET /api/records
       - fileKey belongs to the caller
-    verification_status: code-observed
+      - sandbox smoke passed on 2026-11-25
+    verification_status: sandbox-verified
     last_verified: "2026-11-25"
 
   - id: records.ask
@@ -147,7 +152,8 @@ capabilities:
     verification:
       - the answer cites passages from the selected record
       - the record belongs to the authenticated learner
-    verification_status: code-observed
+      - sandbox smoke passed on 2026-11-25
+    verification_status: sandbox-verified
     last_verified: "2026-11-25"
 
   - id: courses.list_published
@@ -168,6 +174,7 @@ capabilities:
       - only published courses are returned
       - private fields are absent
       - production smoke passed on 2026-11-25
+      - sandbox smoke passed on 2026-11-25
     verification_status: production-verified
     last_verified: "2026-11-25"
 
@@ -189,6 +196,7 @@ capabilities:
       - unpublished courses return not found
       - private fields are absent
       - production smoke passed on 2026-11-25
+      - sandbox smoke passed on 2026-11-25
     verification_status: production-verified
     last_verified: "2026-11-25"
 
@@ -210,6 +218,7 @@ capabilities:
       - draft programmes are excluded
       - only published courses are counted
       - production smoke passed on 2026-11-25
+      - sandbox smoke passed on 2026-11-25
     verification_status: production-verified
     last_verified: "2026-11-25"
 
@@ -233,6 +242,7 @@ capabilities:
       - years and courses are ordered
       - topic counts match the stored topics
       - production smoke passed on 2026-11-25
+      - sandbox smoke passed on 2026-11-25
     verification_status: production-verified
     last_verified: "2026-11-25"
 
@@ -254,6 +264,7 @@ capabilities:
       - only published posts are returned
       - pagination metadata is present
       - production smoke passed on 2026-11-25
+      - sandbox smoke passed on 2026-11-25
     verification_status: production-verified
     last_verified: "2026-11-25"
 
@@ -275,6 +286,7 @@ capabilities:
     verification:
       - the response is 201
       - the message is visible to an admin
+      - sandbox validation returned 422 on 2026-11-25
     verification_status: code-observed
     last_verified: "2026-11-25"
 
@@ -297,5 +309,6 @@ capabilities:
     verification:
       - the response is 201
       - duplicate applications within 24 hours return 409
+      - sandbox validation returned 422 on 2026-11-25
     verification_status: code-observed
     last_verified: "2026-11-25"
