@@ -160,7 +160,9 @@
       "status": "beta",
       "docs": [
         "01-features/ai/overview.md",
-        "06-agents/README.md"
+        "06-agents/README.md",
+        "06-agents/agent-capabilities.md",
+        "06-agents/context-manager.md"
       ],
       "capabilities": []
     }

@@ -102,6 +102,11 @@ import agentActionConfirmationsModule from "./modules/agent-tools/confirmation-r
 import agentMemoryModule from "./modules/agent-tools/memory-routes.js";
 const app        = express();
 const httpServer = createServer(app);
+// Documentation/CI route extraction (scripts/export-routes.mjs) imports the
+// real app and reads app._router.stack. This flag makes that import pure: no
+// Redis/socket clients, migrations, workers, preflight or listener. It is
+// strictly opt-in, so a normal boot follows exactly the same path as before.
+const ROUTE_EXPORT = process.env.AKORO_ROUTE_EXPORT === "1";
 
 // ─── Paystack webhook path ────────────────────────────────────────────────────
 // The full webhook URL lives in PAYSTACK_WEBHOOK_URL (matching the Paystack
@@ -122,34 +127,39 @@ const corsPolicy = createCorsPolicy();
 const { allowedOrigins, isListedOrigin, corsDelegate } = corsPolicy;
 
 // ─── Socket.io + Redis adapter ────────────────────────────────────────────────
-const redisPub = new Redis(config.redis.url);
-const redisSub = redisPub.duplicate();
-// Local quota forensics (AKORO_REDIS_TRACE=true) — inert when the flag is off.
-traceRedis(redisPub, "api/pub");
-traceRedis(redisSub, "api/sub");
-startRedisTraceReporting();
-redisPub.on("error", (err) => console.error("[redis/pub]", err.message));
-redisSub.on("error", (err) => console.error("[redis/sub]", err.message));
+let redisPub = null;
+let redisSub = null;
+let io = null;
+if (!ROUTE_EXPORT) {
+  redisPub = new Redis(config.redis.url);
+  redisSub = redisPub.duplicate();
+  // Local quota forensics (AKORO_REDIS_TRACE=true) — inert when the flag is off.
+  traceRedis(redisPub, "api/pub");
+  traceRedis(redisSub, "api/sub");
+  startRedisTraceReporting();
+  redisPub.on("error", (err) => console.error("[redis/pub]", err.message));
+  redisSub.on("error", (err) => console.error("[redis/sub]", err.message));
 
-const io = new SocketServer(httpServer, {
-  // Sockets authenticate from the handshake COOKIE, so the same rule as HTTP
-  // credentials applies: portal origins only. A tenant school site must never
-  // be able to open a socket as whoever is visiting it.
-  cors: {
-    origin: allowedOrigins === '*' ? '*' : ((origin, cb) => isListedOrigin(origin)
-      ? cb(null, true)
-      : cb(new Error(`CORS: socket origin ${origin} not allowed`))),
-    credentials: true, methods: ["GET", "POST"],
-  },
-  transports: ["websocket", "polling"],
-});
-io.adapter(createAdapter(redisPub, redisSub));
-app.set("io", io);
-global.io = io;   // battle worker uses global.io
+  io = new SocketServer(httpServer, {
+    // Sockets authenticate from the handshake COOKIE, so the same rule as HTTP
+    // credentials applies: portal origins only. A tenant school site must never
+    // be able to open a socket as whoever is visiting it.
+    cors: {
+      origin: allowedOrigins === '*' ? '*' : ((origin, cb) => isListedOrigin(origin)
+        ? cb(null, true)
+        : cb(new Error(`CORS: socket origin ${origin} not allowed`))),
+      credentials: true, methods: ["GET", "POST"],
+    },
+    transports: ["websocket", "polling"],
+  });
+  io.adapter(createAdapter(redisPub, redisSub));
+  app.set("io", io);
+  global.io = io;   // battle worker uses global.io
 
-// Socket auth, rooms and the adaptive/discussion/voice wiring run in their
-// original order (lib/socketHandlers.js); io is still created and adapted here.
-installSocketHandlers(io);
+  // Socket auth, rooms and the adaptive/discussion/voice wiring run in their
+  // original order (lib/socketHandlers.js); io is still created and adapted here.
+  installSocketHandlers(io);
+}
 
 // ─── Core middleware ──────────────────────────────────────────────────────────
 // Order: helmet → cors → cookies → egress/compression → body → security
@@ -244,7 +254,7 @@ app.get("/health", async (req, res) => {
   if (deep || !fresh) {
     // Zero-Redis health: ioredis keeps `status` current from connect/error
     // events — no PING round-trip, so an uptime monitor costs 0 commands.
-    const redisOk = redisPub.status === "ready";
+    const redisOk = redisPub?.status === "ready";
     const dbOk = await checkDb();
     // RunPod is probed only on a deep, deliberate check (?deep=1) AND only
     // when configured — the cached fast path never waits on it.
@@ -403,7 +413,7 @@ app.use("/api/battle",   standardLimit, battleFeedRouter);
 // migration and log a scary failure. Schema only, never demo data (mirrors
 // the old deploy command).
 // Disable with MIGRATIONS_ON_BOOT=false (e.g. one replica owns migrations).
-if (process.env.MIGRATIONS_ON_BOOT !== "false") {
+if (!ROUTE_EXPORT && process.env.MIGRATIONS_ON_BOOT !== "false") {
   const mUrl = migrationUrl();
   const mSha = currentGitSha();
   if (!mUrl) {
@@ -447,7 +457,8 @@ if (process.env.MIGRATIONS_ON_BOOT !== "false") {
 // startWorkers() runs m.startDeferredRelease() and m.migrateBackgroundQueues()
 // on their original timers, and startExecutionLogMaintenance() last.
 const skipJob = sharedSkipJob;
-const stopWorkers = await startWorkers();
+let stopWorkers = () => {};
+if (!ROUTE_EXPORT) stopWorkers = await startWorkers();
 app.use("/api/student",  standardLimit, studentFeedRouter);
 app.use("/api/tasks",      aiLimit,       tasksModule);
 // Only /plan calls a model; the rest is ordinary CRUD. Putting the whole module
@@ -461,7 +472,7 @@ app.use("/api/course-builder", standardLimit, courseBuilderModule);  // Course C
 app.use("/api/hf",          standardLimit, hfMirrorModule);        // Hugging Face model mirror console (key-guarded)
 app.use("/api/parse",       standardLimit, parseConsoleModule);
 app.use("/api/self-tooling",  standardLimit, selfToolingModule);     // learner: my agent-built tools
-startViewRegistry();  // data-driven Data Views: merge edu.self_tool_views into the live registry (fail-open)
+if (!ROUTE_EXPORT) startViewRegistry();  // data-driven Data Views: merge edu.self_tool_views into the live registry (fail-open)
 app.use("/api/verify",        standardLimit, verifyModule);          // Verification Gate (AGENT_CONSOLE_KEY) — PASS/FAIL with evidence
 app.use("/api/agent-console", standardLimit, agentConsoleModule);   // learner Agent Chat test console (AGENT_CONSOLE_KEY)   // parse-worker console (key-guarded browser tester)
 app.use("/api/communities",  standardLimit, communitiesModule);  // higher-ed study groups
@@ -494,11 +505,13 @@ app.use("/api/internal/ticks", ticksRouter);            // scheduler ticks — x
 installErrorHandlers(app);
 
 // ─── Process safety nets + graceful shutdown ─────────────────────────────────
-installProcessSafety();
-installShutdown({
-  httpServer, redisPub, redisSub, config, stopWorkers,
-  setReady: (ready) => { serverReady = ready; },
-});
+if (!ROUTE_EXPORT) {
+  installProcessSafety();
+  installShutdown({
+    httpServer, redisPub, redisSub, config, stopWorkers,
+    setReady: (ready) => { serverReady = ready; },
+  });
+}
 
 // ─── Start ────────────────────────────────────────────────────────────────────
 // Boot-time migrations already ran — they sit ABOVE the background-worker
@@ -506,13 +519,13 @@ installShutdown({
 // has applied (the learner-autonomy recovery race of 2026-09-12).
 
 // Weekly routine preparation (drafts only — assignment stays human).
-startRoutineSchedulerJob();
+if (!ROUTE_EXPORT) startRoutineSchedulerJob();
 
 // Context-layer preflight (Context Layer Adoption P0): every registered
 // doctrine set must resolve within budget or the process refuses to serve —
 // agent behaviour can never silently change because a workspace file went
 // missing. The logged version hash makes doctrine drift observable.
-{
+if (!ROUTE_EXPORT) {
   const { preflight } = await import("./modules/agent-context/index.js");
   const contextLayer = await preflight();
   if (!contextLayer.ok) {
@@ -528,28 +541,30 @@ startRoutineSchedulerJob();
 }
 
 // Persisted admin override for the global default model (survives restarts).
-void loadRuntimeSettings();
-httpServer.listen(config.server.port, config.server.host, () => {
-  serverReady = true;
+if (!ROUTE_EXPORT) void loadRuntimeSettings();
+if (!ROUTE_EXPORT) {
+  httpServer.listen(config.server.port, config.server.host, () => {
+    serverReady = true;
 
-  // Warm the tenant-host cache, then keep it fresh. Until it loads, every
-  // unknown subdomain is treated as a school site and denied credentials — so
-  // a slow or failed load costs a broken page, never an open door.
-  refreshTenantHosts()
-    .then((r) => console.log(`[tenant] host cache: ${r.slugs} school slugs, ${r.domains} custom domains${r.loaded ? "" : " (NOT LOADED — credentials denied to unlisted subdomains)"}`))
-    .catch(() => {});
-  if (!skipJob("tenant host refresh")) {
-    setInterval(() => { refreshTenantHosts().catch(() => {}); }, 5 * 60 * 1000).unref?.();
-  }
-  printStartBanner(config);
+    // Warm the tenant-host cache, then keep it fresh. Until it loads, every
+    // unknown subdomain is treated as a school site and denied credentials — so
+    // a slow or failed load costs a broken page, never an open door.
+    refreshTenantHosts()
+      .then((r) => console.log(`[tenant] host cache: ${r.slugs} school slugs, ${r.domains} custom domains${r.loaded ? "" : " (NOT LOADED — credentials denied to unlisted subdomains)"}`))
+      .catch(() => {});
+    if (!skipJob("tenant host refresh")) {
+      setInterval(() => { refreshTenantHosts().catch(() => {}); }, 5 * 60 * 1000).unref?.();
+    }
+    printStartBanner(config);
 
-  // Best-effort: show the last DB migration run so deploys are verifiable
-  // from the API's own boot log (never blocks startup).
-  void logLastMigration(db);
-});
+    // Best-effort: show the last DB migration run so deploys are verifiable
+    // from the API's own boot log (never blocks startup).
+    void logLastMigration(db);
+  });
+}
 
 // Start the background task worker (Anthropic agent loop) if enabled
-startTaskWorker();
+if (!ROUTE_EXPORT) startTaskWorker();
 
 export { io };
 export default app;

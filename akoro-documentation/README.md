@@ -94,14 +94,17 @@ Phase 2.
 
 ## Current phase
 
-Phase 2 is in progress. The repository now has:
+Phase 2 is complete except for the remaining sandbox write paths. Phase 3
+knowledge-tooling is in place. The repository now has:
 
 - auth and records endpoint pages;
 - five end-to-end workflows;
 - core learner, record, course, programme, learning-session and concept models;
 - 34 OpenAPI paths / 35 operations covering auth, records, public catalogue,
   blog/careers, contact and pilot intake;
-- a validator that checks registry/index/OpenAPI/link integrity.
+- a validator that checks registry/index/OpenAPI/link integrity;
+- a tool registry, Context Manager contract, agent capability guide and offline
+  documentation search.
 
 Still pending: live sandbox re-verification, write-capability cleanup tests,
 runtime route-table coverage, and Tier-2/3 documentation.

@@ -1,0 +1,142 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://akoro.ng/schemas/tool-registry.schema.json",
+  "title": "Akoro Tool Registry",
+  "description": "Agent tool definitions linked to Akoro capabilities, documentation and the OpenAPI contract. The registry describes contracts; the backend enforces access and confirmation.",
+  "type": "object",
+  "required": ["schema_version", "platform", "tools"],
+  "properties": {
+    "schema_version": { "type": "string", "const": "1.0" },
+    "platform": { "type": "string", "const": "Akoro" },
+    "updated": { "type": "string", "format": "date" },
+    "description": { "type": "string" },
+    "tools": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/tool" }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "toolId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$"
+    },
+    "capabilityId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$"
+    },
+    "documentationPath": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Repository-relative path inside akoro-documentation."
+    },
+    "apiReference": {
+      "type": "object",
+      "required": ["openapi", "method", "path"],
+      "properties": {
+        "openapi": { "type": "string", "minLength": 1 },
+        "method": {
+          "type": "string",
+          "enum": ["get", "post", "put", "patch", "delete"]
+        },
+        "path": { "type": "string", "pattern": "^/" },
+        "operation_id": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+    "permissions": {
+      "type": "object",
+      "required": [
+        "access",
+        "requires_authentication",
+        "requires_confirmation",
+        "confirmation_reason"
+      ],
+      "properties": {
+        "access": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "requires_authentication": { "type": "boolean" },
+        "requires_confirmation": { "type": "boolean" },
+        "confirmation_reason": {
+          "type": ["string", "null"],
+          "description": "Required text when requires_confirmation is true; null otherwise."
+        }
+      },
+      "additionalProperties": false,
+      "if": {
+        "properties": { "requires_confirmation": { "const": true } },
+        "required": ["requires_confirmation"]
+      },
+      "then": {
+        "properties": { "confirmation_reason": { "type": "string", "minLength": 1 } }
+      }
+    },
+    "tool": {
+      "type": "object",
+      "required": [
+        "id",
+        "name",
+        "description",
+        "capability",
+        "execution_mode",
+        "input_schema",
+        "documentation",
+        "permissions"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/toolId" },
+        "name": { "type": "string", "minLength": 1 },
+        "description": { "type": "string", "minLength": 1 },
+        "capability": { "$ref": "#/$defs/capabilityId" },
+        "execution_mode": {
+          "type": "string",
+          "enum": ["http", "internal"]
+        },
+        "input_schema": {
+          "type": "object",
+          "description": "JSON Schema for the tool arguments."
+        },
+        "documentation": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/documentationPath" }
+        },
+        "api_reference": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/apiReference" }
+        },
+        "permissions": { "$ref": "#/$defs/permissions" },
+        "side_effects": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "notes": { "type": "string", "minLength": 1 },
+        "internal_reason": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": { "execution_mode": { "const": "http" } },
+            "required": ["execution_mode"]
+          },
+          "then": {
+            "required": ["api_reference"],
+            "properties": { "api_reference": { "minItems": 1 } }
+          }
+        },
+        {
+          "if": {
+            "properties": { "execution_mode": { "const": "internal" } },
+            "required": ["execution_mode"]
+          },
+          "then": { "required": ["internal_reason"] }
+        }
+      ]
+    }
+  }
+}

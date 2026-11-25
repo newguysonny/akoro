@@ -20,7 +20,9 @@ public subplan, and keep the master as the source of truth.
 | [Phase 0 Documentation Audit](audits/phase-0-documentation-audit.md) | Complete | Inventories routes, apps, features, data models, integrations and gaps before documentation begins. |
 | [Phase 1 Capability Verification](audits/phase-1-verification.md) | Partial | Sandbox blocked by hibernation rate limit; production non-destructive smoke passed for 9 capabilities. |
 | [Phase 2 Public API Verification](audits/phase-2-verification.md) | Partial | 16 public GET operations passed on production; sandbox reads and the records write path also passed. |
-| [Phase 2 OpenAPI Coverage](audits/phase-2-coverage.md) | Partial | 20 production-verified, 21 sandbox-verified, 2 validation-only, 11 not fully exercised. |
+| [Phase 2 OpenAPI Coverage](audits/phase-2-coverage.md) | Partial | 23 production-verified, 21 sandbox-verified, 2 validation-only, 8 not fully exercised; runtime 35/35 documented. |
+| [Phase 2 Route Coverage](audits/phase-2-route-coverage.md) | Complete | Boot-safe runtime extractor finds 1,270 routes; all 35 documented operations present. |
+| [Phase 3 Documentation Tooling](audits/phase-3-tooling.md) | Complete | Tool registry, Context Manager contract, search and validation. |
 | [Phase 2 Write-Path Fixtures](audits/phase-2-write-fixtures.md) | Records path executed | Paste record create/ask/delete verified on sandbox; other writes remain planned. |
 | [Phase 2 Sandbox Verification](audits/phase-2-sandbox-verification.md) | Partial | 19 read/auth operations and the records write path passed; auth challenge, blog/job writes and course video remain. |
 

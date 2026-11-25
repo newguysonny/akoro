@@ -14,11 +14,10 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import { createRequire } from "node:module";
+import { docRoot as root, loadYamlModule } from "./lib.mjs";
+import { collectToolRegistryErrors } from "./validate-tool-registry.mjs";
 
-const root = path.resolve("akoro-documentation");
-const require = createRequire(path.resolve("akoro-docs/package.json"));
-const YAML = require("yaml");
+const YAML = loadYamlModule();
 
 const errors = [];
 const rel = (p) => path.relative(root, p);
@@ -71,6 +70,9 @@ for (const capability of registry?.capabilities || []) {
   for (const ref of capability.api_reference || []) exists(path.join(root, ref));
 }
 
+const toolResult = collectToolRegistryErrors({ root, YAML, index, registry, openapi });
+for (const error of toolResult.errors) errors.push(error);
+
 const refs = [];
 function walk(value, at = "") {
   if (!value || typeof value !== "object") return;
@@ -112,6 +114,7 @@ if (errors.length) {
 
 console.log(
   `Documentation validation passed: ${Object.keys(index?.features || {}).length} features, ` +
-  `${capabilityIds.size} capabilities, ${Object.keys(openapi?.paths || {}).length} OpenAPI paths, ` +
+  `${capabilityIds.size} capabilities, ${toolResult.toolCount} tools, ` +
+  `${Object.keys(openapi?.paths || {}).length} OpenAPI paths, ` +
   `${markdownFiles(root).length} Markdown files.`,
 );

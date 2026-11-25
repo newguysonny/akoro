@@ -1,0 +1,581 @@
+schema_version: "1.0"
+platform: Akoro
+updated: "2026-11-25"
+description: >
+  Agent-facing tool definitions linked to the capability registry, the
+  documentation index and the OpenAPI contract. Every tool maps to exactly one
+  capability that already exists in capability-registry.yaml. This file
+  describes tool contracts; it does not grant access, and the backend still
+  enforces authentication, authorisation and confirmation.
+
+# Only capabilities that already exist in capability-registry.yaml are defined
+# here. No speculative, planned or internal-only tools are included.
+tools:
+  - id: auth_login
+    name: Sign in
+    description: >
+      Sign a user in with email and password and obtain portal-scoped access and
+      refresh tokens. The response may instead require email verification or a
+      2FA challenge.
+    capability: auth.login
+    execution_mode: http
+    input_schema:
+      type: object
+      required: [email, password]
+      additionalProperties: false
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 1
+        portal:
+          type: string
+          enum: [student, instructor, admin, school, site, agent, business]
+          default: student
+          description: Sent as the X-Akoro-Portal header.
+    documentation:
+      - 02-api/endpoints/auth-login.md
+      - 01-features/auth/overview.md
+      - 02-api/authentication.md
+    api_reference:
+      - openapi: 02-api/openapi.yaml
+        method: post
+        path: /auth/login
+        operation_id: login
+    permissions:
+      access: [public]
+      requires_authentication: false
+      requires_confirmation: false
+      confirmation_reason: null
+    side_effects:
+      - issues an access token and a rotating refresh token
+      - sets portal-scoped auth cookies
+    notes: >
+      A successful sign-in can still be replaced by a verification or 2FA
+      challenge. Follow the returned challenge; do not assume a full session.
+
+  - id: auth_refresh
+    name: Refresh a session
+    description: >
+      Rotate the refresh token and issue a new portal-scoped access token.
+      Reusing a consumed refresh token outside the grace window revokes the
+      token family.
+    capability: auth.refresh
+    execution_mode: http
+    input_schema:
+      type: object
+      additionalProperties: false
+      properties:
+        refreshToken:
+          type: string
+          description: >
+            Mobile fallback when no refresh cookie is present. Browser clients
+            normally rely on the portal refresh cookie.
+        portal:
+          type: string
+          enum: [student, instructor, admin, school, site, agent, business]
+          default: student
+          description: Sent as the X-Akoro-Portal header.
+    documentation:
+      - 02-api/endpoints/auth-refresh.md
+      - 01-features/auth/overview.md
+      - 02-api/authentication.md
+    api_reference:
+      - openapi: 02-api/openapi.yaml
+        method: post
+        path: /auth/refresh
+        operation_id: refreshSession
+    permissions:
+      access: [authenticated_session]
+      requires_authentication: true
+      requires_confirmation: false
+      confirmation_reason: null
+    side_effects:
+      - rotates the refresh token
+      - replaces the portal access cookie
+
+  - id: records_list
+    name: List library records
+    description: >
+      List the authenticated learner's own Library records, optionally as a
+      paged envelope. The query is scoped to the caller and there is no user-id
+      parameter.
+    capability: records.list
+    execution_mode: http
+    input_schema:
+      type: object
+      additionalProperties: false
+      properties:
+        paged:
+          type: boolean
+          default: false
+          description: Return a paged envelope instead of a plain array.
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 12
+        cursor:
+          type: string
+          description: Cursor from the previous paged response.
+        portal:
+          type: string
+          enum: [student, instructor, admin, school, site, agent, business]
+          default: student
+          description: Sent as the X-Akoro-Portal header.
+    documentation:
+      - 02-api/endpoints/records-list.md
+      - 01-features/records/overview.md
+      - 05-data-models/record.md
+    api_reference:
+      - openapi: 02-api/openapi.yaml
+        method: get
+        path: /records
+        operation_id: listRecords
+    permissions:
+      access: [learner]
+      requires_authentication: true
+      requires_confirmation: false
+      confirmation_reason: null
+
+  - id: records_request_upload
+    name: Request a library upload URL
+    description: >
+      Create a presigned single-use upload URL so a client can send file bytes
+      directly to object storage, then register the upload with records_create.
+    capability: records.request_upload
+    execution_mode: http
+    input_schema:
+      type: object
+      required: [name, mime, size]
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          maxLength: 255
+        mime:
+          type: string
+          description: Must be a supported record type.
+        size:
+          type: integer
+          minimum: 1
+          description: Bytes. Regular records are capped at 500 MB.
+        purpose:
+          type: string
+          enum: [record, folder-cover]
+          default: record
+        portal:
+          type: string
+          enum: [student, instructor, admin, school, site, agent, business]
+          default: student
+          description: Sent as the X-Akoro-Portal header.
+    documentation:
+      - 02-api/endpoints/records-upload-url.md
+      - 01-features/records/overview.md
+      - 13-examples/workflows/records-upload-and-ask.md
+    api_reference:
+      - openapi: 02-api/openapi.yaml
+        method: post
+        path: /records/upload-url
+        operation_id: requestRecordUploadUrl
+    permissions:
+      access: [learner]
+      requires_authentication: true
+      requires_confirmation: false
+      confirmation_reason: null
+    side_effects:
+      - creates a presigned storage URL and key
+
+  - id: records_create
+    name: Create a library record
+    description: >
+      Register an uploaded file, a pasted note or a saved link in the learner's
+      Library after the upload has landed. May start preview, index, extraction
+      or transcription jobs.
+    capability: records.create
+    execution_mode: http
+    input_schema:
+      type: object
+      oneOf:
+        - required: [kind, name, fileKey, size]
+          additionalProperties: false
+          properties:
+            kind:
+              type: string
+              const: upload
+            name:
+              type: string
+              maxLength: 255
+            mime:
+              type: string
+            size:
+              type: integer
+              minimum: 1
+            fileKey:
+              type: string
+              description: Must be under the caller's own storage prefix.
+            duration:
+              type: number
+              minimum: 0
+            legacy:
+              type: boolean
+            portal:
+              type: string
+              enum: [student, instructor, admin, school, site, agent, business]
+              default: student
+        - required: [kind, url]
+          additionalProperties: false
+          properties:
+            kind:
+              type: string
+              const: link
+            url:
+              type: string
+              format: uri
+            name:
+              type: string
+              maxLength: 255
+            portal:
+              type: string
+              enum: [student, instructor, admin, school, site, agent, business]
+              default: student
+        - required: [kind, content]
+          additionalProperties: false
+          properties:
+            kind:
+              type: string
+              const: paste
+            content:
+              type: string
+              minLength: 1
+              maxLength: 20000
+            name:
+              type: string
+              maxLength: 255
+            portal:
+              type: string
+              enum: [student, instructor, admin, school, site, agent, business]
+              default: student
+    documentation:
+      - 02-api/endpoints/records-create.md
+      - 01-features/records/overview.md
+      - 13-examples/workflows/records-upload-and-ask.md
+    api_reference:
+      - openapi: 02-api/openapi.yaml
+        method: post
+        path: /records
+        operation_id: createRecord
+    permissions:
+      access: [learner]
+      requires_authentication: true
+      requires_confirmation: false
+      confirmation_reason: null
+    side_effects:
+      - creates a Library record
+      - may start preview, index, extraction or transcription jobs
+
+  - id: records_ask
+    name: Ask about a record
+    description: >
+      Answer a learner's question grounded in one record, content key or folder,
+      with citations. Supply exactly one target and do not ask before extraction
+      is searchable.
+    capability: records.ask
+    execution_mode: http
+    input_schema:
+      type: object
+      required: [question]
+      oneOf:
+        - required: [recordId]
+        - required: [contentKey]
+        - required: [folderId]
+      properties:
+        question:
+          type: string
+          minLength: 1
+        recordId:
+          type: string
+          format: uuid
+          description: The learner's own record.
+        contentKey:
+          type: string
+          description: Shared or catalogue content.
+        folderId:
+          type: string
+          format: uuid
+          description: Ask across one folder.
+        selection:
+          type: object
+          description: A page or text selection used to ground the answer.
+        portal:
+          type: string
+          enum: [student, instructor, admin, school, site, agent, business]
+          default: student
+    documentation:
+      - 02-api/endpoints/records-ask.md
+      - 01-features/records/overview.md
+      - 13-examples/workflows/records-upload-and-ask.md
+    api_reference:
+      - openapi: 02-api/openapi.yaml
+        method: post
+        path: /records/ask
+        operation_id: askRecord
+    permissions:
+      access: [learner]
+      requires_authentication: true
+      requires_confirmation: false
+      confirmation_reason: null
+    side_effects:
+      - stores the question and answer history for the record
+
+  - id: courses_list_published
+    name: List published courses
+    description: >
+      Return published course cards for the public catalogue. Draft and
+      unpublished courses are excluded by the API.
+    capability: courses.list_published
+    execution_mode: http
+    input_schema:
+      type: object
+      additionalProperties: false
+      properties:
+        q:
+          type: string
+          description: Search title, description and subject.
+        type:
+          type: string
+          enum: [live, video]
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 50
+          default: 12
+    documentation:
+      - 02-api/endpoints/courses-public.md
+      - 01-features/courses/overview.md
+      - 05-data-models/course.md
+    api_reference:
+      - openapi: 02-api/openapi.yaml
+        method: get
+        path: /courses/published
+        operation_id: listPublishedCourses
+    permissions:
+      access: [public]
+      requires_authentication: false
+      requires_confirmation: false
+      confirmation_reason: null
+
+  - id: courses_get_published
+    name: Get a published course
+    description: >
+      Return one published course detail page by id or slug, including modules,
+      lessons, schedule and public metadata. Unpublished courses return 404.
+    capability: courses.get_published
+    execution_mode: http
+    input_schema:
+      type: object
+      required: [idOrSlug]
+      additionalProperties: false
+      properties:
+        idOrSlug:
+          type: string
+          description: Course id or slug from the published catalogue.
+    documentation:
+      - 02-api/endpoints/courses-public.md
+      - 01-features/courses/overview.md
+      - 05-data-models/course.md
+    api_reference:
+      - openapi: 02-api/openapi.yaml
+        method: get
+        path: /courses/{idOrSlug}/full
+        operation_id: getPublishedCourse
+    permissions:
+      access: [public]
+      requires_authentication: false
+      requires_confirmation: false
+      confirmation_reason: null
+
+  - id: programmes_list_catalogue
+    name: List published programmes
+    description: >
+      Return published programmes with the count of published courses. Draft
+      programmes and unpublished courses are excluded.
+    capability: programmes.list_catalogue
+    execution_mode: http
+    input_schema:
+      type: object
+      additionalProperties: false
+      properties: {}
+    documentation:
+      - 02-api/endpoints/programmes-public.md
+      - 01-features/programmes/overview.md
+      - 05-data-models/programme.md
+    api_reference:
+      - openapi: 02-api/openapi.yaml
+        method: get
+        path: /programmes/catalogue
+        operation_id: listPublishedProgrammes
+    permissions:
+      access: [public]
+      requires_authentication: false
+      requires_confirmation: false
+      confirmation_reason: null
+
+  - id: pharmd_get_programme
+    name: Get the PharmD programme
+    description: >
+      Return the public PharmD programme tree with years, courses and topic
+      counts. Some learner-facing content may still be marked coming soon; treat
+      missing content as unavailable.
+    capability: pharmd.get_programme
+    execution_mode: http
+    input_schema:
+      type: object
+      additionalProperties: false
+      properties: {}
+    documentation:
+      - 02-api/endpoints/pharmd-public.md
+      - 01-features/pharmd/overview.md
+    api_reference:
+      - openapi: 02-api/openapi.yaml
+        method: get
+        path: /pharmd/programme
+        operation_id: getPharmdProgramme
+    permissions:
+      access: [public]
+      requires_authentication: false
+      requires_confirmation: false
+      confirmation_reason: null
+
+  - id: content_list_blog_posts
+    name: List blog posts
+    description: >
+      Return published blog post cards for the public blog with optional
+      category and search filters plus pagination metadata.
+    capability: content.list_blog_posts
+    execution_mode: http
+    input_schema:
+      type: object
+      additionalProperties: false
+      properties:
+        category:
+          type: string
+        search:
+          type: string
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 24
+        offset:
+          type: integer
+          minimum: 0
+          default: 0
+    documentation:
+      - 02-api/endpoints/content-public.md
+      - 01-features/content/overview.md
+    api_reference:
+      - openapi: 02-api/openapi.yaml
+        method: get
+        path: /content/blog/posts
+        operation_id: listBlogPosts
+    permissions:
+      access: [public]
+      requires_authentication: false
+      requires_confirmation: false
+      confirmation_reason: null
+
+  - id: contact_submit
+    name: Submit a contact message
+    description: >
+      Submit a public contact or partner enquiry. This is a write endpoint; use
+      test data that can be removed and never submit real personal data in
+      examples.
+    capability: contact.submit
+    execution_mode: http
+    input_schema:
+      type: object
+      required: [name, email, message]
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        email:
+          type: string
+          format: email
+        message:
+          type: string
+          minLength: 1
+          maxLength: 5000
+        kind:
+          type: string
+          enum: [contact, partner]
+          default: contact
+        organisation:
+          type: string
+          maxLength: 200
+        subject:
+          type: string
+          maxLength: 200
+    documentation:
+      - 02-api/endpoints/contact-pilot.md
+      - 01-features/contact/overview.md
+    api_reference:
+      - openapi: 02-api/openapi.yaml
+        method: post
+        path: /contact
+        operation_id: submitContact
+    permissions:
+      access: [public]
+      requires_authentication: false
+      requires_confirmation: false
+      confirmation_reason: null
+    side_effects:
+      - stores a contact message for the admin inbox
+
+  - id: pilot_apply
+    name: Apply for the pilot programme
+    description: >
+      Submit a public pilot-school application for admin review. A duplicate
+      school/email within 24 hours returns 409; treat that as already received.
+    capability: pilot.apply
+    execution_mode: http
+    input_schema:
+      type: object
+      required: [school_name, state_city, est_students]
+      additionalProperties: true
+      description: >
+        The canonical validator in akoro-api/lib/tiersModel.js is authoritative
+        and may accept additional fields. This schema covers only the fields
+        published in the OpenAPI skeleton.
+      properties:
+        school_name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        state_city:
+          type: string
+          minLength: 1
+          maxLength: 120
+        est_students:
+          type: integer
+          minimum: 1
+    documentation:
+      - 02-api/endpoints/contact-pilot.md
+      - 01-features/pilot-applications/overview.md
+    api_reference:
+      - openapi: 02-api/openapi.yaml
+        method: post
+        path: /public/pilot-applications
+        operation_id: submitPilotApplication
+    permissions:
+      access: [public]
+      requires_authentication: false
+      requires_confirmation: false
+      confirmation_reason: null
+    side_effects:
+      - stores a pilot application for admin review

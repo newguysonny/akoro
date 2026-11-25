@@ -5,8 +5,8 @@
 > courses and media, curriculum and assessments, and a school ERP. This
 > repository is the canonical platform knowledge base.
 
-Status: Phase 1 foundation. Content is being populated from the Phase 0 audit.
-Use `capability-registry.yaml` for availability; do not infer it from prose.
+Status: Phase 3 context and tooling in progress. Availability comes from
+`capability-registry.yaml`; do not infer it from prose.
 
 ## Start
 
@@ -20,9 +20,11 @@ Use `capability-registry.yaml` for availability; do not infer it from prose.
 
 - [Documentation index](documentation-index.json)
 - [Capability registry](capability-registry.yaml)
+- [Tool registry](tool-registry.yaml)
 - [OpenAPI skeleton](02-api/openapi.yaml)
 - [Capability registry schema](_schemas/capability-registry.schema.json)
 - [Documentation index schema](_schemas/documentation-index.schema.json)
+- [Tool registry schema](_schemas/tool-registry.schema.json)
 
 ## Features
 
@@ -62,6 +64,10 @@ Use `capability-registry.yaml` for availability; do not infer it from prose.
 ## Agents
 
 - [Agent documentation](06-agents/README.md)
+- [Capability discovery and execution](06-agents/agent-capabilities.md)
+- [Context Manager contract](06-agents/context-manager.md)
+- [Tool registry](tool-registry.yaml)
+- [Search documentation](scripts/search-docs.mjs)
 
 ## Engineering and operations
 

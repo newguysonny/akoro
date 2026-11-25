@@ -5,11 +5,25 @@ on:
     paths:
       - 'akoro-docs/**'
       - 'akoro-documentation/**'
+      - 'akoro-api/app.js'
+      - 'akoro-api/lib/routeCatalog.js'
+      - 'akoro-api/scripts/export-routes.mjs'
+      - 'akoro-api/scripts/route-coverage.mjs'
+      - 'akoro-api/scripts/route-runtime.mjs'
+      - 'docs/audits/phase-0/public-route-candidates.csv'
+      - 'docs/audits/phase-2-route-coverage.md'
       - '.github/workflows/docs.yml'
   pull_request:
     paths:
       - 'akoro-docs/**'
       - 'akoro-documentation/**'
+      - 'akoro-api/app.js'
+      - 'akoro-api/lib/routeCatalog.js'
+      - 'akoro-api/scripts/export-routes.mjs'
+      - 'akoro-api/scripts/route-coverage.mjs'
+      - 'akoro-api/scripts/route-runtime.mjs'
+      - 'docs/audits/phase-0/public-route-candidates.csv'
+      - 'docs/audits/phase-2-route-coverage.md'
       - '.github/workflows/docs.yml'
 
 jobs:
@@ -30,3 +44,32 @@ jobs:
       - name: Validate internal docs references
         working-directory: .
         run: node akoro-documentation/scripts/validate-docs.mjs
+
+  route-coverage:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: akoro-api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: akoro-api/package-lock.json
+      - run: npm ci
+      - name: Extract the runtime Express route table
+        run: node scripts/export-routes.mjs --out "$RUNNER_TEMP/route-table.json"
+      - name: Compare the route table with OpenAPI
+        run: >-
+          node scripts/route-coverage.mjs
+          --input "$RUNNER_TEMP/route-table.json"
+          --out "$RUNNER_TEMP/phase-2-route-coverage.md"
+          --check
+      - name: Upload route coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase-2-route-coverage
+          path: |
+            ${{ runner.temp }}/route-table.json
+            ${{ runner.temp }}/phase-2-route-coverage.md
