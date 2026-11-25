@@ -23,9 +23,10 @@
       // at once for 1080p; the default "dev" (1/16 vCPU, 256 MiB) would
       // OOM immediately. 4K sources need standard-4.
       "instance_type": "standard-3",
-      // Cap the fleet: encode jobs are heavy, and the container's own
-      // MAX_CONCURRENT_JOBS lane guard keeps each instance serialized.
-      "max_instances": 2
+      // Autoscale ceiling. One rendition per named container, each with
+      // MAX_CONCURRENT_JOBS=1; two 4K videos (5 variants each) + planner
+      // + extract fit inside 12.
+      "max_instances": 12
     }
   ],
 

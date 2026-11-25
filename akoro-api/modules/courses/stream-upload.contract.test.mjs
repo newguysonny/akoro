@@ -46,7 +46,8 @@ test("the API no longer buffers a large course video", () => {
   assert.match(presignSrc, /router\.post\("\/upload-complete"/, "completion endpoint");
   assert.match(presignSrc, /canManageCourse\(req\.user, courseId\)/, "only the course owner can stage");
   assert.match(presignSrc, /HeadObjectCommand/, "completion checks the object that actually landed");
-  assert.match(presignSrc, /dispatchEncode\(\{ videoId, courseId: video\.courseId, sourceKey: video\.sourceKey \}\)/, "completion dispatches encode");
+  assert.match(presignSrc, /enqueueMediaEncode\(/, "completion queues the fan-out lane");
+  assert.match(presignSrc, /dispatchEncode\(\{ videoId, courseId: video\.courseId, sourceKey: video\.sourceKey \}\)/, "direct dispatch remains the fallback");
 });
 
 test("video rows map to/from Postgres without leaking storage fields", () => {

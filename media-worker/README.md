@@ -13,11 +13,12 @@ immediately**; the caller polls `GET /jobs/:id`. Deepgram, RunPod
 captions, transcripts and the database all stay in the API — this
 container only ever moves bytes and runs ffmpeg.
 
-**Current concurrency:** the edge worker routes every request to one
-`getByName("singleton")` container and `MAX_CONCURRENT_JOBS=1`, so the
-effective limit is **one encode or extract at a time** (even though
-`max_instances` is 2). Fan-out needs both a different edge routing and
-sticky `/jobs/:id` polling.
+**Current concurrency:** the API queue keeps `MEDIA_ENCODE_VIDEOS` videos
+in flight (default 2). Each video is inspected once, then fans out to one
+named container per rendition (`video-<id>-360p`, `video-<id>-1080p`, …);
+each container still runs `MAX_CONCURRENT_JOBS=1`. `max_instances: 12`
+covers two 4K videos plus the planner/extract lanes. The legacy
+`/jobs/encode` path remains for one-container fallback.
 
 ## Why
 
@@ -89,6 +90,8 @@ MEDIA_WORKER_URL=https://akoro-media-worker.<your-subdomain>.workers.dev
   instructor's status polling and the auto-transcribe hook are unchanged.
   Unset → the BullMQ queue + `akoro-api/worker.js` run exactly as before.
   With it set, stand the old worker down (`VIDEO_WORKER_ENABLED=false`).
+  The API queue (`video-encode-fanout`) retries lost jobs; each variant
+  runs on a named container and the API writes the nested master playlist.
   HLS segment uploads use `R2_UPLOAD_CONCURRENCY` (default 8), not one
   `Promise.all` for thousands of segments.
 
@@ -97,7 +100,9 @@ MEDIA_WORKER_URL=https://akoro-media-worker.<your-subdomain>.workers.dev
 | Method | Path | Body | Notes |
 |---|---|---|---|
 | GET | `/healthz` | — | no auth; platform probe |
-| POST | `/jobs/encode` | `{videoId, courseId, sourceKey}` | 202 → `{jobId}` |
+| POST | `/jobs/inspect` | `{videoId}` | sync ffprobe + variant plan |
+| POST | `/jobs/encode` | `{videoId, courseId, sourceKey}` | 202 → `{jobId}` (legacy full encode) |
+| POST | `/jobs/encode-variant` | `{videoId, courseId, sourceKey, variant, frameRate}` | 202 → `{jobId}` (one rendition) |
 | POST | `/jobs/extract-audio` | `{url, kind?, maxFrames?, sceneThreshold?, prefix?}` | `kind` audio\|video (default video); HLS urls read directly by ffmpeg |
 | GET | `/jobs/:id` | — | `{state: running\|done\|failed, log, result}` |
 | GET | `/jobs` | — | recent snapshots |

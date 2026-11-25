@@ -221,6 +221,19 @@ test("the container is wired: docs, health, R2, and the API knows the URL", () =
   assert.match(apiEnvExample, /MEDIA_WORKER_URL=/, "the API's env documents the worker");
 });
 
+test("the fan-out surface: inspect + one variant per container", () => {
+  assert.match(indexSrc, /app\.post\("\/jobs\/inspect"/, "ffprobe planner endpoint");
+  assert.match(indexSrc, /app\.post\("\/jobs\/encode-variant"/, "single-rendition endpoint");
+  assert.match(encodeSrc, /export async function probeSourceUrl/, "probe without downloading");
+  assert.match(encodeSrc, /export async function runVariantJob/, "one rendition pipeline");
+  assert.match(encodeSrc, /hls\/\$\{variant\.name\}/, "each variant owns its HLS prefix");
+  assert.match(r2Src, /export async function uploadDir\(/, "a variant uploads a directory, not a master");
+  assert.match(cfSrc, /url\.searchParams\.get\("instance"\)/, "the edge routes by named container");
+  assert.match(cfSrc, /url\.pathname\.startsWith\("\/jobs"\) && secret !== env\.INTERNAL_SECRET/, "job routes cannot start paid containers anonymously");
+  assert.match(cfSrc, /instance !== "singleton" && secret !== env\.INTERNAL_SECRET/, "random names cannot start paid containers");
+  assert.match(wranglerSrc, /"max_instances": 12/, "autoscale ceiling");
+});
+
 test("a running encode renews the container instead of the 10m idle stop", () => {
   assert.match(cfSrc, /async onActivityExpired\(\)/, "the edge DO owns the expiry decision");
   assert.match(cfSrc, /containerFetch\([^)]*\/jobs/, "it asks the container for the lane state");

@@ -2,8 +2,12 @@
 //
 // Routing follows the documented pattern (developers.cloudflare.com/
 // containers): the DO binding (env.MEDIA) is the container's namespace,
-// and getByName() hands each request to one running instance. The
-// container starts on first request, serves until idle, then sleeps.
+// and getByName(name) hands each request to one named instance. Distinct
+// names (video-<id>-360p, video-<id>-720p, …) are what make Cloudflare
+// autoscale up to max_instances; the API coordinator dispatches one
+// variant per instance. Without ?instance= the old singleton is kept
+// (extract lane, health probes).
+
 //
 // Secrets live in the WORKER environment (`wrangler secret put …`) and
 // are copied onto the container at start via envVars — the Worker env is
@@ -27,7 +31,8 @@ export class MediaContainer extends Container {
       R2_BUCKET_NAME:       env.R2_BUCKET_NAME       ?? "",
       R2_PUBLIC_URL:        env.R2_PUBLIC_URL        ?? "",
       API_BASE_URL:         env.API_BASE_URL         ?? "",
-      MAX_CONCURRENT_JOBS:  "1",
+      MAX_CONCURRENT_JOBS:  env.MAX_CONCURRENT_JOBS ?? "1",
+      ENCODE_VARIANT_CONCURRENCY: env.ENCODE_VARIANT_CONCURRENCY ?? "2",
       R2_UPLOAD_CONCURRENCY: env.R2_UPLOAD_CONCURRENCY ?? "8",
     };
   }
@@ -70,10 +75,21 @@ export default {
       return Response.json({ ok: true, service: "akoro-media-worker-edge" });
     }
 
-    // One shared instance for now: encode jobs are heavy and the
-    // container's own MAX_CONCURRENT_JOBS lane guard serializes them.
-    // To fan out later: getRandom(env.MEDIA, N) from @cloudflare/containers.
-    const container = env.MEDIA.getByName("singleton");
+    const instance = (url.searchParams.get("instance") || "singleton")
+      .replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 64) || "singleton";
+
+    // Starting a container costs money before the container's own auth can
+    // reject the request. Check the shared secret at the edge for every job
+    // route, and let only the API address non-singleton instances.
+    const secret = request.headers.get("x-internal-secret");
+    if (url.pathname.startsWith("/jobs") && secret !== env.INTERNAL_SECRET) {
+      return Response.json({ ok: false, error: "Bad internal secret" }, { status: 401 });
+    }
+    if (instance !== "singleton" && secret !== env.INTERNAL_SECRET) {
+      return Response.json({ ok: false, error: "Bad internal secret" }, { status: 401 });
+    }
+
+    const container = env.MEDIA.getByName(instance);
     return await container.fetch(request);
   },
 };

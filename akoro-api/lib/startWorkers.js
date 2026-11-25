@@ -155,6 +155,20 @@ export async function startWorkers() {
     }
   }
 
+  // Course-video fan-out: one BullMQ job per video, one container per
+  // rendition. Only meaningful when MEDIA_WORKER_URL is set; the module
+  // returns null otherwise, so environments without the container stay quiet.
+  // Not behind skipJob(): course encoding is user-facing work, so the
+  // background-jobs kill switch must not leave uploads queued forever.
+  if (process.env.REDIS_URL) {
+    import("../modules/courses/index.js")
+      .then((m) => {
+        const worker = m.startMediaEncodeWorker();
+        if (worker) console.log("[media-queue] fan-out coordinator started at boot");
+      })
+      .catch((e) => console.error("[media-queue] failed to start:", e.message));
+  }
+
   // Keeps the vector stores current. Rows arrive without embeddings (SQL seeds,
   // a failed inline call) and rows get edited after being embedded; both leave
   // search quietly wrong, and nothing used to report either.

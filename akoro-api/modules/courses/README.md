@@ -62,11 +62,15 @@ root, so its route files carry their own path prefixes.
   object before dispatching. The bucket must allow cross-origin `PUT` with
   `content-type` from the instructor/school origins. `video-store.js` persists
   rows in the `videos` table, so an API restart cannot orphan a long encode.
-  With `MEDIA_WORKER_URL` set, `encodeDispatch.js` hands the job to the media
-  container and opens no BullMQ queue; otherwise it enqueues on
-  `video-encoding`. The container/worker calls back through
-  `/api/stream/internal/*` with the shared secret. Certificates use `pdf-lib`
-  and R2; subtitles accept VTT/SRT (SRT becomes VTT).
+  With `MEDIA_WORKER_URL` set, `mediaEncodeQueue.js` (BullMQ
+  `video-encode-fanout`) probes the source once, dispatches one named
+  container per rendition, polls them, writes the nested master playlist,
+  and only then marks the video complete. `MEDIA_ENCODE_VIDEOS` controls
+  videos in flight (default 2); each container runs one job. Without the
+  worker, `encodeDispatch.js` falls back to the legacy local queue. The
+  container/worker calls back through `/api/stream/internal/*` with the
+  shared secret. Certificates use `pdf-lib` and R2; subtitles accept
+  VTT/SRT (SRT becomes VTT).
 
   Direct upload contract (large sources):
   `POST /api/stream/upload-url {courseId,title,fileName,mime,size}` →

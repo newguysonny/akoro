@@ -21,6 +21,7 @@ import { authenticateToken, requireRole } from "../auth/index.js";
 import { canManageCourse } from "./courseAccess.js";
 import { VideoStore } from "./video-store.js";
 import { dispatchEncode } from "./encodeDispatch.js";
+import { enqueueMediaEncode, mediaQueueEnabled } from "./mediaEncodeQueue.js";
 import { r2Send } from "../../lib/r2Breaker.js";
 
 export const MAX_SOURCE_BYTES = 2 * 1024 * 1024 * 1024;   // 2 GB, same as before
@@ -177,7 +178,18 @@ export function makeStreamUploadRouter({ r2, bucket, encodingQueue }) {
     let jobId = null;
     let via = "queue";
     try {
-      if (encodingQueue) {
+      if (mediaQueueEnabled()) {
+        try {
+          jobId = await enqueueMediaEncode({
+            videoId, courseId: video.courseId, sourceKey: video.sourceKey, title: video.title,
+          });
+          via = "media-queue";
+        } catch (queueErr) {
+          console.warn("[stream] media queue unavailable, dispatching directly:", String(queueErr?.message || queueErr).slice(0, 160));
+          jobId = await dispatchEncode({ videoId, courseId: video.courseId, sourceKey: video.sourceKey });
+          via = "media-worker";
+        }
+      } else if (encodingQueue) {
         const job = await encodingQueue.add("encode", {
           videoId,
           courseId: video.courseId,
@@ -206,7 +218,7 @@ export function makeStreamUploadRouter({ r2, bucket, encodingQueue }) {
       jobId,
       encodingStatus: "queued",
       via,
-      message: `Source uploaded. Encoding ${via === "media-worker" ? "dispatched to the media worker" : "queued"} — poll /api/stream/status/${videoId} for progress.`,
+      message: `Source uploaded. Encoding ${via === "media-worker" ? "dispatched to the media worker" : "queued for the encoder"} — poll /api/stream/status/${videoId} for progress.`,
     });
   }));
 

@@ -22,23 +22,43 @@ import { test } from "node:test";
 const here = dirname(fileURLToPath(import.meta.url));
 const read = (p) => readFileSync(join(here, p), "utf8");
 
-const [streamSrc, mediaClientSrc, envExample, mwReadme, dispatchSrc] = await Promise.all([
+const [streamSrc, mediaClientSrc, envExample, mwReadme, dispatchSrc, mediaQueueSrc] = await Promise.all([
   read("stream.js"),
   read("../records/mediaClient.js"),
   read("../../.env.example"),
   read("../../../media-worker/README.md"),
   read("encodeDispatch.js"),
+  read("mediaEncodeQueue.js"),
 ]);
 
-test("container mode dispatches to /jobs/encode and opens NO BullMQ queue", () => {
+test("container mode enqueues the fan-out lane; the direct call remains a fallback", () => {
   assert.match(streamSrc, /import \{ mediaWorkerEnabled \}\s+from "\.\.\/records\/index\.js";/, "the shared gate (records' module entry)");
-  assert.match(streamSrc, /import \{ dispatchEncode \}\s+from "\.\/encodeDispatch\.js";/, "the dispatch lives in its own bcrypt-free seam");
-  assert.match(dispatchSrc, /export async function dispatchEncode\(/, "the dispatch helper exists");
-  assert.match(streamSrc, /const encodingQueue = mediaWorkerEnabled\(\) \? null : new Queue\("video-encoding"/, "container mode constructs no Redis encode queue");
-  assert.match(dispatchSrc, /\/jobs\/encode/, "the container endpoint");
+  assert.match(streamSrc, /import \{ enqueueMediaEncode \}\s+from "\.\/mediaEncodeQueue\.js";/, "the queue seam");
+  assert.match(streamSrc, /import \{ dispatchEncode \}\s+from "\.\/encodeDispatch\.js";/, "direct dispatch survives as the fallback");
+  assert.match(dispatchSrc, /export async function dispatchEncode\(/, "the legacy dispatch helper exists");
+  assert.match(dispatchSrc, /export async function dispatchEncodeVariant\(/, "one variant per container");
+  assert.match(dispatchSrc, /export async function dispatchInspect\(/, "the planner probe");
+  assert.match(dispatchSrc, /export async function getEncodeJob\(/, "polling on the accepting container");
+  assert.match(dispatchSrc, /instance=\$\{encodeURIComponent\(container\)\}/, "container names are routed, not collapsed to singleton");
+  assert.match(streamSrc, /const encodingQueue = mediaWorkerEnabled\(\) \? null : new Queue\("video-encoding"/, "the old local queue is not opened when the container owns encode");
+  assert.match(dispatchSrc, /\/jobs\/encode/, "the legacy endpoint");
   assert.match(dispatchSrc, /"x-internal-secret": process\.env\.INTERNAL_SECRET \?\? ""/, "authenticated like every internal seam");
-  assert.match(dispatchSrc, /if \(res\.status === 409\) throw new Error\("The media worker's encode lane is busy/, "a busy lane fails loudly, not silently");
+  assert.match(dispatchSrc, /if \(res\.status === 409\) \{[\s\S]*?lane is busy/, "a busy lane fails loudly so the queue can retry");
   assert.match(dispatchSrc, /if \(!data\?\.jobId\) throw new Error\("The media worker did not return a job id\."\)/, "the container's job id is required");
+});
+
+test("the fan-out coordinator: one queue job per video, one container per variant", () => {
+  assert.match(mediaQueueSrc, /const QUEUE_NAME = "video-encode-fanout"/, "durable queue name");
+  assert.match(mediaQueueSrc, /new Queue\(QUEUE_NAME/, "durable queue");
+  assert.match(mediaQueueSrc, /new Worker\(QUEUE_NAME, processVideoJob/, "the coordinator worker");
+  assert.match(mediaQueueSrc, /MEDIA_ENCODE_VIDEOS/, "videos-in-flight is configurable");
+  assert.match(mediaQueueSrc, /dispatchInspect\(\{ videoId, container: "planner" \}\)/, "ffprobe once");
+  assert.match(mediaQueueSrc, /dispatchEncodeVariant\(\{[\s\S]*?container,/, "each variant gets its own container");
+  assert.match(mediaQueueSrc, /job\.updateData\(data\)/, "retry checkpoints persist plan/job ids");
+  assert.match(mediaQueueSrc, /getEncodeJob\(\{ container: state\.container, jobId: state\.jobId \}\)/, "poll the same container");
+  assert.match(mediaQueueSrc, /masterPlaylistBody\(plan\.variants, plan\.frameRate\)/, "the coordinator writes the master");
+  assert.match(mediaQueueSrc, /\$\{v\.name\}\/\$\{v\.name\}\.m3u8/, "nested variant playlists");
+  assert.match(mediaQueueSrc, /encodingStatus: "completed"/, "final status");
 });
 
 test("the upload handler: container first, BullMQ fallback, honest failure", () => {
@@ -86,7 +106,7 @@ test("the dispatch helper behaves against a real (stub) container", async () => 
   await assert.rejects(() => dispatchEncode({ videoId: "v2", courseId: "c1", sourceKey: "s" }, { fetchImpl: busy }), /lane is busy/);
 
   const reject = async () => new Response(JSON.stringify({ error: "nope" }), { status: 500, headers: { "Content-Type": "application/json" } });
-  await assert.rejects(() => dispatchEncode({ videoId: "v3", courseId: "c1", sourceKey: "s" }, { fetchImpl: reject }), /rejected the encode job \(500\)/);
+  await assert.rejects(() => dispatchEncode({ videoId: "v3", courseId: "c1", sourceKey: "s" }, { fetchImpl: reject }), /rejected the job \(500\)/);
 });
 
 test("the docs tell the operator the truth about standing the old worker down", () => {

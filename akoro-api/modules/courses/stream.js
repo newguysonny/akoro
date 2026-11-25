@@ -59,6 +59,7 @@ import db                                 from "../../db.js";
 import { autoTranscribeContent }          from "../records/index.js";
 import { mediaWorkerEnabled }             from "../records/index.js";
 import { dispatchEncode }                 from "./encodeDispatch.js";
+import { enqueueMediaEncode }             from "./mediaEncodeQueue.js";
 import { VideoStore }                     from "./video-store.js";
 import { canManageCourse }                from "./courseAccess.js";
 import makeStreamUploadRouter, {
@@ -256,7 +257,33 @@ const streamHandlers = {
     // than sitting "queued" forever — re-uploading is the retry.
     let jobId = null;
     let via = "queue";
-    if (encodingQueue) {
+    if (mediaWorkerEnabled()) {
+      try {
+        jobId = await enqueueMediaEncode({ videoId, courseId, sourceKey, title });
+        via = "media-queue";
+        console.log(`[stream] 📥 Job queued for fan-out  videoId=${videoId}  jobId=${jobId}`);
+      } catch (queueErr) {
+        // Redis/misconfig: fall back to the legacy one-container call.
+        console.warn("[stream] media queue unavailable, dispatching directly:", String(queueErr?.message || queueErr).slice(0, 160));
+        try {
+          jobId = await dispatchEncode({ videoId, courseId, sourceKey });
+          via = "media-worker";
+          console.log(`[stream] 📤 Job dispatched to media worker  videoId=${videoId}  jobId=${jobId}`);
+        } catch (err) {
+          console.error(`[stream] media worker dispatch failed:`, String(err?.message || err).slice(0, 200));
+          await VideoStore.update(videoId, {
+            encodingStatus: "failed",
+            errorMessage: `Encoding could not be dispatched: ${String(err?.message || err).slice(0, 160)}`,
+          });
+          return res202(res, {
+            videoId,
+            jobId: null,
+            encodingStatus: "failed",
+            message: "Source staged, but the encoder is unreachable right now — re-upload to retry.",
+          });
+        }
+      }
+    } else if (encodingQueue) {
       const job = await encodingQueue.add("encode", {
         videoId,
         courseId,
@@ -269,7 +296,6 @@ const streamHandlers = {
       try {
         jobId = await dispatchEncode({ videoId, courseId, sourceKey });
         via = "media-worker";
-        console.log(`[stream] 📤 Job dispatched to media worker  videoId=${videoId}  jobId=${jobId}`);
       } catch (err) {
         console.error(`[stream] media worker dispatch failed:`, String(err?.message || err).slice(0, 200));
         await VideoStore.update(videoId, {
@@ -290,7 +316,7 @@ const streamHandlers = {
       jobId,
       encodingStatus: "queued",
       via,
-      message: `Source staged on R2. Encoding ${via === "media-worker" ? "dispatched to the media worker" : "queued"} — poll /api/stream/status/:videoId for progress.`,
+      message: `Source staged on R2. Encoding ${via === "media-worker" ? "dispatched to the media worker" : "queued for the encoder"} — poll /api/stream/status/:videoId for progress.`,
     });
   }),
 

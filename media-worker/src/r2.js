@@ -74,12 +74,18 @@ export async function mapLimit(items, limit, fn) {
 
 export const R2_UPLOAD_CONCURRENCY = Math.max(1, Number(process.env.R2_UPLOAD_CONCURRENCY) || 8);
 
-/** Upload every file in localDir under r2Prefix; returns the public master.m3u8 URL. */
-export async function uploadDirToR2(localDir, r2Prefix) {
+/** Upload every file in localDir under r2Prefix; returns the public keys. */
+export async function uploadDir(localDir, r2Prefix) {
   const { readdir } = await import("node:fs/promises");
   const files = await readdir(localDir);
   await mapLimit(files, R2_UPLOAD_CONCURRENCY,
     (file) => uploadFileAt(path.join(localDir, file), `${r2Prefix}/${file}`));
+  return files.map((file) => `${r2Prefix}/${file}`);
+}
+
+/** Upload every file in localDir under r2Prefix; returns the public master.m3u8 URL. */
+export async function uploadDirToR2(localDir, r2Prefix) {
+  await uploadDir(localDir, r2Prefix);
   return `${R2_PUBLIC}/${r2Prefix}/master.m3u8`;
 }
 

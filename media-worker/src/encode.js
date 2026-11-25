@@ -16,7 +16,7 @@ import https from "node:https";
 import http from "node:http";
 import { promisify } from "node:util";
 import { FFPROBE_PATH, hlsVariantArgs, masterPlaylistBody, variantsFor, run } from "./ffmpeg.js";
-import { R2_BUCKET, uploadDirToR2, deleteR2Object } from "./r2.js";
+import { R2_BUCKET, uploadDir, uploadDirToR2, deleteR2Object } from "./r2.js";
 
 export const apiBaseUrl = () => process.env.API_BASE_URL ?? "http://localhost:4000";
 const internalSecret = () => process.env.INTERNAL_SECRET ?? "";
@@ -154,7 +154,7 @@ export async function runEncodeJob({ videoId, courseId, sourceKey }, { onLog = (
     });
     completed = true;
     onLog(`[encode] ${videoId} complete`);
-    return { videoUrl, variants: result.variants };
+    return { videoUrl, variants: result.variants, duration: result.duration, fileSize: result.fileSize };
   } catch (err) {
     // The old BullMQ "failed" listener told the API. Without this the
     // video sits at "encoding" forever after an ffmpeg/R2/API failure.
@@ -168,5 +168,67 @@ export async function runEncodeJob({ videoId, courseId, sourceKey }, { onLog = (
   } finally {
     await fs.rm(jobTempDir, { recursive: true, force: true }).catch(() => {});
     await fs.rm(outputDir, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
+
+/** ffprobe a signed source URL without downloading it — the fan-out planner. */
+export async function probeSourceUrl(signedUrl) {
+  const { stdout } = await execAsync(FFPROBE_PATH, [
+    "-v", "quiet", "-print_format", "json", "-show_streams", "-show_format", signedUrl,
+  ], { maxBuffer: 8 * 1024 * 1024, timeout: 30_000 });
+  const info = JSON.parse(stdout);
+  const vs = info.streams?.find((s) => s.codec_type === "video");
+  if (!vs?.width || !vs?.height) throw new Error("no video stream found in the staged source");
+  const [num, den] = String(vs.avg_frame_rate ?? vs.r_frame_rate ?? "30/1").split("/").map(Number);
+  const variants = variantsFor(vs.height).filter((v) => {
+    const [w, h] = v.resolution.split("x").map(Number);
+    return w <= vs.width && h <= vs.height;   // never upscale either axis
+  });
+  return {
+    width: vs.width,
+    height: vs.height,
+    frameRate: den ? num / den : 30,
+    duration: parseFloat(info.format?.duration ?? "0") || 0,
+    fileSize: Number(info.format?.size ?? 0) || 0,
+    variants,
+  };
+}
+
+/**
+ * runVariantJob — encode exactly one rendition on this container. The API
+ * coordinator fans a video out to one container per variant, then writes
+ * the master playlist. No /internal/update calls: progress belongs to the
+ * coordinator (several containers would race the same video row).
+ */
+export async function runVariantJob(
+  { videoId, courseId, sourceKey, variant, frameRate },
+  { onLog = () => {}, onProgress = async () => {} } = {},
+) {
+  if (!variant?.name || !variant?.resolution) throw new Error("a variant is required");
+  const { signedUrl } = await getSourceUrl(videoId);
+  const tempRoot = path.join(process.env.TEMP_DIR ?? "/tmp", `variant_${videoId}_${variant.name}_${Date.now()}`);
+  const outputDir = path.join(tempRoot, "out");
+  await fs.mkdir(outputDir, { recursive: true });
+  try {
+    const ext = path.extname(sourceKey || "") || ".mp4";
+    const sourcePath = path.join(tempRoot, `source${ext}`);
+    onLog(`[variant] ${variant.name} — downloading source`);
+    await onProgress(5);
+    await downloadFromSignedUrl(signedUrl, sourcePath);
+    await onProgress(20);
+
+    const gopSize = Math.max(1, Math.floor((Number(frameRate) || 30) * 4));
+    onLog(`[variant] ${variant.name} — ffmpeg ${variant.resolution}`);
+    await run(hlsVariantArgs(variant, { inputPath: sourcePath, outputDir, gopSize }));
+    await onProgress(90);
+
+    const r2Prefix = `courses/${courseId}/videos/${videoId}/hls/${variant.name}`;
+    const keys = await uploadDir(outputDir, r2Prefix);
+    onLog(`[variant] ${variant.name} — uploaded ${keys.length} files`);
+    await onProgress(98);
+    return { variant: variant.name, r2Prefix, files: keys.length };
+  } finally {
+    await fs.rm(tempRoot, { recursive: true, force: true }).catch(() => {});
   }
 }
