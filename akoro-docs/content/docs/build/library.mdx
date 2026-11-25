@@ -1,0 +1,42 @@
+---
+title: Library
+description: Upload, extract, read and ask about learner materials.
+---
+
+# Library
+
+The Library stores learner records: uploaded files, pasted notes and saved
+links.
+
+## Upload
+
+1. `POST /api/records/upload-url` with `{ name, mime, size }`.
+2. PUT the bytes to the returned `uploadUrl`.
+3. `POST /api/records` with `kind: "upload"`, `fileKey`, `name`, `mime` and
+   `size`.
+
+Regular records are capped at 500 MB. The Supabase fallback is capped at 5 MB.
+
+## Extraction
+
+Scanned PDFs and images may use OCR; text PDFs and Office files use their text
+layer; audio/video can be transcribed. Poll
+`GET /api/records/extract/status?recordId=...` with backoff.
+
+## Ask
+
+`POST /api/records/ask` with `{ recordId, question }` returns an answer with
+citations. Do not ask before the record is searchable; `409` means extraction is
+still running.
+
+## Limits
+
+- 200 records per shelf.
+- Folder covers: images up to 5 MB.
+- Ownership is enforced; a `fileKey` from another learner is rejected.
+
+## Related
+
+- [Uploads](/docs/build/uploads)
+- [API reference](/docs/reference/api)
+- [Errors](/docs/start/errors)

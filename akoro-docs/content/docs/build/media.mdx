@@ -1,0 +1,35 @@
+---
+title: Course media
+description: Upload course video, queue encoding and play HLS.
+---
+
+# Course media
+
+Course videos upload directly to object storage and encode asynchronously.
+
+## Publish flow
+
+1. `POST /api/stream/upload-url` with the course id, title, file name, MIME type
+   and size.
+2. PUT the source bytes to the returned URL.
+3. `POST /api/stream/upload-complete` with `{ videoId }`.
+4. Poll `GET /api/stream/status/{videoId}`.
+5. Play from `GET /api/stream/videos/{videoId}`.
+
+## States
+
+`queued` → `encoding` → `completed` or `failed`.
+
+A queued video is not an error. Encoding is asynchronous and may wait behind
+other videos. Do not publish a failed or partial encode.
+
+## Limits
+
+- Direct upload: 2 GB per source.
+- R2 must be configured for large sources.
+- R2 CORS must allow PUT from the instructor origin.
+
+## Related
+
+- [API reference](/docs/reference/api)
+- [Errors](/docs/start/errors)

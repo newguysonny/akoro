@@ -1,0 +1,39 @@
+---
+title: Public catalogues
+description: Published courses, programmes and PharmD content.
+---
+
+# Public catalogues
+
+The public catalogue endpoints are unauthenticated and return only published
+content.
+
+## Courses
+
+- `GET /api/courses/published`
+- `GET /api/courses/{idOrSlug}/full`
+- `GET /api/live-sessions`
+- `GET /api/instructors/featured`
+
+## Programmes
+
+- `GET /api/programmes/catalogue`
+- `GET /api/programmes/catalogue/{id}`
+- `GET /api/programmes/catalogue/courses/{id}`
+
+## PharmD
+
+- `GET /api/pharmd/programme`
+- `GET /api/pharmd/courses/{code}`
+- `GET /api/pharmd/topics/{id}/file`
+
+## Rules
+
+- Draft courses, lessons, programmes and materials never appear.
+- Do not infer publication from an id; use the catalogue.
+- Live-session date/time fields are display strings, not canonical timestamps.
+
+## Related
+
+- [API reference](/docs/reference/api)
+- [Programmes and PharmD overview](/docs/build/api-overview)
