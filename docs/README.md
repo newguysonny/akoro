@@ -19,6 +19,7 @@ public subplan, and keep the master as the source of truth.
 | --- | --- | --- |
 | [Phase 0 Documentation Audit](audits/phase-0-documentation-audit.md) | Complete | Inventories routes, apps, features, data models, integrations and gaps before documentation begins. |
 | [Phase 1 Capability Verification](audits/phase-1-verification.md) | Partial | Sandbox blocked by hibernation rate limit; production non-destructive smoke passed for 9 capabilities. |
+| [Phase 2 Public API Verification](audits/phase-2-verification.md) | Partial | 16 public GET operations passed on production; write paths and sandbox remain pending. |
 
 Supporting data: `docs/audits/phase-0/*.csv`.
 

@@ -132,6 +132,41 @@ paths:
                         $ref: '#/components/schemas/RecordPage'
         '401':
           $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [Records]
+      operationId: createRecord
+      summary: Create a Library record
+      description: Registers an upload after the presigned PUT, or creates a paste/link record.
+      security:
+        - cookieAccess: []
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PortalHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateRecordRequest' }
+      responses:
+        '201':
+          description: Record created
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data]
+                properties:
+                  success: { type: boolean, const: true }
+                  data: { $ref: '#/components/schemas/Record' }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: File key does not belong to the caller
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
 
   /records/upload-url:
     post:
@@ -332,6 +367,635 @@ paths:
                   - type: object
                     properties:
                       code: { type: string, const: duplicate_application }
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
+  /auth/register:
+    post:
+      tags: [Auth]
+      operationId: register
+      summary: Create an account
+      description: |
+        Creates a learner, instructor or school-admin account. Email verification
+        may be required before tokens are issued.
+      parameters:
+        - $ref: '#/components/parameters/PortalHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegisterRequest' }
+      responses:
+        '201':
+          description: Account created, or verification required
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/SuccessAuth'
+                  - $ref: '#/components/schemas/VerificationRequired'
+        '200':
+          description: Existing unverified account; a new code may be sent
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VerificationRequired' }
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /auth/verify-email:
+    post:
+      tags: [Auth]
+      operationId: verifyEmail
+      summary: Complete signup email verification
+      parameters:
+        - $ref: '#/components/parameters/PortalHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ChallengeCodeRequest' }
+      responses:
+        '200':
+          description: Email verified and session issued
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SuccessAuth' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
+  /auth/verify-login:
+    post:
+      tags: [Auth]
+      operationId: verifyLogin
+      summary: Complete a login challenge
+      parameters:
+        - $ref: '#/components/parameters/PortalHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ChallengeCodeRequest' }
+      responses:
+        '200':
+          description: Challenge accepted and session issued
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SuccessAuth' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
+  /auth/resend-code:
+    post:
+      tags: [Auth]
+      operationId: resendCode
+      summary: Resend a verification or login code
+      parameters:
+        - $ref: '#/components/parameters/PortalHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ResendCodeRequest' }
+      responses:
+        '200':
+          description: Code resent or generic success
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SuccessGeneric' }
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /auth/2fa/login:
+    post:
+      tags: [Auth]
+      operationId: twoFactorLogin
+      summary: Complete a 2FA login
+      parameters:
+        - $ref: '#/components/parameters/PortalHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TwoFactorLoginRequest' }
+      responses:
+        '200':
+          description: 2FA accepted and session issued
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SuccessAuth' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /auth/2fa/setup:
+    post:
+      tags: [Auth]
+      operationId: twoFactorSetup
+      summary: Begin 2FA setup
+      description: Requires a session or a 2FA setup token in the body.
+      parameters:
+        - $ref: '#/components/parameters/PortalHeader'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                setupToken: { type: string }
+      responses:
+        '200':
+          description: Pending secret and provisioning URI
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [secret, otpauthUrl]
+                properties:
+                  secret: { type: string }
+                  otpauthUrl: { type: string }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /auth/forgot-password:
+    post:
+      tags: [Auth]
+      operationId: forgotPassword
+      summary: Start password reset
+      parameters:
+        - $ref: '#/components/parameters/PortalHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string, format: email }
+      responses:
+        '200':
+          description: Generic success; does not reveal whether the account exists
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SuccessGeneric' }
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /auth/reset-password:
+    post:
+      tags: [Auth]
+      operationId: resetPassword
+      summary: Finish password reset
+      parameters:
+        - $ref: '#/components/parameters/PortalHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ResetPasswordRequest' }
+      responses:
+        '200':
+          description: Password changed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SuccessGeneric' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
+  /records/extract/status:
+    get:
+      tags: [Records]
+      operationId: getExtractionStatus
+      summary: Check extraction status
+      security:
+        - cookieAccess: []
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PortalHeader'
+        - name: recordId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: contentKey
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: Extraction state
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ExtractionStatus' }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: Record not found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '501':
+          description: Extraction is not configured
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /records/ask:
+    post:
+      tags: [Records]
+      operationId: askRecord
+      summary: Ask a question about a record or folder
+      description: |
+        Answers with citations. Set `?stream=1` for Server-Sent Events
+        (`status`, `delta`, `done`, `error`).
+      security:
+        - cookieAccess: []
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PortalHeader'
+        - name: stream
+          in: query
+          schema: { type: string, enum: ["1"] }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AskRequest' }
+      responses:
+        '200':
+          description: Answer with citations
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AskResponse' }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: Record or folder not found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '409':
+          description: Document is not searchable yet
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /live-sessions:
+    get:
+      tags: [Courses]
+      operationId: listLiveSessions
+      summary: List published live sessions
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 50, default: 10 }
+      responses:
+        '200':
+          description: Live sessions
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, sessions, count]
+                properties:
+                  success: { type: boolean, const: true }
+                  sessions:
+                    type: array
+                    items: { $ref: '#/components/schemas/LiveSession' }
+                  count: { type: integer }
+
+  /instructors/featured:
+    get:
+      tags: [Courses]
+      operationId: listFeaturedInstructors
+      summary: List featured active instructors
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 50, default: 8 }
+      responses:
+        '200':
+          description: Featured instructors
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, instructors, count]
+                properties:
+                  success: { type: boolean, const: true }
+                  instructors:
+                    type: array
+                    items: { $ref: '#/components/schemas/InstructorCard' }
+                  count: { type: integer }
+
+  /courses/{idOrSlug}/full:
+    get:
+      tags: [Courses]
+      operationId: getPublishedCourse
+      summary: Get a published course detail page
+      parameters:
+        - name: idOrSlug
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Published course detail
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, course]
+                properties:
+                  success: { type: boolean, const: true }
+                  course: { $ref: '#/components/schemas/CourseDetail' }
+        '404':
+          description: Course not found or not published
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /programmes/catalogue/{id}:
+    get:
+      tags: [Programmes]
+      operationId: getPublishedProgramme
+      summary: Get a published programme with sections and courses
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Published programme detail
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SuccessGenericData' }
+        '404':
+          description: Programme not found or not published
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /programmes/catalogue/courses/{id}:
+    get:
+      tags: [Programmes]
+      operationId: getPublishedProgrammeCourse
+      summary: Get a published programme course and materials
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Published course and materials
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SuccessGenericData' }
+        '404':
+          description: Course not found or not published
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /pharmd/courses/{code}:
+    get:
+      tags: [PharmD]
+      operationId: getPharmdCourse
+      summary: Get a PharmD course and topics
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: PharmD course and topics
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SuccessGenericData' }
+        '404':
+          description: Course not found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /content/blog/posts/featured:
+    get:
+      tags: [Content]
+      operationId: getFeaturedBlogPost
+      summary: Get the featured blog post
+      responses:
+        '200':
+          description: Featured post card
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success]
+                properties:
+                  success: { type: boolean, const: true }
+                  data:
+                    oneOf:
+                      - $ref: '#/components/schemas/BlogCard'
+                      - type: object
+                        nullable: true
+
+  /content/blog/categories:
+    get:
+      tags: [Content]
+      operationId: listBlogCategories
+      summary: List blog categories with counts
+      responses:
+        '200':
+          description: Categories
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data]
+                properties:
+                  success: { type: boolean, const: true }
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name: { type: string }
+                        count: { type: integer }
+
+  /content/blog/posts/{slug}:
+    get:
+      tags: [Content]
+      operationId: getBlogPost
+      summary: Get a published blog post and related posts
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Blog post
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SuccessGenericData' }
+        '404':
+          description: Post not found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /content/blog/subscribe:
+    post:
+      tags: [Content]
+      operationId: subscribeToBlog
+      summary: Subscribe to the blog newsletter
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string, format: email }
+                source: { type: string, maxLength: 40, default: blog }
+      responses:
+        '201':
+          description: Subscribed
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data]
+                properties:
+                  success: { type: boolean, const: true }
+                  data:
+                    type: object
+                    properties:
+                      subscribed: { type: boolean }
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
+  /content/careers/departments:
+    get:
+      tags: [Content]
+      operationId: listCareerDepartments
+      summary: List job departments
+      responses:
+        '200':
+          description: Departments
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data]
+                properties:
+                  success: { type: boolean, const: true }
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/CareerDepartment' }
+
+  /content/careers/jobs:
+    get:
+      tags: [Content]
+      operationId: listCareerJobs
+      summary: List open jobs grouped by department
+      parameters:
+        - name: dept
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: Job groups
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data]
+                properties:
+                  success: { type: boolean, const: true }
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/CareerGroup' }
+
+  /content/careers/jobs/{id}:
+    get:
+      tags: [Content]
+      operationId: getCareerJob
+      summary: Get an open job
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Job detail
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SuccessGenericData' }
+        '404':
+          description: Role not found or closed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /content/careers/jobs/{id}/apply:
+    post:
+      tags: [Content]
+      operationId: applyToCareerJob
+      summary: Apply to an open job
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email]
+              properties:
+                name: { type: string }
+                email: { type: string, format: email }
+                phone: { type: string }
+                linkedin: { type: string }
+                portfolio: { type: string }
+                message: { type: string }
+      responses:
+        '201':
+          description: Application submitted
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, applicationId]
+                properties:
+                  success: { type: boolean, const: true }
+                  applicationId: { type: string }
+        '404':
+          description: Role not found or closed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
         '422':
           $ref: '#/components/responses/ValidationFailed'
 
@@ -581,3 +1245,180 @@ components:
         school_name: { type: string, minLength: 1, maxLength: 200 }
         state_city: { type: string, minLength: 1, maxLength: 120 }
         est_students: { type: integer, minimum: 1 }
+    RegisterRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, minLength: 8 }
+        username:
+          type: string
+          minLength: 3
+          maxLength: 40
+          pattern: '^[a-zA-Z0-9_]+$'
+        fullName: { type: string, maxLength: 120 }
+        role:
+          type: string
+          enum: [student, instructor, school_admin]
+          default: student
+    VerificationRequired:
+      type: object
+      required: [success]
+      properties:
+        success: { type: boolean, const: true }
+        data:
+          type: object
+          properties:
+            verificationRequired: { type: boolean }
+            email: { type: string, format: email }
+            codeSent: { type: boolean }
+            challengeId: { type: string, format: uuid }
+            expiresInMinutes: { type: integer }
+            resendSeconds: { type: integer }
+            retryAfter: { type: integer, nullable: true }
+    ChallengeCodeRequest:
+      type: object
+      required: [challengeId, code]
+      properties:
+        challengeId: { type: string, format: uuid }
+        code: { type: string, minLength: 6, maxLength: 6 }
+    ResendCodeRequest:
+      type: object
+      properties:
+        challengeId: { type: string, format: uuid }
+        email: { type: string, format: email }
+        purpose: { type: string, enum: [signup, login, reset] }
+    TwoFactorLoginRequest:
+      type: object
+      required: [challengeToken, code]
+      properties:
+        challengeToken: { type: string }
+        code: { type: string }
+    ResetPasswordRequest:
+      type: object
+      required: [password]
+      properties:
+        token: { type: string }
+        email: { type: string, format: email }
+        code: { type: string, minLength: 6, maxLength: 6 }
+        password: { type: string, minLength: 8 }
+    CreateRecordRequest:
+      oneOf:
+        - type: object
+          required: [kind, name, fileKey, size]
+          properties:
+            kind: { type: string, const: upload }
+            name: { type: string, maxLength: 255 }
+            mime: { type: string }
+            size: { type: integer, minimum: 1 }
+            fileKey: { type: string }
+            duration: { type: number, minimum: 0 }
+            legacy: { type: boolean }
+        - type: object
+          required: [kind, url]
+          properties:
+            kind: { type: string, const: link }
+            name: { type: string, maxLength: 255 }
+            url: { type: string, format: uri }
+        - type: object
+          required: [kind, content]
+          properties:
+            kind: { type: string, const: paste }
+            name: { type: string, maxLength: 255 }
+            content: { type: string, minLength: 1, maxLength: 20000 }
+    ExtractionStatus:
+      type: object
+      required: [success]
+      properties:
+        success: { type: boolean, const: true }
+        data:
+          type: object
+          description: Extraction state varies by lane; see the records extraction guide.
+          additionalProperties: true
+    AskRequest:
+      type: object
+      required: [question]
+      description: Supply exactly one target; recordId, contentKey or folderId.
+      properties:
+        recordId: { type: string, format: uuid }
+        contentKey: { type: string }
+        folderId: { type: string, format: uuid }
+        question: { type: string, minLength: 1 }
+        selection:
+          type: object
+          additionalProperties: true
+    AskResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, const: true }
+        data:
+          type: object
+          required: [answer, citations]
+          properties:
+            answer: { type: string }
+            citations: { type: array, items: { type: object, additionalProperties: true } }
+            messageId: { type: string, nullable: true }
+            passages: { type: integer }
+            coverage:
+              type: object
+              additionalProperties: true
+    SuccessGeneric:
+      type: object
+      required: [success]
+      properties:
+        success: { type: boolean, const: true }
+        data: {}
+        message: { type: string }
+    SuccessGenericData:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, const: true }
+        data: { type: object, additionalProperties: true }
+    LiveSession:
+      type: object
+      properties:
+        id: { type: string }
+        status: { type: string, enum: [live, scheduled, recorded] }
+        platform: { type: string }
+        subject: { type: string }
+        course: { type: string }
+        teacher: { type: string }
+        teacherEmoji: { type: string }
+        date: { type: string }
+        time: { type: string }
+        desc: { type: string }
+        enrolled: { type: integer }
+        present: { type: integer, nullable: true }
+    InstructorCard:
+      type: object
+      additionalProperties: true
+      properties:
+        id: { type: string }
+        name: { type: string }
+        avatarUrl: { type: string, nullable: true }
+        school: { type: string, nullable: true }
+        subjects: { type: array, items: { type: string } }
+        rating: { type: number }
+        students: { type: integer }
+    CourseDetail:
+      type: object
+      additionalProperties: true
+      description: Published course detail; full field list is completed in Phase 2.
+    CareerDepartment:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        color: { type: string }
+        sort: { type: integer }
+    CareerGroup:
+      type: object
+      properties:
+        dept: { type: string }
+        color: { type: string }
+        sort: { type: integer }
+        jobs:
+          type: array
+          items: { type: object, additionalProperties: true }

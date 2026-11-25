@@ -1,7 +1,7 @@
 # API documentation
 
-Status: Phase 1 skeleton. OpenAPI covers a small verified subset; Tier-1
-coverage is completed in Phase 2.
+Status: Phase 2 in progress. OpenAPI now covers auth, records core, public
+catalogue, blog/careers, contact and pilot intake (34 paths, 35 operations).
 
 ## Files
 

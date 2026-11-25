@@ -12,7 +12,10 @@
       "status": "implemented",
       "docs": [
         "01-features/auth/overview.md",
-        "02-api/authentication.md"
+        "02-api/authentication.md",
+        "02-api/endpoints/auth-login.md",
+        "02-api/endpoints/auth-refresh.md",
+        "13-examples/workflows/auth-sign-in.md"
       ],
       "capabilities": [
         "auth.login",
@@ -24,11 +27,19 @@
       "tier": 1,
       "status": "implemented",
       "docs": [
-        "01-features/records/overview.md"
+        "01-features/records/overview.md",
+        "02-api/endpoints/records-list.md",
+        "02-api/endpoints/records-upload-url.md",
+        "02-api/endpoints/records-create.md",
+        "02-api/endpoints/records-extract-status.md",
+        "02-api/endpoints/records-ask.md",
+        "13-examples/workflows/records-upload-and-ask.md",
+        "05-data-models/record.md"
       ],
       "capabilities": [
         "records.list",
         "records.request_upload",
+        "records.create",
         "records.ask"
       ]
     },
@@ -37,7 +48,9 @@
       "tier": 1,
       "status": "beta",
       "docs": [
-        "01-features/courses/overview.md"
+        "01-features/courses/overview.md",
+        "13-examples/workflows/course-video-publish.md",
+        "05-data-models/course.md"
       ],
       "capabilities": [
         "courses.list_published",
@@ -49,7 +62,8 @@
       "tier": 1,
       "status": "implemented",
       "docs": [
-        "01-features/programmes/overview.md"
+        "01-features/programmes/overview.md",
+        "05-data-models/programme.md"
       ],
       "capabilities": [
         "programmes.list_catalogue"
