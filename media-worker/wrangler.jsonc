@@ -19,6 +19,10 @@
     {
       "class_name": "MediaContainer",
       "image": "./Dockerfile",
+      // 2 vCPU / 8 GiB / 16 GB disk. ffmpeg encodes four x264 renditions
+      // at once for 1080p; the default "dev" (1/16 vCPU, 256 MiB) would
+      // OOM immediately. 4K sources need standard-4.
+      "instance_type": "standard-3",
       // Cap the fleet: encode jobs are heavy, and the container's own
       // MAX_CONCURRENT_JOBS lane guard keeps each instance serialized.
       "max_instances": 2

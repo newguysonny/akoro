@@ -56,11 +56,22 @@ root, so its route files carry their own path prefixes.
   and `scheduler.js` create and drive meetings. A `node-cron` tick runs every
   minute to create links and expire sessions; `/api/scheduler/*` can force that
   state manually.
-- Media: `stream.js` uploads the source to R2. With `MEDIA_WORKER_URL` set,
-  `encodeDispatch.js` hands the job to the media container and opens no BullMQ
-  queue; otherwise it enqueues on `video-encoding`. The container/worker calls
-  back through `/api/stream/internal/*` with the shared secret. Certificates use
-  `pdf-lib` and R2; subtitles accept VTT/SRT (SRT becomes VTT).
+- Media: `stream.js` owns the legacy inline upload (≤64 MB) and mounts
+  `stream-presign.js` for the real lane: `POST /api/stream/upload-url` gives the
+  browser a presigned PUT, and `POST /api/stream/upload-complete` HEADs the R2
+  object before dispatching. The bucket must allow cross-origin `PUT` with
+  `content-type` from the instructor/school origins. `video-store.js` persists
+  rows in the `videos` table, so an API restart cannot orphan a long encode.
+  With `MEDIA_WORKER_URL` set, `encodeDispatch.js` hands the job to the media
+  container and opens no BullMQ queue; otherwise it enqueues on
+  `video-encoding`. The container/worker calls back through
+  `/api/stream/internal/*` with the shared secret. Certificates use `pdf-lib`
+  and R2; subtitles accept VTT/SRT (SRT becomes VTT).
+
+  Direct upload contract (large sources):
+  `POST /api/stream/upload-url {courseId,title,fileName,mime,size}` →
+  `{videoId,uploadUrl,method,headers}`; PUT the bytes to `uploadUrl` with
+  `headers`; then `POST /api/stream/upload-complete {videoId}`.
 - Engagement: `course-content.js` owns modules/lessons/progress/quizzes (its
   response/validation helpers are in `course-content-rules.js` and the read-only
   outline/progress views in `course-content-outline.js`);

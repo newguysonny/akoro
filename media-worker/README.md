@@ -13,6 +13,12 @@ immediately**; the caller polls `GET /jobs/:id`. Deepgram, RunPod
 captions, transcripts and the database all stay in the API — this
 container only ever moves bytes and runs ffmpeg.
 
+**Current concurrency:** the edge worker routes every request to one
+`getByName("singleton")` container and `MAX_CONCURRENT_JOBS=1`, so the
+effective limit is **one encode or extract at a time** (even though
+`max_instances` is 2). Fan-out needs both a different edge routing and
+sticky `/jobs/:id` polling.
+
 ## Why
 
 Render's 512 MB free instance OOMs when ffmpeg + a downloaded original +
@@ -43,13 +49,13 @@ npx wrangler secret put API_BASE_URL
 npx wrangler deploy
 ```
 
-The `containers` block in `wrangler.jsonc` (instance type names, binding
-shape) evolves quickly — verify against
-[developers.cloudflare.com/containers](https://developers.cloudflare.com/containers)
-before the first deploy. **Secrets** set via `wrangler secret put` live in
-the Worker environment; make sure the start env of the container picks
-them up per the current docs (or bake non-secret config via `vars`, and
-secrets via your registry's image env).
+The `containers` block in `wrangler.jsonc` sets `instance_type:
+standard-3` (2 vCPU / 8 GiB / 16 GB disk). The default `dev` tier
+(1/16 vCPU, 256 MiB) cannot run ffmpeg. Use `standard-4` for 4K sources.
+**Secrets** set via `wrangler secret put` live in the Worker environment;
+make sure the start env of the container picks them up per the current
+docs (or bake non-secret config via `vars`, and secrets via your
+registry's image env).
 
 ### Anywhere else Docker runs
 
@@ -74,14 +80,17 @@ MEDIA_WORKER_URL=https://akoro-media-worker.<your-subdomain>.workers.dev
   set — the API then downloads only the tiny 16 kHz mp3 + frames from R2
   for Deepgram/captions. Unset → the in-process ffmpeg path remains as
   the fallback (byte-for-byte the old behavior).
-- **Encode lane** (flipped): the stream module's upload dispatches
-  straight to `POST /jobs/encode` when `MEDIA_WORKER_URL` is set — media
-  moves container ↔ R2, never through the API, and no BullMQ encode
-  queue is opened at all. The container then drives the SAME
-  `/api/stream/internal/*` callbacks the old worker did, so the
+- **Encode lane** (flipped): the stream module's `POST /api/stream/upload-url`
+  hands the browser a presigned PUT (bytes go straight to R2), and
+  `POST /api/stream/upload-complete` dispatches `POST /jobs/encode` when
+  `MEDIA_WORKER_URL` is set — media moves container ↔ R2, never through the
+  API, and no BullMQ encode queue is opened at all. The container then drives
+  the SAME `/api/stream/internal/*` callbacks the old worker did, so the
   instructor's status polling and the auto-transcribe hook are unchanged.
   Unset → the BullMQ queue + `akoro-api/worker.js` run exactly as before.
   With it set, stand the old worker down (`VIDEO_WORKER_ENABLED=false`).
+  HLS segment uploads use `R2_UPLOAD_CONCURRENCY` (default 8), not one
+  `Promise.all` for thousands of segments.
 
 ## Endpoints
 

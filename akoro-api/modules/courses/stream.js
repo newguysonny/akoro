@@ -3,18 +3,17 @@
  *
  * Runs on: Railway (API server) — NO FFmpeg required here
  *
- * Option A flow:
- *   1. Instructor uploads video → Railway receives it in memory
- *   2. Railway uploads raw source to R2 staging bucket
- *      (courses/<courseId>/videos/<videoId>/source.mp4)
- *   3. Railway drops a BullMQ job with the R2 source key
- *   4. Worker downloads source from R2, encodes, re-uploads HLS, deletes source
+ * Source upload:
+ *   1. Instructor asks POST /upload-url → presigned PUT to R2
+ *   2. Browser PUTs the file straight to R2 (never through the API)
+ *   3. POST /upload-complete HEADs the object and dispatches the encode
+ *   The legacy multipart /upload remains for ≤64 MB compatibility.
  *
- * Why Option A over writing to TEMP_DIR:
- *   - Railway has no persistent disk — temp files vanish on restart
- *   - R2 staging survives Railway restarts, deploys, and crashes
+ * Why R2 staging:
+ *   - Render has no persistent disk — temp files vanish on restart
+ *   - R2 staging survives restarts, deploys, and crashes
  *   - Worker can run on any VPS anywhere without a shared filesystem
- *   - R2 → Hetzner download is fast (~15s) vs Railway → Hetzner (~60-120s)
+ *   - R2 → container download is fast
  *
  * Usage in app.js:
  *   import streamRouter from "./routes/stream.js";
@@ -23,9 +22,8 @@
  * ─── Sections ────────────────────────────────────────────────────────────────
  *  § IMPORTS
  *  § CONFIG
- *  § VIDEO STORE         in-memory — swap for Postgres
  *  § HELPERS
- *  § MULTER              memory-storage, 50 GB cap
+ *  § MULTER              legacy inline path (≤64 MB)
  *  § R2 CLIENT           staging upload + signed URLs + HLS delete
  *  § BULLMQ PRODUCER     drops encode jobs into Redis queue
  *  § STREAM HANDLERS     upload, status, watch, delete, internal callbacks
@@ -56,46 +54,24 @@ import {
 }                                         from "@aws-sdk/client-s3";
 import { getSignedUrl }                   from "@aws-sdk/s3-request-presigner";
 import path                               from "path";
-import { fileURLToPath }                  from "url";
 import { authenticateToken, requireRole } from "../auth/index.js";
 import db                                 from "../../db.js";
 import { autoTranscribeContent }          from "../records/index.js";
 import { mediaWorkerEnabled }             from "../records/index.js";
 import { dispatchEncode }                 from "./encodeDispatch.js";
+import { VideoStore }                     from "./video-store.js";
+import { canManageCourse }                from "./courseAccess.js";
+import makeStreamUploadRouter, {
+  MAX_INLINE_BYTES,
+  ALLOWED_VIDEO_MIME,
+}                                         from "./stream-presign.js";
 import { r2Send } from "../../lib/r2Breaker.js";
 import { requireSharedSecret }            from "../../lib/safeCompare.js";
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // ─── § CONFIG ─────────────────────────────────────────────────────────────────
 
 const R2_BUCKET  = process.env.R2_BUCKET_NAME ?? "";
-const R2_PUBLIC  = process.env.R2_PUBLIC_URL  ?? "";
 const R2_ENABLED = !!(process.env.R2_ACCESS_KEY_ID && R2_BUCKET);
-
-// ─── § VIDEO STORE ────────────────────────────────────────────────────────────
-// Swap array + helpers for Postgres queries without touching anything else.
-
-let _videos   = [];
-const now     = () => new Date().toISOString();
-
-const VideoStore = {
-  list:   (courseId) => _videos.filter((v) => v.courseId === courseId),
-  get:    (id)       => _videos.find((v) => v.id === id) ?? null,
-  create: (data)     => { _videos.push(data); return data; },
-  update: (id, data) => {
-    const i = _videos.findIndex((v) => v.id === id);
-    if (i === -1) return null;
-    _videos[i] = { ..._videos[i], ...data, id, updatedAt: now() };
-    return _videos[i];
-  },
-  delete: (id) => {
-    const i = _videos.findIndex((v) => v.id === id);
-    if (i === -1) return false;
-    _videos.splice(i, 1);
-    return true;
-  },
-};
 
 // ─── § HELPERS ────────────────────────────────────────────────────────────────
 
@@ -112,22 +88,14 @@ const internalGuard = (req, res) => { let ok = false; requireSharedSecret("INTER
 const res404 = (res, msg)             => res.status(404).json({ success: false, message: msg });
 
 // ─── § MULTER ─────────────────────────────────────────────────────────────────
-// Memory storage — buffer goes straight to R2, never written to Railway disk.
-// 50 GB limit supports 4K source files.
+// Legacy inline path — capped small. Real course videos use the presigned
+// direct-to-R2 lane (POST /upload-url + PUT + POST /upload-complete).
 
 const upload = multer({
   storage: multer.memoryStorage(),
-  // 2 GB, not 50: this is a MEMORY buffer on a 512 MB free instance, and
-  // every proxied byte later leaves for R2 through Render's METERED egress
-  // (the API-PUT path is the expensive one; presigned direct-to-R2 uploads
-  // are the fix before this endpoint ever ships to real instructors).
-  limits:  { fileSize: 2 * 1024 * 1024 * 1024 },
+  limits:  { fileSize: MAX_INLINE_BYTES },
   fileFilter: (_req, file, cb) => {
-    const ALLOWED = [
-      "video/mp4", "video/quicktime", "video/x-msvideo",
-      "video/webm", "video/x-matroska", "video/mpeg",
-    ];
-    ALLOWED.includes(file.mimetype)
+    ALLOWED_VIDEO_MIME.has(file.mimetype)
       ? cb(null, true)
       : cb(new Error(`Unsupported video type: ${file.mimetype}`), false);
   },
@@ -179,12 +147,13 @@ const uploadSourceToR2 = async (buffer, courseId, videoId, ext) => {
 
 /**
  * generateSignedSourceUrl
- * Creates a 1-hour presigned GET URL so the worker can download the source.
+ * Creates a 6-hour presigned GET URL so the worker can download the source.
+ * A 2 GB source on a slow container link can outlast a 1-hour URL.
  * Called once per job via GET /internal/source-url/:videoId.
  */
 const generateSignedSourceUrl = async (sourceKey) => {
   const cmd = new GetObjectCommand({ Bucket: R2_BUCKET, Key: sourceKey });
-  return getSignedUrl(r2, cmd, { expiresIn: 3600 }); // 1 hour
+  return getSignedUrl(r2, cmd, { expiresIn: 6 * 60 * 60 });
 };
 
 /**
@@ -197,11 +166,13 @@ const deleteR2Prefix = async (prefix) => {
     new ListObjectsV2Command({ Bucket: R2_BUCKET, Prefix: prefix })
   );
   if (!Contents?.length) return;
-  await Promise.all(
-    Contents.map((obj) =>
-      r2Send(r2, new DeleteObjectCommand({ Bucket: R2_BUCKET, Key: obj.Key }))
-    )
-  );
+  for (let i = 0; i < Contents.length; i += 16) {
+    await Promise.all(
+      Contents.slice(i, i + 16).map((obj) =>
+        r2Send(r2, new DeleteObjectCommand({ Bucket: R2_BUCKET, Key: obj.Key }))
+      )
+    );
+  }
 };
 
 // ─── § BULLMQ PRODUCER ────────────────────────────────────────────────────────
@@ -227,14 +198,15 @@ const encodingQueue = mediaWorkerEnabled() ? null : new Queue("video-encoding", 
 const streamHandlers = {
 
   /**
-   * POST /api/stream/upload
+   * POST /api/stream/upload  (legacy inline path, ≤ MAX_INLINE_BYTES)
    *
-   * Option A steps:
-   *   1. Receive video buffer in memory (multer)
-   *   2. Upload raw source to R2 staging  → private key stored on video record
-   *   3. Create video record (status: queued)
-   *   4. Queue BullMQ job with sourceKey
-   *   5. Return 202 — encoding is fully async on the worker
+   *   1. Receive the small video buffer in memory (multer)
+   *   2. Upload raw source to R2 staging
+   *   3. Create the Postgres video row (status: queued)
+   *   4. Queue/dispatch the encode
+   *   5. Return 202 — encoding is fully async
+   *
+   * Large sources use /upload-url + PUT + /upload-complete instead.
    */
   upload: asyncHandler(async (req, res) => {
     const {
@@ -250,6 +222,7 @@ const streamHandlers = {
     if (!title)    return res400(res, "title is required");
     if (!R2_ENABLED)
       return res400(res, "R2 is not configured — set R2_ACCESS_KEY_ID and R2_BUCKET_NAME in .env");
+    if (!(await canManageCourse(req.user, courseId))) return res403(res, "You do not own this course");
 
     const videoId = crypto.randomUUID();
     const ext     = path.extname(req.file.originalname) || ".mp4";
@@ -260,7 +233,7 @@ const streamHandlers = {
     console.log(`[stream] ✅ Source staged  key=${sourceKey}`);
 
     // Step 2 — create video record
-    VideoStore.create({
+    await VideoStore.create({
       id:               videoId,
       courseId,
       title,
@@ -275,8 +248,6 @@ const streamHandlers = {
       fileSize:         req.file.size,
       encodingStatus:   "queued",
       encodingProgress: 0,
-      createdAt:        now(),
-      updatedAt:        now(),
     });
 
     // Step 3 — dispatch the encode. Container mode: one HTTPS call; the
@@ -301,10 +272,9 @@ const streamHandlers = {
         console.log(`[stream] 📤 Job dispatched to media worker  videoId=${videoId}  jobId=${jobId}`);
       } catch (err) {
         console.error(`[stream] media worker dispatch failed:`, String(err?.message || err).slice(0, 200));
-        VideoStore.update(videoId, {
+        await VideoStore.update(videoId, {
           encodingStatus: "failed",
           errorMessage: `Encoding could not be dispatched: ${String(err?.message || err).slice(0, 160)}`,
-          updatedAt: now(),
         });
         return res202(res, {
           videoId,
@@ -330,7 +300,7 @@ const streamHandlers = {
    * Returns live queue state alongside the stored record.
    */
   status: asyncHandler(async (req, res) => {
-    const video = VideoStore.get(req.params.videoId);
+    const video = await VideoStore.get(req.params.videoId);
     if (!video) return res404(res, `Video ${req.params.videoId} not found`);
 
     let activeJob = null;
@@ -346,7 +316,7 @@ const streamHandlers = {
       encodingProgress: video.encodingProgress,
       videoUrl:         video.videoUrl,
       duration:         video.duration,
-      variants:         video.variants ? JSON.parse(video.variants) : null,
+      variants:         video.variants ?? null,
       queueState:       activeJob?.state        ?? null,
       queueAttempts:    activeJob?.attemptsMade ?? null,
     });
@@ -358,7 +328,7 @@ const streamHandlers = {
    * Only works once encoding is complete.
    */
   watch: asyncHandler(async (req, res) => {
-    const video = VideoStore.get(req.params.videoId);
+    const video = await VideoStore.get(req.params.videoId);
     if (!video) return res404(res, "Video not found");
 
     if (video.encodingStatus !== "completed")
@@ -381,8 +351,9 @@ const streamHandlers = {
    * (source staging file + all encoded HLS segments in one prefix wipe).
    */
   delete: asyncHandler(async (req, res) => {
-    const video = VideoStore.get(req.params.videoId);
+    const video = await VideoStore.get(req.params.videoId);
     if (!video) return res404(res, "Video not found");
+    if (!(await canManageCourse(req.user, video.courseId))) return res403(res, "You do not own this course");
 
     if (R2_ENABLED) {
       // Wipe entire video prefix — source + HLS in one shot
@@ -393,7 +364,7 @@ const streamHandlers = {
       console.log(`[stream] 🗑  R2 objects deleted  prefix=${videoPrefix}`);
     }
 
-    VideoStore.delete(video.id);
+    await VideoStore.delete(video.id);
     res200(res, { message: `Video ${video.id} deleted` });
   }),
 
@@ -403,7 +374,7 @@ const streamHandlers = {
    * Students only see completed; instructors/admin see all statuses.
    */
   listByCourse: asyncHandler(async (req, res) => {
-    const videos  = VideoStore.list(req.params.courseId);
+    const videos  = await VideoStore.list(req.params.courseId);
     const visible = req.user?.role === "student"
       ? videos.filter((v) => v.encodingStatus === "completed")
       : videos;
@@ -418,7 +389,7 @@ const streamHandlers = {
   getSourceUrl: asyncHandler(async (req, res) => {
     if (!internalGuard(req, res)) return;
 
-    const video = VideoStore.get(req.params.videoId);
+    const video = await VideoStore.get(req.params.videoId);
     if (!video?.sourceKey) return res404(res, "Source file not found");
 
     const signedUrl = await generateSignedSourceUrl(video.sourceKey);
@@ -440,7 +411,7 @@ const streamHandlers = {
     const { videoId, ...data } = req.body;
     if (!videoId) return res400(res, "videoId is required");
 
-    const updated = VideoStore.update(videoId, data);
+    const updated = await VideoStore.update(videoId, data);
     if (!updated) return res404(res, `Video ${videoId} not found`);
 
     console.log(`[stream] 📥 Worker update  videoId=${videoId}  status=${data.encodingStatus ?? `${data.encodingProgress}%`}`);
@@ -478,6 +449,9 @@ export { VideoStore };
 
 const router = Router();
 
+// Direct-to-R2 lane: /upload-url + /upload-complete (large sources).
+router.use(makeStreamUploadRouter({ r2, bucket: R2_BUCKET, encodingQueue }));
+
 // Instructor / admin — upload + manage
 router.post  ("/upload",                       authenticateToken, requireRole(["instructor", "admin"]), upload.single("video"), streamHandlers.upload);
 router.get   ("/status/:videoId",              authenticateToken, requireRole(["instructor", "admin"]), streamHandlers.status);
@@ -494,29 +468,22 @@ router.post("/internal/update",                streamHandlers.internalUpdate);
 export default router;
 
 /**
- * ── Full Option A data flow ───────────────────────────────────────────────────
+ * ── Direct upload + encode flow ──────────────────────────────────────────────
  *
- *  Instructor                Railway (stream.js)            Redis           Worker (worker.js)          R2
- *  ──────────                ───────────────────            ─────           ──────────────────          ──
- *  POST /upload ──────────►  multer (memory)
- *                            uploadSourceToR2() ──────────────────────────────────────────────────► source.mp4 (private)
- *                            VideoStore.create()
- *                            encodingQueue.add() ────────► job{sourceKey}
- *                            202 ◄──────────────
- *                                                           job ◄────────── Worker picks up job
- *                                                                           GET /internal/source-url
- *                            generateSignedUrl() ◄──────────────────────── x-internal-secret
- *                            signedUrl ──────────────────────────────────►
- *                                                                           fetch(signedUrl) ────────► download source.mp4
- *                                                                           FFmpeg encode
- *                                                                           uploadDirToR2() ─────────► master.m3u8 + .ts files (public)
- *                                                                           deleteR2Source() ────────► delete source.mp4
- *                                                                           POST /internal/update
- *                            VideoStore.update() ◄──────────────────────── { videoUrl, status: completed }
+ *  Instructor                         API (stream.js)              Postgres        R2 / encoder
+ *  ──────────                         ───────────────              ────────        ────────────
+ *  POST /upload-url ────────────────► canManageCourse
+ *                                     VideoStore.create() ───────► videos
+ *                                     presign PUT ─────────────────────────────────► source URL
+ *  PUT source ─────────────────────────────────────────────────────────────────────► source.mp4
+ *  POST /upload-complete ───────────► HEAD source ─────────────────────────────────► source.mp4
+ *                                     VideoStore.update() ───────► videos
+ *                                     dispatch encode / queue ──────────────────────► media worker
+ *  202 ◄─────────────────────────────
  *
- *  Student polls status ──► GET /status/:videoId → encodingProgress 0→100
- *  Student watches ───────► GET /videos/:videoId → { url: "https://cdn.akoro.app/..." }
- *                            Player fetches master.m3u8 directly from R2/CDN
+ *  Worker: download source, FFmpeg HLS, upload segments to R2, delete source,
+ *          POST /internal/update (same secret-guarded callbacks as before).
+ *  Student: GET /status/:videoId (progress) → GET /videos/:videoId (stream URL).
  *
  * ── Database table (Postgres) ─────────────────────────────────────────────────
  *

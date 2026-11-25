@@ -27,7 +27,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 /* ── source pins ─────────────────────────────────────────────────────────── */
 
 const read = (p) => readFileSync(join(here, p), "utf8");
-const [ffmpegSrc, encodeSrc, indexSrc, jobsSrc, r2Src, cfSrc,
+const [ffmpegSrc, encodeSrc, indexSrc, jobsSrc, r2Src, cfSrc, wranglerSrc,
   avLibSrc, mediaClientSrc, apiEnvExample] = await Promise.all([
   read("../src/ffmpeg.js"),
   read("../src/encode.js"),
@@ -35,6 +35,7 @@ const [ffmpegSrc, encodeSrc, indexSrc, jobsSrc, r2Src, cfSrc,
   read("../src/jobs.js"),
   read("../src/r2.js"),
   read("../cf/worker.js"),
+  read("../wrangler.jsonc"),
   read("../../akoro-api/modules/records/avTranscribeLib.js"),
   read("../../akoro-api/modules/records/mediaClient.js"),
   read("../../akoro-api/.env.example"),
@@ -136,6 +137,22 @@ test("the HTTP surface: auth, 202 + poll, and jobs fail gracefully without ffmpe
   }
 });
 
+test("R2 uploads are capped, not a 2,400-PUT Promise.all", async () => {
+  const { mapLimit, R2_UPLOAD_CONCURRENCY } = await import("../src/r2.js");
+  assert.ok(R2_UPLOAD_CONCURRENCY >= 1 && R2_UPLOAD_CONCURRENCY <= 32, "bounded default");
+  let active = 0;
+  let peak = 0;
+  await mapLimit(Array.from({ length: 25 }, (_, i) => i), 3, async () => {
+    active += 1;
+    peak = Math.max(peak, active);
+    await new Promise((r) => setTimeout(r, 2));
+    active -= 1;
+  });
+  assert.equal(peak, 3, "never more than the configured ceiling");
+  assert.match(r2Src, /mapLimit\(files, R2_UPLOAD_CONCURRENCY/, "uploadDirToR2 uses the cap");
+  assert.doesNotMatch(r2Src, /Promise\.all\(files\.map/, "no unbounded per-segment fan-out");
+});
+
 test("the lane guard serializes heavy jobs and answers 409-shaped when full", async () => {
   const { startJob, getJob } = await import("../src/jobs.js");
   process.env.MAX_CONCURRENT_JOBS = "1";
@@ -200,6 +217,7 @@ test("the container is wired: docs, health, R2, and the API knows the URL", () =
   assert.match(indexSrc, /express\.json\(\{ limit: "256kb" \}\)/, "small bodies only — media never comes through the API");
   assert.match(r2Src, /ACL: "public-read"/, "HLS artifacts stay publicly streamable");
   assert.match(jobsSrc, /MAX_CONCURRENT_JOBS/, "the lane is bounded");
+  assert.match(wranglerSrc, /"instance_type": "standard-3"/, "ffmpeg needs real vCPU/RAM, not the dev default");
   assert.match(apiEnvExample, /MEDIA_WORKER_URL=/, "the API's env documents the worker");
 });
 

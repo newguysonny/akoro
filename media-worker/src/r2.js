@@ -48,11 +48,38 @@ export async function uploadFileAt(localPath, key) {
   return `${R2_PUBLIC}/${key}`;
 }
 
+/**
+ * Run async work with a fixed ceiling. A one-hour HLS rendition is ~600
+ * segments; four renditions means ~2,400 files. `Promise.all` opened all
+ * 2,400 PUTs at once and could exhaust memory/sockets (and R2 rate limits).
+ */
+export async function mapLimit(items, limit, fn) {
+  const list = Array.from(items);
+  const max = Math.max(1, Number(limit) || 1);
+  let next = 0;
+  let stopped = false;
+  const workers = Array.from({ length: Math.min(max, list.length) }, async () => {
+    while (!stopped && next < list.length) {
+      const i = next++;
+      try {
+        await fn(list[i], i);
+      } catch (err) {
+        stopped = true;
+        throw err;
+      }
+    }
+  });
+  await Promise.all(workers);
+}
+
+export const R2_UPLOAD_CONCURRENCY = Math.max(1, Number(process.env.R2_UPLOAD_CONCURRENCY) || 8);
+
 /** Upload every file in localDir under r2Prefix; returns the public master.m3u8 URL. */
 export async function uploadDirToR2(localDir, r2Prefix) {
   const { readdir } = await import("node:fs/promises");
   const files = await readdir(localDir);
-  await Promise.all(files.map((file) => uploadFileAt(path.join(localDir, file), `${r2Prefix}/${file}`)));
+  await mapLimit(files, R2_UPLOAD_CONCURRENCY,
+    (file) => uploadFileAt(path.join(localDir, file), `${r2Prefix}/${file}`));
   return `${R2_PUBLIC}/${r2Prefix}/master.m3u8`;
 }
 

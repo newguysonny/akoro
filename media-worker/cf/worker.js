@@ -28,6 +28,7 @@ export class MediaContainer extends Container {
       R2_PUBLIC_URL:        env.R2_PUBLIC_URL        ?? "",
       API_BASE_URL:         env.API_BASE_URL         ?? "",
       MAX_CONCURRENT_JOBS:  "1",
+      R2_UPLOAD_CONCURRENCY: env.R2_UPLOAD_CONCURRENCY ?? "8",
     };
   }
 
