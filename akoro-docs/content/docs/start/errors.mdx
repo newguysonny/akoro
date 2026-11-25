@@ -1,0 +1,44 @@
+---
+title: Errors and rate limits
+description: Error envelopes, status codes and retry rules.
+---
+
+# Errors and rate limits
+
+Akoro does not yet use one universal error envelope across every module. The
+public API is being normalised; use the returned body and status.
+
+Common shapes:
+
+```json
+{
+  "success": false,
+  "message": "Human-readable message",
+  "code": "optional_machine_code"
+}
+```
+
+Validation failures may include `errors` or `fields`.
+
+## Status codes
+
+| Status | Meaning | Retry |
+| --- | --- | --- |
+| 400 | Invalid request | No |
+| 401 | Missing/invalid session | Refresh or sign in |
+| 403 | Not allowed | No |
+| 404 | Not found or not visible | No |
+| 409 | Conflict or busy lane | Only when documented |
+| 413 | Too large | No |
+| 422 | Validation failed | No |
+| 429 | Rate limited | After `Retry-After` |
+| 500 | Server error | Maybe, with backoff |
+| 502/503 | Dependency unavailable | Yes, with backoff |
+| 504 | Timeout | Verify side effect before retrying writes |
+
+## Rules
+
+- Never retry permissions or validation errors unchanged.
+- Retry only idempotent operations or writes with an idempotency key.
+- After a timeout, verify the side effect before retrying.
+- Do not expose internal stack traces to users.

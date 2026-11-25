@@ -1,0 +1,51 @@
+---
+title: Authentication
+description: Portal-scoped sessions, cookies, bearer tokens and 2FA.
+---
+
+# Authentication
+
+## Portals
+
+Send the portal header on every request:
+
+```http
+X-Akoro-Portal: student
+```
+
+Supported values: `student`, `instructor`, `admin`, `school`, `site`, `agent`,
+`business`. The default is `student`.
+
+## Cookies
+
+Browser sessions use HttpOnly cookies:
+
+- `akoro_access_<portal>` — short-lived access token.
+- `akoro_refresh_<portal>` — rotating refresh token.
+
+The refresh cookie is scoped to `/api/auth/refresh`.
+
+## Bearer tokens
+
+Sign-in and refresh also return `accessToken` and `refreshToken` in the body for
+mobile and server-to-server clients.
+
+```http
+Authorization: Bearer <accessToken>
+```
+
+## 2FA and OAuth
+
+- `POST /api/auth/2fa/login` completes a 2FA challenge.
+- `POST /api/auth/2fa/setup` starts setup with a setup token.
+- `GET /api/auth/google` and `/api/auth/google/callback` implement Google OAuth.
+
+## Refresh rotation
+
+`POST /api/auth/refresh` rotates the refresh token. Reuse outside the short
+grace window revokes the token family.
+
+## Related
+
+- [Getting started](/docs/start/getting-started)
+- [Errors](/docs/start/errors)

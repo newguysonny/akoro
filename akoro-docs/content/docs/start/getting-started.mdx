@@ -1,0 +1,59 @@
+---
+title: Getting started
+description: Make your first authenticated Akoro API request.
+---
+
+# Getting started
+
+## Base URL
+
+```text
+https://api.akoro.ng/api
+```
+
+The canonical `/api/v1` path is planned; current examples use `/api`.
+
+## 1. Sign in
+
+Use the portal header for the app you are integrating with.
+
+```bash
+curl -i -X POST https://api.akoro.ng/api/auth/login \
+  -H 'Content-Type: application/json' \
+  -H 'X-Akoro-Portal: student' \
+  -d '{"email":"learner@example.com","password":"your-password"}'
+```
+
+A successful response sets `akoro_access_<portal>` and
+`akoro_refresh_<portal>` cookies and returns access/refresh tokens for mobile
+clients.
+
+Some accounts require email verification or 2FA before a session is issued.
+Follow the returned challenge.
+
+## 2. Call an authenticated endpoint
+
+```bash
+curl https://api.akoro.ng/api/records \
+  -H 'X-Akoro-Portal: student' \
+  -b cookies.txt
+```
+
+## 3. Refresh before expiry
+
+```bash
+curl -X POST https://api.akoro.ng/api/auth/refresh \
+  -H 'X-Akoro-Portal: student' \
+  -b cookies.txt
+```
+
+## 4. Handle errors
+
+Every failure includes a status and a message; see [Errors](/docs/start/errors).
+Do not retry validation, permission or not-found errors.
+
+## Next
+
+- [Authentication](/docs/start/authentication)
+- [Uploads](/docs/build/uploads)
+- [API reference](/docs/reference/api)
