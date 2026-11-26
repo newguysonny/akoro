@@ -1,0 +1,147 @@
+---
+title: Study Prep
+description: Goal-driven exam preparation with a confirmed plan, engine-scored practice and adaptive transitions.
+---
+
+# Study Prep
+
+Study Prep is Akoro's goal-driven preparation surface. A learner states a goal,
+subject, class level and exam board, and an agent proposes a topic plan that
+the learner confirms or adjusts. The learner then practises topics, submits
+answers and lets the learning engine score the attempt and choose the next
+transition. The engine, not the agent, owns scoring and topic advancement.
+
+> **Status: beta.** Gated by the `AKORO_STUDY_PREP_ENABLED` flag (on by
+> default). The surface is implemented but broad, and some media states are
+> still partial. Treat these endpoints as the current contract, not a stable
+> one.
+
+## What it does
+
+- Turns a goal into a costed topic plan the learner must approve.
+- Generates practice per topic in `diagnostic` or `retest` mode.
+- Scores submissions deterministically and records teaching evidence.
+- Enforces teach-back and confirmation gates before a topic can advance.
+- Pauses on money limits and resumes only when the learner approves more coins.
+
+## Who it is for
+
+Learners preparing for an exam, and the agents that act on their behalf. The
+harness validates every move an agent proposes; agents observe rejection codes
+and adapt rather than retrying the identical call.
+
+## The flow
+
+1. Create a session with a goal, subject, class level and exam board.
+2. Review the proposed topic plan and confirm it, or adjust it first.
+3. Practise a topic in diagnostic mode.
+4. Submit answers; the engine scores the attempt.
+5. The engine returns the next eligible action, including teach-back gates.
+6. Continue, defer or conclude through the session action routes.
+
+## Endpoints
+
+All paths below are mounted under `/api/adaptive/study-prep` and require an
+authenticated learner session.
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `POST` | `/sessions` | Create a session with `{goal, subject, classLevel, examBoard}` and run one planning step. Returns 201. |
+| `GET` | `/sessions` | Restore the learner's active session, or `null` when none exists. |
+| `GET` | `/sessions/:id` | The single learner-visible session view. |
+| `POST` | `/sessions/:id/plan` | Replan, running a planning step in the `replanning` state. |
+| `POST` | `/sessions/:id/confirm` | Approve the plan card. |
+| `POST` | `/sessions/:id/adjust` | Drop or reorder topics before confirming, with `{drop, order}`. |
+| `POST` | `/sessions/:id/approve-more` | Approve more coins so the plan can pass its current balance. |
+| `POST` | `/sessions/:id/topics/:topicId/practice` | Generate practice for a topic, with `{mode: "diagnostic" or "retest"}`. Returns 201. |
+| `POST` | `/sessions/:id/topics/:topicId/submit` | Submit `{answers}`; the engine scores and returns `score`, `correct`, `total` and `passed`. |
+| `POST` | `/sessions/:id/topics/:topicId/teach-back-done` | Satisfy the teach-back human gate for a topic. |
+| `POST` | `/sessions/:id/topics/:topicId/strategy` | Accept or decline a strategy the agent offered, with `{strategy, accepted}`. |
+| `POST` | `/sessions/:id/topics/:topicId/teaching/approve` | Approve the teaching session offered for a topic. |
+| `GET` | `/teaching-sessions` | List the learner's open teaching sessions waiting on the dashboard. |
+| `POST` | `/sessions/:id/next` | Ask the engine what happens now. |
+| `POST` | `/sessions/:id/advance` | Advance to the next topic. |
+| `POST` | `/sessions/:id/defer` | Set the current topic aside for later. |
+| `POST` | `/sessions/:id/retry-deferred` | Retry a deferred topic. |
+| `POST` | `/sessions/:id/conclude` | Conclude the session and return a summary. |
+| `POST` | `/sessions/:id/pause` | Pause the session, returning a pause message. |
+| `POST` | `/sessions/:id/resume` | Resume a paused session. |
+| `POST` | `/sessions/:id/cancel` | Cancel the session. |
+
+## Session and topic states
+
+The session state machine:
+
+```text
+planning -> awaiting_confirmation -> topic_active
+                                   -> replanning
+                                   -> paused -> topic_active
+                                   -> abandoned / cancelled
+```
+
+The topic state machine:
+
+```text
+queued -> active -> diagnostic_ready -> diagnostic
+        -> intervention_required -> awaiting_teaching -> retest_ready -> retest
+        -> capped_out / deferred / flagged_gap
+```
+
+Where a scored attempt leaves a topic:
+
+| Result | Topic state |
+| --- | --- |
+| Passed | `understood` |
+| Failed at the attempt cap | `capped_out` |
+| Failed below the cap | `intervention_required` |
+
+Only one active Study Prep session per learner is allowed by a partial unique
+index.
+
+## Decision rules
+
+| Condition | Action |
+| --- | --- |
+| No active session | Create one. |
+| Plan needs adjustment | Use `/adjust` before confirming. |
+| Plan exceeds the coin balance | Ask the learner to approve more, or adjust. |
+| Practice not started | Start with `diagnostic`; use `retest` only from `retest_ready`. |
+| Score not passing | Follow the engine's next action; do not skip mastery. |
+| `409` or `422` | Read the returned machine-readable code; do not guess a transition. |
+
+The harness hard caps the plan at `MAX_TOPICS` (12 topics) and validates that
+every proposed topic is in the approved syllabus, appears once, and respects
+prerequisite order. Attempts default to a maximum of 3 and a pass threshold of
+0.70, both overridable by policy.
+
+## Coins and billing
+
+The plan is costed in coins. A plan that exceeds the learner's balance surfaces
+as a pause; the learner approves more coins through `/approve-more` before the
+session continues. Money-adjacent pauses surface as `402 insufficient_balance`.
+
+## Failure and retry
+
+- `study_prep_disabled` means the feature is off; stop.
+- A `409` on an invalid state means the session moved meanwhile; refresh the
+  session view before retrying.
+- Never submit the same answers twice; the engine owns scoring.
+- Do not retry a rejected transition without changing the cause.
+- Do not mark mastery from a conversational claim, bypass a teach-back gate, or
+  create a second active session for the same goal.
+
+## Permissions
+
+- Sessions and evidence are learner-scoped; a learner can only see and act on
+  their own sessions.
+- The harness and engine are the writers of state; the learner writes only
+  through confirm, adjust, answer and teach-back actions.
+- Agents may propose transitions, but the engine validates them.
+
+## Related
+
+- [Learning overview](/docs/learn/overview)
+- [Teaching sessions](/docs/learn/teaching-sessions)
+- [Exam Prep](/docs/learn/exam-prep)
+- [Practice and assessments](/docs/learn/practice)
+- [Learner app](/docs/apps/learner)

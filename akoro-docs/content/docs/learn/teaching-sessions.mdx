@@ -1,0 +1,169 @@
+---
+title: Teaching sessions
+description: The adaptive lesson ladder, syllabus grounding and phased teaching sessions.
+---
+
+# Teaching sessions
+
+Teaching sessions are the adaptive lessons the engine runs with a learner. A
+learner teaches a Student AI Agent (the protégé) while NaNa Esumai coaches the
+teaching on the side, or the learner is taught directly by NaNa in guide mode.
+The engine draws a foundation-to-advanced lesson ladder, walks the syllabus,
+and gates every advance on observed evidence.
+
+> **Status: beta.** Live session turns run over the WebSocket; the REST surface
+> below exposes configuration, session lists, history and the teacher review
+> queue.
+
+## What it does
+
+- **Lesson ladder** — an ordered list of subtopics (plus objectives) that
+  structures a session, resolved from the most trustworthy source available.
+- **Syllabus grounding** — a WAEC/JAMB/NECO knowledge base that grounds ladder
+  generation and agent retrieval.
+- **Phased progression** — a deterministic gate that moves a session forward
+  only on evidence, never on a model's say-so.
+- **Assessment gates** — a short check (Sergeant) on what the learner just
+  taught, before the session can advance.
+
+## Who it is for
+
+Learners who study by teaching a protégé or by being taught by NaNa, and
+teachers or school admins who review and improve lesson ladders for their
+school.
+
+## The lesson ladder
+
+A ladder is the foundation-to-advanced list of short subtopics that structures
+a session. It resolves from three provenance tiers and is cached per school,
+class, subject and topic:
+
+| Tier | Source | Status |
+| --- | --- | --- |
+| `scheme_of_work` | The school's own teacher-authored plan | Auto-approved |
+| `syllabus` | WAEC/JAMB/NECO grounding via retrieval | Pending review |
+| `ai` | Model knowledge only | Pending review |
+
+Review never blocks a learner: a freshly generated ladder is served immediately
+with its provenance tier. Only an explicitly rejected ladder is discarded and
+regenerated. Teachers and school admins approve, reject or edit ladders through
+the review routes below; a teacher edit becomes the canonical ladder.
+
+## Syllabus grounding
+
+The syllabus knowledge base ingests a structured subject document (JSON, or a
+PDF converted to JSON by text or vision extraction) into `edu.syllabus_*`
+tables with embedded chunks, and serves structured outlines and semantic search
+to agents. Ingestion is idempotent per exam and subject slug, and is
+admin-only.
+
+## Phases and the progression gate
+
+A session moves through fixed phases:
+
+| Phase | Meaning |
+| --- | --- |
+| `PHASE_1` | What does the Student Agent already know |
+| `PHASE_2` | Must-know parts |
+| `PHASE_3` | The Student Agent teaches it back |
+| `PHASE_4` | Push a little further |
+| `MASTERY` | Mastery |
+
+The progression gate is deterministic. Advancing a subtopic requires evidence
+that the learner may advance plus a next subtopic. Reaching `MASTERY` requires
+advancement, no remaining subtopic, and every concept verified; a missing
+evidence gate cannot be talked past.
+
+## Next-action rules
+
+Inside a turn, the observed dialogue move decides the guide's next action:
+
+| Dialogue move | Next action |
+| --- | --- |
+| `clarify_core` | `DIG_DEEPER` |
+| `repair_misconception` | `CLEAR_MISTAKE` |
+| `apply_in_context` | `USE_ANALOGY` |
+| `connect_and_explain` | `ONE_MORE_PUSH` |
+| `stretch_transfer` | `CHALLENGE` |
+| `consolidate_and_advance` | `GAP_CLOSED` |
+| `synthesise` | `TRIGGER_RECALL` |
+
+Outside a turn, the learner model decides, with the misconception signal
+central: an active misconception returns `CLEAR_MISTAKE`; no history or very low
+understanding returns `DIG_DEEPER`; high confusion returns `USE_ANALOGY`; higher
+understanding steps up through `ONE_MORE_PUSH`, `NEXT_SUBTOPIC`, `NAME_IT`, then
+`SPACED_REVIEW`, `TRIGGER_RECALL` or `GAP_CLOSED` as mastery approaches one.
+
+## Teaching workflow lifecycle
+
+A teaching session is also a workflow, so the rest of the app can see and wait
+on it:
+
+```text
+proposed -> scheduled -> teaching_active <-> adapt_strategy
+                       -> assessment -> completed
+                       -> cancelled / abandoned
+```
+
+A proposal offered in Study Prep's chat confirms itself after 60 seconds
+without a tap. The dashboard lists open sessions in `scheduled`,
+`teaching_active` and `adapt_strategy`.
+
+## Endpoints
+
+Configuration, session lists and history are REST; the live session start,
+message, assessment and summary events run over the WebSocket.
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `POST` | `/api/adaptive/teaching/configure` | Generate subtopics and objectives from `{topic, subject}`. No write. |
+| `POST` | `/api/adaptive/teaching/reference` | Extract a compact text reference from a PDF, TXT, Markdown or CSV upload. |
+| `GET` | `/api/adaptive/teaching/sessions` | The learner's past adaptive sessions, paged with `limit` and `cursor`. |
+| `GET` | `/api/adaptive/teaching/sessions/:sessionId/history` | Faded block history and resume position for continuation. |
+| `GET` | `/api/adaptive/teaching/ladders` | Teacher review queue, default `status=pending_review`. |
+| `PATCH` | `/api/adaptive/teaching/ladders/:id` | Approve or reject a ladder, optionally editing `subtopics` and `objectives`. |
+| `POST` | `/api/teaching/workflows` | Create a direct teaching workflow from `{topic, subject, mode, focus}`. |
+| `GET` | `/api/teaching/workflows/:id` | The owner's teaching workflow. |
+| `POST` | `/api/teaching/workflows/:id/resume` | What the modal opens; a finished session returns 409. |
+
+Syllabus ingestion and search are mounted under `/api/adaptive/syllabus`,
+including `GET /subjects`, `GET /search` and `GET /:slug/outline`, with
+admin-only `POST /ingest`, `POST /ingest-pdf` and the `POST /imports` batch
+import flow.
+
+## Session bounds
+
+The teaching turn is bounded by policy: at most 3 decisions per turn with an 8
+second decision timeout, 2 strategy changes and 2 assessments per session, and
+a 60 turn cap. Exceeding a bound ends the session without its objective and
+hands the result back as a bounded end.
+
+## Persistence and rewards
+
+Each session persists a row in `edu.adaptive_sessions` that is written on
+create, appended per turn and completed on end, so a session always appears in
+the list. Completing a session awards XP exactly once, guarded by a conditional
+status write.
+
+## Failure and retry
+
+- A missing or foreign continuation history degrades to a fresh start, never a
+  failure.
+- Reading another learner's session history returns 404.
+- A finished teaching workflow cannot be resumed; it returns 409.
+
+## Permissions
+
+- Session rows and history are learner-scoped; ownership is checked on read.
+- Ladder review requires a teacher, school or admin role, scoped to the
+  schools the caller administers or teaches at.
+- The learner is always the authenticated user, never a value from the request
+  body.
+
+## Related
+
+- [Learning overview](/docs/learn/overview)
+- [Study Prep](/docs/learn/study-prep)
+- [Exam Prep](/docs/learn/exam-prep)
+- [Practice and assessments](/docs/learn/practice)
+- [Learner app](/docs/apps/learner)

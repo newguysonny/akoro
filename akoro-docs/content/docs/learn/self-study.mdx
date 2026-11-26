@@ -1,0 +1,178 @@
+---
+title: Self-study
+description: Instructor self-study authoring, from AI drafts and routines to grading and learner hand-in.
+---
+
+# Self-study
+
+Self-study is the instructor-facing authoring surface for assigned, AI-assisted
+work. A teacher or school assigns a topic; each learner works through it with
+their own AI agent. This page documents the authoring side, including activity
+drafts and versions, routines, generated question papers and rubrics, activity
+reviews, learner hand-in, and grading.
+
+> **Status: beta.** Self-study authoring is implemented in the API but not yet
+> listed in the capability registry, so this page describes the module's
+> current surface rather than a verified contract.
+
+The module is mounted at `/api/self-study`. All routes require an
+authenticated user. Authoring and grading routes are restricted to teacher or
+school roles; the learner routes apply to the caller's own assigned work.
+
+## The model
+
+An assignment is only the brief: subject, topic, subtopics and objectives.
+The learning itself is an ordinary `edu.adaptive_sessions` row, created per
+learner the first time they start. Assigned work therefore behaves like every
+other agent session instead of being a parallel world, and the Sessions list,
+knowledge confidence, decay and revision all read the same table.
+
+## Authoring workflow
+
+The instructor drafts the assignment before anything is sent to learners.
+
+- `POST /plan` — AI drafts subtopics and objectives to review.
+- `POST /assignment-draft/questions` — AI drafts the assignment's questions,
+  with points allocated and a level per question.
+- `POST /assignment-draft/rubric` — AI drafts the marking rubric.
+- `POST /` — create the brief and assign it, by usernames, ids or a whole
+  class.
+
+The workbench's assignment form exposes only the necessary fields: total
+points, the AI switches, the question types to use, and the rubric. Everything
+question-level — text, type, `max_points`, difficulty and cognitive level — is
+drafted on the server and handed back for review. Nothing is assigned by the
+drafting routes; the instructor edits before anything is sent.
+
+## Activity drafts and versions
+
+AI activity drafts follow a prepare, preview, assign flow. The agent only
+prepares via the `prepare_activity` chat tool; only the human-facing preview
+endpoints can assign.
+
+- `GET /drafts` — the instructor's pending drafts.
+- `GET /drafts/:id` — one draft for the preview panel.
+- `PATCH /drafts/:id` — edit before assigning.
+- `POST /drafts/:id/assign` — the approval, replayed through the same create
+  path as the workbench (targets, notifications, live ding).
+- `DELETE /drafts/:id` — discard a pending draft.
+
+Each draft carries question versions (V1, V2, and so on). A version can be
+saved in place, a failed version can be retried, and a rubric can be written
+or improved per version.
+
+- `PUT /drafts/:id/versions/:n` — save the instructor's edits to one version.
+- `POST /drafts/:id/versions/:n/retry` — draft a failed version again.
+- `POST /drafts/:id/versions/:n/rubric` — write a version's rubric, or improve
+  it as asked.
+- `PUT /drafts/:id/versions/:n/rubric` — edit a version's rubric.
+- `PUT /drafts/:id/settings` — grading settings such as AI auto-grade and
+  answer format.
+- `POST /drafts/:id/review-questions` — write the review battle's questions.
+- `POST /drafts/:id/history/:n/restore` — restore one round of a
+  non-assignment draft.
+
+## Routines
+
+Routines are recurring, human-approved preparation. A weekly schedule, such as
+"every Friday, prep a drill for JSS 2", prepares a draft at its slot; the
+instructor is nudged by bell, previews, and assigns each occurrence by hand.
+Preparation is automation, but assignment stays human — a routine has no path
+to learners.
+
+- `GET /routines` — the instructor's routines.
+- `POST /routines` — schedule a recurring prepare.
+- `PATCH /routines/:id` — pause or resume.
+- `DELETE /routines/:id` — cancel the routine.
+
+## Assigning and managing
+
+- `GET /` — assignments the instructor created, with per-status progress.
+- `GET /:id` — one assignment plus each learner's state.
+- `PATCH /:id` — edit the brief.
+- `POST /:id/assign` — add more learners later.
+- `DELETE /:id/targets/:sid` — unassign one learner.
+- `DELETE /:id` — delete the assignment and its targets. Adaptive sessions
+  learners already started are left alone; the foreign key is set null so
+  deleting the brief cannot destroy their work.
+- `GET /:id/analytics` — class results for one activity, plus any saved AI
+  report.
+- `POST /:id/report` — generate and save the AI report.
+- `GET /:id/reviews` — the activity's review battle: when it runs and each
+  learner's state (waiting, sent, accepted, running, done with its mark,
+  missed).
+
+## Learner flow
+
+Learners answer an assignment a question at a time and hand the work in from a
+review step.
+
+- `GET /mine` — what the learner has been assigned.
+- `POST /:id/start` — mark started and return the brief. This does not create
+  the adaptive session; the teaching WebSocket creates it, and the client then
+  records the real id.
+- `POST /:id/link` — record which adaptive session the attempt became.
+- `PUT /:id/draft/:index` — save one question's answer on the server; an empty
+  value clears it.
+- `PUT /:id/draft-text` — autosave the written answer of work without
+  questions, so it follows the learner across devices.
+- `POST /:id/files` — upload one attachment, base64, up to 5 MB, PDF, JPEG,
+  PNG, .docx or text, sniffed, kept in object storage under the learner's
+  prefix and capped at 5 files per target.
+- `DELETE /files/:fileId` — remove one of the learner's files, before
+  submitting.
+- `GET /files/:fileId` — open an attachment, for the owning learner or the
+  teacher or school that owns the activity.
+- `POST /:id/complete` — hand in. Status becomes complete and the work
+  (`text`, `answers`, `fileIds`) is stored on the target; the submission PDF
+  and markdown are built after it. Refused once graded, and late work is
+  accepted but marked late.
+
+## Submission rendering
+
+The assignment and each submission are rendered server-side through the paper
+template.
+
+- `GET /:id/paper.html` — the assignment as the paper template.
+- `GET /drafts/:id/paper.html` — a draft's version as the paper preview.
+- `GET /targets/:targetId/submission.html` — the submission as the paper.
+- `GET /targets/:targetId/draft.html` — the learner's answers so far, before
+  hand-in, on the same template.
+- `GET /targets/:targetId/submission.json` — the submission as data, with each
+  question's answer and marks box; marks appear only once published.
+- `GET /targets/:targetId/submission.pdf` and `submission.md` — the whole
+  submission as one document, built at hand-in or on demand.
+- `GET /targets/:targetId/marked.pdf` — the submission with the grader's marks
+  drawn in. The learner gets it once graded; the teacher can preview it any
+  time.
+
+## Grading
+
+Grading is a deliberate publish. The workbench autosaves drafts locally and
+they never touch the server; publishing is what turns a number into the
+learner's grade.
+
+- `PATCH /:id/targets/:sid/grade` — publish a grade. The number becomes the
+  learner's grade, the feedback travels with it, the learner is notified, and
+  their gradebook files the work under "Graded activity". Republishing
+  overwrites; the latest deliberate grade wins.
+- `DELETE /:id/targets/:sid/grade` — unpublish. The work goes back to
+  "submitted, not graded"; the marks and comments stay as the teacher's draft
+  and the learner stops seeing a grade.
+- `PUT /:id/targets/:sid/markup` — save the grader's marks on the submission
+  PDF, autosaved while marking. They reach the learner only inside the marked
+  copy, after a grade is published.
+- `POST /:id/targets/:sid/ai-grade` — draft marks with AI for approval;
+  nothing is published. The draft lands on the target as `ai_grade`, and the
+  instructor approves or adjusts it.
+
+With AI auto-grade on and release set to instant, the learner sees the AI's
+marks the moment they are ready. The release is provisional: the teacher can
+still adjust or unpublish, and it never overwrites a teacher's grade.
+
+## Related
+
+- [Learning overview](/docs/learn/overview)
+- [Communities](/docs/learn/communities)
+- [Instructor app](/docs/apps/instructor)
+- [Learner app](/docs/apps/learner)

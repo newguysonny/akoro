@@ -1,0 +1,120 @@
+---
+title: Exam Prep
+description: Learner-owned, confidence-tracked exam practice with scored diagnostic and retest runs.
+---
+
+# Exam Prep
+
+Exam Prep is a learner-owned confidence loop that generates exam-style
+multiple-choice practice and scores it so the learner can see what is
+exam-ready and what needs more work. It creates generated practice only; it is
+never described as a historical WAEC, JAMB or NECO paper.
+
+> **Status: beta.** Gated by the `AKORO_EXAM_PREP_CONFIDENCE_ENABLED` flag (on
+> by default). Workflow projections are gated separately by
+> `AKORO_ADAPTIVE_WORKFLOWS_ENABLED`.
+
+## What it does
+
+- Starts a diagnostic run with a topic, subject, exam board and a question
+  count from 3 to 10.
+- Scores submissions deterministically against a server-side answer key.
+- Returns a pass or fail, a teach-back offer below the mark, and a
+  change-approach result at the attempt cap.
+- Issues a fresh retest only when the learner confirms they are ready.
+
+## Who it is for
+
+Learners preparing for an exam who want a quick, confidence-tracking practice
+loop, independent of the plan-first Study Prep flow.
+
+## The flow
+
+1. Start a run with `POST /confidence-runs`.
+2. Answer the generated questions and submit with `POST /confidence-runs/:runId/submit`.
+3. The engine scores the attempt and returns the next status.
+4. Below the mark, the learner may confirm readiness and start a fresh retest.
+5. Passed, or the attempt cap reached, ends the run.
+
+## Endpoints
+
+All paths below are mounted under `/api/adaptive/exam-prep` and require an
+authenticated learner session.
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `POST` | `/confidence-runs` | Start a diagnostic run with `{topic, subject, examBoard, questionCount}`. Returns 201. |
+| `GET` | `/confidence-runs` | List the learner's runs, newest first. |
+| `POST` | `/confidence-runs/:runId/submit` | Submit `{answers}` and get `score`, `correct`, `total` and `passed`. |
+| `POST` | `/confidence-runs/:runId/retest` | Start a fresh retest, requiring `learnerConfirmedReady` to be true. Returns 201. |
+
+## Run statuses
+
+| State | Meaning |
+| --- | --- |
+| `diagnostic_ready` | Generated practice ready |
+| `teach_back_required` | Teach-back available before a fresh retest |
+| `retest_ready` | Fresh generated retest ready |
+| `passed` | Assessment result recorded |
+| `change_approach` | Attempt cap reached; choose a different approach |
+| `cancelled` | Workflow cancelled |
+
+The defined machine also carries `researching` and `planned`, but the
+confidence loop starts each run at `diagnostic_ready`. A scored attempt moves
+the run to `passed`, to `change_approach` when the attempt cap is reached, or
+to `teach_back_required` otherwise. Starting a retest moves `teach_back_required`
+to `retest_ready`.
+
+## Scoring and policy
+
+Scoring is deterministic and LLM-free. The answer key never leaves the server;
+the caller sends only the `{questionId, answerIndex}` pairs the learner chose.
+A run's pass threshold and attempt cap come from
+`edu.exam_prep_confidence_policies` for the exam board and subject, falling
+back to an explicit default of 0.70 and 3 attempts.
+
+## Retest and the teach-back gate
+
+A fresh retest is hard-gated on the learner's own confirmation: the
+`learnerConfirmedReady` field must be true, and the run must be in
+`teach_back_required` with attempts remaining. A low score offers a
+learner-initiated teach-back handoff but creates no task, notification,
+autonomous session or instructor escalation.
+
+## Concurrent submissions
+
+Submissions use single-writer discipline. The attempt write is conditional on
+the attempt not yet being submitted, and only the winner proceeds to the
+status-guarded run update. A concurrent double-submit loses cleanly and returns
+`attempt_already_submitted` instead of double-scoring.
+
+## Relationship to Study Prep
+
+- Study Prep is the goal-driven, plan-first preparation flow.
+- Exam Prep is the standalone confidence-tracking practice loop.
+- Inside a Study Prep topic, the same engine scores the attempt through one
+  transaction, and the topic state machine owns the state; the standalone route
+  keeps its own run statuses. Both update the same concept state and evidence.
+
+## Failure and retry
+
+- `exam_prep_disabled` means the loop is off; stop.
+- A run that is not ready for submission returns 409 with `attempt_not_ready`.
+- A submit against a run owned by someone else, or a missing run, returns 404.
+- An already-submitted attempt returns 409 with `attempt_already_submitted`.
+- A retest without `learnerConfirmedReady` returns 422 with
+  `learner_confirmed_ready_required`.
+
+## Permissions
+
+- Runs and attempts are learner-scoped; a learner can only read and submit
+  their own runs.
+- Retests are gated on the learner's own teach-back confirmation.
+
+## Related
+
+- [Learning overview](/docs/learn/overview)
+- [Study Prep](/docs/learn/study-prep)
+- [Teaching sessions](/docs/learn/teaching-sessions)
+- [Practice and assessments](/docs/learn/practice)
+- [Learner app](/docs/apps/learner)

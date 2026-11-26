@@ -1,0 +1,130 @@
+---
+title: Payments, wallet and vouchers
+description: Learner wallet and coins, instructor payouts, vouchers, subscriptions and how purchases and refunds work.
+---
+
+# Payments, wallet and vouchers
+
+Akoro handles money in a few connected surfaces: a learner coin wallet that pays
+for AI features, instructor earnings that are settled as bank payouts, a voucher
+marketplace for credit codes, course and cart purchases, and learner
+subscriptions. This page describes the product concepts. The provider webhook
+that credits and settles all of this is documented separately in
+[Webhooks and callbacks](/docs/build/webhooks).
+
+## Wallet
+
+Each learner has a coin wallet. Coins are the unit that AI features — tutoring,
+study planning, quiz and assessment generation, and voice — are priced in, so a
+wallet balance is how a learner pays for them.
+
+- **Balance and transactions** — the wallet shows the current coin balance and a
+  recent transaction history. Each transaction records the coin change, the
+  balance after it, the feature it paid for, and an identifier for the charge.
+- **Welcome grant** — a newly created wallet starts with a welcome grant of
+  coins so a learner can try the AI features before topping up.
+- **Low balance** — the wallet reports a low-balance threshold so the learner
+  app can prompt a top-up before a charge is blocked.
+- **School wallets** — a school has its own wallet. A school admin can top up
+  the school wallet and allocate coins to individual students. When a learner's
+  own balance runs out, the charge can fall back to their school's wallet.
+
+### Funding a wallet
+
+A wallet is funded in two ways, both of which credit the same coin balance:
+
+1. **Top-up in naira** — the learner (or a school admin, for the school wallet)
+   starts a top-up and pays through the payment provider. The wallet is credited
+   once the provider confirms the payment.
+2. **Voucher code** — the learner redeems a voucher code, which credits coins to
+   their wallet. One voucher credit equals one coin.
+
+A pricing endpoint exposes the current coin value, the platform markup and a few
+example costs (such as a tutor message, a quiz generation and an assessment) so
+the apps can show what a coin buys.
+
+## Instructor earnings and payouts
+
+Every course sale creates an immutable earnings record for the course's
+instructor. Each record snapshots the amounts at the time of purchase, so a
+later change to the platform commission never alters settled earnings.
+
+- **Gross, commission, net** — each sale records the gross amount, the platform
+  commission and the instructor's net share. The commission percentage is
+  applied at purchase time and stored with the record.
+- **Earnings overview** — instructors see their earnings as a summary plus
+  per-course and per-month breakdowns, and the admin sees a platform-wide view.
+- **Bank details** — before requesting a payout, the instructor verifies a bank
+  account number and saves the account details.
+- **Payouts** — an instructor requests a payout of all pending earnings. A
+  payout is subject to a minimum threshold and is sent to the saved bank
+  account. Payouts move through processing to completed, and a failed or
+  reversed transfer returns the earnings to the pending balance so the
+  instructor can retry.
+
+## Vouchers and credits
+
+Vouchers are a self-contained credit marketplace with two distinct sides.
+
+- **Learner side** — a learner redeems a voucher code to credit coins to their
+  wallet, or pays for a cart with a voucher. Redemption happens server-side and
+  a single-use code cannot be credited twice.
+- **Business side** — a business (a "startup") registers, sets a per-credit rate
+  and discount tiers, and sells batches of voucher codes to agents. Agents top
+  up a prepaid wallet, buy codes, and track their codes and purchase history.
+- **Redemption API** — a startup's own backend validates codes through a
+  server-to-server API authenticated with an API key. A successful redemption
+  tells the startup how many credits a code carries and credits the startup net
+  of a platform fee. Startups withdraw their settlement balance to a bank
+  account.
+
+## Purchases and refunds
+
+- **Courses and carts** — a learner buys a single course or checks out a whole
+  cart in one payment, including courses and teaching guides. Free items are
+  granted directly without a payment.
+- **Fulfilment** — once the provider confirms payment, the learner is enrolled,
+  the instructor's earnings are recorded, and the buyer is notified. A cart
+  payment enrols every item in the cart, not just the first.
+- **Refunds** — a learner can request a refund within the course's refund window
+  (30 days by default), and an admin can refund any successful payment. A refund
+  marks the payment and the instructor's earnings as refunded and removes the
+  learner's access to every item the payment covered.
+
+## Subscriptions
+
+The learner Premium tier is sold as a monthly or annual subscription. A learner
+picks a cycle and pays through the provider; a paid invoice, subscription
+timeline entry and audit record are created on success. Renewals charge the
+saved card automatically. A failed renewal moves the subscription past due and
+into a retry cycle before it eventually returns to the free tier.
+
+## Notifications
+
+Payments raise in-app notifications through a stable event catalogue. The
+payment-related events are:
+
+| Event | Trigger | Recipient |
+| --- | --- | --- |
+| `purchase_success` | A payment is confirmed and access granted | Buyer |
+| `order_processing` | A payment is being confirmed | Buyer |
+| `purchase_refunded` | A refund is processed and access removed | Buyer |
+| `sale_new` | A new course sale is recorded | Instructor |
+| `payout_completed` | A payout is sent to the bank account | Instructor |
+| `payout_failed` | A payout could not be completed and funds were returned | Instructor |
+
+These are the same event types surfaced over the notification socket — see
+[Realtime and sockets](/docs/build/realtime).
+
+## Webhook verification
+
+Payments, top-ups, payouts and refunds are all settled from provider-signed
+webhooks. Signature verification and reliability are covered in
+[Webhooks and callbacks](/docs/build/webhooks) and are not repeated here.
+
+## Related
+
+- [Webhooks and callbacks](/docs/build/webhooks)
+- [Feature matrix](/docs/apps/feature-matrix)
+- [Learner](/docs/apps/learner)
+- [Instructor](/docs/apps/instructor)

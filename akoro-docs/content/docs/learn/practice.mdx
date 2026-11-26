@@ -1,0 +1,143 @@
+---
+title: Practice and assessments
+description: Topic practice, proctored assessment sessions, scoring and mastery evidence.
+---
+
+# Practice and assessments
+
+Practice and assessments are where a learner demonstrates a topic and the
+engine turns that demonstration into scored evidence. Two kinds of run share
+the same workflow type: the live proctored assessment, and the shorter Agent
+Check runs used inside Study Prep. This page describes the proctored
+assessment, which is the surface that produces a score, a verdict and mastery
+evidence.
+
+> **Status: beta.**
+
+## What it is
+
+A proctored assessment is a live, web-based exam. An assessment agent called
+Sergeant generates the questions, judges each answer and decides what happens
+next, while a proctoring layer watches the camera and turns per-frame signals
+into a sustained cheat probability. The score and the verdict are computed in
+code, never by the agent.
+
+It is for:
+
+- **Learners** — take the exam, then read their score, verdict and next step.
+- **Teachers and school staff** — review sessions that were flagged or
+  terminated by proctoring.
+
+## Primary flow
+
+1. The learner registers a reference photo as an identity baseline.
+2. Sergeant generates the questions and the exam opens.
+3. Each turn, the learner answers; Sergeant judges the answer and the practice
+   agent picks the next move.
+4. Proctoring frames are analysed continuously while the exam runs.
+5. When the last question is answered, the exam finalizes into a score, a
+   verdict and a recommended next action.
+
+The live exam runs over a WebSocket. The client sends `register_reference`,
+`start_assessment`, `proctor_frame` and `assessment_message` events; the server
+replies with `reference_saved`, `assessment_ready`, `proctor_result` and
+`assessment_turn`, then closes with `assessment_summary`. Every event requires
+an authenticated socket, and the client-supplied student id is overwritten with
+the token identity, so no one can sit or poison someone else's exam.
+
+## How attempts are scored
+
+Scoring is fixed in code and is the same for every exam.
+
+- **Per-question judgement** — Sergeant judges each answer against a rubric as
+  a proposal on a 0 to 100 scale. A follow-up probe, when one runs, is
+  averaged with the original judgement.
+- **Hint deduction** — each hint costs 15 points off that question. A question
+  allows at most one hint, and an exam allows at most two hints in total.
+- **Assessment score** — the average of the question scores, over every
+  question that was judged, on a 0 to 100 scale.
+
+| Rule | Value |
+| --- | --- |
+| Pass mark | 70 |
+| Hints per question | 1 |
+| Hints per exam | 2 |
+| Hint deduction | 15 points |
+| Follow-up probes per question | 1 |
+| Agent decision attempts per turn | 3 |
+| Decision timeout | 8 seconds |
+
+## Verdicts and integrity
+
+The verdict is computed in code from the score and the cheat probability.
+Sergeant only writes the explanation text, never the decision.
+
+| Verdict | Condition |
+| --- | --- |
+| `pass` | score at least 70 and cheat probability below 0.4 |
+| `fail` | score below 70 and cheat probability below 0.4 |
+| `flagged` | cheat probability at or above 0.4 |
+| `terminated` | cheat probability at or above 0.85, or the exam was ended for integrity |
+
+Proctoring frames arrive roughly every two seconds and are throttled so bursts
+are ignored. A temporal scorer turns the noisy per-frame signals into a stable
+probability; sustained high probability auto-terminates the exam. The practice
+agent that runs each turn never sees the raw frames, the cheat probability, the
+score or the verdict, and it cannot end, pause or soften the exam.
+
+## Evidence and mastery
+
+Only a clean pass or fail writes evidence to the learner model. A flagged or
+terminated run writes none.
+
+- The assessment score (0 to 100) is converted to the learner model's 0 to 1
+  scale before it is stored.
+- A first, passing attempt lifts mastery to at least 0.7; later evidence blends
+  the fresh score against the existing state, with fresh evidence weighted
+  more heavily.
+- The recommended next action is computed from the verdict and score: a pass
+  recommends nothing further; a fail at 50 or above recommends retrieval
+  practice; a fail below 50 recommends teaching.
+
+Per-question signals are also recorded once per question from proctored
+assessments and Agent Checks. They capture the question's skill and format
+tags, the time taken to answer, and confusion pairs, where a wrong answer chose
+a real option. These feed struggle detection on the learner's record.
+
+## Assessment lifecycle
+
+Each exam is a workflow run with the states below. A socket drop pauses the run
+for a short grace window so a reconnecting client can resume; if no one
+returns, the run is abandoned.
+
+| State | Meaning |
+| --- | --- |
+| `created` | the run exists, awaiting consent |
+| `preparing` | questions are being generated |
+| `in_progress` | the exam is live |
+| `paused` | the socket dropped, awaiting resume |
+| `scoring` | the exam finished, scoring runs |
+| `evaluated` | the outcome is recorded |
+| `completed` | a clean, finished run |
+| `terminated` | ended for integrity, never the agent's call |
+| `abandoned` | ended early, or the resume grace expired |
+
+Agent Check runs share the same workflow type but use their own short
+lifecycle: `running` through `completed`, `stopped` or `abandoned`.
+
+## Reviewing results
+
+The WebSocket runs the exam; the results are read back over read-only REST
+endpoints. A learner lists their own history and opens a full session detail,
+including the transcript and proctoring evidence. Staff roles can list the
+review queue, which surfaces flagged and terminated sessions first, ordered by
+cheat probability, and can open any session's detail. A separate endpoint
+lists today's assessable subjects and topics for a school learner, built from
+what was taught that day.
+
+## Related
+
+- [Learning overview](/docs/learn/overview)
+- [Study Prep](/docs/learn/study-prep)
+- [Teaching sessions](/docs/learn/teaching-sessions)
+- [Learner app](/docs/apps/learner)

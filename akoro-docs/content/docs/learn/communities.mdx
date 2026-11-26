@@ -1,0 +1,92 @@
+---
+title: Communities
+description: Higher-ed study groups with discovery, membership, shared items, activities and group discussion.
+---
+
+# Communities
+
+Communities are study groups for higher-ed learners. They cover discovery and
+membership, creator-authored activities with member submissions, shared items
+("add to community"), member and analytics views, and a per-community group
+discussion surfaced beside connected content.
+
+> **Status: beta.** Communities are implemented in the API but not yet listed
+> in the capability registry, so this page describes the module's current
+> surface rather than a verified contract.
+
+Communities are separate from courses. A community has one creator or owner and
+any number of members. The module is mounted at `/api/communities`, and every
+route requires an authenticated user.
+
+## Discovery and membership
+
+- `GET /mine` — the caller's joined communities, with role and member counts.
+- `GET /` — public communities for discovery, with `?q=` to search.
+- `POST /` — create a community with a name and optional description and emoji.
+- `GET /:id` — one community plus the caller's membership.
+- `PATCH /:id` — edit, creator only.
+- `DELETE /:id` — delete, creator only.
+- `POST /:id/join` — join, idempotent.
+- `POST /:id/leave` — leave, members only; owners delete the community
+  instead.
+
+Ownership is checked per route: only the creator edits or deletes the
+community, creates activities, or reads analytics. Members read the member
+list, items and discussion. Joining and activity submission are idempotent.
+
+## Activities
+
+The community creator posts activities; members submit to them.
+
+- `GET /:id/activities` — the community's activity feed, with the creator
+  name, submission counts and whether the caller has submitted.
+- `POST /:id/activities` — create, creator only. An activity carries a name,
+  optional subject, class, instructions, due date and type (assignment,
+  project, multi_stage, self_study or live_course).
+- `POST /activities/:activityId/submit` — a member submits, idempotent.
+- `DELETE /activities/:activityId` — delete, the activity creator only.
+
+## Shared items
+
+Members share content into a community through the "Add to community" page,
+which mirrors the library's add-to-folder flow. A single item can be added to
+several communities at once, with a display snapshot stored at add time,
+idempotent per community.
+
+- `GET /:id/items` — the community's shared materials, members only, newest
+  first, with who shared each.
+- `POST /items` — add one thing to one or more communities, members only. The
+  item is typed (`record`, `pharmd_topic`, `lesson` or `library`) and carries
+  a title, an in-app link and an optional kind.
+- `GET /for-item` — which of the caller's communities already have a given
+  item, by `itemType` and `itemRef`.
+
+## Member and analytics views
+
+- `GET /:id/members` — the member list with names, avatars and roles, owner
+  first, visible to members.
+- `GET /:id/analytics` — community stats plus recent submissions, creator
+  only. Returns member, activity and submission counts, an average per
+  activity, and the most recent submissions by name.
+
+## Discussion
+
+Each community has one group discussion, owned by the community rather than by
+any content. Any content the community is connected to opens with this
+conversation attached, so the same thread follows the community's materials
+everywhere, including the PDF, audio lecture and video.
+
+- `GET /:id/discussion/messages` — the persistent history, members only, with
+  pagination.
+- `POST /:id/discussion/messages` — post a message, members only. REST is the
+  single write path; the socket room only fans messages out to live readers.
+
+Writes are broadcast to the socket.io room `discussion:<communityId>`, and
+every join re-checks membership, so only the community's members receive.
+
+## Related
+
+- [Learning overview](/docs/learn/overview)
+- [Self-study](/docs/learn/self-study)
+- [Instructor app](/docs/apps/instructor)
+- [Learner app](/docs/apps/learner)
