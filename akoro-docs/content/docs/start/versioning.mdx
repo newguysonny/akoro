@@ -1,6 +1,6 @@
 ---
 title: API versioning and deprecation
-description: Base paths, stability rules and the 90-day sunset policy.
+description: Base paths, stability rules and the proposed deprecation policy.
 ---
 
 # API versioning and deprecation
@@ -17,10 +17,12 @@ https://sandbox.akoro.ng/api      # sandbox
 A canonical versioned path (`/api/v1`) is planned but not yet implemented.
 Current clients call `/api` directly.
 
-## Versioning policy
+## Proposed versioning policy
 
-The recommended policy below is agreed for the public surface. It applies from
-the first versioned release.
+The policy below is **proposed, not yet agreed or implemented**, and the
+versioning decision is still open. Until it is taken, the live API is the
+unversioned `/api` described above and nothing on this page is a commitment.
+If the policy is adopted, it will apply from the first versioned release.
 
 | Rule | Behaviour |
 | --- | --- |
@@ -47,7 +49,9 @@ Breaking changes require a new major:
 - changing an error status code or envelope;
 - changing pagination semantics.
 
-## Deprecation lifecycle
+## Proposed deprecation lifecycle
+
+Under the proposed policy, a deprecation would run:
 
 ```text
 Announced (90+ days) -> Deprecated (headers) -> Removed (new major only)

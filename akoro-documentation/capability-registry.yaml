@@ -128,8 +128,9 @@ capabilities:
       - the record appears in GET /api/records
       - fileKey belongs to the caller
       - sandbox smoke passed on 2026-11-25
+      - sandbox write-path smoke passed on 2026-11-26 (create, grounded ask, delete, verified gone)
     verification_status: sandbox-verified
-    last_verified: "2026-11-25"
+    last_verified: "2026-11-26"
 
   - id: records.ask
     name: Ask about a record
@@ -153,8 +154,9 @@ capabilities:
       - the answer cites passages from the selected record
       - the record belongs to the authenticated learner
       - sandbox smoke passed on 2026-11-25
+      - sandbox write-path smoke passed on 2026-11-26 (grounded answer with citation)
     verification_status: sandbox-verified
-    last_verified: "2026-11-25"
+    last_verified: "2026-11-26"
 
   - id: courses.list_published
     name: List published courses
@@ -419,8 +421,9 @@ capabilities:
       - saves conversation and grounded context
     verification:
       - turn prepare/answer and tool-runtime policy are defined in code
-    verification_status: code-observed
-    last_verified: "2026-11-26"
+      - sandbox verify run 7b145bcf (2026-11-25, sandbox build 13dbcb1b): chat.* scenarios pass (7 of 7)
+    verification_status: sandbox-verified
+    last_verified: "2026-11-25"
 
   - id: battle.play
     name: Battles
@@ -440,8 +443,9 @@ capabilities:
       - runs the battle worker lifecycle and writes results
     verification:
       - battle types, entry rules and worker lifecycle are defined in code
-    verification_status: code-observed
-    last_verified: "2026-11-26"
+      - sandbox verify run 7b145bcf (2026-11-25, sandbox build 13dbcb1b): battles.entry_gates pass
+    verification_status: sandbox-verified
+    last_verified: "2026-11-25"
 
   - id: self_study.author
     name: Self-study authoring
@@ -500,8 +504,9 @@ capabilities:
       - creates challenges, connections and marketplace listings
     verification:
       - discovery, privacy and review-gating rules are defined in code
-    verification_status: code-observed
-    last_verified: "2026-11-26"
+      - sandbox verify run 7b145bcf (2026-11-25, sandbox build 13dbcb1b): network.privacy_edges pass
+    verification_status: sandbox-verified
+    last_verified: "2026-11-25"
 
   - id: payments.wallet
     name: Wallet, payouts and vouchers

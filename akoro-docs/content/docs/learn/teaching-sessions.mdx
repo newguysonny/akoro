@@ -11,9 +11,8 @@ teaching on the side, or the learner is taught directly by NaNa in guide mode.
 The engine draws a foundation-to-advanced lesson ladder, walks the syllabus,
 and gates every advance on observed evidence.
 
-> **Status: beta.** Live session turns run over the WebSocket; the REST surface
-> below exposes configuration, session lists, history and the teacher review
-> queue.
+> **Status: beta.** Teaching sessions are a learner-app surface, not part of
+> the public API documented on this site. This page describes how they work.
 
 ## What it does
 
@@ -47,15 +46,14 @@ class, subject and topic:
 Review never blocks a learner: a freshly generated ladder is served immediately
 with its provenance tier. Only an explicitly rejected ladder is discarded and
 regenerated. Teachers and school admins approve, reject or edit ladders through
-the review routes below; a teacher edit becomes the canonical ladder.
+a review queue in their app; a teacher edit becomes the canonical ladder.
 
 ## Syllabus grounding
 
-The syllabus knowledge base ingests a structured subject document (JSON, or a
-PDF converted to JSON by text or vision extraction) into `edu.syllabus_*`
-tables with embedded chunks, and serves structured outlines and semantic search
-to agents. Ingestion is idempotent per exam and subject slug, and is
-admin-only.
+The syllabus knowledge base is built from structured subject documents (JSON,
+or PDFs converted by text or vision extraction) and gives agents structured
+outlines and semantic search over the syllabus. Building and refreshing it is
+an admin task.
 
 ## Phases and the progression gate
 
@@ -109,48 +107,25 @@ A proposal offered in Study Prep's chat confirms itself after 60 seconds
 without a tap. The dashboard lists open sessions in `scheduled`,
 `teaching_active` and `adapt_strategy`.
 
-## Endpoints
-
-Configuration, session lists and history are REST; the live session start,
-message, assessment and summary events run over the WebSocket.
-
-| Method | Path | Purpose |
-| --- | --- | --- |
-| `POST` | `/api/adaptive/teaching/configure` | Generate subtopics and objectives from `{topic, subject}`. No write. |
-| `POST` | `/api/adaptive/teaching/reference` | Extract a compact text reference from a PDF, TXT, Markdown or CSV upload. |
-| `GET` | `/api/adaptive/teaching/sessions` | The learner's past adaptive sessions, paged with `limit` and `cursor`. |
-| `GET` | `/api/adaptive/teaching/sessions/:sessionId/history` | Faded block history and resume position for continuation. |
-| `GET` | `/api/adaptive/teaching/ladders` | Teacher review queue, default `status=pending_review`. |
-| `PATCH` | `/api/adaptive/teaching/ladders/:id` | Approve or reject a ladder, optionally editing `subtopics` and `objectives`. |
-| `POST` | `/api/teaching/workflows` | Create a direct teaching workflow from `{topic, subject, mode, focus}`. |
-| `GET` | `/api/teaching/workflows/:id` | The owner's teaching workflow. |
-| `POST` | `/api/teaching/workflows/:id/resume` | What the modal opens; a finished session returns 409. |
-
-Syllabus ingestion and search are mounted under `/api/adaptive/syllabus`,
-including `GET /subjects`, `GET /search` and `GET /:slug/outline`, with
-admin-only `POST /ingest`, `POST /ingest-pdf` and the `POST /imports` batch
-import flow.
-
 ## Session bounds
 
-The teaching turn is bounded by policy: at most 3 decisions per turn with an 8
-second decision timeout, 2 strategy changes and 2 assessments per session, and
-a 60 turn cap. Exceeding a bound ends the session without its objective and
-hands the result back as a bounded end.
+Teaching turns are bounded by policy — how much the guide may decide in one
+turn, how often a session may change strategy or assess, and how long a
+session may run — so a session cannot run away. Exceeding a bound ends the
+session without its objective and hands the result back as a bounded end.
 
 ## Persistence and rewards
 
-Each session persists a row in `edu.adaptive_sessions` that is written on
-create, appended per turn and completed on end, so a session always appears in
-the list. Completing a session awards XP exactly once, guarded by a conditional
-status write.
+Each session is recorded as it runs — created at the start, updated per turn
+and completed at the end — so a session always appears in the learner's list.
+Completing a session awards XP exactly once.
 
 ## Failure and retry
 
 - A missing or foreign continuation history degrades to a fresh start, never a
   failure.
 - Reading another learner's session history returns 404.
-- A finished teaching workflow cannot be resumed; it returns 409.
+- A finished session cannot be resumed.
 
 ## Permissions
 

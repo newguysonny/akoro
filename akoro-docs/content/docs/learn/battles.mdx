@@ -1,6 +1,6 @@
 ---
 title: Battles
-description: Live, judged study battles between learner agents, from entry and question sourcing to judging, series and the worker lifecycle.
+description: Live, judged study battles between learner agents, from entry and question sourcing to judging and recurring series.
 ---
 
 # Battles
@@ -10,17 +10,17 @@ others. An agent does not answer from general knowledge. It answers from what
 its owner actually taught it, drawing only on the learner's own notes, so a
 battle measures what the learner knows rather than what the model can guess.
 
-The battle system is exposed at `/api/battle`. It is described here from the
-module code and routes, not from a published API contract.
+Battles are a learner-app surface and are not part of the public API
+documented on this site; this page describes how they work, not an API
+contract.
 
-> **Status: beta.** Battles are implemented but are not yet in the capability
-> registry, and the feature documentation lists them as "not yet documented".
-> Treat this page as a module-level overview, not a stable contract.
+> **Status: beta.** Battles are live in the learner app and still evolving.
+> Treat this page as an overview, not a stable contract.
 
 ## Battle types
 
-The route header names three battle types, plus study reviews that run through
-the same worker.
+There are three battle types, plus study reviews that run through the same
+system.
 
 | Type | Who is in it | How it starts |
 |---|---|---|
@@ -28,7 +28,7 @@ the same worker.
 | Open Lobby | Anyone enrolled can join up to `max_participants` | A learner creates it and others join |
 | Classroom | A teacher starts it and all invited students must accept | Teacher sends invitations to a class |
 
-The same worker also runs two non-contest modes observed in code:
+The same system also runs two non-contest modes:
 
 - **Study review** — one learner's agent works through a paper alone. It has no
   HP to lose, no winner and no XP race; it is a check of knowledge, and each
@@ -52,8 +52,8 @@ Before a learner takes a seat, the entry check verifies two requirements.
 A study review has no XP gate (it is a check of knowledge, not a contest), but
 it still needs the coins for the answers. The entry check runs when a learner
 accepts a challenge, joins an open battle, accepts a challenge request, takes a
-daily-battle seat, or creates a battle they will play in. `GET
-/api/battle/battles/:battleId/entry` returns the requirements.
+daily-battle seat, or creates a battle they will play in, and learners see the
+requirements before they take a seat.
 
 How many players a battle needs to run depends on its type. A review, an Agent
 Check and a daily battle run for one learner's agent; a team battle needs all
@@ -99,10 +99,9 @@ creator (default 10, maximum 50). At 0 HP the agent is out and watches as a
 spectator, unranked. A value of `0` means nobody can be knocked out.
 
 At the end, scores are settled from the recorded answers rather than the running
-counters. Participants are ranked, and the XP pool is paid out by rank. A
-classroom battle pays from its `xp_pool`; other battles pay from `xp_prize`. A
-review pays the pool scaled by how much of the paper the learner got right, and
-gives each participant a free coin. A team battle awards the team with more
+counters. Participants are ranked, and the battle's XP pool is paid out by rank.
+A review pays the pool scaled by how much of the paper the learner got right,
+and gives each participant a free coin. A team battle awards the team with more
 correct answers, with ties shared. Questions drawn from past papers are also
 logged as past-question practice, and one revision card is raised for the
 topics the learner was actually weak on.
@@ -110,57 +109,20 @@ topics the learner was actually weak on.
 ## Recurring series
 
 A class, course or network battle can repeat on days of the week at a time,
-until an end date. Each occurrence is created by running the same invite route
-as a one-off battle. Members can sit one out, leave, or the creator can end the
-series.
+until an end date. Members can sit one occurrence out or leave the series, and
+the creator can end it — no more occurrences are created, and one already made
+but not started is cancelled.
 
-- `POST /api/battle/series/:seriesId/skip` — sit one occurrence out.
-- `POST /api/battle/series/:seriesId/opt-out` — leave the series and its
-  upcoming occurrences.
-- `POST /api/battle/series/:seriesId/end` — the creator ends the series; no more
-  occurrences, and one already made but not started is cancelled.
+## How a battle runs
 
-## Worker lifecycle
-
-Battles run on a BullMQ queue named `battles`, backed by Redis. Job modules sit
-beside the queue and route by action.
-
-| Job | What it does |
-|---|---|
-| `start-battle` | Claims a waiting battle live, drops seats nobody took, broadcasts Q1 |
-| `advance-question` | Broadcasts the next question and schedules its answer jobs |
-| `agent-answer` | One agent answers one question on its own schedule |
-| `reveal-question` | Marks the question, tallies misses, applies HP and shows the ruling |
-| `end-battle` | Settles, ranks, pays XP and review coins, then hands an Agent Check back |
-| `expire-battle` | Closes the invite window, or starts the battle if enough accepted |
-| `refresh-leaderboard` | Rebuilds the course leaderboard after a finished battle |
-
-When a battle starts, only the learners who actually took their seat compete;
-invitees who never answered are dropped, not failed. The teacher hosts but is
-not in the fight. Each question is embedded once and every agent's answer job
-searches with the same vector. An agent answers from its learner's notes; when
-the notes do not cover the question it says so and guesses, and the log records
-the gap. A battle ends after the last question, or when nobody is left who can
-answer.
-
-## Endpoints
-
-The route file declares 43 endpoints. The main learner-facing ones are:
-
-- `GET /api/battle/health` — public health check.
-- `GET /api/battle/my-battles`, `GET /api/battle/my-challenges` — the learner's
-  own battles and challenges.
-- `POST /api/battle/courses/:courseId/battles/open` — create an open battle.
-- `POST /api/battle/classes/:classroomId/battles/invite` — invite a class.
-- `POST /api/battle/battles/:battleId/join` — join an open battle.
-- `POST /api/battle/challenges/:challengeId/accept`, `/decline` — answer an
-  invitation.
-- `POST /api/battle/battles/:battleId/answer` — agents answer; the human watches.
-- `GET /api/battle/battles/:battleId/state` — the live scoreboard.
-- `POST /api/battle/battles/:battleId/start`, `/end` — start or end early.
-- `GET /api/battle/battles/:battleId/results`, `/questions`, `/log` — review
-  what happened.
-- `GET /api/battle/courses/:courseId/questions-bank` — the course question bank.
+Battles run live in the background. When a battle starts, only the learners who
+actually took their seat compete; invitees who never answered are dropped, not
+failed. The teacher hosts but is not in the fight. Each agent answers from its
+learner's notes; when the notes do not cover the question it says so and
+guesses, and the gap is recorded so the learner can see what to teach next. A
+battle ends after the last question, or when nobody is left who can answer.
+Afterwards, learners can review the results, the questions and a log of what
+happened, and course leaderboards are rebuilt from the finished battle.
 
 ## Related
 

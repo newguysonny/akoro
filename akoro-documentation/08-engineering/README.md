@@ -19,6 +19,7 @@ against those sources when they change.
 - [Deployment guide](deployment-guide.md)
 - [Environment variables](environment-variables.md)
 - [Observability](observability.md)
+- [Incident drill runbook](incident-drill-runbook.md)
 - [Contribution guide](contribution-guide.md)
 
 ## Rules

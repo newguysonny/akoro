@@ -14,18 +14,14 @@ description: Library files and course video use presigned direct-to-storage uplo
 4. Poll extraction status if the document needs OCR or transcription.
 5. Ask or read once the document is searchable.
 
-Limits: regular records up to 500 MB; the Supabase fallback is capped at 5 MB.
+Limits: regular records up to 500 MB.
 
 ## Course video
 
-1. `POST /api/stream/upload-url` with the course, title, file name, MIME and
-   size.
-2. PUT to the returned upload URL.
-3. `POST /api/stream/upload-complete`.
-4. Poll `/api/stream/status/{videoId}` until encoding completes.
-5. Play from `/api/stream/videos/{videoId}`.
-
-Encoding is queued and asynchronous. Do not assume immediate playback.
+Instructors upload course video from the instructor app. The file goes
+directly to storage, and encoding is queued and asynchronous: a video becomes
+playable once encoding completes, so do not assume immediate playback. See
+[Course media](/docs/build/media).
 
 ## Related
 

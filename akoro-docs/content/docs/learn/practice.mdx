@@ -18,9 +18,8 @@ evidence.
 
 A proctored assessment is a live, web-based exam. An assessment agent called
 Sergeant generates the questions, judges each answer and decides what happens
-next, while a proctoring layer watches the camera and turns per-frame signals
-into a sustained cheat probability. The score and the verdict are computed in
-code, never by the agent.
+next, while a proctoring layer watches the session for signs of dishonesty.
+The score and the verdict are computed in code, never by the agent.
 
 It is for:
 
@@ -38,12 +37,9 @@ It is for:
 5. When the last question is answered, the exam finalizes into a score, a
    verdict and a recommended next action.
 
-The live exam runs over a WebSocket. The client sends `register_reference`,
-`start_assessment`, `proctor_frame` and `assessment_message` events; the server
-replies with `reference_saved`, `assessment_ready`, `proctor_result` and
-`assessment_turn`, then closes with `assessment_summary`. Every event requires
-an authenticated socket, and the client-supplied student id is overwritten with
-the token identity, so no one can sit or poison someone else's exam.
+The live exam runs over a secure realtime connection. Every connection is
+authenticated, and the exam always runs as the signed-in learner, so no one
+can sit or interfere with someone else's exam.
 
 ## How attempts are scored
 
@@ -64,25 +60,22 @@ Scoring is fixed in code and is the same for every exam.
 | Hints per exam | 2 |
 | Hint deduction | 15 points |
 | Follow-up probes per question | 1 |
-| Agent decision attempts per turn | 3 |
-| Decision timeout | 8 seconds |
 
 ## Verdicts and integrity
 
-The verdict is computed in code from the score and the cheat probability.
+The verdict is computed in code from the score and the proctoring evidence.
 Sergeant only writes the explanation text, never the decision.
 
-| Verdict | Condition |
+| Verdict | Meaning |
 | --- | --- |
-| `pass` | score at least 70 and cheat probability below 0.4 |
-| `fail` | score below 70 and cheat probability below 0.4 |
-| `flagged` | cheat probability at or above 0.4 |
-| `terminated` | cheat probability at or above 0.85, or the exam was ended for integrity |
+| `pass` | The learner met the pass mark with no integrity concerns |
+| `fail` | The learner scored below the pass mark with no integrity concerns |
+| `flagged` | Proctoring raised concerns; the session is held for staff review |
+| `terminated` | The exam was ended for integrity reasons |
 
-Proctoring frames arrive roughly every two seconds and are throttled so bursts
-are ignored. A temporal scorer turns the noisy per-frame signals into a stable
-probability; sustained high probability auto-terminates the exam. The practice
-agent that runs each turn never sees the raw frames, the cheat probability, the
+While the exam runs, the proctoring layer builds a picture of the session from
+what it observes; sustained, serious concerns end the exam automatically. The
+practice agent that runs each turn never sees the proctoring evidence, the
 score or the verdict, and it cannot end, pause or soften the exam.
 
 ## Evidence and mastery
@@ -127,13 +120,12 @@ lifecycle: `running` through `completed`, `stopped` or `abandoned`.
 
 ## Reviewing results
 
-The WebSocket runs the exam; the results are read back over read-only REST
-endpoints. A learner lists their own history and opens a full session detail,
-including the transcript and proctoring evidence. Staff roles can list the
-review queue, which surfaces flagged and terminated sessions first, ordered by
-cheat probability, and can open any session's detail. A separate endpoint
-lists today's assessable subjects and topics for a school learner, built from
-what was taught that day.
+The exam runs live; the results are read back afterwards. A learner lists
+their own history and opens a full session detail, including the transcript
+and proctoring evidence. Staff roles can list the review queue, which surfaces
+flagged and terminated sessions first, most serious first, and can open any
+session's detail. School learners also see today's assessable subjects and
+topics, built from what was taught that day.
 
 ## Related
 

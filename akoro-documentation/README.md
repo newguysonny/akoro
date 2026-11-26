@@ -80,6 +80,30 @@ documentation issue.
   changelog entry.
 - Do not create a new top-level plan; extend the existing plans under `docs/`.
 
+## Ownership
+
+Ownership follows the roles in the Platform Documentation System Plan (§18.1).
+Akoro is a single-owner platform today: **Matt (GitHub `newguysonny`) holds
+every role below and is the owner of record for every document in this
+repository**, including documents whose frontmatter still says
+`owners: [TBD]` — read TBD as "the documentation lead" until a document is
+explicitly reassigned.
+
+| Role | Responsibility | Held by |
+| --- | --- | --- |
+| Documentation lead | Structure, templates, editorial, CI, public site | Matt |
+| Domain owner | Feature and API accuracy | Matt |
+| Agent-platform owner | Registry, index, tool definitions, context loading | Matt |
+| Security | Sensitive content, permissions, data classification | Matt |
+| Operations | Status, incidents, runbooks | Matt |
+| Product | Roadmap, feature status, changelog | Matt |
+
+Agents draft and validate documentation; only the owner approves a capability
+status change (for example `beta` → `implemented`), a public-docs addition, or
+a security sign-off. Review follows §18.2 of the plan: technical accuracy by
+the domain owner, structure by the documentation lead, security review for
+auth, data, permissions and infrastructure content.
+
 ## Plans and audit
 
 - [`docs/PLATFORM-DOCUMENTATION-SYSTEM-PLAN.md`](../docs/PLATFORM-DOCUMENTATION-SYSTEM-PLAN.md)
@@ -93,8 +117,14 @@ node akoro-documentation/scripts/validate-docs.mjs
 ```
 
 This checks JSON/YAML parsing, registry/index references, OpenAPI refs and local
-Markdown links. Full route coverage and sandbox example validation arrive in
-Phase 2.
+Markdown links. Route coverage against the runtime Express table is enforced in
+CI (`akoro-api/scripts/export-routes.mjs` + `route-coverage.mjs --check` in the
+Docs workflow); the 2026-11-26 report (`docs/audits/phase-2-route-coverage.md`)
+shows all 36 documented OpenAPI operations present in the runtime table, 0
+missing. `validate-secrets.mjs` scans both documentation trees for
+credential-shaped content, and the weekly Docs health workflow runs all
+validators plus `check-doc-gaps.mjs` (undocumented modules, the
+beta-verification backlog, stale reviews).
 
 ## Current phase
 
@@ -109,12 +139,14 @@ knowledge-tooling is in place. The repository now has:
 - a validator that checks registry/index/OpenAPI/link integrity;
 - a tool registry, Context Manager contract, agent capability guide and offline
   documentation search;
-- full category coverage: 173 Markdown documents across `00-platform` through
+- full category coverage: 174 Markdown documents across `00-platform` through
   `13-examples`, including the learning-methodology and architecture sets,
   written from the code on 2026-11-26 (see
   `docs/PLATFORM-DOCUMENTATION-SYSTEM-PLAN.md`).
 
-Still pending: live sandbox re-verification of the beta capabilities,
-write-capability cleanup tests, runtime route-table coverage, and the public
-site's non-content gates (accessibility, security review, status monitors and
-incident drill, `/api/v1` decision).
+Still pending: live sandbox re-verification of the remaining beta capabilities
+(agent chat, battles and the agent network are sandbox-verified as of the
+2026-11-25 verify run), the public docs redeploy to the current commit, the
+public site's accessibility pass, the security-review sign-off, the status
+monitors and incident drill (runbook: `08-engineering/incident-drill-runbook.md`),
+and the `/api/v1` decision.

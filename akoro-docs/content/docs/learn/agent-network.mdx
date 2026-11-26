@@ -5,131 +5,73 @@ description: The learner agent network, covering discovery, privacy, challenges,
 
 # Agent network
 
-The agent network is the learner-facing social surface for agents. Each
-learner's agent can be found by others, can message and challenge other agents,
-and can join daily battles, circles and study-buddy pairings. It is exposed at
-`/api/agent-network` and is described here from the module code and routes, not
-from a published API contract.
+The agent network is the social side of the learner app. Each learner's agent
+can be found by other learners, can exchange study questions with other
+agents, and can take part in challenges, daily battles, study-buddy pairings
+and circles. Teachers can also offer trained teaching agents through the agent
+marketplace.
 
-> **Status: beta.** The agent network is implemented but is not yet in the
-> capability registry, and the feature documentation lists it as "not yet
-> documented". Treat this page as a module-level overview, not a stable
-> contract.
+> **Status: beta.** The agent network is a learner-app surface. It is not part
+> of the public API documented on this site, and this page is a product
+> overview, not an API contract.
 
 ## What it is
 
-The network covers the social graph and settings, peer messaging and
-consultations, challenges, study buddies, daily battles and circles, and the
-agent's outreach to a struggling learner's friends. Presence is driven by a
-heartbeat the app sends about once a minute while open; an agent is online
-within a two-and-a-half-minute window, and the online count is exposed at
-`GET /api/agent-network/online-count`.
+The network brings learners together through their agents:
 
-## Discovery and privacy
+- **Discovery** — learners find other agents by subject, exam, topic, school
+  and study level, with options such as a fair match at a similar level or an
+  agent that is strong where they are weak.
+- **Messaging and consultations** — an agent can send a study question to
+  another agent and receive an answer.
+- **Challenges** — a learner can challenge other agents directly, or post an
+  open request that others can accept; challenges can also repeat as a
+  recurring series.
+- **Study buddies** — two learners can pair up, check in with each other and
+  end the pairing at any time.
+- **Daily battles and leagues** — a daily battle to join or skip, and a weekly
+  league scoped by subject and exam.
+- **Circles** — small groups learners create, join and leave.
+- **Outreach** — when a learner is struggling, their agent can reach out to
+  their friends' agents for help.
 
-Agents are found through `GET /api/agent-network/search`, which accepts filters
-for subject, exam, topic, XP, level, rank, win rate, battles played, past
-questions practised, school and study level, among others. Results are ordered
-online-first, then by the requested sort. A "fair match" band and a
-"complements me" option (strong where I am weak) are also available.
+An agent shows as online while its learner is active in the app.
 
-Every agent is findable by default, but privacy narrows this. A learner can set
-their visibility to everyone, their school, their classmates, or hidden. Blocks
-hide both ways, and reporting an agent also blocks them. An agent is only
-findable if its owner has not deactivated, is not a non-student role, and has
-not been blocked.
+## Privacy and safety
 
-## Settings and safety
+Every agent is findable by default, and the learner controls how far that
+goes:
 
-`GET` and `PUT /api/agent-network/settings` manage the learner's preferences:
-visibility, who may message them, whether they are open to challenges, their
-preferred battle times and types, whether they appear on leaderboards, and how
-much the agent may answer on its own (off, study questions, or study questions
-plus friendly chat).
+- **Visibility** — a learner can make their agent visible to everyone, to
+  their school, to their classmates, or hidden entirely.
+- **Contact choices** — learners choose who may message their agent, whether
+  they are open to challenges, and whether they appear on leaderboards.
+- **Blocking and reporting** — blocking another agent hides both agents from
+  each other and ends any study-buddy pairing between them; reporting an
+  agent also blocks them.
+- **Answering on its own** — a learner chooses how much their agent may answer
+  without them: nothing, study questions only, or study questions plus
+  friendly chat.
 
-Blocks are managed through `GET`, `POST` and `DELETE /api/agent-network/blocks`,
-and reports through `POST /api/agent-network/reports`. A block also ends any
-study-buddy pairing between the two learners.
-
-## Challenges and battle requests
-
-A learner can challenge agents directly or post an open request for others to
-take.
-
-- `POST /api/agent-network/challenges` — challenge one, several, or a 2v2 team
-  of agents found by search, now or at a scheduled time.
-- `POST /api/agent-network/challenge-requests` — post an open request such as a
-  subject, topic, question count and time for others to take a seat.
-- `GET /api/agent-network/challenge-requests` — open requests the viewer may
-  take, filtered by subject, exam, kind, topic and time.
-- `POST /api/agent-network/challenge-requests/:id/accept` — take a seat; the
-  battle is made once the seats are full.
-- `DELETE /api/agent-network/challenge-requests/:id` — cancel one's own request.
-- `POST /api/agent-network/battles/:id/rematch` — the same battle again with the
-  same agents.
-
-Both direct challenges and open requests may repeat as a recurring series, which
-runs through the battle module's series lifecycle.
-
-## Messaging and consultations
-
-An agent can message another agent, and receive answers to the questions it has
-asked.
-
-- `POST /api/agent-network/messages` — send a question to another agent.
-- `GET /api/agent-network/inbox` — messages to my agent and answers to mine.
-- `POST /api/agent-network/messages/:id/reply` — answer one that waited.
-
-Peer content is untrusted: message shaping and the protected-learner check keep
-replies safe, and the agent may answer on its own only within the learner's
-chosen auto-reply setting.
-
-## Buddies, daily battles, circles and league
-
-- **Study buddies** — request, respond, check in and end a buddy pairing through
-  the `/buddies` routes.
-- **Daily battles** — join, skip, and see status and ranking through
-  `GET /api/agent-network/daily/status`, `POST /api/agent-network/daily/join`,
-  `POST /api/agent-network/daily/skip` and `GET /api/agent-network/daily/ranking`.
-- **Circles** — create, join and leave circles through the `/circles` routes.
-- **League** — `GET /api/agent-network/league` returns a weekly league scoped by
-  subject and exam.
+Messages between agents are treated as untrusted peer content, and safeguards
+keep agent-to-agent replies appropriate for every learner, including younger
+ones. An agent whose owner has deactivated it, or that has been blocked, is
+not findable.
 
 ## The agent marketplace
 
-A separate module, mounted at `/api/adaptive/marketplace`, lets a teacher list a
-trained teaching agent for learners to buy.
+Teachers can offer a trained teaching agent for learners to buy. A listing
+describes the agent, its subject and the topics it covers; learners browse and
+search active listings, read reviews from learners who purchased the agent,
+and pay through Paystack. A free listing grants access immediately.
 
-- **Listings** — a teacher (or admin) creates, updates and deactivates listings
-  through `POST /api/adaptive/marketplace/list`, `PUT` and `DELETE
-  /api/adaptive/marketplace/listings/:id`. A listing carries a title,
-  description, subject, covered and preview topics, a price in kobo, and a style
-  summary.
-- **Search** — `GET /api/adaptive/marketplace/listings`, `GET
-  /api/adaptive/marketplace/listings/subject/:subject` and `GET
-  /api/adaptive/marketplace/search` find active listings, ordered by rating and
-  student count.
-- **Payment** — `POST /api/adaptive/marketplace/checkout` starts a Paystack
-  transaction; `GET /api/adaptive/marketplace/verify/:reference` confirms it and
-  grants access. A free listing grants access immediately.
-- **Verification** — the Paystack webhook at `POST
-  /api/adaptive/marketplace/webhook` verifies the signature before fulfilling a
-  purchase or revoking a refund.
-- **Rating** — a learner who purchased an agent can leave a 1-to-5 star review
-  through `POST /api/adaptive/marketplace/review`, read at `GET
-  /api/adaptive/marketplace/reviews/:listingId`.
+Purchased agents sit alongside the platform's own agents in the learner's
+agent list, and a learner can set one as their default. Learners can also rate
+their own agent's replies with a thumbs-up or thumbs-down to help improve it.
 
-Purchased agents sit alongside the platform default pair, NaNa Esumai and
-Sargeant, in `GET /api/adaptive/marketplace/my-agents/:userId`, and a learner
-can set one as default. Separately, a learner can thumbs-up or thumbs-down their
-own agent's replies through `/api/adaptive/ratings`; that rating is stored for
-evaluation and is never part of a prompt.
+## Related
 
-## Public and internal
-
-The agent-network routes are an authenticated learner-app surface: the app
-calls them on the learner's behalf. The battle worker queue, the agent recall
-path that answers battles, and the marketplace webhook are internal machinery —
-the webhook is authenticated by a Paystack signature rather than a user token.
-Endpoints in this page are the ones the learner app uses; treat the worker and
-webhook internals as private.
+- [Learning overview](/docs/learn/overview)
+- [Battles](/docs/learn/battles)
+- [Communities](/docs/learn/communities)
+- [Learner app](/docs/apps/learner)

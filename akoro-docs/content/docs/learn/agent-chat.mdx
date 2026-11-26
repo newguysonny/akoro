@@ -11,8 +11,7 @@ learner's records through tools, all grounded in what the learner has taught it
 and the data it is allowed to read. The same surface runs an instructor
 assistant that drafts teaching activities from the teacher's own words.
 
-> **Status: beta.** Several slices are feature-flagged and gated by kill
-> switches, and the tool catalogue is assembled once at boot.
+> **Status: beta.** Some parts of Agent Chat are still rolling out.
 
 ## Who it is for
 
@@ -23,18 +22,17 @@ assistant that drafts teaching activities from the teacher's own words.
 
 ## Primary flow
 
-1. The learner sends a message with an optional conversation id and turn id.
-2. The turn is prepared: the request is validated, durable context is loaded,
-   and the prompt is assembled from the learner's own records.
-3. The agent loop runs: the model selects tools and executes them against the
-   learner's data, bounded to a fixed number of iterations.
-4. A closing answer call writes the reply in plain words from the tool results.
-5. The reply is scrubbed and checked, then saved to the session transcript.
+1. The learner sends a message.
+2. The conversation so far and the learner's own records are brought together
+   to ground the turn.
+3. The agent uses its tools to read the learner's data and carry out the
+   request.
+4. The reply is written in plain words from what the tools found.
+5. The reply is checked before it is shown, then saved to the conversation.
 
-Replies stream over server-sent events, but a non-streaming request returns the
-same result. Each turn carries a conversation id and a turn id, so a dropped
-connection can retry the same turn and replay the same answer instead of
-re-running an action.
+Replies stream in as they are written. If a connection drops mid-turn, the
+same turn can be retried and replays the same answer instead of re-running an
+action.
 
 ## The protégé
 
@@ -45,41 +43,30 @@ has not been taught, the reply says so and offers the Teach me action. The
 protégé reads the learner's active goals and running work so its advice stays
 aligned with what the learner is trying to do.
 
-## Tool selection and the tool runtime
+## Acting through tools
 
-The agent acts through a feature-gated tool catalogue. The tool runtime owns the
-catalogue, the side-effect policy and the dispatch; handler bodies live in
-separate groups so a new tool never lands back in the route file.
+The agent does more than talk: it can search the learner's library, read their
+records, plan study and start sessions on their behalf.
 
-- **Side effects** — tools that create, send, challenge or publish are flagged
-  as side-effecting. Write tools may require the learner to confirm on a card
-  before anything changes; the agent prepares, the human approves.
-- **Runtime area selection** — a turn sends the always-on core plus the tools
-  of the areas active for the conversation. Areas activate from the message,
-  from a forced tool, or when the agent loads an area explicitly. Selection is
-  an optimisation, never a wall: a vague opener keeps the full list.
-- **Forced tool** — when a message clearly needs a specific tool, the first
-  iteration is forced onto it so the model does not answer from memory instead
-  of reading the data.
-- **Agent console** — with the console key, a turn runs in dry mode where
-  side-effecting tools are simulated rather than executed.
+- **The agent prepares, the human approves** — before the agent changes
+  anything (creating, sending, challenging or publishing), the learner may be
+  asked to confirm on a card. Nothing changes until they approve.
+- **Answers come from the data** — when a question is about the learner's own
+  records, the agent reads the data first instead of answering from memory.
 
 ## Grounding on the learner's records
 
-The prompt is assembled from the learner's own data, not from the model's
-general knowledge. Grounding sources include the syllabus, past questions, the
-protégé's taught knowledge, the learner's active goals, running work, library
-files and the learner's saved memories. Instructors are grounded in their
-curriculum and their pending activity drafts. The current time is computed in
-the platform timezone so relative dates resolve correctly. All of these are
-best-effort: a failed lookup never takes the chat down.
+Answers are grounded in the learner's own data, not the model's general
+knowledge. The agent draws on the syllabus, past questions, what the protégé
+has been taught, the learner's active goals and running work, their library
+files and their saved memories. Instructors are grounded in their curriculum
+and their pending activity drafts. If one of these sources is unavailable, the
+chat carries on without it rather than failing.
 
 ## Session lifecycle
 
-- **Durable context** — durable Agent Chat context is on by default. The server
-  owns the exact transcript, and each turn is saved idempotently by turn id.
-  If durable storage is unavailable, the turn degrades to a plain transcript
-  save rather than failing.
+- **Saved conversations** — conversations are saved as they go, so a learner
+  can leave and pick up where they left off.
 - **Stop** — the learner can stop a running turn, which marks the reply as
   stopped and keeps whatever already streamed.
 - **Modes and model picker** — three modes answer the learner: default, think
@@ -91,25 +78,18 @@ best-effort: a failed lookup never takes the chat down.
 
 ## Realtime
 
-The answer streams live. A separate WebSocket handles the identity-bearing,
-realtime side of the adaptive surface: the learner's agent inventory, teaching
-session starts and turns, session resume, park and end, switching agents, and
-knowledge health. Like the assessment gateway, the socket overwrites any
-client-supplied user or student id with the authenticated token identity, so a
-client can never drive another learner's session.
+The answer streams live as it is written. The realtime side of the app — the
+learner's agents, teaching sessions and switching between agents — always
+runs as the signed-in learner, so no one can drive another learner's session.
 
-## How replies are verified and scrubbed
+## How replies are checked
 
 A reply is not trusted as-is before it reaches the learner.
 
-- **Internal ids are scrubbed** — ids the model saw in tool results, such as
-  record or request ids, are removed so the app can show names and links
-  instead.
-- **Tool-call markup is stripped** — some models write tool-call markup into
-  the answer text; it is removed so the learner never sees raw call syntax.
+- **No internal clutter** — internal identifiers and machine markup are kept
+  out of replies, so learners see names and links, never raw syntax.
 - **Claims are checked** — a reply that promises an action that did not run,
-  reports work as done when it was not, or says a request went to an admin when
-  none did, is corrected or appended to, not left standing.
+  or reports work as done when it was not, is corrected before it stands.
 - **Teach me is honoured** — a reply that promises the Teach me action without
   having run it gets the action it promised.
 

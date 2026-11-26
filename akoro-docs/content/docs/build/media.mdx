@@ -9,12 +9,13 @@ Course videos upload directly to object storage and encode asynchronously.
 
 ## Publish flow
 
-1. `POST /api/stream/upload-url` with the course id, title, file name, MIME type
-   and size.
-2. PUT the source bytes to the returned URL.
-3. `POST /api/stream/upload-complete` with `{ videoId }`.
-4. Poll `GET /api/stream/status/{videoId}`.
-5. Play from `GET /api/stream/videos/{videoId}`.
+Instructors publish course video from the instructor app:
+
+1. Choose the course and add the video's title and source file.
+2. The source uploads directly to storage.
+3. Encoding is queued; the video moves through `queued` and `encoding` to
+   `completed`, or `failed` if the encode fails.
+4. Once encoding completes, the video plays in the course as HLS.
 
 ## States
 
@@ -26,8 +27,6 @@ other videos. Do not publish a failed or partial encode.
 ## Limits
 
 - Direct upload: 2 GB per source.
-- R2 must be configured for large sources.
-- R2 CORS must allow PUT from the instructor origin.
 
 ## Related
 

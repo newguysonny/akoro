@@ -4,7 +4,10 @@
  *   - every local /docs link resolves to an MDX page or generated OpenAPI operation;
  *   - public/llms.txt paths resolve;
  *   - changelog JSON parses;
- *   - openapi/akoro.yaml matches the internal source when it is present.
+ *   - openapi/akoro.yaml matches the internal source when it is present;
+ *   - every /api/... path mentioned in the content is an operation in
+ *     openapi/akoro.yaml or an explicit ALLOWLIST entry (public-surface
+ *     allow-list check; see docs/audits/security-review-public-docs-2026-11-26.md).
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -80,6 +83,65 @@ try {
   }
 } catch {
   // deploy roots may not include the internal source; the committed copy is used
+}
+
+// --- API allow-list check ---------------------------------------------------
+// The public site documents the Tier-1 API in openapi/akoro.yaml. Any other
+// /api/... path mentioned in the content is unpublished-surface drift: route
+// maps or internals of surfaces the public allow-list excludes (the public
+// surface is auth, the published catalogue, blog/careers, contact, pilot
+// intake, and authenticated Library/course access). A mention passes only
+// when it matches an OpenAPI operation path (after normalising {param} and
+// :param segments) or is an explicit ALLOWLIST entry below. Keep the
+// allow-list at zero if you can; every entry needs its justification
+// reviewed like a finding.
+const ALLOWLIST = new Map([
+  // Planned canonical prefix discussed in the versioning docs; a base path,
+  // not an endpoint (start/versioning.mdx, reference/api.mdx,
+  // start/getting-started.mdx).
+  ['/api/v1', 'planned version prefix, not an endpoint'],
+  // Browser-redirect OAuth endpoints in the authentication guide. They are
+  // not JSON API operations, so they are not modelled in the OpenAPI
+  // contract (start/authentication.mdx).
+  ['/api/auth/google', 'Google OAuth start, browser redirect'],
+  ['/api/auth/google/callback', 'Google OAuth callback, browser redirect'],
+  // The unified Paystack webhook: documented in the internal Tier-1 API docs
+  // (akoro-documentation/02-api/webhooks.md) and the subject of
+  // build/webhooks.mdx. Inbound provider callbacks are authenticated by the
+  // Paystack signature, not a user session, and are not modelled as OpenAPI
+  // operations.
+  ['/api/webhooks/paystack', 'documented Paystack webhook, signature-authenticated'],
+  // Mount points of registry-backed beta learner surfaces whose Learn pages
+  // document relative paths under the mount. Only the mount itself is
+  // named; the endpoints are not Tier-1 and must not be spelled out.
+  ['/api/adaptive/study-prep', 'Study Prep mount (learn/study-prep.mdx)'],
+  ['/api/adaptive/exam-prep', 'Exam Prep mount (learn/exam-prep.mdx)'],
+  ['/api/self-study', 'Self-study mount (learn/self-study.mdx)'],
+  ['/api/communities', 'Communities mount (learn/communities.mdx)'],
+]);
+
+function normaliseApiPath(p) {
+  return p
+    .split('/')
+    .map((seg) => (/^\{.*\}$/.test(seg) || /^:[A-Za-z_][\w]*$/.test(seg) ? '{}' : seg))
+    .join('/');
+}
+
+const operationPaths = new Set(
+  Object.keys(openapi?.paths || {}).map((p) => normaliseApiPath(`/api${p}`)),
+);
+
+for (const file of walk('content/docs')) {
+  const text = read(file);
+  const seen = new Set();
+  for (const match of text.matchAll(/\/api\/[A-Za-z0-9._~{}:%-]+(?:\/[A-Za-z0-9._~{}:%-]+)*/g)) {
+    const mention = match[0].replace(/[.:]$/, '');
+    if (seen.has(mention)) continue;
+    seen.add(mention);
+    if (operationPaths.has(normaliseApiPath(mention))) continue;
+    if (ALLOWLIST.has(mention)) continue;
+    errors.push(`${file}: API path not in the public OpenAPI or ALLOWLIST: ${mention}`);
+  }
 }
 
 if (errors.length) {
