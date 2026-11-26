@@ -13,7 +13,7 @@ table is listed with its mechanism and its current evidence.
 | Example verification | Sandbox smoke suites in `akoro-documentation/scripts/` | Write path PASS; content validation PASS (success paths blocked by design — no delete endpoint); auth 14 PASS / 0 FAIL / 2 blocked-by-design (see below); course video BLOCKED (see below) | Partial — see open items |
 | Link verification | `validate-docs.mjs` resolves every local Markdown link; public-docs validator resolves public links | Both pass (174 internal documents, 72 public routes) | Verified |
 | Workflow verification | The five documented workflows in `13-examples/workflows/` executed on the sandbox | records-upload-and-ask PASS (write smoke); auth-sign-in PASS (auth smoke); agent-capability PASS (verify run `7b145bcf`, 2026-11-25); study-prep PASS (dedicated smoke: create 201 → read → cancel, 2026-11-26); course-video-publish BLOCKED (encoding, below) | 4 of 5 verified |
-| Permission verification | `sandbox-permissions-smoke.mjs` (new) | 6 of 7 PASS: unauthenticated 401, learner→admin 403, cross-learner preview 404, file 403, list isolation. 1 FAIL: cross-learner ask (below) | Partial — 1 finding |
+| Permission verification | `sandbox-permissions-smoke.mjs` (new) | All probes pass under the confirmed model: unauthenticated 401, learner→admin 403, cross-learner preview 404, file 403, list isolation, and cross-learner ask grounded 200 (free owner = public by design; see open item 2) | Verified (Premium-owner branch unprobed) |
 | Capability verification | `capability-registry.yaml` statuses vs sandbox evidence | Agent chat, battles, agent network and study prep upgraded to `sandbox-verified`; remainder stay `code-observed` until evidenced | Ongoing |
 | Index verification | `validate-docs.mjs` checks `documentation-index.json` paths and IDs | Passes | Verified |
 | Status verification | Registry rule: `implemented` requires production evidence | Enforced by the validator's status/verification vocabularies | Verified |
@@ -32,16 +32,20 @@ table is listed with its mechanism and its current evidence.
    Cloudflare media worker, or run `worker.js` against the sandbox
    environment. Until then the course-video-publish workflow cannot be
    verified end to end on the sandbox.
-2. **Cross-learner record ask (permission finding).** Any learner can ask
-   grounded questions against any other learner's non-private records and
-   receives answers citing their content. In code this is the deliberate
-   Discover rule (`modules/records/access.js`), but no API path can mark a
-   record private (`createRecord` never sets the flag; PATCH does not allow
-   it), so in practice all library content is cross-askable — which
-   contradicts the documented model ("the learner's own record",
-   `modules/records/service-ask.js`). Decision needed: default records to
-   private, add a privacy control, or amend the documented permission model.
-   The permissions smoke keeps the refusal expectation as its gate.
+2. **Cross-learner record ask — model confirmed, docs amended.** The
+   permission model (confirmed by Matt, 2026-11-26) is: **uploads are public
+   for free users and private for Premium subscribers.** The code implements
+   exactly this (`modules/records/access.js`: a record is cross-askable only
+   when it is not private and its owner holds no active Premium entitlement;
+   a Premium subscriber's uploads never leave their library). The smoke's
+   original refusal expectation was written against the older documented
+   model; the endpoint documentation and the smoke now state the confirmed
+   model (free→free ask expects a grounded 200; the Premium-owner 404 branch
+   is documented but unprobed — no Premium demo account exists). One part of
+   the model is **not yet built**: a Premium subscriber's choice to set a
+   record public. The Premium block in `access.js` is unconditional and no
+   API writes a record's visibility, so today neither direction is a user
+   choice — free is always public, Premium is always private.
 3. **Two auth probes are blocked by design.** The 2FA login challenge and
    the password-reset success path both require reading an emailed code.
    Demo-domain accounts (`@demo.akoro.app`) bypass the email code — and the

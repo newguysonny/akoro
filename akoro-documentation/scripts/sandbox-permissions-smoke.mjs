@@ -10,8 +10,12 @@
  * It verifies the documented permission model end to end:
  *   - an unauthenticated request to a protected route is refused (401);
  *   - a learner token on an admin-only route is refused (403);
- *   - a record created by learner A is not readable or askable by learner B
- *     (403 or 404 on the by-id surfaces, absent from B's list);
+ *   - a record created by learner A is not readable by learner B on the
+ *     by-id surfaces (403 or 404) and is absent from B's list;
+ *   - but B CAN ask about it: uploads are public for free users and private
+ *     for Premium subscribers (modules/records/access.js), and both probe
+ *     accounts are free — so a grounded 200 is the model working. The
+ *     Premium-owner refusal (404) is not probed: no Premium demo account;
  *   - learner A deletes the record in `finally` and verifies it is gone.
  *
  * It refuses to run against anything except sandbox.akoro.ng.
@@ -124,22 +128,19 @@ try {
   verdict("    learner B GET /records/:id/file", file.status === 403 || file.status === 404,
     `HTTP ${file.status} (expect 403 or 404)`);
 
-  // 6. Learner B must not ask about A's record, and must not see it listed.
-  //    NOTE (2026-11-26): this check currently FAILS on the sandbox. Records
-  //    are created with `private` unset (DB default false) and
-  //    modules/records/access.js deliberately lets any learner ask a
-  //    non-private record whose owner is not Premium (the Discover rule) —
-  //    so B gets HTTP 200 with a grounded answer quoting A's content. The
-  //    documented model (service-ask.js: "the learner's own record") says
-  //    refusal; the check stays as the regression gate for that gap. There
-  //    is no API to mark a record private (PATCH allows name/progress only).
+  // 6. Learner B asks about A's record. The permission model (confirmed
+  //    2026-11-26): uploads are public for free users, private for Premium
+  //    subscribers. A and B are both free, so B's ask must SUCCEED with a
+  //    grounded answer (the Discover rule in modules/records/access.js).
+  //    Had A been a Premium subscriber, the same call would return 404 —
+  //    that branch is not probed here (no Premium demo account exists).
   const ask = await call("/api/records/ask", {
     method: "POST",
     token: tokenB,
     body: { recordId, question: "What does photosynthesis produce?" },
   });
-  verdict("6/7 learner B POST /records/ask on A's record", ask.status === 403 || ask.status === 404,
-    `HTTP ${ask.status} (expect 403 or 404 refusal)`);
+  verdict("6/7 learner B POST /records/ask on A's record (free owner = public)", ask.status === 200,
+    `HTTP ${ask.status} (expect 200 grounded answer)`);
   const listB = await call("/api/records?limit=200", { token: tokenB });
   if (listB.status === 200) {
     const rows = Array.isArray(listB.data?.data) ? listB.data.data : listB.data?.data?.records || [];
