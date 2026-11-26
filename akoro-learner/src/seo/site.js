@@ -26,4 +26,4 @@ export const SOCIALS = [
 ];
 
 /** The marketing site's own address (no trailing slash). Build time reads VITE_SITE_URL; the fallback is the current domain. */
-export const siteUrl = (env = {}) => String(env.VITE_SITE_URL || 'https://akoro.ng').trim().replace(/\/+$/, '');
+export const siteUrl = (env = {}) => String(env.VITE_SITE_URL || 'https://www.akoro.ng').trim().replace(/\/+$/, '');

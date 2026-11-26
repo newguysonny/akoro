@@ -124,7 +124,7 @@ export async function loadRenderer() {
     localStorage: mem(), sessionStorage: mem(), window: globalThis, addEventListener: noop, removeEventListener: noop,
     matchMedia: () => ({ matches: false, addEventListener: noop, removeEventListener: noop, addListener: noop, removeListener: noop }),
     document: { documentElement: el(), body: el(), head: el(), createElement: el, querySelector: () => null, querySelectorAll: () => [], getElementById: () => null, addEventListener: noop, removeEventListener: noop, cookie: '', readyState: 'complete' },
-    location: { pathname: '/', search: '', hash: '', href: 'https://akoro.ng/', origin: 'https://akoro.ng', hostname: 'akoro.ng', protocol: 'https:' },
+    location: { pathname: '/', search: '', hash: '', href: 'https://www.akoro.ng/', origin: 'https://www.akoro.ng', hostname: 'www.akoro.ng', protocol: 'https:' },
   });
   return (await import(pathToFileURL(path.resolve('.ssr/ssr-entry.js')).href)).renderRoute;
 }
