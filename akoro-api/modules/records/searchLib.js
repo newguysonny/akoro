@@ -413,10 +413,10 @@ export async function searchPlatformChunks({ userId, q, limit = 40 }) {
   if (!chunks.length) return [];
   const ids = [...new Set(chunks.map((c) => c.record_id).filter(Boolean))];
   const { data: recs } = await db.schema("edu").from("records")
-    .select("id, user_id, name, kind, private")
+    .select("id, user_id, name, kind, private, discoverable")
     .in("id", ids).is("deleted_at", null).eq("private", false)
     .in("kind", ["upload", "paste"]).neq("user_id", userId);
-  const open = new Map((recs || []).filter((r) => !premium.has(r.user_id)).map((r) => [r.id, r]));
+  const open = new Map((recs || []).filter((r) => !premium.has(r.user_id) || r.discoverable === true).map((r) => [r.id, r]));
   if (!open.size) return [];
   const ownerIds = [...new Set([...open.values()].map((r) => r.user_id))];
   const { data: users } = await db.schema("edu").from("users").select("id, full_name").in("id", ownerIds);

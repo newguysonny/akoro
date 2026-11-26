@@ -5,14 +5,16 @@
  * feed's guarantees are product rules, so they're pinned to the route
  * source:
  *
- *   · the list EXCLUDES uploads owned by Premium subscribers (the tier
- *     lookup + the .not("user_id", "in", …) filter ride together)
+ *   · the list EXCLUDES uploads owned by Premium subscribers — unless
+ *     the subscriber set the record public (discoverable = true), their
+ *     sharing choice (the tier lookup + the or-filter ride together)
  *   · the list mints NO presigned URLs — browsing the feed must cost
  *     this API zero storage calls; presigning happens once per open
  *   · legacy detail-only rows (no file_key) never reach the feed
  *   · paste rows carry a PREVIEW, never the full text, in the list
- *   · /discover/:id/open hides Premium-owned records behind a 404
- *     (never a 403 — a guessed id must not confirm the record exists)
+ *   · /discover/:id/open hides Premium-owned records behind a 404 —
+ *     unless set public by their owner (never a 403 — a guessed id must
+ *     not confirm the record exists)
  *   · the shelf's owner-scoped /:id/file route keeps its owner check —
  *     discovery is a separate seam, not a hole in the shelf
  */
@@ -37,9 +39,9 @@ const openRoute = source.slice(
   source.indexOf("export async function patchRecord"),
 );
 
-test("the feed list excludes Premium subscribers' uploads", () => {
+test("the feed list excludes Premium subscribers' uploads unless set public", () => {
   assert.ok(listRoute.includes("const premiumIds = await activePremiumUserIds();"));
-  assert.match(listRoute, /if \(premiumIds\.length\) query = query\.not\("user_id", "in", `\(\$\{premiumIds\.join\(","\)\}\)`\)/);
+  assert.match(listRoute, /if \(premiumIds\.length\) query = query\.or\(`user_id\.not\.in\.\(\$\{premiumIds\.join\(","\)\}\),discoverable\.eq\.true`\)/);
 });
 
 test("the premium helper targets the paid learner Premium tier's active subscriptions", () => {
@@ -63,7 +65,7 @@ test("paste rows carry a preview in the list, never the full text", () => {
 });
 
 test("opening hides Premium-owned records behind a 404, before presigning", () => {
-  assert.match(openRoute, /if \(premiumIds\.includes\(r\.user_id\)\) return res404\(res, "Record not found\."\);/);
+  assert.match(openRoute, /if \(premiumIds\.includes\(r\.user_id\) && r\.discoverable !== true\) return res404\(res, "Record not found\."\);/);
   assert.ok(
     openRoute.indexOf("premiumIds.includes") < openRoute.indexOf("createPresignedDownload"),
     "the premium check must run before the presign",

@@ -54,8 +54,9 @@ async function chatReadRecords({ userId, conversationId }) {
 /* ── The platform tier (Discover) ───────────────────────────────────────────
    Reached only when the learner's own Library has nothing: the community's
    free notes — the records the Discover feed shows (uploads and pastes, not
-   private, not deleted, never a Premium subscriber's, never the learner's
-   own). Name first (the feed's own signal), then content. A winner is NOT
+   private, not deleted, never a Premium subscriber's unless they set the
+   record public, never the learner's own). Name first (the feed's own
+   signal), then content. A winner is NOT
    built from directly: makeStudyMaterial first saves the learner their own
    copy (copyPlatformRecord), because reader access is owner-only — the
    artifact, its card and its dedupe all hang off a record the learner owns.
@@ -76,7 +77,7 @@ async function platformFind({ userId, q }) {
   const discoverable = (query) => {
     let x = query.eq("private", false).in("kind", ["upload", "paste"])
       .is("deleted_at", null).neq("user_id", userId);
-    if (premium.length) x = x.not("user_id", "in", `(${premium.join(",")})`);
+    if (premium.length) x = x.or(`user_id.not.in.(${premium.join(",")}),discoverable.eq.true`);
     return x;
   };
   // By name first — a free note actually called what the learner asked for.
@@ -133,14 +134,14 @@ async function platformFind({ userId, q }) {
 export async function copyPlatformRecord({ userId, sourceId }) {
   const E = db.schema("edu");
   const { data: src } = await E.from("records")
-    .select("id, user_id, kind, name, mime, size, duration, file_key, content, private")
+    .select("id, user_id, kind, name, mime, size, duration, file_key, content, private, discoverable")
     .eq("id", sourceId).is("deleted_at", null).maybeSingle();
   if (!src || src.user_id === userId || src.private || !["upload", "paste"].includes(src.kind)) {
     return { error: "That free note isn't available anymore — say so and offer another way." };
   }
   const { activePremiumUserIds } = await import("./access.js");
   const premium = await activePremiumUserIds().catch(() => []);
-  if (premium.includes(src.user_id)) return { error: "That free note isn't available anymore — say so and offer another way." };
+  if (premium.includes(src.user_id) && src.discoverable !== true) return { error: "That free note isn't available anymore — say so and offer another way." };
   if (src.kind === "upload" && src.file_key) {
     const { data: existing } = await E.from("records").select("id, name")
       .eq("user_id", userId).eq("file_key", src.file_key).is("deleted_at", null)
@@ -207,13 +208,13 @@ export async function buildGatheredContent({ userId, query, sources }) {
   const { activePremiumUserIds } = await import("./access.js");
   const premium = await activePremiumUserIds().catch(() => []);
   const { data: rows } = await E.from("records")
-    .select("id, user_id, kind, name, file_key, private")
+    .select("id, user_id, kind, name, file_key, private, discoverable")
     .in("id", (sources || []).map((s) => s.id)).is("deleted_at", null);
   const byId = new Map((rows || []).map((r) => [r.id, r]));
   const usable = [];
   for (const s of sources || []) {
     const row = byId.get(s.id);
-    if (!row || row.user_id === userId || row.private || premium.includes(row.user_id)) continue;
+    if (!row || row.user_id === userId || row.private || (premium.includes(row.user_id) && row.discoverable !== true)) continue;
     const passages = await gatherSourcePassages({ ...s, kind: row.kind, file_key: row.file_key });
     if (passages.length) usable.push({ ...s, kind: row.kind, file_key: row.file_key || null, passages });
   }

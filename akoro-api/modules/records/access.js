@@ -7,7 +7,11 @@
  *
  *   recordId   — the learner's OWN record (owner-only)
  *   contentKey — a shared file (the discovery feed's rule): any upload,
- *                except a Premium subscriber's, which stays private to them
+ *                except a Premium subscriber's, which stays private to
+ *                them — unless the subscriber has set that record public
+ *                (discoverable = true), their choice to share it. A
+ *                private record (a chat upload) is its owner's alone
+ *                either way: discoverable never overrides private.
  *
  * The db client loads lazily so importers stay cheap and testable.
  */
@@ -48,7 +52,8 @@ async function resolvePharmdContent(contentKey) {
   };
 }
 
-/** Active Premium learners — their uploads never leave their library. */
+/** Active Premium learners — their uploads never leave their library,
+ *  except a record the subscriber has set public (discoverable = true). */
 export async function activePremiumUserIds() {
   const { data: tierRows } = await (await edu()).from("tiers")
     .select("id").eq("platform", "learner").eq("access", "paid").eq("name", "Premium").limit(1);
@@ -82,14 +87,14 @@ export async function resolveContentAccess({ userId, recordId: rawRecordId, cont
     // Shared content — the SAME rule the discovery feed opens under. The
     // earliest record holding the key owns it (a key can appear twice).
     const { data: rec, error } = await (await edu()).from("records")
-      .select("id, user_id, name, mime, file_key, kind, private").eq("file_key", contentKey).is("deleted_at", null)
+      .select("id, user_id, name, mime, file_key, kind, private, discoverable").eq("file_key", contentKey).is("deleted_at", null)
       .order("created_at", { ascending: true }).limit(1).maybeSingle();
     if (error) throw error;
     if (!rec || rec.kind !== "upload") return { status: 404, message: "Content not found." };
     // A private record (a chat upload, D53) is its owner's alone.
     if (rec.private && rec.user_id !== userId) return { status: 404, message: "Content not found." };
     const premiumIds = await activePremiumUserIds();
-    if (rec.user_id !== userId && premiumIds.includes(rec.user_id)) return { status: 404, message: "Content not found." };
+    if (rec.user_id !== userId && premiumIds.includes(rec.user_id) && rec.discoverable !== true) return { status: 404, message: "Content not found." };
     return { contentKey, name: rec.name, mime: rec.mime };
   }
   return { status: 400, message: "A recordId or contentKey is required." };
@@ -108,18 +113,19 @@ export async function resolveAskTargetFor({ userId, recordId: rawRecordId, conte
   if (recordId) {
     if (!/^[0-9a-f-]{36}$/i.test(recordId)) return { status: 400, message: "A valid recordId is required." };
     const { data: rec, error } = await (await edu()).from("records")
-      .select("id, user_id, name, kind, file_key, private").eq("id", recordId).is("deleted_at", null).maybeSingle();
+      .select("id, user_id, name, kind, file_key, private, discoverable").eq("id", recordId).is("deleted_at", null).maybeSingle();
     if (error) throw error;
     if (!rec) return { status: 404, message: "Record not found." };
     if (rec.user_id !== userId) {
       // Not theirs — but a record Discover would show them (a free user's
-      // public note, never a Premium subscriber's, never a private one)
-      // is a fair ask target: the thread and any items they make stay
-      // keyed to THEIR user id, and the passages are the owner's chunks,
-      // exactly like the shared-file path below.
+      // public note, or a Premium subscriber's record they have set
+      // public — never a private one) is a fair ask target: the thread
+      // and any items they make stay keyed to THEIR user id, and the
+      // passages are the owner's chunks, exactly like the shared-file
+      // path below.
       const discoverable = !rec.private
         && (rec.kind === "paste" || (rec.kind === "upload" && !!rec.file_key))
-        && !(await activePremiumUserIds()).includes(rec.user_id);
+        && (!(await activePremiumUserIds()).includes(rec.user_id) || rec.discoverable === true);
       if (!discoverable) return { status: 404, message: "Record not found." };
     }
     return askTargetForRecord(rec);

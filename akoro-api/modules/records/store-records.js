@@ -59,8 +59,8 @@ export const listDiscover = ({ limit, premiumIds, term, paged, cursor }) => {
     .in("kind", ["upload", "paste"]).is("deleted_at", null)
     .order("created_at", { ascending: false }).order("id", { ascending: false })
     .limit(limit);
-  if (premiumIds.length) query = query.not("user_id", "in", `(${premiumIds.join(",")})`);
-  query = query.eq("private", false);   // private records stay their owner's; Premium owners excluded above — one rule for Library and chat uploads alike
+  if (premiumIds.length) query = query.or(`user_id.not.in.(${premiumIds.join(",")}),discoverable.eq.true`);
+  query = query.eq("private", false);   // private records stay their owner's; Premium owners excluded above unless they set a record public — one rule for Library and chat uploads alike
   if (term) query = query.or(`name.ilike.%${term}%,content.ilike.%${term}%`);
   if (paged) {
     // The openable rule moves into SQL so a page is a full page.
@@ -76,14 +76,14 @@ export const countDiscover = ({ premiumIds, term }) => {
     .in("kind", ["upload", "paste"]).is("deleted_at", null)
     .eq("private", false)
     .or("kind.eq.paste,file_key.not.is.null");
-  if (premiumIds.length) countQuery = countQuery.not("user_id", "in", `(${premiumIds.join(",")})`);
+  if (premiumIds.length) countQuery = countQuery.or(`user_id.not.in.(${premiumIds.join(",")}),discoverable.eq.true`);
   if (term) countQuery = countQuery.or(`name.ilike.%${term}%,content.ilike.%${term}%`);
   return countQuery;
 };
 
 export const getDiscoverRecord = (id) =>
   edu().from("records")
-    .select("id, user_id, kind, name, file_key, content, private, deleted_at")
+    .select("id, user_id, kind, name, file_key, content, private, discoverable, deleted_at")
     .eq("id", id).maybeSingle();
 
 export const listUserNames = (ids) =>
@@ -105,7 +105,7 @@ export const setPreviewKey = (id, key) =>
 
 export const getRecordPreviewRow = (id) =>
   edu().from("records")
-    .select("id, user_id, private, preview_key, deleted_at").eq("id", id).maybeSingle();
+    .select("id, user_id, private, discoverable, preview_key, deleted_at").eq("id", id).maybeSingle();
 
 export async function listRecordsMissingPreview(limit = 100) {
   const db = edu();

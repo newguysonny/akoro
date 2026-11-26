@@ -284,7 +284,8 @@
     "2026-school-site-context-fix.sql",
     "2026-school-site-context-reload.sql",
     "2026-cleanup-docs-smoke-users.sql",
-    "2026-cleanup-docs-test-users-2.sql"
+    "2026-cleanup-docs-test-users-2.sql",
+    "2026-record-discoverable.sql"
   ],
   "demo": [
     "2026-seed-school-passwords.sql",

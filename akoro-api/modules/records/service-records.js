@@ -51,6 +51,10 @@ const toApi = async (r) => ({
   // A gathered content's citation map (marker → the original Discover
   // record), so the reader can open a citation's source and come back.
   sources: Array.isArray(r.sources) && r.sources.length ? r.sources : undefined,
+  // The Premium sharing choice: true when the owner has set this record
+  // public (it rides Discover like a free user's upload). Always false
+  // for free owners' rows in effect — their uploads are public anyway.
+  discoverable: r.discoverable === true,
   fileUrl: r.kind === "upload" && r.file_key
     ? await createPresignedDownload(r.file_key).catch((err) => {
         console.error("[records] could not sign fileUrl:", err?.message || err);
@@ -139,7 +143,7 @@ export async function openPreview(req, res) {
   if (r.user_id !== req.user.id) {
     if (r.private) return res404(res, "Record not found.");
     const premiumIds = await activePremiumUserIds();
-    if (premiumIds.includes(r.user_id)) return res404(res, "Record not found.");
+    if (premiumIds.includes(r.user_id) && r.discoverable !== true) return res404(res, "Record not found.");
   }
   const url = await createPresignedDownload(r.preview_key).catch((err) => {
     console.error("[records] preview presign failed:", err?.message || err);
@@ -362,7 +366,8 @@ export async function searchShelf(req, res) {
    Everyone's uploaded material — videos, audio, PDFs, images, text files
    and pasted notes — discoverable by the whole community, with the one
    exception the product draws: uploads owned by PREMIUM subscribers never
-   appear (their material stays private to them; see access.js). */
+   appear (their material stays private to them; see access.js) — unless
+   the subscriber sets that record public (discoverable = true). */
 
 // ─── GET /api/records/discover — the feed list ─────────────────────────────
 // METADATA ONLY: browsing the feed costs this API no storage calls — no
@@ -417,15 +422,16 @@ export async function listDiscover(req, res) {
 
 // ─── GET /api/records/discover/:id/open — open one discovered record ───────
 // One call per open: presign an upload's file (with its download name), or
-// hand back a paste's full text. Premium-owned records answer 404 — they
-// were never in the feed, and a guessed or stale id must not leak them.
+// hand back a paste's full text. Premium-owned records answer 404 unless
+// the owner set them public — they were never in the feed, and a guessed
+// or stale id must not leak them.
 export async function openDiscover(req, res) {
   const { data: r, error } = await store.getDiscoverRecord(req.params.id);
   if (error || !r || r.deleted_at || !["upload", "paste"].includes(r.kind)) return res404(res, "Record not found.");
   if (r.private && r.user_id !== req.user.id) return res404(res, "Record not found.");
   if (r.kind === "upload" && !r.file_key) return res400(res, "This record has no saved file.");
   const premiumIds = await activePremiumUserIds();
-  if (premiumIds.includes(r.user_id)) return res404(res, "Record not found.");
+  if (premiumIds.includes(r.user_id) && r.discoverable !== true) return res404(res, "Record not found.");
   if (r.kind === "paste") return res200(res, { content: r.content || "" });
   const url = await createPresignedDownload(r.file_key, { downloadName: r.name })
     .catch((err) => {
@@ -462,7 +468,7 @@ export async function openDiscoverFile(req, res) {
   if (r.private && r.user_id !== req.user.id) return res404(res, "Record not found.");
   if (r.kind !== "upload" || !r.file_key) return res404(res, "Record not found.");
   const premiumIds = await activePremiumUserIds();
-  if (premiumIds.includes(r.user_id)) return res404(res, "Record not found.");
+  if (premiumIds.includes(r.user_id) && r.discoverable !== true) return res404(res, "Record not found.");
   const url = await createPresignedDownload(r.file_key, { downloadName: r.name })
     .catch((err) => {
       console.error("[records] discover file presign failed:", err?.message || err);
@@ -473,7 +479,7 @@ export async function openDiscoverFile(req, res) {
   return res.redirect(302, url);
 }
 
-// ─── PATCH /api/records/:id — progress / last-opened ────────────────────────
+// ─── PATCH /api/records/:id — progress / last-opened / sharing ─────────────
 export async function patchRecord(req, res) {
   const userId = req.user.id;
   const { data: existing } = await store.getRecordOwner(req.params.id);
@@ -485,6 +491,12 @@ export async function patchRecord(req, res) {
     const p = Number(req.body.progress);
     if (!Number.isInteger(p) || p < 0 || p > 100) return res400(res, "progress must be a whole number between 0 and 100.");
     patch.progress = p;
+  }
+  // The Premium sharing choice (owner-only — the 403 above already ran):
+  // true sets the record public on Discover despite a Premium owner.
+  if (req.body?.discoverable !== undefined) {
+    if (typeof req.body.discoverable !== "boolean") return res400(res, "discoverable must be true or false.");
+    patch.discoverable = req.body.discoverable;
   }
   if (req.body?.lastOpened) patch.last_opened_at = new Date().toISOString();
   if (req.body?.name !== undefined) {
