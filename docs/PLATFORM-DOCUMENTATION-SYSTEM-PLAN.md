@@ -1416,6 +1416,11 @@ public presentation layer of this system.
 
 ## 18. Documentation lifecycle and governance
 
+**Settled 2026-11-26 (Matt):** ownership (§18.1) and review (§18.2) stand as
+operated today — Matt holds all six roles and is the owner of record (see the
+documentation README's ownership section). The change rule's reverse
+direction (§18.3) is report-only, per the note there.
+
 ### 18.1 Ownership
 
 | Role | Responsibility |
@@ -1446,7 +1451,13 @@ A pull request that changes behaviour must update:
 - changelog entry if users/developers are affected;
 - examples if they would now fail.
 
-CI should warn or fail when a public endpoint changes without a docs update.
+The reverse direction — an endpoint or module changing without a docs
+update — is **report-only** (decided 2026-11-26): the weekly docs-health
+gap check (`check-doc-gaps.mjs`, run by `docs-health.yml`) reports
+undocumented modules and stale or beta documentation in its run summary
+and artifact. It never fails CI; the validators that do fail CI are the
+forward-looking ones (reference integrity and secret scanning, in
+`docs.yml`).
 
 ### 18.4 Status labels
 
