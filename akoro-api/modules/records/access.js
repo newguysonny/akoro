@@ -59,9 +59,13 @@ export async function activePremiumUserIds() {
     .select("id").eq("platform", "learner").eq("access", "paid").eq("name", "Premium").limit(1);
   const tierId = tierRows?.[0]?.id ?? null;
   if (!tierId) return [];
+  // Billing writes learner subscriptions with learner_user_id (gateway.js
+  // fulfillment) — that is the column that identifies the subscriber. (This
+  // helper previously selected user_id, which checkout never populates, so
+  // no subscriber ever matched and the Premium privacy rule never fired.)
   const { data: subs } = await (await edu()).from("subscriptions")
-    .select("user_id").eq("tier_id", tierId).in("status", ["active", "trial", "trialing"]);
-  return [...new Set((subs || []).map((s) => s.user_id).filter(Boolean))];
+    .select("learner_user_id").eq("tier_id", tierId).in("status", ["active", "trial", "trialing"]);
+  return [...new Set((subs || []).map((s) => s.learner_user_id).filter(Boolean))];
 }
 
 /** recordId | contentKey → { contentKey, name, mime } | { status, message }. */

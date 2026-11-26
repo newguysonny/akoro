@@ -98,7 +98,7 @@ function chainFor(table) {
   const filters = [];
   const rows = () => (table === "records" ? state.records
     : table === "tiers" ? [{ id: "tier-premium", platform: "learner", access: "paid", name: "Premium" }]
-    : table === "subscriptions" ? [{ user_id: PREMIUM, tier_id: "tier-premium", status: "active" }]
+    : table === "subscriptions" ? [{ learner_user_id: PREMIUM, tier_id: "tier-premium", status: "active" }]
     : [])
     .filter((row) => filters.every(([col, val]) => (Array.isArray(val) ? val.includes(row[col]) : row[col] === val)));
   const chain = {
