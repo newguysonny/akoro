@@ -312,3 +312,215 @@ capabilities:
       - sandbox validation returned 422 on 2026-11-25
     verification_status: code-observed
     last_verified: "2026-11-25"
+
+  - id: learning.study_prep
+    name: Study Prep
+    category: learning
+    status: beta
+    description: >
+      Goal-driven exam preparation. A learner sets a goal, subject, class level
+      and exam board; the engine plans, the learner confirms, and practice and
+      transitions are engine-scored. Gated by AKORO_STUDY_PREP_ENABLED.
+    documentation:
+      - 01-features/learning/overview.md
+    api_reference: []
+    access:
+      - learner
+    requires_confirmation: false
+    side_effects:
+      - creates and updates a Study Prep session
+      - writes concept mastery evidence
+    verification:
+      - session and topic state machines are defined in code
+      - next-transition decisions are engine-owned
+    verification_status: code-observed
+    last_verified: "2026-11-26"
+
+  - id: learning.teaching_session
+    name: Teaching sessions
+    category: learning
+    status: beta
+    description: >
+      The adaptive lesson ladder and syllabus. Topics are drawn onto a ladder,
+      grounded in a syllabus, and progress through phased teaching with
+      teach-back gates.
+    documentation:
+      - 01-features/learning/overview.md
+    api_reference: []
+    access:
+      - learner
+    requires_confirmation: false
+    side_effects:
+      - creates teaching sessions and workflow state
+      - writes teaching evidence
+    verification:
+      - phase progression and next-action rules are defined in code
+    verification_status: code-observed
+    last_verified: "2026-11-26"
+
+  - id: learning.exam_prep
+    name: Exam Prep
+    category: learning
+    status: beta
+    description: >
+      Confidence-tracked exam practice with scored diagnostic and retest runs.
+      Gated by AKORO_EXAM_PREP_CONFIDENCE_ENABLED.
+    documentation:
+      - 01-features/learning/overview.md
+    api_reference: []
+    access:
+      - learner
+    requires_confirmation: false
+    side_effects:
+      - records confidence runs and scores
+    verification:
+      - run states and transitions are defined in code
+    verification_status: code-observed
+    last_verified: "2026-11-26"
+
+  - id: learning.practice
+    name: Practice and assessments
+    category: learning
+    status: beta
+    description: >
+      Topic practice and proctored assessment sessions. Attempts are scored
+      against fixed verdict thresholds and write back concept mastery evidence.
+    documentation:
+      - 01-features/learning/overview.md
+    api_reference: []
+    access:
+      - learner
+    requires_confirmation: false
+    side_effects:
+      - creates practice and assessment sessions
+      - writes mastery evidence on clean pass or fail
+    verification:
+      - verdict thresholds and mastery write-back are defined in code
+    verification_status: code-observed
+    last_verified: "2026-11-26"
+
+  - id: ai.agent_chat
+    name: Agent Chat
+    category: ai
+    status: beta
+    description: >
+      The AI protégé: a chat agent that tutors from the learner's own records
+      and acts through a feature-gated tool runtime, with reply scrubbing and
+      claim checks.
+    documentation:
+      - 01-features/ai/overview.md
+      - 01-features/learning/overview.md
+    api_reference: []
+    access:
+      - learner
+    requires_confirmation: false
+    side_effects:
+      - runs agent turns and tool calls
+      - saves conversation and grounded context
+    verification:
+      - turn prepare/answer and tool-runtime policy are defined in code
+    verification_status: code-observed
+    last_verified: "2026-11-26"
+
+  - id: battle.play
+    name: Battles
+    category: battle
+    status: beta
+    description: >
+      Live, judged study battles between learner agents: 1v1 Challenge, Open
+      Lobby and Classroom. Questions are sourced, judged by Sergeant, and
+      settled, ranked and paid on completion.
+    documentation:
+      - 01-features/battle/overview.md
+    api_reference: []
+    access:
+      - learner
+    requires_confirmation: false
+    side_effects:
+      - runs the battle worker lifecycle and writes results
+    verification:
+      - battle types, entry rules and worker lifecycle are defined in code
+    verification_status: code-observed
+    last_verified: "2026-11-26"
+
+  - id: self_study.author
+    name: Self-study authoring
+    category: self-study
+    status: beta
+    description: >
+      Instructor self-study authoring: activity drafts and versions, generated
+      question papers and rubrics, reviews, grading and learner hand-in.
+    documentation:
+      - 01-features/self-study/overview.md
+    api_reference: []
+    access:
+      - instructor
+    requires_confirmation: false
+    side_effects:
+      - creates assignments, drafts and grades
+    verification:
+      - authoring and grading flows are defined in code
+    verification_status: code-observed
+    last_verified: "2026-11-26"
+
+  - id: communities.study_group
+    name: Communities
+    category: communities
+    status: beta
+    description: >
+      Higher-ed study groups with discovery, membership, creator-authored
+      activities, shared items and a per-community group discussion.
+    documentation:
+      - 01-features/communities/overview.md
+    api_reference: []
+    access:
+      - learner
+    requires_confirmation: false
+    side_effects:
+      - creates communities, memberships, activities and discussion messages
+    verification:
+      - ownership and idempotency rules are defined in code
+    verification_status: code-observed
+    last_verified: "2026-11-26"
+
+  - id: agent_network.marketplace
+    name: Agent network and marketplace
+    category: agent-network
+    status: beta
+    description: >
+      The learner agent network: social graph, discovery and privacy, challenges
+      and messaging, and the agent marketplace with purchaser-only reviews.
+    documentation:
+      - 01-features/agent-network/overview.md
+    api_reference: []
+    access:
+      - learner
+    requires_confirmation: false
+    side_effects:
+      - creates challenges, connections and marketplace listings
+    verification:
+      - discovery, privacy and review-gating rules are defined in code
+    verification_status: code-observed
+    last_verified: "2026-11-26"
+
+  - id: payments.wallet
+    name: Wallet, payouts and vouchers
+    category: payments
+    status: beta
+    description: >
+      The learner wallet and coins, instructor earnings and payouts, vouchers,
+      subscriptions, purchases and refunds, all settling through the unified
+      Paystack webhook.
+    documentation:
+      - 01-features/payments/overview.md
+    api_reference: []
+    access:
+      - learner
+      - instructor
+    requires_confirmation: false
+    side_effects:
+      - moves coins, records transactions, and processes payouts and refunds
+    verification:
+      - settlement and payout rules are defined in code
+    verification_status: code-observed
+    last_verified: "2026-11-26"

@@ -21,10 +21,15 @@ Tier-2/3 pages are overviews and need module-level detail.
 - [Learning and assessment](learning/overview.md)
 - [Instructor](instructor/overview.md)
 - [School platform](school/overview.md)
+- [Battles](battle/overview.md)
+- [Self-study](self-study/overview.md)
+- [Communities](communities/overview.md)
+- [Payments and wallet](payments/overview.md)
 
 ## Tier 3 / internal
 
 - [AI and agent runtime](ai/overview.md)
+- [Agent network](agent-network/overview.md)
 
 ## Rules
 
@@ -37,8 +42,5 @@ Tier-2/3 pages are overviews and need module-level detail.
 
 ## Not yet documented
 
-- Learner communities, battles and agent network.
-- Self-study assignment detail.
 - Admin operations.
-- Payments/wallet/vouchers beyond the public contract.
 - School ERP module groups.
