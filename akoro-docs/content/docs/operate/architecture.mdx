@@ -1,0 +1,56 @@
+---
+title: Architecture
+description: High-level system boundaries and the request lifecycle.
+---
+
+# Architecture
+
+Akoro is an education platform with four web applications, one API, a library
+and extraction pipeline, a course and media system, an AI runtime, and a school
+management system. This page describes the public-facing boundaries.
+
+## Surfaces
+
+| Surface | Purpose |
+| --- | --- |
+| Learner app | Students: onboarding, library, AI protégé, study, practice |
+| Instructor app | Teachers: courses, lessons, assignments, assessments |
+| School app | Institutions: a full ERP (admissions, academics, fees, HR, logistics) |
+| Admin app | Operators: users, approvals, analytics, AI operations |
+| API | One JSON API shared by all apps, portal-scoped by role |
+| Media worker | Asynchronous course-video encode lane |
+| Extraction | PDF/image/audio processing into text and chunks |
+
+## Request lifecycle
+
+1. A client authenticates and receives a portal-scoped session (see
+   [Authentication](/docs/start/authentication)).
+2. Requests are authorised server-side from the session; the client never
+   supplies its own role.
+3. Long-running work (video encoding, extraction) runs asynchronously and is
+   polled by status.
+
+## Backend domains
+
+- Authentication, sessions, 2FA and OAuth.
+- Profiles, roles and portal-scoped access.
+- Library records: upload, preview, extraction, chunking, retrieval and ask.
+- Courses, lessons, enrolments, progress, live sessions and HLS video.
+- Programmes, curriculum, syllabus, past questions and PharmD.
+- Adaptive learning, study and exam preparation, practice and assessment
+  evidence.
+- Payments, wallets, payouts and webhooks.
+- School ERP and school website/domain management.
+- Admin operations, AI model routing, evaluations and the verification gate.
+
+## What is not public
+
+Internal admin, school ERP, agent-console and verification routes are not part
+of the public API. The public surface is an allow-listed subset; see
+[API reference](/docs/reference/api).
+
+## Related
+
+- [API overview](/docs/build/api-overview)
+- [Observability](/docs/operate/observability)
+- [Security](/docs/operate/security)

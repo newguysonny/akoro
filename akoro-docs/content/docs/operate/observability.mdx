@@ -1,0 +1,39 @@
+---
+title: Observability
+description: Health endpoints and how to check whether Akoro is up.
+---
+
+# Observability
+
+Akoro exposes health endpoints and a public status page.
+
+## Status page
+
+The public status page is at [akoro.instatus.com](https://akoro.instatus.com).
+It is hosted independently of the API and applications so it stays available
+during an outage. Use it to tell whether an issue is Akoro-wide or specific to
+your app.
+
+## Health endpoints
+
+| Endpoint | Purpose | Notes |
+| --- | --- | --- |
+| `GET /health` | Liveness / readiness | Returns 200 when the API process is up |
+| `GET /api/tasks/health` | Task service diagnostic | Internal diagnostic |
+
+Health endpoints are for monitoring, not part of the documented public API. They
+do not require a session.
+
+## Rate limits
+
+Rate limits are enforced per scope and returned as `429` with a `Retry-After`
+header. See [Errors and rate limits](/docs/start/errors).
+
+## Logs and metrics
+
+Logs and metrics are internal and are not exposed through the public API.
+
+## Related
+
+- [Errors and rate limits](/docs/start/errors)
+- [Architecture](/docs/operate/architecture)

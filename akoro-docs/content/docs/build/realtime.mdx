@@ -1,0 +1,46 @@
+---
+title: Realtime and sockets
+description: Socket authentication, notification events and reconnect behaviour.
+---
+
+# Realtime and sockets
+
+Akoro uses Socket.io for realtime updates such as notifications, chat and
+adaptive sessions.
+
+## Authentication
+
+Sockets authenticate from the handshake cookie, following the same portal and
+origin rules as HTTP. A socket can only open for the signed-in user whose cookie
+it presents.
+
+## Notifications
+
+In-app notifications are delivered to the user's own channel. The notification
+catalogue includes:
+
+- `purchase_success`, `order_processing`, `purchase_refunded`
+- `sale_new`, `payout_completed`
+- teaching, community and study events
+
+The `type` field is stable and maps to an icon and colour in the client.
+
+## Channels
+
+Notifications are best-effort across channels:
+
+- in-app bell entry;
+- realtime `notification` event on the user's channel;
+- optional email, when the user has not disabled it.
+
+A failure in one channel never fails the action that raised the notification.
+
+## Reconnect
+
+Clients should reconnect with backoff after a disconnect and re-authenticate if
+the session has expired. WebSocket and polling transports are both supported.
+
+## Related
+
+- [Authentication](/docs/start/authentication)
+- [Webhooks and callbacks](/docs/build/webhooks)

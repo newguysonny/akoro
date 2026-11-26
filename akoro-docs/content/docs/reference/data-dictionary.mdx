@@ -1,0 +1,70 @@
+---
+title: Data dictionary
+description: Shared objects that appear across the public API.
+---
+
+# Data dictionary
+
+Shared objects that appear across public endpoints. Field trees and
+nullability are per endpoint in the [API reference](/docs/reference/api); this
+page defines the concepts.
+
+## Identity and session
+
+| Object | Meaning |
+| --- | --- |
+| User | A learner, instructor, school staff or admin account |
+| Role | Server-decided permission level (`student`, instructor, school, admin) |
+| Portal | The client surface a session belongs to, sent as `X-Akoro-Portal` |
+| Session | Portal-scoped HttpOnly cookies plus access/refresh tokens |
+
+## Library and records
+
+| Object | Meaning |
+| --- | --- |
+| Record | A library material: PDF, document, image, audio, video, paste or link |
+| File | Stored bytes for a record, served through presigned URLs |
+| Preview | Rendered pages or thumbnails for a record |
+| Extraction | Text, OCR or transcript produced from a record |
+| Chunk | A retrievable fragment of extracted text used for search and ask |
+
+## Courses and media
+
+| Object | Meaning |
+| --- | --- |
+| Course | A structured learning product with lessons and media |
+| Lesson | A unit within a course |
+| Enrolment | A learner's membership in a course, with progress |
+| Video | A course-video source and its processed renditions |
+| Encode job | The asynchronous job turning a source into HLS variants |
+| Variant | One rendition, such as 360p or 1080p |
+
+## Catalogue
+
+| Object | Meaning |
+| --- | --- |
+| Programme | A structured programme with courses and faculty |
+| PharmD course | A pharmacy course and its topic documents |
+
+## Payments
+
+| Object | Meaning |
+| --- | --- |
+| Payment | A checkout and its status |
+| Transaction | A ledger entry |
+| Refund | A reversal returning access and funds |
+| Payout | A transfer to an instructor's bank account |
+
+## Common envelopes
+
+| Object | Meaning |
+| --- | --- |
+| Pagination envelope | `data` list with cursor/limit semantics |
+| Error envelope | `success`, `message`, optional `code` and `errors` fields |
+| Rate-limit headers | `Retry-After` on `429` responses |
+
+## Related
+
+- [API reference](/docs/reference/api)
+- [Error catalog](/docs/reference/errors)
+- [API overview](/docs/build/api-overview)

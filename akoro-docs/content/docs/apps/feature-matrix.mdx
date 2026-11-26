@@ -1,0 +1,42 @@
+---
+title: Feature matrix
+description: Which capabilities each Akoro app provides.
+---
+
+# Feature matrix
+
+| Area | Learner | Instructor | School | Admin |
+| --- | --- | --- | --- | --- |
+| Onboarding | Yes | Yes | Yes | Yes |
+| Courses | Enrol / read | Create / manage | Curriculum | All |
+| Library | Upload / read | Share | School library | All |
+| Agents / AI | Chat / study | Authoring | Oversight | Platform |
+| Media | Watch | Upload / encode | Approve | Operate |
+| Assessments | Take | Author / grade | Results | All |
+| Payments | Pay | Earnings | Fees | Reconciliation |
+| Admin | No | Limited | School admin | Full |
+
+## Reading the matrix
+
+- **Learner** is the student-facing app: study, practice, communities and the
+  catalogue.
+- **Instructor** is the teacher-facing app: courses, lessons, assignments,
+  assessments and payouts.
+- **School** is the institution-facing ERP: admissions, academics, exams, fees
+  and more than 128 management tables.
+- **Admin** is the platform-operator app: users, approvals, analytics and AI
+  operations.
+
+## API access
+
+Each app authenticates against the same API with a portal-scoped session. See
+[Authentication](/docs/start/authentication) and
+[API reference](/docs/reference/api). The public API is an allow-listed subset;
+school ERP and admin operations remain internal.
+
+## Related
+
+- [Learner](/docs/apps/learner)
+- [Instructor](/docs/apps/instructor)
+- [School](/docs/apps/school)
+- [Admin](/docs/apps/admin)

@@ -1,0 +1,52 @@
+---
+title: Security
+description: HTTPS, portal-scoped sessions and data handling for integrators.
+---
+
+# Security
+
+This page describes the security model for integrators. It does not document
+internal controls or attack surface.
+
+## Transport
+
+All API and app traffic must use HTTPS. Sessions are transmitted only over
+secure connections.
+
+## Authentication and sessions
+
+- Sessions live in HttpOnly, Secure, SameSite cookies and are never readable
+  from browser JavaScript.
+- Cookies are portal-scoped (`akoro_access_<portal>`). Requests must send the
+  matching `X-Akoro-Portal` header.
+- Role and ownership are decided server-side from the session. A client can
+  never grant itself a role.
+
+See [Authentication](/docs/start/authentication) for the full flow.
+
+## Secrets in examples
+
+- Never put real credentials in requests or code examples.
+- Use demo accounts and sandbox data only.
+- Redact tokens, cookies and personal data before sharing snippets.
+
+## Cross-origin requests
+
+Cross-origin requests are allowed only from explicit origins; the API does not
+reflect arbitrary origins.
+
+## Rate limiting and retries
+
+Rate limits protect the API. Honour `429` and `Retry-After`. See
+[Errors and rate limits](/docs/start/errors).
+
+## Reporting
+
+For security issues, follow coordinated disclosure. Do not post details
+publicly.
+
+## Related
+
+- [Authentication](/docs/start/authentication)
+- [Errors and rate limits](/docs/start/errors)
+- [Environments](/docs/start/environments)

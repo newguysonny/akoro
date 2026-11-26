@@ -1,3 +1,3 @@
 {
-  "pages": ["api-overview", "uploads", "library", "media", "catalogues"]
+  "pages": ["api-overview", "uploads", "webhooks", "realtime", "library", "media", "catalogues"]
 }

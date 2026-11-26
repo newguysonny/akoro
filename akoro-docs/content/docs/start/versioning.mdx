@@ -1,0 +1,83 @@
+---
+title: API versioning and deprecation
+description: Base paths, stability rules and the 90-day sunset policy.
+---
+
+# API versioning and deprecation
+
+## Current state
+
+The public API is served from:
+
+```text
+https://api.akoro.ng/api          # production
+https://sandbox.akoro.ng/api      # sandbox
+```
+
+A canonical versioned path (`/api/v1`) is planned but not yet implemented.
+Current clients call `/api` directly.
+
+## Versioning policy
+
+The recommended policy below is agreed for the public surface. It applies from
+the first versioned release.
+
+| Rule | Behaviour |
+| --- | --- |
+| Canonical path | `/api/v1` for the current major |
+| Alias | `/api` keeps resolving for existing clients |
+| Additive change | Allowed within a major version |
+| Breaking change | Requires a new major version |
+| Deprecation notice | Minimum 90 days before removal |
+| Sunset headers | `Deprecation` and `Sunset` on deprecated responses |
+| Changelog | Every deprecation and breaking change ships an entry plus a migration guide |
+
+Additive changes are things that do not change existing behaviour:
+
+- adding a new optional field;
+- adding a new endpoint;
+- adding a new, non-conflicting value to an enum;
+- tightening documentation.
+
+Breaking changes require a new major:
+
+- removing or renaming a field;
+- changing a field type or meaning;
+- removing an endpoint;
+- changing an error status code or envelope;
+- changing pagination semantics.
+
+## Deprecation lifecycle
+
+```text
+Announced (90+ days) -> Deprecated (headers) -> Removed (new major only)
+```
+
+1. Publish a changelog entry and a migration guide.
+2. Add `Deprecation` and `Sunset` response headers to the endpoint.
+3. Keep the endpoint working for at least 90 days.
+4. Remove it only as part of a major version bump.
+
+## Headers
+
+```text
+Deprecation: true
+Sunset: Wed, 03 Mar 2027 00:00:00 GMT
+```
+
+Clients should treat a `Deprecation` header as a signal to migrate, and a
+`Sunset` date as the last day the endpoint is guaranteed to work.
+
+## What you can rely on
+
+- JSON requests and responses.
+- The error envelope described in [Errors and rate limits](/docs/start/errors).
+- Portal-scoped authentication with `X-Akoro-Portal` (see
+  [Authentication](/docs/start/authentication)).
+- Stable, machine-readable error codes once the public error catalogue ships.
+
+## Related
+
+- [Errors and rate limits](/docs/start/errors)
+- [API overview](/docs/build/api-overview)
+- [Changelog](/docs/changelog)

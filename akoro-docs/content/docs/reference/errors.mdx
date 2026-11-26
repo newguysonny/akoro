@@ -1,0 +1,84 @@
+---
+title: Error catalog
+description: Error envelope, status codes and retryability for the public API.
+---
+
+# Error catalog
+
+Akoro does not yet use one universal error envelope across every module. The
+public surface is being normalised; this page documents the observed shapes and
+the status mapping that applies today.
+
+## Error envelope
+
+Auth and common service errors use:
+
+```json
+{
+  "success": false,
+  "message": "Human-readable message",
+  "code": "optional_machine_code"
+}
+```
+
+Validation failures may include a `fields` or `errors` array:
+
+```json
+{
+  "success": false,
+  "message": "Please check the highlighted fields.",
+  "errors": [
+    { "field": "email", "message": "Enter a valid email address." }
+  ]
+}
+```
+
+Some catalogue and legacy handlers return a minimal shape:
+
+```json
+{ "error": "Human-readable message" }
+```
+
+Always read the body; do not infer the cause from the status code alone.
+
+## Status codes
+
+| Status | Meaning | Retry |
+| --- | --- | --- |
+| 400 | Invalid request | No, fix the request |
+| 401 | Missing or invalid session | Refresh or sign in |
+| 403 | Authenticated but not allowed | No |
+| 404 | Not found, or not visible to the caller | No |
+| 409 | Conflict or busy lane | Only when documented |
+| 413 | Payload too large | No |
+| 422 | Validation failed | No, fix fields |
+| 429 | Rate limited | After `Retry-After` |
+| 500 | Unexpected server error | Maybe, with backoff |
+| 502 / 503 | Dependency unavailable | Yes, with backoff |
+| 504 | Timeout | Verify side effect before retrying writes |
+
+## Retry rules
+
+- Retry only idempotent operations, or writes carrying an idempotency key.
+- Never retry a permanent validation or permission error unchanged.
+- After a timeout or 5xx, verify the side effect before retrying a write.
+- Honour `Retry-After` on 429 responses.
+
+## Rate limits
+
+Rate limits are enforced per scope. When exceeded the API returns `429` with a
+`Retry-After` header. Limits are documented per endpoint in the
+[API reference](/docs/reference/api).
+
+## Stable error codes
+
+A stable, machine-readable error-code catalogue per public endpoint is planned
+but not yet shipped. Until then treat the `code` field, when present, as
+informational rather than a contract. The
+[changelog](/docs/changelog) will announce the catalogue when it lands.
+
+## Related
+
+- [Errors and rate limits](/docs/start/errors)
+- [API overview](/docs/build/api-overview)
+- [API reference](/docs/reference/api)

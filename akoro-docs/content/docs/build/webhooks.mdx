@@ -1,0 +1,45 @@
+---
+title: Webhooks and callbacks
+description: Payment webhooks, signature verification and reliability.
+---
+
+# Webhooks and callbacks
+
+Akoro receives provider-signed webhooks for payments. Webhooks are authenticated
+by the provider's signature, not by a user session.
+
+## Payment webhooks
+
+Payments are processed by Paystack. Akoro verifies the webhook signature once
+against the raw request body.
+
+| Endpoint | Purpose |
+| --- | --- |
+| `POST /api/webhooks/paystack` | Unified Paystack webhook |
+| `POST /api/payments/verify` | Legacy Paystack verification |
+| `POST /api/payouts/webhook` | Payout / transfer status |
+
+## Signature verification
+
+The `x-paystack-signature` header carries an HMAC-SHA512 digest of the exact
+request body. Requests with an invalid signature are rejected with `400`.
+
+Because the signature is computed over the raw body, send the body unmodified —
+do not re-encode or reformat it.
+
+## Reliability
+
+- Events are recorded before processing so a failed attempt is auditable.
+- Writes use an outbox with idempotency keys; a redelivered event is applied once.
+- Respond `2xx` quickly so the provider does not retry an already-processed
+  event.
+
+## Consuming webhooks
+
+Webhooks are inbound only. If you build your own integration that mirrors these
+callbacks, verify the signature the same way and keep consumers idempotent.
+
+## Related
+
+- [API overview](/docs/build/api-overview)
+- [Payments and wallets](/docs/apps/feature-matrix)

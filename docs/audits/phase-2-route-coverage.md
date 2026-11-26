@@ -5,7 +5,7 @@ router table, not from a static source scan.
 
 | Field | Value |
 | --- | --- |
-| Generated | 2026-11-25T18:43:02.685Z |
+| Generated | 2026-11-26T00:13:40.385Z |
 | Extractor | `AKORO_ROUTE_EXPORT=1` import of `akoro-api/app.js`; recursive `app._router.stack` walk |
 | Normalized table | `docs/audits/phase-2-route-table.json` (written by `export-routes.mjs`) |
 | OpenAPI | `akoro-documentation/02-api/openapi.yaml` |
@@ -17,14 +17,14 @@ router table, not from a static source scan.
 | --- | ---: |
 | Runtime routes (method + full path, deduplicated) | 1270 |
 | Runtime paths | 1076 |
-| OpenAPI paths | 34 |
-| OpenAPI operations | 35 |
-| Documented operations present in runtime | 35 |
+| OpenAPI paths | 35 |
+| OpenAPI operations | 36 |
+| Documented operations present in runtime | 36 |
 | Documented operations missing from runtime | 0 |
-| Public route candidates | 40 |
-| Public candidates documented | 29 |
-| Public candidates without docs | 11 |
-| Runtime routes not in OpenAPI | 1235 |
+| Public route candidates | 36 |
+| Public candidates documented | 30 |
+| Public candidates without docs | 6 |
+| Runtime routes not in OpenAPI | 1234 |
 
 ## Documented operations
 
@@ -57,6 +57,7 @@ router table, not from a static source scan.
 | getPublishedProgramme | GET | /programmes/catalogue/{id} | /api/programmes/catalogue/:id | yes |
 | getPublishedProgrammeCourse | GET | /programmes/catalogue/courses/{id} | /api/programmes/catalogue/courses/:id | yes |
 | getPharmdCourse | GET | /pharmd/courses/{code} | /api/pharmd/courses/:code | yes |
+| getPharmdTopicFile | GET | /pharmd/topics/{id}/file | /api/pharmd/topics/:id/file | yes |
 | getFeaturedBlogPost | GET | /content/blog/posts/featured | /api/content/blog/posts/featured | yes |
 | listBlogCategories | GET | /content/blog/categories | /api/content/blog/categories | yes |
 | getBlogPost | GET | /content/blog/posts/{slug} | /api/content/blog/posts/:slug | yes |
@@ -74,17 +75,12 @@ None. Every documented operation resolves to a runtime route.
 
 | Method | Path | Module | Notes |
 | --- | --- | --- | --- |
-| GET | /api/auth/google | auth | OAuth redirect |
-| GET | /api/auth/google/callback | auth | OAuth callback |
-| GET | /api/pharmd/topics/:id/file | pharmd | public topic PDF |
-| GET | /api/adaptive/marketplace/listings | adaptive-learning | agent marketplace |
-| GET | /api/adaptive/marketplace/listings/:id | adaptive-learning | agent listing |
-| GET | /api/adaptive/marketplace/listings/subject/:subject | adaptive-learning | agent listing by subject |
-| GET | /api/adaptive/marketplace/search | adaptive-learning | agent marketplace search |
-| GET | /api/adaptive/marketplace/verify/:reference | adaptive-learning | payment reference verification |
-| GET | /api/adaptive/marketplace/payment/callback | adaptive-learning | payment redirect |
-| GET | /health | app | liveness/readiness |
-| GET | /api/tasks/health | tasks | diagnostic |
+| GET | /api/adaptive/marketplace/listings | adaptive-learning | agent marketplace (Tier 2 - deferred) |
+| GET | /api/adaptive/marketplace/listings/:id | adaptive-learning | agent listing (Tier 2 - deferred) |
+| GET | /api/adaptive/marketplace/listings/subject/:subject | adaptive-learning | agent listing by subject (Tier 2 - deferred) |
+| GET | /api/adaptive/marketplace/search | adaptive-learning | agent marketplace search (Tier 2 - deferred) |
+| GET | /api/adaptive/marketplace/verify/:reference | adaptive-learning | payment reference verification (Tier 2 - deferred) |
+| GET | /api/adaptive/marketplace/payment/callback | adaptive-learning | payment redirect (Tier 2 - deferred) |
 
 ## Undocumented runtime routes by module
 
@@ -116,8 +112,8 @@ None. Every documented operation resolves to a runtime route.
 | workflows | 9 |
 | wallet | 8 |
 | auth | 7 |
-| pharmd | 7 |
 | agent-proposals | 6 |
+| pharmd | 6 |
 | teaching | 6 |
 | verify | 6 |
 | app | 5 |

@@ -799,6 +799,28 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
 
+  /pharmd/topics/{id}/file:
+    get:
+      tags: [PharmD]
+      operationId: getPharmdTopicFile
+      summary: Download a PharmD topic document
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Topic document (PDF or image), streamed from storage
+          content:
+            application/pdf:
+              schema: { type: string, format: binary }
+        '404':
+          description: Topic not found or not available
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
   /content/blog/posts/featured:
     get:
       tags: [Content]
