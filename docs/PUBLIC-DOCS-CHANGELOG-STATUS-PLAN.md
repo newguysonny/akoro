@@ -2,7 +2,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Phase 4 substantially complete — docs live at `docs.akoro.ng` (apps and operate guides, error catalog, data dictionary, versioning policy, generated API reference, changelog feeds, search, analytics); Tier-1 OpenAPI coverage closed (36 operations, marketplace deferred to Tier 2); Instatus status page wired via `/status` |
+| Status | Phase 4 substantially complete — docs live at `docs.akoro.ng` (apps and operate guides, error catalog, data dictionary, versioning policy, generated API reference, changelog feeds, search, analytics); Tier-1 OpenAPI coverage closed (36 operations, marketplace deferred to Tier 2); Instatus status page wired via `/status`; app guides build (§14.5) — learner track complete 2026-11-26 (17 hubs, 179 routes), instructor/school/admin tracks pending |
 | Owner | Platform / Documentation |
 | Created | 2026-11-25 |
 | Scope | Public documentation site, API reference, product/API changelog, public status page |
@@ -1090,6 +1090,66 @@ v1, with some phases parallelisable.
 - Rollback and ownership documented.
 
 ---
+
+### 14.5 Guides build (app guides expansion, 2026-11-26)
+
+The Phase 4 "app guides" line item grew into its own build. The trigger was a
+quality judgement: the public guides were not yet task-complete pages with
+screenshots in the way Vercel's docs are. A study and a blueprint were produced
+before any pages were written:
+
+- a study of the Vercel docs system (hub per area, one page per job);
+- a surface inventory of all four apps — Learner (17 areas, 134 items),
+  Instructor (11 areas, 48 items), School ERP (20 groups, 244 routes),
+  Platform Admin (7 areas, 32 items);
+- the guides blueprint: five tracks, roughly 55 hubs and 170 job pages
+  (about 225 pages total, about 200 of them public).
+
+Decisions (owner, 2026-11-26):
+
+- Structure and scope approved as blueprinted; phase order is **learner
+  first**, then instructor, school, admin.
+- Screenshots are captured by the agent, signed into the **sandbox** with
+  demo accounts — never against production data.
+- The **Admin track is internal only**: admin guides are written for the
+  internal knowledge base (`akoro-documentation/`), never published to
+  docs.akoro.ng.
+- Screenshots enter the repository through the GitHub web upload UI; the
+  GitHub integration cannot push binary files (its push path is UTF-8 text
+  only — verified 2026-11-26).
+
+Conventions: one hub per app area and one page per job; frontmatter is title
+plus description only; each page carries its screenshot with a caption; every
+internal `/docs/…` link must resolve to a real page; the public-docs validator
+runs before every push.
+
+Status:
+
+- **Learner track — complete (2026-11-26).** 17 hubs, 179 validated routes,
+  66 screenshots, every remote file size-verified against its local capture.
+  Hubs: Getting started, Home, Agent chat, Build your own tools, Study,
+  Library, Reader, Discover, Courses & programmes, Communities, Agent
+  network, Progress, Premium & payments, Settings — Account, Settings —
+  Agent, Troubleshooting, Battles. There is no deployed sandbox frontend, so
+  captures were taken from the production app bundle mirrored locally and
+  served against the sandbox API (the internal KB's local-relay pattern).
+- **Instructor track — not started.** Blocked on the instructor app's
+  deployed URL, which appears in no repository, KB or hosting source
+  checked. A sandbox instructor demo account exists
+  (`teacher1@demo.akoro.app`, from the KB smoke scripts).
+- **School track — not started.** Same blocker: the school portal's deployed
+  URL is unknown.
+- **Admin track — not started.** The capture pipeline is built (production
+  admin bundle mirrored; the local relay serves it against the sandbox API;
+  the sign-in page renders). Blocked on the sandbox admin account password:
+  `admin@demo.akoro.app` does not accept the standard demo password, and the
+  real one is held only inside the KB smoke scripts.
+
+Build note (2026-11-26): a frontmatter YAML defect — descriptions containing
+an unquoted colon on 13 learner pages — failed the Vercel build; fixed the
+same day (`beb9bf96`). The public-docs validator does not parse frontmatter;
+adding a frontmatter parse check to it is recommended so this class of error
+is caught before a deploy rather than during one.
 
 ## 15. Risks and mitigations
 
