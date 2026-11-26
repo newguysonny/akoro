@@ -2,7 +2,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Implemented — Phases 0–3 complete; Phase 4 public surfaces live (redeployed 2026-11-26; public-content security remediation and the validator allow-list guard landed the same day, pending one further redeploy); Phase 5 expansion written 2026-11-26, with secret scanning and weekly docs-health checks in CI. Remaining: security-review sign-off, status monitors and the incident drill, the WCAG/Lighthouse pass, the `/api/v1` decision, and verification upgrades for the remaining beta capabilities |
+| Status | Implemented — Phases 0–3 complete; Phase 4 public surfaces live (redeployed 2026-11-26; public-content security remediation and the validator allow-list guard landed the same day, pending one further redeploy); Phase 5 expansion written 2026-11-26, with secret scanning and weekly docs-health checks in CI. Remaining: security-review sign-off, status monitors and the incident drill, the WCAG/Lighthouse pass, and verification upgrades for the remaining beta capabilities. The `/api/v1` decision was taken 2026-11-26: keep the API unversioned for now |
 | Scope | Complete platform knowledge system for humans and AI agents |
 | Supersedes | Extends `docs/PUBLIC-DOCS-CHANGELOG-STATUS-PLAN.md` (public-surface plan) |
 | Audience | Engineering, product, docs, security, operations, Akoro agents |

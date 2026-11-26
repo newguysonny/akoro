@@ -20,13 +20,16 @@ empty because the API has never shipped a versioned break.
 - The live API is **unversioned**: base path `https://api.akoro.ng/api`
   (sandbox: `https://sandbox.akoro.ng/api`), contract in
   [OpenAPI](../../02-api/openapi.yaml), spec version `0.1.0-skeleton`.
-- Canonical **`/api/v1` versioning is proposed, not implemented**, and the
-  decision is still open. Until it is taken, clients integrate against
-  `/api` and this documentation set describes that surface.
-- Because there is no v1, there is nothing to migrate *to* yet. When the
-  versioning decision lands, the first migration guide (from unversioned
-  `/api` to `/api/v1`) will be written here before any client is asked to
-  move.
+- Canonical **`/api/v1` versioning is proposed, not implemented**.
+  **Decision (2026-11-26, Matt): keep the API unversioned for now.** There
+  are no external API consumers yet, and the deprecation rules below work
+  without a version prefix; `/api/v1` stays a documented proposal to revisit
+  if external consumers arrive. Clients integrate against `/api` and this
+  documentation set describes that surface.
+- Because there is no v1, there is nothing to migrate *to* yet. If the
+  versioning decision is ever reversed, the first migration guide (from
+  unversioned `/api` to `/api/v1`) will be written here before any client is
+  asked to move.
 
 ## Rules for any future migration
 

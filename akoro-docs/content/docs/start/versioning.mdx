@@ -14,15 +14,17 @@ https://api.akoro.ng/api          # production
 https://sandbox.akoro.ng/api      # sandbox
 ```
 
-A canonical versioned path (`/api/v1`) is planned but not yet implemented.
+A canonical versioned path (`/api/v1`) has been considered and **deferred**:
+as of 2026-11-26 the decision is to keep the API unversioned for now.
 Current clients call `/api` directly.
 
 ## Proposed versioning policy
 
-The policy below is **proposed, not yet agreed or implemented**, and the
-versioning decision is still open. Until it is taken, the live API is the
-unversioned `/api` described above and nothing on this page is a commitment.
-If the policy is adopted, it will apply from the first versioned release.
+The policy below is **proposed, not implemented**. It is kept on record for
+if and when a versioned surface is adopted — for example, if external API
+consumers arrive. Until then, the live API is the unversioned `/api`
+described above and nothing in this section is a commitment. If the policy
+is adopted, it will apply from the first versioned release.
 
 | Rule | Behaviour |
 | --- | --- |
