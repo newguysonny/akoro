@@ -1,3 +1,13 @@
 {
-  "pages": ["index", "start", "learner", "build", "apps", "operate", "reference", "changelog"]
+  "pages": [
+    "index",
+    "start",
+    "learner",
+    "instructor",
+    "build",
+    "apps",
+    "operate",
+    "reference",
+    "changelog"
+  ]
 }
