@@ -3,6 +3,7 @@
  * notification preferences, avatar, deactivation and erasure.
  */
 import { endSession, invalidateCachedUser } from "../auth/index.js";
+import { activePremiumUserIds } from "../records/access.js";
 import { now, res200, res400 } from "./http.js";
 import { isIanaTimeZone, notificationPreferenceRow } from "./rules.js";
 import * as users from "./store-users.js";
@@ -11,11 +12,15 @@ import * as users from "./store-users.js";
 export async function getMe(req, res) {
   const userId = req.user.id;
 
-  const [{ data: user }, { data: agent }, { data: notif }, { data: accountSettings }] = await Promise.all([
+  const [{ data: user }, { data: agent }, { data: notif }, { data: accountSettings }, premiumIds] = await Promise.all([
     users.readProfileWithFallback(userId),
     users.getActiveUserAgent(userId),
     users.getNotificationPreferences(userId),
     users.getUserSettings(userId),
+    // The caller's real plan, under the records rule's own definition of a
+    // Premium learner (records/access.js) — a failed lookup reads as Free,
+    // the same degradation the records search uses.
+    activePremiumUserIds().catch(() => []),
   ]);
 
   if (!user) return res.status(404).json({ success: false, message: "User not found" });
@@ -29,6 +34,9 @@ export async function getMe(req, res) {
     avatarEmoji:     user.avatar_emoji,
     phone:           user.phone,
     role:            user.role,
+    // The caller's real plan ("Premium" | "Free") from their subscription —
+    // the server-side truth the app's device-local plan switch can't fake.
+    plan:            premiumIds.includes(userId) ? "Premium" : "Free",
     country:         user.country,
     city:            user.city ?? null,
     schoolName:      user.school_name,

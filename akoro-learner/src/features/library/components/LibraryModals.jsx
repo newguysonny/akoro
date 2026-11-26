@@ -7,14 +7,14 @@ import AddToFolderPage from '../../../components/library/AddToFolderPage.jsx';
 import AddToTargetSheet from '../../../components/library/AddToTargetSheet.jsx';
 import { AddToCommunityPage } from '../../communities/index.js';
 import NowStudyingBar from '../../../components/dashboard/NowStudyingBar.jsx';
-import { listFolders, renameRecord, deleteRecord } from '../../../services/recordsApi.js';
+import { listFolders, renameRecord, deleteRecord, setRecordDiscoverable } from '../../../services/recordsApi.js';
 import LibraryFolderPage from './LibraryFolderPage.jsx';
 import FolderReaderSession from './FolderReaderSession.jsx';
 import RecentlyDeletedPage from './RecentlyDeletedPage.jsx';
 import RecordTeachSession from './RecordTeachSession.jsx';
 
 export default function LibraryModals({
-  toast, addOpen, setAddOpen, setSheetOpen, setFolderSheetOpen, higherEd, navigate,
+  toast, addOpen, setAddOpen, setSheetOpen, setFolderSheetOpen, higherEd, ownerPremium, navigate,
   sheetOpen, openRecord, setRecords,
   folderSheetOpen, setFolders, setFoldersTotal, setToast,
   deletedOpen, closeDeleted, setDeletedCount,
@@ -121,6 +121,18 @@ export default function LibraryModals({
             await deleteRecord(item.itemRef);
             setToast('File deleted');
             await load();
+          }}
+          ownerPremium={ownerPremium}
+          onToggleDiscoverable={async (item, value) => {
+            try {
+              const updated = await setRecordDiscoverable(item.itemRef, value);
+              const discoverable = updated?.discoverable === true;
+              setRecords((rs) => rs.map((r) => (String(r.id) === item.itemRef ? { ...r, discoverable } : r)));
+              setToast(discoverable ? 'Shared in Discover' : 'Removed from Discover');
+            } catch (e) {
+              setToast('Could not update sharing');
+              throw e;
+            }
           }}
         />
       )}

@@ -261,6 +261,13 @@ export async function renameRecord(id, { name }) {
   return d?.data ?? d ?? true;
 }
 
+/** Share (or unshare) a record in Discover — a Premium subscriber's choice.
+ * Returns the updated record (its `discoverable` is the server's truth). */
+export async function setRecordDiscoverable(id, value) {
+  const d = await apiPatch(`/api/records/${id}`, { discoverable: value === true });
+  return d?.data ?? null;
+}
+
 /* ── AI text extraction (hanji-parse-4b on RunPod) ────────────────────────
    The reader rasterizes a record's pages; the API runs each page through
    the parse worker and caches the result. Scanned PDFs and images come

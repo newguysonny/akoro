@@ -4,10 +4,12 @@
  * handle, item head, action rows). Targets: Add to folder, Add to community,
  * and — for the learner's OWN uploaded files — Rename and Delete. Picking one
  * hands the stored snapshot to that page and closes; Rename/Delete ask in place.
+ * A Premium owner also gets the "Share in Discover" toggle on their records.
  */
 import { useState } from 'react';
 import { BRAND } from '../../constants.js';
 import { Icon } from '../common/Icons.jsx';
+import { Toggle, rowBase } from '../../pages/settings/shared.jsx';
 
 /* kind → line icon, for the sheet's item head. */
 const KIND_ICONS = {
@@ -17,16 +19,31 @@ const KIND_ICONS = {
 };
 const DANGER = '#EF4444';
 
-export default function AddToTargetSheet({ item, onClose, onPickFolder, onPickCommunity, onRename, onDelete, onAgentSession }) {
+export default function AddToTargetSheet({ item, onClose, onPickFolder, onPickCommunity, onRename, onDelete, onAgentSession, ownerPremium, onToggleDiscoverable }) {
   const [mode, setMode] = useState('actions');   // actions | rename | delete
   const [draft, setDraft] = useState(item?.title || '');
   const [busy, setBusy] = useState(false);
+  const [discoverable, setDiscoverable] = useState(item?.discoverable === true);
+  const [shareBusy, setShareBusy] = useState(false);
   if (!item) return null;
   const icon = KIND_ICONS[item.kind] || 'ti-file-text';
   // Rename/Delete only make sense for the learner's OWN uploaded files.
   const canAgentSession = item.itemType === 'record' && typeof onAgentSession === 'function';
   const canRename = item.itemType === 'record' && typeof onRename === 'function';
   const canDelete = item.itemType === 'record' && typeof onDelete === 'function';
+  // The Discover sharing choice belongs to Premium subscribers alone —
+  // ownerPremium is the SERVER plan, so a Free learner never sees the row.
+  const canShare = ownerPremium === true && item.itemType === 'record' && typeof onToggleDiscoverable === 'function';
+
+  const doToggleDiscoverable = async () => {
+    if (shareBusy) return;
+    const next = !discoverable;
+    setDiscoverable(next);
+    setShareBusy(true);
+    try { await onToggleDiscoverable(item, next); }
+    catch { setDiscoverable(!next); }
+    setShareBusy(false);
+  };
 
   const doRename = async () => {
     const name = String(draft || '').trim();
@@ -97,6 +114,12 @@ export default function AddToTargetSheet({ item, onClose, onPickFolder, onPickCo
                 <span className="ats-hint" style={{ display: 'block' }}>Share it with a community you've joined</span>
               </span>
             </button>
+            {canShare && (
+              <div style={{ ...rowBase, padding: '13px 20px', borderBottom: 'none' }}>
+                <span className="ats-label" style={{ flex: 1 }}>Share in Discover</span>
+                <Toggle on={discoverable} onChange={doToggleDiscoverable} disabled={shareBusy} />
+              </div>
+            )}
             {canRename && (
               <button className="ats-action" onClick={() => { setDraft(item.title || ''); setMode('rename'); }}>
                 <span className="ats-icon" style={{ background: 'rgba(108,59,255,.10)', color: 'var(--ak-accent)' }}><Icon name="ti-pencil" size={18}/></span>

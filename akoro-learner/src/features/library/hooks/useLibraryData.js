@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { fetchMyLibrary } from '../../../services/libraryApi.js';
+import { apiGet } from '../../../services/api.js';
 import { listRecords, listRecordsPage, listFolders, listFoldersPage, setRecordProgress, touchRecordOpened, searchRecords } from '../../../services/recordsApi.js';
 import { useLocalList, useSentinel } from '../../../lib/usePagedList.js';
 import { STUDENT_ID } from '../../../constants.js';
@@ -72,6 +73,18 @@ export function useLibraryData() {
   // resolved via the shared cached hook, so the page never flashes the
   // school layout at a higher-ed learner while the tier revalidates.
   const higherEd = useHigherEd();
+  // The learner's REAL plan, straight from /api/profiles/me — the raw
+  // server `plan`, never the device-local plan switch (utils/planOverride.js),
+  // which anyone can flip. Premium owners get the Discover sharing choice
+  // on their records; Free learners never see it.
+  const [ownerPremium, setOwnerPremium] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    apiGet('/api/profiles/me')
+      .then((d) => { if (alive) setOwnerPremium((d?.data ?? d)?.plan === 'Premium'); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
   const [toast, setToast] = useState('');
   // Recently deleted (§7.17, D55): chat uploads undone in the last 30 days — a tile at the end of Folders.
   const [deletedCount, setDeletedCount] = useState(0);
@@ -195,7 +208,7 @@ export function useLibraryData() {
       const kind = item.kind === 'link' ? 'link'
         : item.kind === 'paste' ? 'paste'
         : ['pdf','docx','pptx','audio','video','image','text'].includes(ft) ? ft : 'text';
-      return { itemType: 'record', itemRef: String(item.id), title: item.name, sub: 'Your record', kind, link: null };
+      return { itemType: 'record', itemRef: String(item.id), title: item.name, sub: 'Your record', kind, link: null, discoverable: item.discoverable === true };
     }
     if (item.kind === 'blog') {
       return { itemType: 'library', itemRef: String(item.id), title: item.title, sub: 'Blog', kind: 'blog', link: `/write/blog/${item.id}` };
@@ -369,7 +382,7 @@ export function useLibraryData() {
     sheetOpen, setSheetOpen, addOpen, setAddOpen, folderSheetOpen, setFolderSheetOpen,
     folderPage, setFolderPage, folderReader, setFolderReader,
     addToFolder, setAddToFolder, addToCommunity, setAddToCommunity, addTarget, setAddTarget,
-    higherEd, toast, setToast,
+    higherEd, ownerPremium, toast, setToast,
     deletedCount, setDeletedCount, deletedOpen, setDeletedOpen, closeDeleted,
     recordsTotal, setRecordsTotal, foldersTotal, setFoldersTotal,
     loadMoreRecords, loadMoreFolders, replaceFolders, load,
