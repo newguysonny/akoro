@@ -22,7 +22,7 @@ Requires a learner session and access to the target.
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
 | `question` | string | yes | Non-empty; length limited |
-| `recordId` | UUID | one target | The learner's own record, or a Discover-visible one: uploads are public for free users and private for Premium subscribers, so another learner's record is a valid target only when its owner is a free user and the record is not private (`modules/records/access.js`) |
+| `recordId` | UUID | one target | The learner's own record, or a Discover-visible one: uploads are public for free users and private for Premium subscribers, so another learner's record is a valid target only when the record is not private and its owner is a free user — or a Premium subscriber who has set that record public (`discoverable = true`, via `PATCH /api/records/:id`) (`modules/records/access.js`) |
 | `contentKey` | string | one target | Shared/catalogue content |
 | `folderId` | UUID | one target | Ask across a folder |
 | `selection` | object | no | A page/text selection to ground the answer |

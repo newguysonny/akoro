@@ -42,10 +42,18 @@ table is listed with its mechanism and its current evidence.
    model; the endpoint documentation and the smoke now state the confirmed
    model (free→free ask expects a grounded 200; the Premium-owner 404 branch
    is documented but unprobed — no Premium demo account exists). One part of
-   the model is **not yet built**: a Premium subscriber's choice to set a
-   record public. The Premium block in `access.js` is unconditional and no
-   API writes a record's visibility, so today neither direction is a user
-   choice — free is always public, Premium is always private.
+   the model was **not yet built** at the time of the pass: a Premium
+   subscriber's choice to set a record public. **Built later the same day**
+   (Matt's go-ahead; commit `18e307a7`): `records.discoverable` (migration
+   `2026-record-discoverable.sql`) honoured by the access rule, the ask and
+   content paths, the Discover feed, platform search and study-material
+   gather/copy; the owner sets it via `PATCH /api/records/:id`. Live proof
+   on sandbox build `18e307a7` (`sandbox-premium-sharing-smoke.mjs`): the
+   choice surface passes all checks — default false, non-boolean 400,
+   non-owner 403, owner round-trip, free visibility unchanged. The
+   Premium-gated transitions themselves remain live-unprobed until a
+   Premium sandbox account exists; they are covered by the behavioural
+   tests in `discoverable.contract.test.mjs` (14/14).
 3. **Two auth probes are blocked by design.** The 2FA login challenge and
    the password-reset success path both require reading an emailed code.
    Demo-domain accounts (`@demo.akoro.app`) bypass the email code — and the
