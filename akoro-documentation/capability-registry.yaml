@@ -335,7 +335,8 @@ capabilities:
     verification:
       - session and topic state machines are defined in code
       - next-transition decisions are engine-owned
-    verification_status: code-observed
+      - sandbox study-prep smoke passed on 2026-11-26 (session create 201, read back, cancel; feature enabled on sandbox)
+    verification_status: sandbox-verified
     last_verified: "2026-11-26"
 
   - id: learning.teaching_session

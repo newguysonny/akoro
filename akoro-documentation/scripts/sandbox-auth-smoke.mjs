@@ -12,6 +12,14 @@
  *   - One disposable user is created through POST /api/admin/users/create.
  *     Its id is captured immediately and deleted in `finally` with
  *     DELETE /api/admin/users/:id, then GET /api/admin/users/:id must 404.
+ *   - Both disposable addresses live on @demo.akoro.app — the domain Akoro
+ *     reserves for seeded testers, who cannot receive email. The platform
+ *     skips the email-code gate for that domain only
+ *     (modules/auth/emailCodes.js, AUTH_EMAIL_CODES_BYPASS, default
+ *     "demo.akoro.app"). A non-demo address (e.g. .invalid) can never
+ *     complete the code step: admin create hardcodes email_verified=false,
+ *     admin PATCH cannot set it, and the login gate fires for verified
+ *     accounts too — the emailed code is the only way through, by design.
  *   - TOTP is generated locally; 2FA is disabled before deletion. Deleting the
  *     user is the final backstop and also removes the secret.
  *   - The registration probe creates a second disposable user only if the
@@ -29,8 +37,8 @@ const CONFIRM = process.argv.includes("--confirm");
 const ADMIN_EMAIL = process.env.SANDBOX_ADMIN_EMAIL || "admin@demo.akoro.app";
 const ADMIN_PASSWORD = process.env.SANDBOX_ADMIN_PASSWORD || "Password123!";
 const STAMP = Date.now().toString(36);
-const USER_EMAIL = `docs-auth-${STAMP}@docs.akoro.invalid`;
-const REG_EMAIL = `docs-reg-${STAMP}@docs.akoro.invalid`;
+const USER_EMAIL = `docs-auth-${STAMP}@demo.akoro.app`;
+const REG_EMAIL = `docs-reg-${STAMP}@demo.akoro.app`;
 const USER_PASSWORD = `Disp-${STAMP}-Pass1!`;
 const REG_PASSWORD = `Reg-${STAMP}-Pass1!`;
 
@@ -232,7 +240,7 @@ try {
       } else {
         twoFactorLogin = "bypassed";
         record("2FA login challenge", "blocked",
-          `login returned HTTP ${gated.status} without a 2FA challenge (demo-domain bypass or RATE limit)`);
+          `login returned HTTP ${gated.status} without a 2FA challenge — by design: the demo-domain bypass (auth/service.js) skips the email code AND the 2FA gate, so no account an external script can create ever faces the TOTP challenge (non-demo accounts stop at the unreadable email code)`);
       }
 
       // Disable with the still-valid session (2FA enable does not invalidate it).
@@ -270,11 +278,24 @@ try {
   if (found.row?.id) regUserId = found.row.id;
   if (reg.status === 201 && !regData.verificationRequired) {
     record("registration", "ok", `HTTP 201, session issued, user ${regUserId ?? "id not listed"}`);
-  } else if (regData.verificationRequired) {
-    record("registration", "blocked",
-      `HTTP ${reg.status}, verificationRequired=true, codeSent=${regData.codeSent}, challengeId=${!!regData.challengeId}; verification code is emailed and unreadable`);
-  } else if (reg.status === 503) {
-    record("registration", "blocked", "HTTP 503 send_failed (verification email could not be sent)");
+  } else if (regData.verificationRequired || reg.status === 503) {
+    // Register always issues an email code when codes are on — it never
+    // consults the demo-domain bypass, and a 503 (send_failed) still leaves
+    // the created row behind. The bypass applies at login, so a working
+    // session for the just-registered account is the real success proof.
+    const regLogin = await call("/api/auth/login", {
+      method: "POST", portal: "student", body: { email: REG_EMAIL, password: REG_PASSWORD },
+    });
+    const regLoginData = regLogin.data?.data || regLogin.data || {};
+    if (regLogin.status === 200 && cookiesOf(regLogin) && !regLoginData.codeRequired && !regLoginData.verificationRequired) {
+      record("registration", "ok",
+        `HTTP ${reg.status} (email-code step issued), registered demo-domain account signs in directly, user ${regUserId ?? "id not listed"}`);
+    } else if (regData.verificationRequired) {
+      record("registration", "blocked",
+        `HTTP ${reg.status}, verificationRequired=true, codeSent=${regData.codeSent}, challengeId=${!!regData.challengeId}; verification code is emailed and unreadable`);
+    } else {
+      record("registration", "blocked", "HTTP 503 send_failed (verification email could not be sent)");
+    }
   } else if (found.row?.id) {
     record("registration", "blocked", `HTTP ${reg.status}; user row created but flow did not issue a session`);
   } else {

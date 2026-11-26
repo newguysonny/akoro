@@ -65,6 +65,11 @@ publish a playable lesson.
 - Do not upload to a course the instructor does not own.
 - Do not use the legacy multipart route for large files.
 - Do not delete the source while encoding is running.
+- Sandbox note (2026-11-26): encoding cannot complete on the sandbox today —
+  no encoding consumer is provisioned there (`MEDIA_WORKER_URL` is unset on
+  the sandbox API service and no standalone `worker.js` runs against it), so
+  uploads stay `queued`. See
+  `docs/audits/section-15-verification-2026-11-26.md`.
 - Do not publish a failed/partial encode.
 
 ## Related
