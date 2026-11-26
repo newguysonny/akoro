@@ -1,7 +1,7 @@
 ---
 title: Frontend architecture
 status: beta
-doc_status: draft
+doc_status: complete
 audience: [engineer, agent]
 last_reviewed: 2026-11-26
 owners: [TBD]
@@ -11,9 +11,10 @@ owners: [TBD]
 
 ## Purpose
 
-Each portal is its own Vite + React single-page app in the monorepo:
-`akoro-learner` (the learner app, installed as a PWA), `akoro-admin`,
-`akoro-instructor`, and `akoro-docs` (the public documentation site). There
+Each portal is its own app in the monorepo. `akoro-learner` (the learner
+app, installed as a PWA), `akoro-admin`, `akoro-instructor` and
+`akoro-school` are Vite + React single-page apps; `akoro-docs` (the public
+documentation site) is a Next.js + Fumadocs site. There
 is no shared frontend monorepo package; the apps share conventions, the API
 contract, and the realtime protocol rather than code.
 

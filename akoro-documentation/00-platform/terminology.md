@@ -1,6 +1,6 @@
 ---
 title: Terminology
-doc_status: draft
+doc_status: complete
 audience: [developer, product, agent]
 last_reviewed: 2026-11-25
 owners: [TBD]

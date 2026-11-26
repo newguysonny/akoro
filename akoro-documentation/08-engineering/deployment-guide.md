@@ -1,7 +1,7 @@
 ---
 title: Deployment guide
 status: implemented
-doc_status: draft
+doc_status: complete
 audience: [engineer, agent]
 last_reviewed: 2026-11-26
 owners: [TBD]
@@ -50,7 +50,7 @@ migrations need a connection string even though the API itself runs on
   (`npm run db:migrate`), `demo` (`npm run db:seed:demo`), `all`
   (`npm run db:deploy`).
 - `akoro-api/migrations/manifest.json` is the manifest that lists the files
-  in each group (284 schema files and 37 demo files at last review). A
+  in each group (285 schema files and 37 demo files at last review). A
   migration file that is not listed in the manifest does not apply — adding
   the SQL file alone is not enough.
 - At boot, when `MIGRATION_DATABASE_URL` is set, the API can apply pending

@@ -10,6 +10,7 @@ against those sources when they change.
 ## Documents
 
 - [Getting started](getting-started.md)
+- [Your first change, end to end](first-change-walkthrough.md)
 - [Repository structure](repository-structure.md)
 - [Development environment](development-environment.md)
 - [Coding standards](coding-standards.md)

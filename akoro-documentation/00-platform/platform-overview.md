@@ -1,6 +1,6 @@
 ---
 title: Platform overview
-doc_status: draft
+doc_status: complete
 audience: [developer, product, agent]
 last_reviewed: 2026-11-25
 owners: [TBD]
@@ -60,7 +60,9 @@ foundation overview, not a complete product specification.
   rules are part of the product.
 - The school app is not a small admin panel; it is a broad ERP with more than
   170 API route declarations and 128 management tables.
-- The API is not fully documented yet. Phase 0 found no OpenAPI contract.
+- The API contract exists as an OpenAPI specification
+  (`02-api/openapi.yaml`); Tier-1 coverage is complete (36 documented
+  operations) and Tier-2 domains are still being documented.
 - Documentation explains permissions; the backend enforces them.
 - Public documentation is an allow-listed subset of this repository.
 
@@ -75,5 +77,7 @@ foundation overview, not a complete product specification.
 
 - Is the school ERP partner-facing in the first public release?
 - Which capabilities are public versus internal?
-- What is the approved `/api/v1` policy?
+- `/api/v1` policy — decided 2026-11-26: keep the API unversioned for now;
+  versioning stays a documented proposal to revisit if external consumers
+  arrive.
 - Who owns each domain's feature and API documentation?

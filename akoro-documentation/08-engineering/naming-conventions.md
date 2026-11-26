@@ -1,7 +1,7 @@
 ---
 title: Naming conventions
 status: beta
-doc_status: draft
+doc_status: complete
 audience: [engineer, agent]
 last_reviewed: 2026-11-26
 owners: [TBD]
