@@ -54,10 +54,10 @@ Do not put secret-bearing URLs in a public status page.
 
 ## Wire the docs
 
-1. Create the Instatus page.
-2. Copy its public URL.
-3. Set `NEXT_PUBLIC_STATUS_URL` in the `akoro-docs` Vercel project.
-4. Redeploy. `/status` redirects; the Status nav link appears.
+1. ~~Create the Instatus page.~~ Done — page at `https://akoro.instatus.com`.
+2. ~~Copy its public URL.~~ Done.
+3. ~~Set `NEXT_PUBLIC_STATUS_URL` in the `akoro-docs` Vercel project.~~ Done.
+4. ~~Redeploy. `/status` redirects; the Status nav link appears.~~ Done.
 5. Add the status badge to the docs footer/index when available.
 
 ## Upgrade to Pro later

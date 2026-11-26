@@ -17,7 +17,7 @@ Target: Vercel project + `docs.akoro.ng`.
 | Variable | Value |
 | --- | --- |
 | `NEXT_PUBLIC_SITE_URL` | `https://docs.akoro.ng` |
-| `NEXT_PUBLIC_STATUS_URL` | Instatus public URL, once created |
+| `NEXT_PUBLIC_STATUS_URL` | `https://akoro.instatus.com` |
 
 ## Domain
 
