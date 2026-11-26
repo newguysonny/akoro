@@ -55,15 +55,18 @@ async function resolvePharmdContent(contentKey) {
 /** Active Premium learners — their uploads never leave their library,
  *  except a record the subscriber has set public (discoverable = true). */
 export async function activePremiumUserIds() {
-  const { data: tierRows } = await (await edu()).from("tiers")
+  // Tiers and subscriptions live in the PUBLIC schema (the default client) —
+  // billing writes them there (gateway.js fulfillment). This helper must NOT
+  // use the edu() client: it previously queried edu.tiers/edu.subscriptions,
+  // which hold no billing data, so no subscriber ever matched and the
+  // Premium privacy rule never fired. Billing also identifies the learner
+  // as learner_user_id, not user_id.
+  const db = await dbLazy();
+  const { data: tierRows } = await db.from("tiers")
     .select("id").eq("platform", "learner").eq("access", "paid").eq("name", "Premium").limit(1);
   const tierId = tierRows?.[0]?.id ?? null;
   if (!tierId) return [];
-  // Billing writes learner subscriptions with learner_user_id (gateway.js
-  // fulfillment) — that is the column that identifies the subscriber. (This
-  // helper previously selected user_id, which checkout never populates, so
-  // no subscriber ever matched and the Premium privacy rule never fired.)
-  const { data: subs } = await (await edu()).from("subscriptions")
+  const { data: subs } = await db.from("subscriptions")
     .select("learner_user_id").eq("tier_id", tierId).in("status", ["active", "trial", "trialing"]);
   return [...new Set((subs || []).map((s) => s.learner_user_id).filter(Boolean))];
 }
