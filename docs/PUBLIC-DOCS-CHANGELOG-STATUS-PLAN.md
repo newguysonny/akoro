@@ -2,7 +2,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Phase 4 started — docs live at `docs.akoro.ng` (search, sitemap, generated API reference, changelog feeds, CI, Vercel Analytics + Speed Insights); Instatus Starter page at `akoro.instatus.com` wired via `/status` redirect |
+| Status | Phase 4 substantially complete — docs live at `docs.akoro.ng` (apps and operate guides, error catalog, data dictionary, versioning policy, generated API reference, changelog feeds, search, analytics); Tier-1 OpenAPI coverage closed (36 operations, marketplace deferred to Tier 2); Instatus status page wired via `/status` |
 | Owner | Platform / Documentation |
 | Created | 2026-11-25 |
 | Scope | Public documentation site, API reference, product/API changelog, public status page |
