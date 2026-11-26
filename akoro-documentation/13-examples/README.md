@@ -4,6 +4,12 @@ API, agent and complete workflow examples.
 
 Status: Phase 2 in progress.
 
+## Pages
+
+- [API examples](api-examples.md) — worked request/response pairs, including missing-parameter, permission, empty-result, duplicate-request and rate-limit failures.
+- [Agent examples](agent-examples.md) — agent decision traces: grounded reads, confirmed writes, missing capabilities, duplicates and timeouts.
+- [Complete workflows](complete-workflows.md) — index and summaries of the five end-to-end workflow documents below.
+
 ## Workflows
 
 - [Sign in and maintain a session](workflows/auth-sign-in.md)

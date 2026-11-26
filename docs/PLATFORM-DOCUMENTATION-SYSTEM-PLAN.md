@@ -2,7 +2,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Draft plan — no implementation started |
+| Status | Implemented — Phases 0–3 complete; Phase 4 public surfaces built (redeploy + non-content gates pending); Phase 5 category expansion written 2026-11-26 |
 | Scope | Complete platform knowledge system for humans and AI agents |
 | Supersedes | Extends `docs/PUBLIC-DOCS-CHANGELOG-STATUS-PLAN.md` (public-surface plan) |
 | Audience | Engineering, product, docs, security, operations, Akoro agents |

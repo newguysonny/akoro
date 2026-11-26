@@ -9,7 +9,13 @@ catalogue, blog/careers, contact and pilot intake (34 paths, 35 operations).
 | --- | --- |
 | [openapi.yaml](openapi.yaml) | Machine-readable contract |
 | [authentication.md](authentication.md) | Sessions, portals, 2FA and OAuth |
+| [authorization.md](authorization.md) | Portals, roles, ownership and internal callers |
+| [request-response-schemas.md](request-response-schemas.md) | Envelope and schema conventions |
 | [errors.md](errors.md) | Error envelope and recovery |
+| [pagination.md](pagination.md) | Cursor and limit/offset conventions |
+| [rate-limits.md](rate-limits.md) | Rate-limit tiers, 429 shape and client behaviour |
+| [webhooks.md](webhooks.md) | Inbound provider callbacks and the realtime channel |
+| [endpoints/README.md](endpoints/README.md) | Per-operation endpoint reference |
 
 ## Conventions
 

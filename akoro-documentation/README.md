@@ -3,8 +3,12 @@
 Canonical knowledge base for the Akoro platform, its APIs, learning model,
 agents, data, operations and change history.
 
-Status: **Phase 1 foundation** — structure and templates are in place; content is
-being populated from the Phase 0 audit.
+Status: **All categories populated** — the Phase 1 foundation and Phase 2
+capability/API content are in place, and on 2026-11-26 the remaining categories
+(architecture, learning methodology, data models, agents, integrations,
+engineering, security/governance, testing/quality, changes/releases, roadmap,
+examples) were written from the module code. Documents are `doc_status: draft`
+until reviewed; capability status still comes only from the registry.
 
 ## Start here
 
@@ -100,11 +104,17 @@ knowledge-tooling is in place. The repository now has:
 - auth and records endpoint pages;
 - five end-to-end workflows;
 - core learner, record, course, programme, learning-session and concept models;
-- 34 OpenAPI paths / 35 operations covering auth, records, public catalogue,
-  blog/careers, contact and pilot intake;
+- 35 OpenAPI paths covering auth, records, public catalogue, blog/careers,
+  contact and pilot intake;
 - a validator that checks registry/index/OpenAPI/link integrity;
 - a tool registry, Context Manager contract, agent capability guide and offline
-  documentation search.
+  documentation search;
+- full category coverage: 173 Markdown documents across `00-platform` through
+  `13-examples`, including the learning-methodology and architecture sets,
+  written from the code on 2026-11-26 (see
+  `docs/PLATFORM-DOCUMENTATION-SYSTEM-PLAN.md`).
 
-Still pending: live sandbox re-verification, write-capability cleanup tests,
-runtime route-table coverage, and Tier-2/3 documentation.
+Still pending: live sandbox re-verification of the beta capabilities,
+write-capability cleanup tests, runtime route-table coverage, and the public
+site's non-content gates (accessibility, security review, status monitors and
+incident drill, `/api/v1` decision).

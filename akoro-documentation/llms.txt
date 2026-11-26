@@ -5,7 +5,7 @@
 > courses and media, curriculum and assessments, and a school ERP. This
 > repository is the canonical platform knowledge base.
 
-Status: Phase 3 context and tooling in progress. Availability comes from
+Status: all categories populated (2026-11-26). Availability comes from
 `capability-registry.yaml`; do not infer it from prose.
 
 ## Start
@@ -48,33 +48,66 @@ Status: Phase 3 context and tooling in progress. Availability comes from
 
 - [API overview](02-api/README.md)
 - [Authentication](02-api/authentication.md)
+- [Authorization](02-api/authorization.md)
 - [Errors](02-api/errors.md)
+- [Pagination](02-api/pagination.md)
+- [Rate limits](02-api/rate-limits.md)
+- [Webhooks](02-api/webhooks.md)
 - [OpenAPI](02-api/openapi.yaml)
+
+## Architecture and learning
+
+- [Architecture](03-architecture/README.md)
+- [System overview](03-architecture/system-overview.md)
+- [Agent architecture](03-architecture/agent-architecture.md)
+- [Model routing](03-architecture/model-routing.md)
+- [Learning methodology](04-learning/README.md)
+- [Learning engine](04-learning/learning-engine.md)
+- [Spaced repetition](04-learning/spaced-repetition.md)
+- [Mastery framework](04-learning/mastery-framework.md)
 
 ## Workflows and data models
 
 - [Workflows](13-examples/workflows/README.md)
+- [Data models](05-data-models/README.md)
 - [Learner model](05-data-models/learner.md)
 - [Record model](05-data-models/record.md)
 - [Course model](05-data-models/course.md)
 - [Programme model](05-data-models/programme.md)
 - [Learning session model](05-data-models/learning-session.md)
 - [Concept model](05-data-models/concept.md)
+- [Assessment model](05-data-models/assessment.md)
+- [Evidence model](05-data-models/evidence.md)
+- [Memory model](05-data-models/memory.md)
 
 ## Agents
 
 - [Agent documentation](06-agents/README.md)
 - [Capability discovery and execution](06-agents/agent-capabilities.md)
 - [Context Manager contract](06-agents/context-manager.md)
+- [Agent permissions](06-agents/agent-permissions.md)
+- [Agent safety](06-agents/agent-safety.md)
 - [Tool registry](tool-registry.yaml)
 - [Search documentation](scripts/search-docs.mjs)
+
+## Integrations
+
+- [Integrations](07-integrations/README.md)
+- [Supabase](07-integrations/supabase.md)
+- [AI providers](07-integrations/ai-providers.md)
+- [Payment providers](07-integrations/payment-providers.md)
+- [Storage providers](07-integrations/storage-providers.md)
 
 ## Engineering and operations
 
 - [Engineering](08-engineering/README.md)
+- [Getting started](08-engineering/getting-started.md)
+- [Deployment guide](08-engineering/deployment-guide.md)
 - [Security and governance](09-security-governance/README.md)
 - [Testing and quality](10-testing-quality/README.md)
 - [Changes and releases](11-changes-releases/README.md)
+- [Roadmap](12-roadmap/README.md)
+- [Examples](13-examples/README.md)
 
 ## Notes
 
