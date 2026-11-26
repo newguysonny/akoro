@@ -1419,7 +1419,9 @@ public presentation layer of this system.
 **Settled 2026-11-26 (Matt):** ownership (§18.1) and review (§18.2) stand as
 operated today — Matt holds all six roles and is the owner of record (see the
 documentation README's ownership section). The change rule's reverse
-direction (§18.3) is report-only, per the note there.
+direction (§18.3) is report-only, per the note there; its delivery —
+a standing GitHub issue plus a weekly in-chat delivery — was settled the
+same day.
 
 ### 18.1 Ownership
 
@@ -1457,7 +1459,10 @@ gap check (`check-doc-gaps.mjs`, run by `docs-health.yml`) reports
 undocumented modules and stale or beta documentation in its run summary
 and artifact. It never fails CI; the validators that do fail CI are the
 forward-looking ones (reference integrity and secret scanning, in
-`docs.yml`).
+`docs.yml`). Delivery (settled 2026-11-26): each week's report is posted
+as a comment on a standing GitHub issue titled "Weekly documentation gap
+report", and the week's substance is also delivered to Matt directly in
+chat by a weekly scheduled check.
 
 ### 18.4 Status labels
 
