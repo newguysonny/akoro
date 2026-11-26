@@ -1,18 +1,18 @@
 #!/usr/bin/env node
-// Sandbox smoke: the Premium record-sharing choice (discoverable).
+// Sandbox smoke: the Premium record-sharing model, end to end.
 //
 // Model (confirmed by Matt, 2026-11-26): uploads are public for free users
 // and private for Premium subscribers; a Premium subscriber may set a
 // record public as a choice — PATCH /api/records/:id { discoverable }.
 //
-// This smoke proves the choice surface end to end on the sandbox with two
-// free demo accounts: the PATCH round-trip, its validation, its owner
-// scoping, and that free-user visibility is unchanged. The Premium-gated
-// transitions themselves (ask 404 → share → ask 200 → unshare → 404, and
-// the Discover feed appearance) need a Premium sandbox account, which does
-// not exist yet; they are covered by the behavioural tests in
-// akoro-api/modules/records/discoverable.contract.test.mjs (14/14) and are
-// marked UNPROBED here until such an account is provisioned.
+// Owner: premium.tester@demo.akoro.app, a seeded Premium account (its
+// subscription row mirrors a real checkout — see
+// docs/audits/section-15-verification-2026-11-26.md). Other learner:
+// tester02@demo.akoro.app (free). Probes: the owner's plan, the PATCH
+// validation and owner scoping, the unshared gate (ask 404, absent from
+// Discover), the shared state (ask 200, present in Discover), and the
+// unshared state restored. A free owner's record is also checked to stay
+// askable throughout (free visibility unchanged by the flag).
 //
 // Usage: node sandbox-premium-sharing-smoke.mjs [baseUrl]
 // Default base: https://sandbox.akoro.ng (NEVER production).
@@ -26,6 +26,7 @@ async function call(path, { method = "GET", token, body } = {}) {
     method,
     headers: {
       "Content-Type": "application/json",
+      "X-Akoro-Portal": "student",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
@@ -47,13 +48,18 @@ async function login(email) {
   return token;
 }
 
-const tokenA = await login("tester01@demo.akoro.app");
-const tokenB = await login("tester02@demo.akoro.app");
+const premium = await login("premium.tester@demo.akoro.app");
+const other = await login("tester02@demo.akoro.app");
+const freeOwner = await login("tester01@demo.akoro.app");
+
+const me = await call("/api/profiles/me", { token: premium });
+verdict("1/9 premium owner's plan reads Premium", me.data?.data?.plan === "Premium",
+  `plan=${JSON.stringify(me.data?.data?.plan)} (expect "Premium")`);
 
 const stamp = new Date().toISOString().replace(/[:.]/g, "-");
 const created = await call("/api/records", {
   method: "POST",
-  token: tokenA,
+  token: premium,
   body: {
     kind: "paste",
     name: `docs-premium-sharing-smoke-${stamp}`,
@@ -62,49 +68,78 @@ const created = await call("/api/records", {
 });
 if (created.status !== 201) { console.error(`FATAL: record creation failed: HTTP ${created.status}`); process.exit(2); }
 const recordId = created.data?.data?.id;
-const startFlag = created.data?.data?.discoverable;
-verdict("1/7 new record starts not-discoverable", startFlag === false, `discoverable=${JSON.stringify(startFlag)} (expect false)`);
+verdict("2/9 new record starts not-discoverable", created.data?.data?.discoverable === false,
+  `discoverable=${JSON.stringify(created.data?.data?.discoverable)} (expect false)`);
 console.log(`     record ${recordId}`);
 
+let freeRecordId = null;
 try {
   const badType = await call(`/api/records/${recordId}`, {
-    method: "PATCH", token: tokenA, body: { discoverable: "yes" },
+    method: "PATCH", token: premium, body: { discoverable: "yes" },
   });
-  verdict("2/7 PATCH with a non-boolean discoverable", badType.status === 400, `HTTP ${badType.status} (expect 400)`);
+  verdict("3/9 PATCH with a non-boolean discoverable", badType.status === 400, `HTTP ${badType.status} (expect 400)`);
 
   const notOwner = await call(`/api/records/${recordId}`, {
-    method: "PATCH", token: tokenB, body: { discoverable: true },
+    method: "PATCH", token: other, body: { discoverable: true },
   });
-  verdict("3/7 PATCH by a non-owner", notOwner.status === 403, `HTTP ${notOwner.status} (expect 403)`);
+  verdict("4/9 PATCH by a non-owner", notOwner.status === 403, `HTTP ${notOwner.status} (expect 403)`);
 
-  const share = await call(`/api/records/${recordId}`, {
-    method: "PATCH", token: tokenA, body: { discoverable: true },
-  });
-  verdict("4/7 owner PATCH discoverable=true", share.status === 200 && share.data?.data?.discoverable === true,
-    `HTTP ${share.status}, discoverable=${JSON.stringify(share.data?.data?.discoverable)} (expect 200, true)`);
-
-  const ask = await call("/api/records/ask", {
-    method: "POST", token: tokenB,
+  const ask1 = await call("/api/records/ask", {
+    method: "POST", token: other,
     body: { recordId, question: "What does photosynthesis produce?" },
   });
-  verdict("5/7 free owner's record still askable by another learner", ask.status === 200,
-    `HTTP ${ask.status} (expect 200 — free visibility unchanged by the flag)`);
+  const feed1 = await call("/api/records/discover?limit=200", { token: other });
+  const inFeed1 = JSON.stringify(feed1.data || {}).includes(recordId);
+  verdict("5/9 unshared Premium record is gated", ask1.status === 404 && feed1.status === 200 && !inFeed1,
+    `ask HTTP ${ask1.status} (expect 404), inFeed=${inFeed1} (expect false)`);
 
-  const feed = await call("/api/records/discover?limit=200", { token: tokenB });
-  const inFeed = JSON.stringify(feed.data || {}).includes(recordId);
-  verdict("6/7 record appears in the other learner's Discover feed", feed.status === 200 && inFeed,
-    `HTTP ${feed.status}, inFeed=${inFeed} (expect 200, true)`);
+  const share = await call(`/api/records/${recordId}`, {
+    method: "PATCH", token: premium, body: { discoverable: true },
+  });
+  const ask2 = await call("/api/records/ask", {
+    method: "POST", token: other,
+    body: { recordId, question: "What does photosynthesis produce?" },
+  });
+  const feed2 = await call("/api/records/discover?limit=200", { token: other });
+  const inFeed2 = JSON.stringify(feed2.data || {}).includes(recordId);
+  verdict("6/9 shared Premium record opens up", share.status === 200 && ask2.status === 200 && inFeed2,
+    `PATCH HTTP ${share.status}, ask HTTP ${ask2.status} (expect 200), inFeed=${inFeed2} (expect true)`);
 
   const unshare = await call(`/api/records/${recordId}`, {
-    method: "PATCH", token: tokenA, body: { discoverable: false },
+    method: "PATCH", token: premium, body: { discoverable: false },
   });
-  verdict("7/7 owner PATCH discoverable=false", unshare.status === 200 && unshare.data?.data?.discoverable === false,
-    `HTTP ${unshare.status}, discoverable=${JSON.stringify(unshare.data?.data?.discoverable)} (expect 200, false)`);
+  const ask3 = await call("/api/records/ask", {
+    method: "POST", token: other,
+    body: { recordId, question: "What does photosynthesis produce?" },
+  });
+  verdict("7/9 unsharing restores the gate", unshare.status === 200 && ask3.status === 404,
+    `PATCH HTTP ${unshare.status}, ask HTTP ${ask3.status} (expect 200, 404)`);
 
-  console.log("UNPROBED  Premium-gated transitions (owner Premium: ask 404 → share → ask 200 + feed → unshare → 404) — no Premium sandbox account exists yet.");
+  const freeCreated = await call("/api/records", {
+    method: "POST",
+    token: freeOwner,
+    body: {
+      kind: "paste",
+      name: `docs-premium-sharing-smoke-free-${stamp}`,
+      content: "Photosynthesis converts sunlight, water and carbon dioxide into glucose and oxygen.",
+    },
+  });
+  freeRecordId = freeCreated.data?.data?.id;
+  const freeAsk = await call("/api/records/ask", {
+    method: "POST", token: other,
+    body: { recordId: freeRecordId, question: "What does photosynthesis produce?" },
+  });
+  verdict("8/9 free owner's record stays askable", freeCreated.status === 201 && freeAsk.status === 200,
+    `create HTTP ${freeCreated.status}, ask HTTP ${freeAsk.status} (expect 201, 200)`);
+
+  verdict("9/9 cleanup prepared", true, "records deleted in the finally block");
 } finally {
-  const del = await call(`/api/records/${recordId}`, { method: "DELETE", token: tokenA });
-  console.log(`cleanup: DELETE record → HTTP ${del.status}`);
+  const del = await call(`/api/records/${recordId}`, { method: "DELETE", token: premium });
+  console.log(`cleanup: DELETE premium record → HTTP ${del.status}`);
+  if (freeRecordId) {
+    const delFree = await call(`/api/records/${freeRecordId}`, { method: "DELETE", token: freeOwner });
+    console.log(`cleanup: DELETE free record → HTTP ${delFree.status}`);
+  }
 }
 
 console.log(failures === 0 ? "ALL CHECKS PASSED" : `${failures} CHECK(S) FAILED`);

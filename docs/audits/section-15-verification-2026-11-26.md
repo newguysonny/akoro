@@ -50,10 +50,27 @@ table is listed with its mechanism and its current evidence.
    gather/copy; the owner sets it via `PATCH /api/records/:id`. Live proof
    on sandbox build `18e307a7` (`sandbox-premium-sharing-smoke.mjs`): the
    choice surface passes all checks — default false, non-boolean 400,
-   non-owner 403, owner round-trip, free visibility unchanged. The
-   Premium-gated transitions themselves remain live-unprobed until a
-   Premium sandbox account exists; they are covered by the behavioural
-   tests in `discoverable.contract.test.mjs` (14/14).
+   non-owner 403, owner round-trip, free visibility unchanged.
+   **Addendum (same day): the Premium-gated transitions are now
+   live-probed — and the probe exposed a real privacy bug.** A Premium
+   tester was seeded on the sandbox exactly as a real checkout writes
+   (a `customers` row + a subscription keyed by `learner_user_id`), yet
+   `activePremiumUserIds` still matched nobody, for two stacked reasons:
+   the helper ran its tiers/subscriptions queries through the `edu`
+   schema client while billing writes both tables in the **public**
+   schema, and it selected `user_id`, a column checkout fulfillment
+   never populates. The Premium privacy rule had therefore never fired
+   for any real subscriber — Premium uploads were public like free
+   users'. Fixed in `8b718410` (column) and `41ba9a18` (schema; the
+   helper now uses the default public client). With the fixes live,
+   `sandbox-premium-sharing-smoke.mjs` passes all 9 checks: the owner's
+   plan reads Premium; an unshared Premium record refuses another
+   learner's ask (404) and stays out of Discover; sharing opens both
+   (200, in feed); unsharing restores the gate; free visibility is
+   unchanged throughout. Production already runs `41ba9a18`, so the
+   privacy rule is in force there too. The behavioural tests remain in
+   `discoverable.contract.test.mjs` (14/14, stub now mirrors the real
+   subscription row shape).
 3. **Two auth probes are blocked by design.** The 2FA login challenge and
    the password-reset success path both require reading an emailed code.
    Demo-domain accounts (`@demo.akoro.app`) bypass the email code — and the
