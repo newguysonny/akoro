@@ -7,8 +7,13 @@
 --   2 published courses (owned by teacher 1 & 2)
 --   + 2 students per class (12) so classes aren't empty
 --
--- All seeded accounts log in with password: Password123!
--- Idempotent — guarded by email/slug/name. Run once in Supabase SQL Editor.
+-- All seeded accounts are created with password: Password123!
+-- The school admin's password is RE-ASSERTED on every run (see the admin
+-- block below), so the documented demo login keeps working even on an
+-- environment whose admin row predates it; teachers and students are
+-- insert-only, so an existing row keeps whatever password it already has.
+-- Idempotent — guarded by email/slug/name. Runs at boot via the migration
+-- manifest; also safe to run manually in the Supabase SQL Editor.
 -- (Local variables are v_-prefixed to avoid PL/pgSQL column ambiguity.)
 -- =============================================================
 
@@ -32,6 +37,14 @@ BEGIN
     INSERT INTO public.users (email, username, password_hash, full_name, role, is_active)
     VALUES ('school@demo.akoro.app', 'demo_school_admin', v_pw, 'Demo School Admin', 'school_admin', true)
     RETURNING id INTO v_admin;
+  ELSE
+    -- Re-assert the documented demo login: without this, an environment
+    -- whose admin row was created with a different password rejects
+    -- Password123! forever, because the insert above never runs again.
+    UPDATE public.users
+    SET password_hash = v_pw, username = 'demo_school_admin',
+        full_name = 'Demo School Admin', role = 'school_admin', is_active = true
+    WHERE id = v_admin;
   END IF;
 
   -- ── School profile ────────────────────────────────────────

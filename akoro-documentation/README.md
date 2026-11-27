@@ -22,6 +22,25 @@ until reviewed; capability status still comes only from the registry.
 | [00-platform/platform-overview.md](00-platform/platform-overview.md) | What Akoro is and who it serves |
 | [00-platform/terminology.md](00-platform/terminology.md) | Akoro-specific terms |
 
+## Demo accounts (sandbox and demo data)
+
+Seeded demo accounts — never use real data in examples or tests.
+
+| Account | Password | What it opens |
+| --- | --- | --- |
+| `school@demo.akoro.app` | `Password123!` | School admin for **Akoro Demo Academy** (school portal) |
+| `teacher1@demo.akoro.app` … `teacher6@demo.akoro.app` | `Password123!` | The academy's teachers (instructor app) |
+| `stu.<class><n>@demo.akoro.app` (e.g. `stu.jss11@demo.akoro.app`) | `Password123!` | Two students per academy class, JSS1–SS3 |
+| `tester01@demo.akoro.app` … `tester50@demo.akoro.app` | `Password123!` | Learner test cohort |
+
+Sources: `akoro-api/migrations/2026-seed-school.sql` (school cohort) and
+`akoro-api/migrations/2026-seed-agent-testers.sql` (learners); both run at
+boot via the migration manifest. Accounts are created with the password
+above; the **school admin's password is re-asserted by the seed on every
+run**, so it is always `Password123!`. Other accounts are insert-only — an
+environment whose rows predate the seed can hold a different password for
+them until the row is reset.
+
 ## Structure
 
 | Folder | Contents |
