@@ -11,9 +11,9 @@ import FortizoChatComposer from '../components/common/FortizoChatComposer.jsx';
  * SessionToolPage — a session (mode) tool's own UI (2026-11-27).
  *
  * The learner opens this from their sessions list on the dashboard. The
- * screen is the session's own home: the tool's presentation over its
- * state at the top (the overview — hero, stepper, key points), then a
- * CHAT with the tutor — a real conversation, per the approved planning
+ * screen is the session's own home: a collapsed overview strip
+ * (progress + the current part — tapping it opens the full overview:
+ * hero, stepper, key points, as a modal), then a CHAT with the tutor — a real conversation, per the approved planning
  * preview — with the app's composer at the bottom. Each message goes to
  * POST /api/self-tooling/tools/:id/session-turn: the model replies as
  * the tutor under the tool's steer, moves the state through the tool's
@@ -23,7 +23,7 @@ import FortizoChatComposer from '../components/common/FortizoChatComposer.jsx';
  */
 const NUNITO = "'Nunito',sans-serif";
 
-/** { phase, done, total } from the state's largest checklist — mirrors the server's sessionSummary. */
+/** { phase, done, total, current } from the state's largest checklist — mirrors the server's sessionSummary. */
 function summarize(state) {
   if (!state || typeof state !== 'object') return null;
   let best = null;
@@ -31,11 +31,18 @@ function summarize(state) {
     if (!Array.isArray(v) || !v.length) continue;
     if (!v.every((i) => i && typeof i === 'object' && typeof i.state === 'string')) continue;
     if (!best || v.length > best.total) {
-      best = { total: v.length, done: v.filter((i) => !['todo', 'hidden', 'pending', ''].includes(i.state)).length };
+      const open = v.find((i) => ['todo', 'partial', 'hidden', ''].includes(i.state));
+      best = {
+        total: v.length,
+        done: v.filter((i) => !['todo', 'hidden', 'pending', ''].includes(i.state)).length,
+        // A hidden item's title is the book's content — never surface it.
+        current: open ? (open.state === 'hidden' ? null : (open.title || null)) : null,
+        openHidden: !!open && open.state === 'hidden',
+      };
     }
   }
   const phase = typeof state.phase === 'string' && state.phase ? state.phase : null;
-  return best || phase ? { phase, ...(best || { done: 0, total: 0 }) } : null;
+  return best || phase ? { phase, ...(best || { done: 0, total: 0, current: null, openHidden: false }) } : null;
 }
 
 export default function SessionToolPage() {
@@ -47,6 +54,7 @@ export default function SessionToolPage() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [pending, setPending] = useState('');
+  const [showOverview, setShowOverview] = useState(false);
   const scrollRef = useRef(null);
   const firstPaint = useRef(true);
 
@@ -130,8 +138,17 @@ export default function SessionToolPage() {
           ) : (
             <>
               {view.presentation ? (
-                <SpecView presentation={view.presentation} state={state} rows={null}
-                  tool={{ label: view.label, goal: view.goal }} onSend={(m) => send(m)} />
+                <button onClick={() => setShowOverview(true)} aria-label="Open the session overview"
+                  style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', boxSizing: 'border-box', background: 'var(--ak-surface)', border: '1px solid var(--ak-border)', borderRadius: 14, padding: '11px 13px', cursor: 'pointer', fontFamily: NUNITO, textAlign: 'left' }}>
+                  <span className="ti ti-list-check" style={{ fontSize: 18, color: BRAND, flexShrink: 0 }} />
+                  {summary?.total ? (
+                    <span style={{ fontSize: 13, fontWeight: 900, color: 'var(--ak-text)', flexShrink: 0 }}>{summary.done}/{summary.total}</span>
+                  ) : null}
+                  <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 700, color: 'var(--ak-text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {summary?.current || (summary?.openHidden ? 'Still in the book' : (phaseLabel || 'Overview'))}
+                  </span>
+                  <span className="ti ti-chevron-down" style={{ fontSize: 16, color: 'var(--ak-text-muted)', flexShrink: 0 }} />
+                </button>
               ) : null}
 
               {barText ? (
@@ -189,6 +206,28 @@ export default function SessionToolPage() {
               running={busy}
               hideModelMenu
             />
+          </div>
+        ) : null}
+
+        {showOverview && view?.presentation ? (
+          <div onClick={() => setShowOverview(false)}
+            style={{ position: 'fixed', inset: 0, background: 'rgba(23,20,31,.45)', zIndex: 60, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+            <div onClick={(e) => e.stopPropagation()} role="dialog" aria-label="Session overview"
+              style={{ background: 'var(--ak-bg)', width: '100%', maxWidth: 520, maxHeight: '84%', overflowY: 'auto', borderRadius: '22px 22px 0 0', padding: '16px 14px 26px', boxSizing: 'border-box' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                <span style={{ flex: 1, fontSize: 15, fontWeight: 900, color: 'var(--ak-text)' }}>Overview</span>
+                {summary?.total ? (
+                  <span style={{ fontSize: 12.5, fontWeight: 800, color: 'var(--ak-text-muted)' }}>{summary.done}/{summary.total} completed</span>
+                ) : null}
+                <button onClick={() => setShowOverview(false)} aria-label="Close overview"
+                  style={{ border: 'none', background: 'var(--ak-surface)', borderRadius: '50%', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
+                  <span className="ti ti-x" style={{ fontSize: 16, color: 'var(--ak-text)' }} />
+                </button>
+              </div>
+              <SpecView presentation={view.presentation} state={state} rows={null}
+                tool={{ label: view.label, goal: view.goal }}
+                onSend={(m) => { setShowOverview(false); send(m); }} />
+            </div>
           </div>
         ) : null}
       </div>
