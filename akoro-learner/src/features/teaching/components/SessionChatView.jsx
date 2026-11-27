@@ -359,7 +359,7 @@ function SessionChatView({
             chat right on desktop/tablet; full-screen modal on mobile).
             Guide mode: text only — voice/audio have no backend there yet. */}
         {materialBox && (
-          <div style={{ marginBottom:8 }}>{materialBox}</div>
+          <div>{materialBox}</div>
         )}
         <div style={{ marginBottom:8 }}>
           <FortizoChatComposer
