@@ -1,16 +1,21 @@
 /**
  * modules/self-tooling/sessionTurn.js — one turn of a MODE (session) tool
  * inside its OWN UI (2026-11-27, Matt's direction: the learning happens in
- * the session's UI, not in the chat).
+ * the session's own screen, not in the main chat — and the session screen
+ * is itself a CHAT: a real conversation with the tutor, per the approved
+ * planning preview).
  *
  * The learner opens the session from their dashboard sessions list; the
- * screen renders the tool's presentation over its state plus ONE
- * interaction card described by state.ui ({ say, prompt, input, action,
- * button }). A submission lands here: the model evaluates it against the
- * state under the tool's steer, names at most one declared action (whose
+ * screen renders the tool's presentation over its state (the overview:
+ * hero, stepper, key points) plus a chat transcript and the app's
+ * composer. Each learner message lands here: the model replies as the
+ * tutor under the tool's steer, names at most one declared action (whose
  * declarative effects the server applies via modeSpec.applyModeAction),
- * and returns the next step's ui, which is stored back into the state so
- * the screen — and any later resume — always shows the current step.
+ * and the exchange is appended to state.transcript so the conversation —
+ * like the progress — persists and resumes from the dashboard.
+ * state.ui carries the live step: { say (the tutor's latest message),
+ * prompt (composer placeholder), bar (short phase/status line),
+ * input: short | long | none, action, button }.
  *
  * No generated code runs; state moves only through declared effects, the
  * same guarantee as the chat path's run_mode_action.
@@ -31,10 +36,19 @@ function sanitizeUi(raw, def, fallbackSay) {
   return {
     say: str(ui.say, 2000) || str(fallbackSay, 2000),
     prompt: str(ui.prompt, 400),
+    bar: str(ui.bar, 90),
     input,
     action: names.has(ui.action) ? ui.action : null,
     button: str(ui.button, 40) || (input === "none" ? "" : "Send"),
   };
+}
+
+const TRANSCRIPT_CAP = 80;
+function pushMsg(transcript, role, text) {
+  const t = String(text || "").slice(0, 2000);
+  if (!t) return transcript;
+  const next = [...transcript, { role, text: t }];
+  return next.length > TRANSCRIPT_CAP ? next.slice(next.length - TRANSCRIPT_CAP) : next;
 }
 
 /**
@@ -54,18 +68,28 @@ export async function runSessionTurn({ learnerId, toolId, text = "", action = nu
   const state = await ensureToolState(learnerId, t, {});
   const submission = { action: typeof action === "string" ? action : null, text: String(text || "").slice(0, 8000) };
 
+  // The conversation so far. Tools built before the transcript existed
+  // seed it from their current step's say, so their screen opens mid-
+  // conversation instead of blank.
+  let transcript = Array.isArray(state.transcript)
+    ? state.transcript.filter((m) => m && (m.role === "agent" || m.role === "learner") && typeof m.text === "string")
+    : (state.ui?.say ? [{ role: "agent", text: String(state.ui.say).slice(0, 2000) }] : []);
+  transcript = pushMsg(transcript, "learner", submission.text);
+  const { transcript: _omit, ...stateForModel } = state;
+
   const system = [
-    "You are the agent running a learning session inside its own UI in the Akoro app — not in a chat. The learner sees the session's screen (its presentation over the state below) plus one interaction card. Each learner submission must advance the session by exactly ONE step, following the session's steer.",
+    "You are the tutor in a chat-based learning session that lives in its own screen in the Akoro app (not the main chat). The learner sees the session overview (the presentation over the state below) and a chat transcript with a composer; you are the voice in that transcript. Each learner message must advance the session by exactly ONE step, following the session's steer.",
     "",
     "THE STEER (the session's protocol — follow it exactly):",
     String(def.steer || ""),
     "",
     "RULES:",
-    "- Evaluate the learner's submission against the material in the state. Score or judge ONLY what they actually submitted.",
+    "- Reply like a tutor in a conversation: warm, direct, in your voice. Your message teaches or responds, then asks at most ONE question or gives one clear next task — never a wall of steps.",
+    "- Evaluate the learner's message against the material in the state. Score or judge ONLY what they actually wrote.",
     "- Never invent the learner's side: no made-up answers, no recall text they didn't write.",
     "- Never reveal content whose state is \"hidden\" while the session is in a recall phase.",
     "- If a declared action fits this step, name ONE in \"action\" (with its args) — the server applies its effects to the state. If none fits, action is null.",
-    "- ALWAYS return \"ui\": the next step's interaction card — { \"say\": what you show the learner now (feedback on their submission and/or the next teaching, in your voice, concise), \"prompt\": the label above the input (omit when input is \"none\"), \"input\": \"short\" | \"long\" | \"none\", \"action\": the declared action that will handle the NEXT submission (or null), \"button\": the button label }.",
+    "- ALWAYS return \"ui\": { \"say\": your chat message for this turn (feedback on their message and/or the next teaching), \"prompt\": a short composer placeholder for their reply (e.g. \"Recall from memory…\"; omit when input is \"none\"), \"bar\": a short status line for the session's phase (e.g. \"Book closed — recall from memory\", \"Learn — part 2 of 5\"), \"input\": \"short\" | \"long\" | \"none\", \"action\": the declared action that will handle the NEXT message (or null), \"button\": a short label }.",
     "- When the session is complete, return ui with input \"none\" and a closing \"say\".",
     "- Answer with ONE JSON object: { \"say\": string, \"action\": { \"name\": string, \"args\": object } | null, \"ui\": { ... } }. No other text.",
   ].join("\n");
@@ -75,7 +99,7 @@ export async function runSessionTurn({ learnerId, toolId, text = "", action = nu
     response_format: { type: "json_object" },
     messages: [
       { role: "system", content: system },
-      { role: "user", content: JSON.stringify({ state, actions: (def.actions || []).map((a) => ({ name: a.name, description: a.description, params: a.params || {} })), submission }) },
+      { role: "user", content: JSON.stringify({ state: stateForModel, conversation: transcript.slice(-16), actions: (def.actions || []).map((a) => ({ name: a.name, description: a.description, params: a.params || {} })), submission }) },
     ],
     __feature: "self_tooling", __userId: learnerId,
   });
@@ -89,7 +113,8 @@ export async function runSessionTurn({ learnerId, toolId, text = "", action = nu
     if (out.ok) next = out.state;
   }
   const ui = sanitizeUi(parsed.ui, def, parsed.say);
-  next = { ...next, ui };
+  transcript = pushMsg(transcript, "agent", ui.say);
+  next = { ...next, ui, transcript };
 
   const { error } = await edu().from("agent_tool_state")
     .update({ state: next, updated_at: new Date().toISOString() })
