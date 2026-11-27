@@ -355,7 +355,17 @@ async function executeBuild(row, { userId, toolDeps, callTool }) {
     found: next ? (next.items || []).length : null,
     changed: appliedChange?.result?.done ?? null, changeFailed: appliedChange?.result?.failed ?? null, at: new Date().toISOString() };
   const stored = await storeResult(row.id, claimed, result);
-  return { confirmation: publicConfirmation(stored), kind: "build", result, next: appliedChange ? null : next, appliedChange };
+  // A kept SESSION (mode) tool has already run once above — hand the agent
+  // that run's steer + live state in this result, so the session continues
+  // from THIS tool. Without it the agent must pick a session tool by name
+  // to resume, and with two session tools it can open the wrong one
+  // (live, 2026-11-27: a teach-then-recall keep continued into the
+  // learner's Newton's-laws protégé session instead).
+  const session = out?.result?.mode
+    ? { tool: out.tool, label: out.label, steer: out.result.steer, state: out.result.state, actions: out.result.actions,
+        note: "The learner kept this session tool and it has just run once — YOU are now running this session. Follow its steer from its live state above. Do not open or resume a different session tool for this request." }
+    : null;
+  return { confirmation: publicConfirmation(stored), kind: "build", result, next: appliedChange ? null : next, appliedChange, ...(session ? { session } : {}) };
 }
 
 /** Apply an approved permission card: grant the capability to this learner alone, then build (or switch on the drafted tool) and run it. */

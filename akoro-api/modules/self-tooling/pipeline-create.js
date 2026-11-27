@@ -510,7 +510,7 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
       await finish("escalated", {});
       return { status: "needs_consent", drafted: true, tool: name, label, mode: "mode", confirmation: card.confirmation,
         result: { mode: true, steer: built.definition.steer, state: initialState, actions: built.definition.actions.map((a) => a.name) },
-        note: `The session tool is built and checked, but it is NOT on: it is drafted and OFF, and a card is asking the learner to Keep it. ` + "`result`" + ` shows the session it will run — use it to describe the session now, in your own words: say you've built "${label}", what it will be like, and that tapping Keep on the card starts it. When they keep it, call await_decision as usual to finish the keep, then call the tool by name — it returns its steer and live state, and you run the session from there. Never say it is saved or on.${droppedNote}` };
+        note: `The session tool is built and checked, but it is NOT on: it is drafted and OFF, and a card is asking the learner to Keep it. ` + "`result`" + ` shows the session it will run — use it to describe the session now, in your own words: say you've built "${label}", what it will be like, and that tapping Keep on the card starts it. When they keep it, call await_decision as usual to finish the keep — its result carries the session itself (steer + live state), and you run the session from there. Never say it is saved or on.${droppedNote}` };
     }
     return finish("rejected", reject(`Couldn't build it safely: ${String(lastProblem || "the mode builder couldn't express it").slice(0, 240)}`));
   }
