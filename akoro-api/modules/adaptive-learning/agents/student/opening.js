@@ -55,3 +55,49 @@ export function buildOpening({ topic, isDecaySession, mustKnow = [], index = 0, 
 
   return { openingPrompt, openingBlocks };
 }
+
+/**
+ * The opening for a CONTINUATION — the learner is returning to a session
+ * already in progress (2026-11-27, Matt). A fresh opening here reads like
+ * starting over ("Let's teach X. Start by explaining…") even though the
+ * protégé remembers everything, so a continuation opens with a recap
+ * instead: what the learner has already taught (the protégé is grounded
+ * in those), where to pick up, and what is still to go. The recap rides
+ * as its own typed block; the header and the guide's idea pills stay.
+ */
+export function buildResumeOpening({ topic, mustKnow = [], index = 0, knowledgeMap = [], subject = "", guideName = "Guide", guideEmoji = "🧠" }) {
+  const current = mustKnow[index] || topic;
+  const openingPrompt = `Let's continue from where we stopped — pick up with ${current}.`;
+
+  const openingBlocks = [
+    {
+      type:     "subtopic-hdr",
+      subtopic: current,
+      items:    mustKnow,
+      map:      knowledgeMap,
+      idx:      index,
+      total:    mustKnow.length || 1,
+      topic,
+      subject,
+    },
+    {
+      // The recap itself: taught concepts before the resume position,
+      // the concept to pick up, and the ones still to go — all sliced
+      // from the same must-know ladder the header pages through.
+      type:      "resume-recap",
+      topic,
+      taught:    mustKnow.slice(0, Math.max(0, index)),
+      current,
+      remaining: mustKnow.slice(index + 1),
+    },
+    {
+      type:             "guide-ideas",
+      agent:            guideName,
+      emoji:            guideEmoji,
+      hint:             `Let's continue from where we stopped. Explain the current idea in your own words when you're ready.`,
+      ideas:            openingIdeas(topic, { review: true }),   // the review set reads naturally for a return visit
+    },
+  ];
+
+  return { openingPrompt, openingBlocks };
+}

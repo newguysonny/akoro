@@ -243,6 +243,53 @@ function BlockRenderer({ block, agentName, agentEmoji, onCite = null }) {
   /* ── subtopic-hdr ── */
   if (block.type === "subtopic-hdr") return <SubtopicHeader block={block} opacity={opacity} />;
 
+  /* ── resume recap ── a continuation's opening: what the learner already
+     taught (the protégé is grounded in those), where to pick up, and what
+     is still to go — instead of the fresh "Let's teach X" script. */
+  if (block.type === "resume-recap") {
+    const taught = Array.isArray(block.taught) ? block.taught : [];
+    const remaining = Array.isArray(block.remaining) ? block.remaining : [];
+    const row = (text, icon, color, bold) => (
+      <div key={text} style={{ display:"flex", alignItems:"flex-start", gap:8 }}>
+        <span className={`ti ${icon}`} style={{ fontSize:14, color, flexShrink:0, marginTop:1 }}/>
+        <span style={{ fontSize:12.5, fontWeight:bold ? 800 : 600, color: bold ? "var(--ak-text)" : "var(--ak-text-sub)", lineHeight:1.45 }}>{text}</span>
+      </div>
+    );
+    return (
+      <div data-block="resume-recap" style={{ background:"var(--ak-surface)", border:"1px solid var(--ak-border)", borderRadius:16, padding:"13px 14px", marginBottom:4, opacity, fontFamily:"'Nunito',sans-serif" }}>
+        <div style={{ fontSize:13.5, fontWeight:900, color:"var(--ak-text)", marginBottom: taught.length || remaining.length ? 10 : 8 }}>
+          Let&rsquo;s continue from where we stopped
+        </div>
+        {taught.length > 0 && (
+          <div style={{ marginBottom:10 }}>
+            <div style={{ fontSize:10.5, fontWeight:900, letterSpacing:".05em", textTransform:"uppercase", color:"var(--ak-text-muted)", marginBottom:6 }}>
+              You&rsquo;ve taught these concepts — your protégé is grounded in them
+            </div>
+            <div style={{ display:"flex", flexDirection:"column", gap:5 }}>
+              {taught.map(t => row(t, "ti-circle-check", GREEN, false))}
+            </div>
+          </div>
+        )}
+        <div style={{ marginBottom: remaining.length ? 10 : 0 }}>
+          <div style={{ fontSize:10.5, fontWeight:900, letterSpacing:".05em", textTransform:"uppercase", color:BRAND, marginBottom:6 }}>
+            Continue from here
+          </div>
+          {row(block.current || block.topic || "", "ti-arrow-right", BRAND, true)}
+        </div>
+        {remaining.length > 0 && (
+          <div>
+            <div style={{ fontSize:10.5, fontWeight:900, letterSpacing:".05em", textTransform:"uppercase", color:"var(--ak-text-muted)", marginBottom:6 }}>
+              Still to go
+            </div>
+            <div style={{ display:"flex", flexDirection:"column", gap:5 }}>
+              {remaining.map(t => row(t, "ti-circle", "var(--ak-text-muted)", false))}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   /* The "NaNa plan" strip and the "Objectives" checklist used to render here.
      Both are gone. The plan exposed internal workflow phases rather than a
      learner action, while the checklist was the subtopic progress bar written

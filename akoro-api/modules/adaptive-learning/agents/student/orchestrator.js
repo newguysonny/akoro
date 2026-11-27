@@ -25,7 +25,7 @@ import { executeAgentTeachingTurn } from "../../teaching-session/controller.js";
 import { normaliseMode } from "../../teaching-session/policy.js";
 import { blocksToConversationHistory } from "./continuation-history.js";
 import { STUDENT_PHASES, ACTION_FOR_DIALOGUE_MOVE } from "../../teaching-session/state-machine.js";
-import { buildOpening } from "./opening.js";
+import { buildOpening, buildResumeOpening } from "./opening.js";
 import { createClient } from "@supabase/supabase-js";
 
 // Lazy: a barrel re-export must not build the client (or throw) in a test env.
@@ -249,8 +249,12 @@ export class StudentSessionOrchestrator extends BaseOrchestrator {
     const isDecaySession = this.sessionType === "decay_review";
 
     // ── Structured opening blocks (same typed shape the UI renders per turn) ──
+    // A continuation (resumeFrom restored from the previous session's row)
+    // opens with the resume recap, not the fresh "Let's teach X" script —
+    // the protégé remembers the earlier lesson, so the opening says what
+    // was taught and where to pick up. Decay keeps its own opening.
     const guideEmoji = this.guideOrchestrator.guide?.emoji || "🧠";
-    const { openingPrompt, openingBlocks } = buildOpening({
+    const openingArgs = {
       topic,
       isDecaySession,
       mustKnow,
@@ -259,7 +263,10 @@ export class StudentSessionOrchestrator extends BaseOrchestrator {
       subject: this.subject || "",
       guideName,
       guideEmoji,
-    });
+    };
+    const { openingPrompt, openingBlocks } = (!isDecaySession && this.resumeFrom)
+      ? buildResumeOpening(openingArgs)
+      : buildOpening(openingArgs);
 
     return {
       openingPrompt,

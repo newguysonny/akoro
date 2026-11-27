@@ -404,7 +404,12 @@ export function useTeachAgent({ session, config, onClose, onMinimize, onSessionS
         if (d.historyBlocks?.length) {
           setBlocks(prev => {
             const fresh = prev.filter(b => !b.faded && b.type !== "system-divider");
-            return [...d.historyBlocks, { type:"system-divider", label:"Continuing from here" }, ...fresh, ...opening];
+            // A resume opening carries its own recap card — it IS the seam,
+            // so the "Continuing from here" divider would only repeat it.
+            const hasRecap = opening.some(b => b.type === "resume-recap");
+            return hasRecap
+              ? [...d.historyBlocks, ...fresh, ...opening]
+              : [...d.historyBlocks, { type:"system-divider", label:"Continuing from here" }, ...fresh, ...opening];
           });
         } else if (opening.length) {
           // Append (not replace) when a transcript already exists — e.g. a
