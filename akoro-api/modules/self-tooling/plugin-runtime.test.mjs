@@ -119,3 +119,13 @@ test("a mode def with an effect on undeclared state is refused", () => {
   bad.actions[0].effects.push({ op: "set", path: "nope", value: 1 });
   assert.equal(validateModeDefinition(bad).ok, false);
 });
+
+test("embedded $refs in content templates interpolate; unknown refs stay literal", async () => {
+  const { substituteRefs } = await import("./modeSpec.js");
+  const out = substituteRefs(
+    { topic: "$topic", content: "State what $topic is and why it matters in $subject. Cost: $5.", other: "$missing" },
+    { args: { topic: "Parts of speech" }, params: { subject: "English Language" } });
+  assert.equal(out.topic, "Parts of speech");
+  assert.equal(out.content, "State what Parts of speech is and why it matters in English Language. Cost: $5.");
+  assert.equal(out.other, "$missing");
+});

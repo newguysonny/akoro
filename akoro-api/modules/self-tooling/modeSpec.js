@@ -102,7 +102,23 @@ export function substituteRefs(v, { args = {}, params = {}, now = new Date() } =
     if (key === "now") return now.toISOString();
     if (key in args) return args[key];
     if (key in params) return params[key];
-    return v;
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) {
+      // A longer string that happens to start with $ — fall through to
+      // embedded interpolation below.
+    } else return v;
+  }
+  if (typeof v === "string" && v.includes("$")) {
+    // Embedded refs ("State what $topic is…") interpolate too — the builder
+    // writes content templates, and a raw $ref must never reach the state
+    // the agent teaches from or the tab renders (live, 2026-11-27). A $name
+    // that resolves to nothing is left exactly as written.
+    return v.replace(/\$([A-Za-z_][A-Za-z0-9_]*)/g, (m, key) => {
+      if (key === "today") return now.toISOString().slice(0, 10);
+      if (key === "now") return now.toISOString();
+      if (key in args) return String(args[key]);
+      if (key in params) return String(params[key]);
+      return m;
+    });
   }
   if (Array.isArray(v)) return v.map((x) => substituteRefs(x, { args, params, now }));
   if (isObj(v)) return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, substituteRefs(x, { args, params, now })]));
