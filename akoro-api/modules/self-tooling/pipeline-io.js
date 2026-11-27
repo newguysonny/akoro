@@ -121,7 +121,12 @@ export async function learnerToolDefsWithAreas(learnerId, audience = "learner") 
   // Rows built before areas were stored derive theirs on the fly — nothing is area-less.
   const areas = new Map(rows.map((t) => [t.name, t.area || deriveToolArea(t).area]));
   const labels = new Map(rows.map((t) => [t.name, t.label || t.name]));
-  return { defs: rows.map(toolDef).filter(Boolean), areas, labels };
+  // Session (mode) tools: the turn's area selection must never filter one
+  // out — a session is resumable from any conversation, whatever area the
+  // message points at (their derived area is "other", which no message
+  // activates, so without this they vanish mid-session).
+  const modes = new Set(rows.filter((t) => t.mode === "mode").map((t) => t.name));
+  return { defs: rows.map(toolDef).filter(Boolean), areas, labels, modes };
 }
 
 export async function learnerToolDefs(learnerId, audience = "learner") {

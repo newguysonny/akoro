@@ -77,9 +77,9 @@ export async function answerTurn(ctx) {
     let turnTools = instructorTools;
     let selectionNote = "";
     if (role === "student") {
-      const { defs: learnerDefs, areas: learnerAreas, labels: learnerLabels } = selfToolOn
+      const { defs: learnerDefs, areas: learnerAreas, labels: learnerLabels, modes: learnerModes } = selfToolOn
         ? await learnerDefsP
-        : { defs: [], areas: new Map(), labels: new Map() };
+        : { defs: [], areas: new Map(), labels: new Map(), modes: new Set() };
       // Named-tool force (2026-11-18): "run my Delete a chat by title
       // tool" names one of the learner's own tools with a run verb —
       // force that call. The tool was already being LOADED (its area
@@ -121,6 +121,16 @@ export async function answerTurn(ctx) {
           if (forcedTool && !turnTools.some((t) => t.function?.name === forcedTool)) {
             const needed = allTools.find((t) => t.function?.name === forcedTool);
             if (needed) turnTools = [...turnTools, needed];
+          }
+          // Session (mode) tools survive selection for the same reason: a
+          // session is resumable from any conversation, and its derived
+          // area ("other") is one no message ever activates — filtering it
+          // out mid-session strands the session (live, 2026-11-27).
+          if (learnerModes?.size) {
+            for (const d of allTools) {
+              const n = d.function?.name;
+              if (n && learnerModes.has(n) && !turnTools.some((t) => t.function?.name === n)) turnTools = [...turnTools, d];
+            }
           }
           selectionNote = `\n\n## Tools loaded for this conversation\nLoaded areas: ${[...active].join(", ")}, plus the always-on core. Your other tools exist but are not loaded in this conversation. If the learner's request needs a tool you do not have, call get_agent_capabilities with { area: "<area id>" } to load that area's tools, then continue the request. Area ids: ${Object.keys(AREAS).join(", ")}.`;
         }
