@@ -852,7 +852,10 @@ export default function LearnerDashboard() {
     const dayLabel = !d ? "" : (d.toDateString() === new Date().toDateString() ? "Today" : d.toLocaleDateString("en-GB", { weekday: "short", month: "short", day: "numeric" }));
     const phase = s?.phase ? s.phase.charAt(0).toUpperCase() + s.phase.slice(1) : null;
     const topic = s ? (s.total > 0 ? `${phase || "Session"} · ${s.done} of ${s.total}` : (phase || t.goal || "Session tool")) : (t.goal || "Session tool");
-    return { id: `tool-${t.id}`, sessionToolId: t.id, title: t.label, subject: "session_tool", topic, nextSession: dayLabel };
+    return { id: t.id, sessionToolId: t.id, title: t.label, subject: "session_tool", topic, nextSession: dayLabel,
+      time: d ? d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }).toLowerCase() : "",
+      topics: s?.total || 0, revisions: 0, reviews: 0,
+      progress: s && s.total > 0 ? Math.round((s.done / s.total) * 100) : 0 };
   });
   const liveBase  = liveSubjectFilter==="all" ? sessions : sessions.filter(s=>s.subject===liveSubjectFilter);
   // Each live sub-tab matches its own bucket — Live now and Starting soon are
