@@ -59,8 +59,14 @@ export async function answerTurn(ctx) {
     syllabusRefs, pastRefs, curriculumRefs, ingests, pendingDrafts, draftFollowUp,
     selfToolOn, instructorTools, learnerDefsP, summaryP, intentP, fit,
     systemStatic, systemDynamic, systemContent, promptTailOn, userText, userContent,
-    forcedTool, trace, isAborted, isContinuation,
+    trace, isAborted, isContinuation,
   } = ctx;
+  // `let`, not part of the const destructure: the named-tool force below
+  // reassigns it when the learner names one of their own tools with a run
+  // verb. As a const binding that assignment threw "Assignment to constant
+  // variable" and dropped the turn — the force never survived contact
+  // with a real named-tool message (found live, 2026-11-27).
+  let forcedTool = ctx.forcedTool;
   const { turnCtx } = ctx;
   let summaryNow = ctx.summaryNow;
   let summaryMark = ctx.summaryMark;
