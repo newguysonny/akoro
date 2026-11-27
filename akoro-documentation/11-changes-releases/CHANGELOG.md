@@ -41,6 +41,11 @@ required action, read [Migrations](migrations/database-migrations.md).
 - `GET /api/school/sessions` — live sessions across every course owned by
   a school's teachers (from 24 h ago onward, dashboard-mapped shape). The
   school-scoped counterpart of `GET /api/instructor/sessions`.
+- `GET /api/school/profile`, `PATCH /api/school/profile`, and
+  `PATCH /api/school/profile/notifications` — the school admin's own
+  account profile, agent, notification preferences, and school-wide
+  stats. The school-scoped counterparts of the instructor profile
+  endpoints.
 
 - Documentation system expansion following
   docs/PLATFORM-DOCUMENTATION-SYSTEM-PLAN.md:
@@ -81,6 +86,12 @@ required action, read [Migrations](migrations/database-migrations.md).
   also showed invented fallback figures (342 responses, 94% satisfaction)
   whenever the profile call failed; it now shows the agent's real XP and
   guide, and no fabricated stats.
+- School Profile page (akoro-school ProfilePage) read and saved through
+  the instructor-only `/api/instructor/profile`, which 403s for the
+  `school_admin` role: the page fell back to cached data ("Offline —
+  showing cached data"), every field save failed, and its stats fetch to
+  `/api/instructor/stats` failed silently. It now uses the school-scoped
+  `/api/school/profile` endpoints, which also return the stats block.
 
 ### Security
 

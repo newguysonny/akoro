@@ -152,3 +152,25 @@ export const mapSchoolSession = (row) => ({
   moduleId:      row.module_id ?? null,
   meetingUrl:    row.meeting_url ?? null,
 });
+
+// ── Account profile (the school admin's own user profile) ────────────────────
+// The same field set the instructor profile exposes (modules/instructor) —
+// the profile is user-keyed, not instructor data; only the role gate on the
+// instructor routes kept school admins out.
+export const PROFILE_SELECT = "id, full_name, username, email, phone, bio, avatar_url, role, country, school_name, school_type, subjects, language, display_mode, accent_color, two_factor_enabled, created_at";
+
+export const PROFILE_FIELDS = [
+  "full_name", "username", "phone", "bio", "avatar_url",
+  "country", "school_name", "school_type", "subjects",
+  "language", "display_mode", "accent_color", "two_factor_enabled",
+];
+
+export const levelFromXp = (xp = 0) => Math.floor((xp ?? 0) / 500) + 1;
+
+export const mapNotifPrefs = (n) => (n ? {
+  email:            n.email_enabled,
+  push:             n.push_enabled,
+  sessionReminders: n.notify_session_reminders,
+  announcements:    n.notify_new_announcements,
+  qaReplies:        n.notify_qa_replies,
+} : null);

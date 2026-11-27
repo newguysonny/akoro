@@ -47,6 +47,7 @@ export default function ProfilePage() {
           color: BRAND, personality: a.personality || '',
           level: a.level || 1, xpEarned: a.xp || 0, streakDays: a.streak_days || 0,
         });
+        setStats(d.stats ?? {});
       })
       .catch(() => {
         setProfile({
@@ -59,8 +60,6 @@ export default function ProfilePage() {
       })
       .finally(() => setLoading(false));
 
-    fetch(`${API_URL}/api/instructor/stats`, { credentials: 'include', headers: { 'X-Akoro-Portal': 'school' } })
-      .then((r) => r.json()).then((res) => setStats(res?.data ?? {})).catch(() => {});
   }, [user]);
 
   const saveProfileField = useCallback(async (field, val) => {

@@ -1,7 +1,9 @@
 /**
  * settingsApi.js — instructor settings + marketplace publishing.
  *
- * Profile/agent use the instructor module; marketplace publishing uses the
+ * Profile uses the school module's account-profile endpoints (the
+ * instructor profile routes are role-gated to instructors); agent edits
+ * use the school agent endpoint. Marketplace publishing uses the
  * adaptive-learning marketplace module (teacherId passed in the body, matching
  * the existing /api/adaptive/marketplace/* contract).
  */
@@ -10,9 +12,9 @@ import { apiGet, apiPatch } from './api.js';
 import { API } from '../constants.js';
 
 /* ── Profile + agent ─────────────────────────────────────────────── */
-export const getProfile  = () => apiGet('/api/instructor/profile');
-export const patchProfile = (patch) => apiPatch('/api/instructor/profile', patch);
-export const patchNotifications = (prefs) => apiPatch('/api/instructor/profile/notifications', prefs);
+export const getProfile  = () => apiGet('/api/school/profile');
+export const patchProfile = (patch) => apiPatch('/api/school/profile', patch);
+export const patchNotifications = (prefs) => apiPatch('/api/school/profile/notifications', prefs);
 
 export const patchAgent = (agentPatch) => {
   // settings camelCase → API snake_case

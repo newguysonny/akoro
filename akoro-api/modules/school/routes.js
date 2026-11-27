@@ -59,6 +59,11 @@ router.post("/students/enrol", authenticateToken, requireRole(SCHOOL_ROLES), ser
 router.get("/agent", authenticateToken, operations.getAgent);
 router.patch("/agent", authenticateToken, requireRole(SCHOOL_ROLES), operations.updateAgent);
 
+// ── Account profile (the admin's own user profile) ───────────────────────────
+router.get("/profile", authenticateToken, service.getProfile);
+router.patch("/profile", authenticateToken, requireRole(SCHOOL_ROLES), service.updateProfile);
+router.patch("/profile/notifications", authenticateToken, requireRole(SCHOOL_ROLES), service.updateNotifications);
+
 // ── Settings, profile branding, integrations ─────────────────────────────────
 router.get("/settings", authenticateToken, operations.getSettings);
 router.put("/settings/profile", authenticateToken, requireRole(SCHOOL_ROLES), operations.updateProfile);

@@ -7,7 +7,7 @@
  */
 
 import db from "../../db.js";
-import { AGENT_SELECT } from "./rules.js";
+import { AGENT_SELECT, PROFILE_SELECT } from "./rules.js";
 
 const edu = () => db.schema("edu");
 const mgmt = () => db.schema("mgmt");
@@ -192,6 +192,24 @@ export const coursesForSite = (teacherIds) => db
   .from("courses").select("title, subject, level, price, is_free").in("instructor_id", teacherIds).eq("is_published", true).limit(24);
 
 // ── user_agents ──────────────────────────────────────────────────────────────
+// ── account profile (the school admin's own user profile) ────────────────────
+export const profileByUser = (userId) => db
+  .from("users").select(PROFILE_SELECT).eq("id", userId).maybeSingle();
+
+export const updateUserProfile = (userId, updates) => db
+  .from("users").update(updates).eq("id", userId).select(PROFILE_SELECT).single();
+
+export const notifPrefsByUser = (userId) => db
+  .from("user_notification_preferences").select("*").eq("user_id", userId).maybeSingle();
+
+export const upsertNotifPrefs = (row) => db
+  .from("user_notification_preferences").upsert(row, { onConflict: "user_id" });
+
+// Active enrollments across a set of courses (profile stats: headcount +
+// revenue, revenue counting only payment-backed enrollments).
+export const activeEnrollmentsByCourses = (courseIds) => db
+  .from("enrollments").select("course_id, payment_id").in("course_id", courseIds).eq("status", "active");
+
 export const agentByUser = (userId) => db
   .from("user_agents").select(AGENT_SELECT).eq("user_id", userId).maybeSingle();
 

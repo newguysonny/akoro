@@ -13,7 +13,7 @@ import { notifyUser } from "../notify.js";
 import { invalidateCachedUser } from "../auth/index.js";
 import { urlFor } from "../../lib/urls.js";
 import * as store from "./store.js";
-import { sanitizeAuditBody, pickEntityLabel, slugify, mapSchoolSession } from "./rules.js";
+import { sanitizeAuditBody, pickEntityLabel, slugify, mapSchoolSession, PROFILE_FIELDS, levelFromXp, mapNotifPrefs } from "./rules.js";
 
 // =============================================================
 // SHARED REQUEST HELPERS
@@ -151,6 +151,100 @@ export async function listSessions(req, res) {
     const { data: sessions, error } = await store.sessionsForCourses(courseIds, from);
     if (error) throw new Error(error.message);
     res.json({ success: true, data: (sessions || []).map(mapSchoolSession) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+}
+
+// ── GET /api/school/profile ──────────────────────────────────────────────────
+// The signed-in school admin's own account profile — the school-scoped
+// counterpart of GET /api/instructor/profile, which is role-gated to
+// instructors and so always 403'd here (the Profile page fell back to
+// cached data and every save failed). Same shape: the user row, the
+// caller's agent (the school's agent is the admin's user_agents row),
+// notification preferences, plus a stats block computed across the whole
+// school's courses — where the instructor stats are per-teacher — for the
+// profile page's figures.
+export async function getProfile(req, res) {
+  try {
+    const [{ data: user, error: userErr }, { data: agent }, { data: notif }] = await Promise.all([
+      store.profileByUser(req.user.id),
+      store.agentByUser(req.user.id),
+      store.notifPrefsByUser(req.user.id),
+    ]);
+    if (userErr) throw new Error(userErr.message);
+    if (!user) return res.status(404).json({ error: "User not found" });
+
+    const stats = {
+      total_students: 0, total_revenue: 0, active_courses: 0, total_courses: 0,
+      agent_xp: agent?.total_xp ?? 0, agent_level: levelFromXp(agent?.total_xp), streak_days: 0,
+    };
+    const { data: school } = await store.schoolProfileByAdmin(req.user.id);
+    if (school) {
+      const { data: teachers } = await store.teacherIdsBySchool(school.id);
+      const teacherIds = (teachers || []).map((t) => t.teacher_id);
+      if (teacherIds.length) {
+        const { data: courses } = await store.coursesByInstructors(teacherIds);
+        const list = courses || [];
+        stats.total_courses = list.length;
+        stats.active_courses = list.filter((c) => c.is_published).length;
+        const courseIds = list.map((c) => c.id);
+        if (courseIds.length) {
+          const { data: enrollments } = await store.activeEnrollmentsByCourses(courseIds);
+          const rows = enrollments || [];
+          stats.total_students = rows.length;
+          const priceMap = Object.fromEntries(list.map((c) => [c.id, c.price ?? 0]));
+          stats.total_revenue = rows.reduce((sum, e) => sum + (e.payment_id ? (priceMap[e.course_id] ?? 0) : 0), 0);
+        }
+      }
+    }
+
+    res.json({ success: true, data: {
+      ...user,
+      agent: agent ? { ...agent, xp: agent.total_xp ?? 0, level: levelFromXp(agent.total_xp), streak_days: 0 } : null,
+      notif: mapNotifPrefs(notif),
+      stats,
+    }});
+  } catch (e) { res.status(500).json({ error: e.message }); }
+}
+
+// ── PATCH /api/school/profile ────────────────────────────────────────────────
+// Field-for-field the instructor profile update: same allow-list, same
+// friendly username-taken error the client checks for.
+export async function updateProfile(req, res) {
+  try {
+    const updates = Object.fromEntries(
+      Object.entries(req.body || {}).filter(([k]) => PROFILE_FIELDS.includes(k)),
+    );
+    if (Object.keys(updates).length === 0)
+      return res.status(400).json({ error: `No valid fields provided. Allowed: ${PROFILE_FIELDS.join(", ")}` });
+    updates.updated_at = new Date().toISOString();
+    const { data, error } = await store.updateUserProfile(req.user.id, updates);
+    if (error) {
+      if (/duplicate key|unique/i.test(error.message)) return res.status(400).json({ error: "That username is already taken" });
+      throw new Error(error.message);
+    }
+    notifyUser({ userId: req.user.id, type: "profile_updated", title: "Profile updated", content: "Your profile details were saved" });
+    res.json({ success: true, data });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+}
+
+// ── PATCH /api/school/profile/notifications ──────────────────────────────────
+// Upsert into the shared user_notification_preferences table (same model
+// as the instructor and learner apps).
+export async function updateNotifications(req, res) {
+  try {
+    const { email, push, sessionReminders, announcements, qaReplies } = req.body ?? {};
+    const row = { user_id: req.user.id, updated_at: new Date().toISOString() };
+    if (email            !== undefined) row.email_enabled            = email;
+    if (push             !== undefined) row.push_enabled             = push;
+    if (sessionReminders !== undefined) row.notify_session_reminders = sessionReminders;
+    if (announcements    !== undefined) row.notify_new_announcements = announcements;
+    if (qaReplies        !== undefined) row.notify_qa_replies        = qaReplies;
+    if (Object.keys(row).length <= 2)
+      return res.status(400).json({ error: "No valid notification fields provided" });
+    const { error } = await store.upsertNotifPrefs(row);
+    if (error) throw new Error(error.message);
+    notifyUser({ userId: req.user.id, type: "settings_updated", title: "Notification preferences updated", content: "Your notification settings were saved" });
+    res.json({ success: true, data: { saved: true } });
   } catch (e) { res.status(500).json({ error: e.message }); }
 }
 
