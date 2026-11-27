@@ -160,7 +160,10 @@ export function registerTeachingSessionHandlers(socket) {
   socket.on("teacher_message", async ({ message, mode } = {}) => {
     const { sessionId, agentPairId } = socket.data;
     const orchestrator = activeSessions.get(sessionId);
-    if (!orchestrator) return socket.emit("error", { message: "No active session." });
+    if (!orchestrator) {
+      if (socket.data.sessionEnded) return;   // typed into a completed session — drop it quietly
+      return socket.emit("error", { message: "No active session." });
+    }
 
     try {
       socket.emit("typing_start");

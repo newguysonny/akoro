@@ -148,6 +148,10 @@ export async function endLiveSession(socket, { endedBy = "learner", bounded = nu
     }
     activeSessions.delete(sessionId);
     await clearStateCache(agentId);
+    // From here the socket's session is DONE: late pulls or messages on it
+    // (the client's post-turn get_state races this teardown) must no-op
+    // silently in the handlers below, never surface as "No active session."
+    socket.data.sessionEnded = true;
     socket.emit("session_ended", {
       message: formatted, summary: endResult, agentPairId,
       agentGrowth:  endResult.agentGrowth  || null,

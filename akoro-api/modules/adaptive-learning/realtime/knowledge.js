@@ -39,7 +39,10 @@ export function registerKnowledgeHandlers(socket) {
   socket.on("get_state", async () => {
     const { sessionId } = socket.data;
     const orchestrator  = activeSessions.get(sessionId);
-    if (!orchestrator) return socket.emit("error", { message: "No active session." });
+    if (!orchestrator) {
+      if (socket.data.sessionEnded) return;   // a completed session has no state to pull — not an error
+      return socket.emit("error", { message: "No active session." });
+    }
     try {
       const agentId = orchestrator.session?.agentId || orchestrator.studentId;
       const state   = await getStudentState(agentId);

@@ -83,6 +83,7 @@ export function useTeachAgent({ session, config, onClose, onMinimize, onSessionS
   const wsRef         = useRef(null);
   const sessionIdRef  = useRef(resumeSid);
   const endedRef      = useRef(false);    // the session ended (by the learner, or by itself: every part taught / a limit)   // live session id — drives seamless resume on reconnect AND on minimize→restore
+  const [ended, setEnded] = useState(false);   // state mirror of endedRef — the chat view disables its composer on it
   // True the moment the learner minimizes: the unmount cleanup must NOT end
   // the server session then — a park keeps it resumable.
   const parkedRef     = useRef(false);
@@ -470,13 +471,14 @@ export function useTeachAgent({ session, config, onClose, onMinimize, onSessionS
           if (agentBlock?.confidence != null)
             setCogState(prev => ({ ...prev, understanding: agentBlock.confidence, phase: currentPhase ?? prev?.phase }));
         }
-        ws.emit("get_state");   // pull full cognitive snapshot for this turn
+        if (!endedRef.current) ws.emit("get_state");   // pull full cognitive snapshot for this turn (a completed session has none to pull)
       });
 
       // Live cognitive state — both the push (state_update) and the
       // explicit snapshot (state_snapshot) resolve to the same shape.
       const applyState = (state) => {
         if (!state) return;
+        if (endedRef.current) return;   // the meters freeze at their final values — a torn-down session's blank snapshot must not zero them
         const c = state.cognitive || state;
         setCogState(prev => ({
           understanding: c.understanding ?? prev?.understanding ?? 0,
@@ -508,6 +510,7 @@ export function useTeachAgent({ session, config, onClose, onMinimize, onSessionS
       // The session ended itself (every part verified and the agent finished it, or a limit was reached).
       ws.on("session_ended", (d) => {
         endedRef.current = true;
+        setEnded(true);
         setLoading(false);
         if (d?.endedBy && d.endedBy !== "learner") {
           setBlocks(prev => [...prev, { type: "session-complete", text: d.endedBy === "objective_met"
@@ -521,6 +524,12 @@ export function useTeachAgent({ session, config, onClose, onMinimize, onSessionS
         console.warn("[TeachModal WS]", err.message);
         setLoading(false); setSwitching(false);
         clearLiveStream();   // a failed turn leaves no half-drawn bubbles
+        // The session already ended (the completion card is on screen): a
+        // late error — classically the post-turn state pull finding the
+        // torn-down session — is not a reply failure. Swallow it instead of
+        // stamping a raw "Couldn't get a reply: No active session." line
+        // into a finished transcript.
+        if (endedRef.current) return;
         // If the session never came up, surface the failure instead of leaving
         // the user on a silent spinner.
         if (!sessionIdRef.current) {
@@ -776,7 +785,7 @@ export function useTeachAgent({ session, config, onClose, onMinimize, onSessionS
   const handleSend = async (overrideText, modality = "text", audioUrl = null) => {
     // A quoted passage rides the typed message only (not voice or a resend).
     const text = overrideText != null ? String(overrideText).trim() : withQuote(input, quote);
-    if (!text || loading) return;
+    if (!text || loading || endedRef.current) return;   // a completed session takes no more teaching
     if (overrideText == null) { setInput(""); setQuote(null); }
     lastModalityRef.current = modality;
     speakSeqRef.current += 1;            // invalidate any queued speech from the prior turn
@@ -849,7 +858,7 @@ export function useTeachAgent({ session, config, onClose, onMinimize, onSessionS
     topic, subject, agentNm, agentEm, guideNm, guideEm, guideRS, mode, t,
     sessionId, blocks, initLoading, prepNote, input, setInput, quote, setQuote,
     recording, seconds, loading, activeTab, setActiveTab, summary, summaryErr, review,
-    requestReview, wsReady, connState, userTurns, fmt,
+    requestReview, wsReady, connState, userTurns, fmt, ended,
     handleSend, handleMinimize, toggleRecording, toggleVoiceStream,
     voiceStreaming, interimText, voiceLevel, cogState, liveStudent, liveGuide,
     guide, switching, switchOpen, setSwitchOpen, agentChoices, openSwitch, performSwitch,

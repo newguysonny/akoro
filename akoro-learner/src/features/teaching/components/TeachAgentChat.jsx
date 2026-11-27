@@ -9,7 +9,7 @@ export default function TeachAgentChat({ reader, embedded }) {
     handleMinimize, recording, toggleRecording, seconds, voiceStreaming, interimText,
     voiceLevel, toggleVoiceStream, cogState, guide, wsReady, openSwitch, switching,
     connState, onClose, readerOpen, closeReader, openReader, content, jumpToCitation,
-    setBoardOpen, liveStudent, liveGuide,
+    setBoardOpen, liveStudent, liveGuide, ended,
   } = reader;
 
   return (
@@ -52,6 +52,7 @@ export default function TeachAgentChat({ reader, embedded }) {
       materialBox={<TeachAgentMaterialBox reader={reader}/>}
       liveStudent={liveStudent}
       liveGuide={liveGuide}
+      ended={ended}
     />
   );
 }

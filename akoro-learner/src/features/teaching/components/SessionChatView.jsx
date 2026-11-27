@@ -83,6 +83,7 @@ function SessionChatView({
   cognitive,
   guideLabel, onSwitchAgent, switching,
   connState = "connected",
+  ended = false,   // the session completed — the composer closes and the guide's next-step pills go away
   onClose,
   onMinimize,
   // Reader split (Fortizo concept): when embedded, this view is the right
@@ -245,7 +246,7 @@ function SessionChatView({
           {cognitive.phase != null && (
             <span style={{ fontSize:9.5,fontWeight:800,color:BRAND,background:`${BRAND}22`,
               padding:"3px 9px",borderRadius:20,whiteSpace:"nowrap",flexShrink:0 }}>
-              Phase {cognitive.phase}
+              Phase {String(cognitive.phase).replace(/^PHASE_/i, "")}
             </span>
           )}
         </div>
@@ -260,7 +261,7 @@ function SessionChatView({
           <BlockRenderer key={i} block={b} agentName={agentName} agentEmoji={agentEmoji} onCite={onCite}/>
         ))}
         {/* The guide doesn't speak in the conversation: its ideas for what to say next sit under the protégé's latest reply. */}
-        {!loading && !liveStudent && <GuideIdeas blocks={blocks} onPick={onInputChange}/>}
+        {!loading && !liveStudent && !ended && <GuideIdeas blocks={blocks} onPick={onInputChange}/>}
         {/* ── Streaming token feedback — the turn in flight, drawn as it is
             generated. Styles mirror BlockRenderer's protégé / guide bubbles
             so the finished block simply replaces this in place. ── */}
@@ -366,7 +367,8 @@ function SessionChatView({
             value={input}
             onChange={onInputChange}
             onSend={onSend}
-            placeholder={quote ? 'Ask about this passage…' : t('teaching.explain_ph').replace('{name}', agentName)}
+            disabled={ended}
+            placeholder={ended ? 'Session complete' : quote ? 'Ask about this passage…' : t('teaching.explain_ph').replace('{name}', agentName)}
             quote={quote}
             onQuoteClear={onQuoteClear}
             bookAction={onOpenReader}
@@ -380,7 +382,7 @@ function SessionChatView({
             attachmentLabel="Attachments are not available in teaching sessions yet"
             modelLabel="Adaptive"
             modelLabelDescription="The teaching guide selects the response mode"
-            sendDisabled={!input.trim() && !quote}
+            sendDisabled={ended || (!input.trim() && !quote)}
           />
         </div>
 
@@ -388,7 +390,7 @@ function SessionChatView({
         {
         <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between" }}>
           <span style={{ fontSize:10.5,fontWeight:600,color:"var(--ak-text-muted)" }}>
-            {mode === "decay" ? t('teaching.reteach_turns') : mode === "continuation" ? t('teaching.continuation_turns') : t('teaching.teaching_turns')}: {userTurns} / 4
+            {mode === "decay" ? t('teaching.reteach_turns') : mode === "continuation" ? t('teaching.continuation_turns') : t('teaching.teaching_turns')}: {userTurns}{userTurns <= 4 ? " / 4" : ""}
           </span>
           <div style={{ display:"flex",gap:3 }}>
             {[0,1,2,3].map(i=>(
