@@ -9,6 +9,7 @@
 import { openai } from "../../lib/aiModel.js";
 import { DATA_VIEWS, describeView, audienceOf } from "./views.js";
 import { CAPABILITIES, capAudience } from "./capabilities.js";
+import { UI_COMPONENTS } from "./uiCatalogue.js";
 
 // Code is the hardest stage (and the rarest): a stronger model writes it.
 
@@ -62,7 +63,30 @@ const CODE_FORMAT = `Format (CODE — only when a recipe or spec can't express i
 Example — spread my weakest topics over the days until $examDate, $perDay a day, weakest first, skipping Sundays:
 {"definition":{"kind":"code","steps":[{"id":"weak","view":"my_weak_topics"}],"source":"function run(input, data, akoro) {\n  var topics = data.weak.slice().sort(function (a, b) { return a.confidence - b.confidence; });\n  var day = new Date(akoro.today + 'T00:00:00Z'), end = new Date(input.examDate + 'T00:00:00Z'), out = [], i = 0;\n  while (i < topics.length && day < end) {\n    if (day.getUTCDay() !== 0) { for (var k = 0; k < input.perDay && i < topics.length; k++, i++) out.push({ date: day.toISOString().slice(0, 10), subject: topics[i].subject, topic: topics[i].topic }); }\n    day.setUTCDate(day.getUTCDate() + 1);\n  }\n  return out;\n}"},"samples":[{"examDate":"2026-12-01","perDay":2},{"examDate":"2026-11-20","perDay":1}]}`;
 
-const FORMATS = { spec: SPEC_FORMAT, recipe: RECIPE_FORMAT, code: CODE_FORMAT };
+/**
+ * The UI catalogue, generated from uiCatalogue.js so the builder prompt,
+ * akoro_inspect and the client renderer can never drift apart. A
+ * presentation is DATA (components + bindings), never code.
+ */
+const UI_SECTION = `UI — the tool's tab (OPTIONAL for spec/recipe/code, REQUIRED for mode):
+Add "presentation": {"v":1,"slot":"tool.tab","body":[ …components ]} — the screen the learner sees in this tool's own tab, rendered from the tool's data.
+A string starting with $ binds to data: $state.<key> (a mode tool's state), $rows (a data tool's result rows), $tool.label, $params.<name>. In a list's "item" map, title/sub name FIELDS of each item, not $ paths.
+Components:
+${Object.entries(UI_COMPONENTS).map(([t, c]) => `- ${t}: ${c.does} Props: ${JSON.stringify(c.props)}`).join("\n")}
+Keep it small (≤ 8 components): a hero or a title line, the 2–4 facts that matter, one list, one cta. Bind only state keys / row fields that exist in YOUR definition — an unresolvable binding fails the build's UI check and the presentation is dropped.`;
+
+const MODE_FORMAT = `Format (a MODE — an interactive session or protocol the learner runs WITH the agent in chat; it answers nothing from rows):
+{"definition": {"kind":"mode","steer":"…","state":{…},"actions":[…]}, "presentation": {…}, "samples":[{…},{…}]}
+- steer: the behaviour contract the agent follows while this mode is live, second person ("You are…"), ≤ 4000 chars. Say exactly what the agent does step by step, what it must NEVER do, and when it calls each action. The steer is the whole protocol — write it so a careful agent could run the session from it alone.
+- state: the tool's initial state document (small JSON) — everything its tab shows and its actions move: a phase field, coverage/checklist items (objects with a "title" and a "state" field: todo|partial|done, or hidden for not-yet-revealed items), counters, logs (arrays). A value may reference a declared param as "$paramName" (filled from the run's values when the session first starts).
+- actions (≤ 10): the named steps the agent calls to move the state. Each: {"name": snake_case, "description": "when the agent calls this", "params": {"p": {"type": "string|number|integer|boolean|array|object", "required": true?}}, "effects": […]}. Effects apply to the state in order and are the ONLY way state changes:
+  {"op":"set","path":"phase","value":…} · {"op":"inc","path":"sessions","by":1} · {"op":"append","path":"questions","value":{"text":"$question","open":true}} · {"op":"mark","path":"coverage","matchField":"title","matchFrom":"title","set":{"state":"done"}} (update list items whose matchField equals the named param) · {"op":"flip","path":"keyPoints","field":"state","from":"hidden","to":"missed"} (change a field on every list item holding "from").
+  Effect values may use "$paramName", "$today", "$now". A path's first segment must be a state key.
+- samples: 2 example run inputs (values for the declared params, e.g. the topic the learner named).
+Example — a teach-your-protégé session over a topic the learner names:
+{"definition":{"kind":"mode","steer":"You are Ako, the learner's eager protégé. The learner teaches YOU the topic in $topic… (the full protocol: restate each explanation in your own words, ask a question whenever a step is unclear or has no example, call mark_covered only after a definition AND an example, log every question you ask).","state":{"topic":"$topic","phase":"teaching","coverage":[{"title":"Core idea","state":"todo"},{"title":"Worked example","state":"todo"}],"questions":[]},"actions":[{"name":"mark_covered","description":"Call when the learner has covered one coverage item (definition and example heard).","params":{"title":{"type":"string","required":true}},"effects":[{"op":"mark","path":"coverage","matchField":"title","matchFrom":"title","set":{"state":"done"}}]},{"name":"log_question","description":"Call every time you ask the learner a question.","params":{"question":{"type":"string","required":true}},"effects":[{"op":"append","path":"questions","value":{"text":"$question","open":true}}]}]},"presentation":{"v":1,"slot":"tool.tab","body":[{"type":"hero","title":"$state.topic","sub":"You are teaching Ako"},{"type":"list","title":"Coverage","items":"$state.coverage","item":{"title":"title","stateField":"state"}},{"type":"list","title":"Ako's questions","items":"$state.questions","item":{"title":"text"}},{"type":"cta","label":"Continue teaching","message":"Let's continue my teaching session."}]},"samples":[{"topic":"Newton's laws"},{"topic":"Photosynthesis"}]}`;
+
+const FORMATS = { spec: SPEC_FORMAT, recipe: RECIPE_FORMAT, code: CODE_FORMAT, mode: MODE_FORMAT };
 
 /** The registry slice the builder may use: views (with fields) + capabilities (with returns). */
 export function registrySlice(lookup, hint = {}, audience = "learner") {
@@ -87,7 +111,7 @@ export function registrySlice(lookup, hint = {}, audience = "learner") {
  */
 export async function buildDefinition({ stage, goal, params, slice, feedback = null, learnerId, platformPays = false, approved = [] }) {
   const messages = [
-    { role: "system", content: `${COMMON}\n\n${FORMATS[stage] || RECIPE_FORMAT}` },
+    { role: "system", content: `${COMMON}\n\n${FORMATS[stage] || RECIPE_FORMAT}\n\n${UI_SECTION}` },
     { role: "user", content: JSON.stringify({ goal, params: params || {}, available: slice }) },
   ];
   // A resume: these capabilities were approved FOR this goal (by an admin, or the learner) — they are what answers it.
@@ -100,7 +124,7 @@ export async function buildDefinition({ stage, goal, params, slice, feedback = n
   if (approved.length) messages.push({ role: "user", content: `This was approved for exactly this goal — build it with what was approved: ${approved.join("; ")}. Don't answer notExpressible.` });
   if (feedback) messages.push({ role: "user", content: `Your previous attempt failed: ${feedback}\nFix it and answer again with ONE JSON object.` });
   const resp = await openai.chat.completions.create({
-    __role: "builder", temperature: 0, max_tokens: stage === "code" ? 2000 : 1200,
+    __role: "builder", temperature: 0, max_tokens: stage === "code" ? 2000 : stage === "mode" ? 3000 : 1200,
     response_format: { type: "json_object" },
     messages,
     __feature: "self_tooling", ...(platformPays ? { __payer: "platform" } : { __userId: learnerId }),
@@ -108,7 +132,7 @@ export async function buildDefinition({ stage, goal, params, slice, feedback = n
   const raw = resp.choices?.[0]?.message?.content || "";
   const parsed = parseBuilderJson(raw);
   if (!parsed) { return { raw, notExpressible: null, error: `the builder didn't answer with JSON (${raw.length} chars: ${raw.slice(0, 60).replace(/\s+/g, " ")}…${raw.slice(-40).replace(/\s+/g, " ")})` }; }
-  return { raw, definition: parsed.definition || null, samples: Array.isArray(parsed.samples) ? parsed.samples.slice(0, 3) : [], notExpressible: parsed.notExpressible || null };
+  return { raw, definition: parsed.definition || null, presentation: parsed.presentation || null, samples: Array.isArray(parsed.samples) ? parsed.samples.slice(0, 3) : [], notExpressible: parsed.notExpressible || null };
 }
 
 /**

@@ -39,6 +39,10 @@ const publicConfirmation = (row) => ({
   sessionId: row.session_id && row.session_id !== "none" ? row.session_id : null,
   // A permission card for a drafted tool: its goal, and the items are what it would change right now.
   ...((row.tool_arguments?.kind === "permission" || row.tool_arguments?.kind === "build") ? { goal: row.preview?.goal || null, drafted: !!row.tool_arguments?.toolId, ...(row.tool_arguments?.kind === "build" ? { writes: !!row.preview?.writes } : {}) } : {}),
+  // A build card may carry the tool's live UI preview (Plugin Runtime):
+  // the presentation spec + the data it renders (a mode tool's initial
+  // state, or a data tool's verified sample rows).
+  ...(row.tool_arguments?.kind === "build" && row.preview?.ui ? { ui: row.preview.ui } : {}),
   // The table's word for a recorded approval is 'confirmed'; the app calls it 'approved'.
   status: row.status === "confirmed" ? "approved" : row.status,
   title: row.preview?.title || null,
@@ -161,14 +165,14 @@ export async function getConfirmation(id, userId) {
  * the draft on. Nothing about the learner's data changes by keeping a reader;
  * a tool that can write still proposes every change on its own card.
  */
-export async function proposeBuild({ learnerId, conversationId = null, proposed, toolId, does = null, writes = false, items = [], more = 0, refs = [] }) {
+export async function proposeBuild({ learnerId, conversationId = null, proposed, toolId, does = null, writes = false, items = [], more = 0, refs = [], ui = null }) {
   if (!toolId) throw new Error("a build card needs its drafted tool");
   const args = { kind: "build", toolId, proposed,
     ...(Array.isArray(refs) && refs.length ? { approvedRefs: [...new Set(refs.map(String))].sort() } : {}) };
   const digest = agentToolArgumentsDigest({ kind: "build", name: proposed.name, goal: proposed.goal, toolId });
   const bucket = Math.floor(Date.now() / PERMISSION_TTL_MS);
   const preview = { title: proposed.label, action: does || "It only reads your own data.", goal: proposed.goal, writes: !!writes,
-    items: (items || []).slice(0, 20), more: Math.max(0, (items || []).length - 20) + (more || 0) };
+    items: (items || []).slice(0, 20), more: Math.max(0, (items || []).length - 20) + (more || 0), ...(ui ? { ui } : {}) };
   const row = {
     id: randomUUID(), capability_jti: JTI, session_id: conversationId || "none", principal_id: learnerId,
     tool_name: `selftool:build:${proposed.name}`, tool_arguments: args, arguments_digest: digest, preview,

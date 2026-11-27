@@ -13,6 +13,7 @@
 
 import { schemaLookup } from "../../self-tooling/index.js";
 import { awaitDecision, listConfirmedDecisions } from "../../self-tooling/index.js";
+import { akoroInspect, runModeAction } from "../../self-tooling/index.js";
 import { listChats, searchChats } from "./chat-history-tools.js";
 import { searchMyStudyKnowledge } from "../learner/learner-chat-read-tools.js";
 
@@ -76,6 +77,24 @@ export function createHandlers(deps) {
       } catch (error) {
         console.warn("[self-tooling] await_decision failed:", error?.stack || error?.message || error);
         return { status: "error", error: "Waiting for the decision failed — the card is still live; the learner's tap will be picked up in the next turn." };
+      }
+    },
+    async akoro_inspect(input, { studentId, conversationId = null, role = "student", channel = "ai_chat" }) {
+      if (!SELF_TOOLING_ROLES.has(role)) return { error: "Inspecting the runtime is for learners and instructors." };
+      if (!(await selfToolingAllowedFor(studentId))) return { error: "Building new tools isn't turned on for this account yet." };
+      try { return await akoroInspect({ learnerId: studentId, audience: toolAudience(role), provider: input?.provider || null }); }
+      catch (error) { return { error: error.message || "Couldn't inspect the runtime just now" }; }
+    },
+    async run_mode_action(input, { studentId, conversationId = null, role = "student", channel = "ai_chat" }) {
+      if (!SELF_TOOLING_ROLES.has(role)) return { error: "Session tools are for learners and instructors." };
+      if (!(await selfToolingAllowedFor(studentId))) return { error: "Self-tooling isn't turned on for this account yet." };
+      if (!input?.tool || !input?.action) return { error: "Say which session tool and which of its declared actions to run." };
+      try {
+        return await runModeAction({ learnerId: studentId, toolName: String(input.tool), action: String(input.action),
+          args: input?.args && typeof input.args === "object" ? input.args : {}, audience: toolAudience(role) });
+      } catch (error) {
+        console.warn("[self-tooling] run_mode_action failed:", error?.stack || error?.message || error);
+        return { error: "That state update couldn't be saved just now." };
       }
     },
     async my_weak_topics(input, { studentId, conversationId = null, role = "student", channel = "ai_chat" }) {

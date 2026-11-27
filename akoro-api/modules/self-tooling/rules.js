@@ -200,6 +200,9 @@ export function toolDef(t) {
     ...(p.description ? { description: String(p.description).slice(0, 200) } : {}),
   }]));
   const origin = t.scope === "platform" ? "an Akoro tool for every learner, runs on this learner's own data" : "a tool the learner's agent built";
+  if (t.mode === "mode") {
+    return { type: "function", function: { name: t.name, description: `${t.label} — ${t.goal} (${origin}; an interactive session tool: calling it starts or resumes the session and returns its steer and live state — follow the steer and keep the state current with run_mode_action)`, parameters: { type: "object", properties: props, required: [] } } };
+  }
   return { type: "function", function: { name: t.name, description: `${t.label} — ${t.goal} (${origin}; read-only)`, parameters: { type: "object", properties: props, required: [] } } };
 }
 

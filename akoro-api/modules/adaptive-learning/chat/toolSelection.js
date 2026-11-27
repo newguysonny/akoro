@@ -22,6 +22,10 @@ export { AREAS };
 export const CORE_TOOL_NAMES = Object.freeze([
   "get_learner_context", "get_agent_capabilities",
   "schema_lookup", "create_tool", "save_computation", "await_decision", "submit_tool_request",
+  // Plugin Runtime (2026-11-27): inspect is discovery, like schema_lookup;
+  // run_mode_action must survive area selection mid-session — a session
+  // tool's conversation rarely keeps the building area active.
+  "akoro_inspect", "run_mode_action",
   // The instructor identity tool — always on for instructor turns (it is
   // not in the learner catalogue, so listing it here costs learners nothing).
   "get_my_profile",

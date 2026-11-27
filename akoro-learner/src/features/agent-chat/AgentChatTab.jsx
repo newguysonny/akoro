@@ -1301,6 +1301,9 @@ function AgentChatTab({
   };
 
   sendRef.current=sendMessage;
+  // A tool tab's call-to-action (Plugin Runtime): the tool view in Settings
+  // stashes its message and brings the learner here — send it as them, once.
+  useEffect(()=>{ try { const m = sessionStorage.getItem("akoro_cta_message"); if (m) { sessionStorage.removeItem("akoro_cta_message"); sendMessage(m); } } catch { /* private mode */ } },[]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ■ Stop: tell the server to stop THIS turn first (a dropped connection alone
   // never stops it — the server finishes and saves the full reply so a retry
@@ -1554,7 +1557,7 @@ function AgentChatTab({
                   )}
                   {msg.agents?.length>0&&<AgentCards agents={msg.agents} onFill={applyIdea}/>}
                   {msg.requests?.length>0&&<ChallengeRequestCards requests={msg.requests} mine={!!msg.requestsMine}/>}
-                  {msg.confirm&&<ConfirmChangeCard confirm={msg.confirm} onDone={onCardDone}/>}
+                  {msg.confirm&&<ConfirmChangeCard confirm={msg.confirm} onDone={onCardDone} onSend={(text)=>sendMessage(text)}/>}
                   {/* Approved by the Akoro team while away: one tap runs it in a normal turn (gone once the chat moves on). */}
                   {msg.runTool&&!messages.slice(messages.indexOf(msg)+1).some((m)=>m.from==="me")&&(
                     <button type="button" disabled={loading||running} onClick={()=>sendMessage(`Run "${msg.runTool.label}" now.`)}
@@ -1721,7 +1724,7 @@ function AgentChatTab({
                 <div data-open-bar="" style={{ display:"flex",flexDirection:"column",gap:6,margin:"0 0 8px" }}>
                   {waiting.length>0&&<div style={bar}><Icon name="ti-shield-check" size={14} color={BRAND}/><span>{waiting.length} change{waiting.length===1?"":"s"} waiting for your OK</span>
                     <button type="button" style={btn} onClick={()=>setShowWaiting((v)=>!v)}>{showWaiting?"Hide":"Show"}</button></div>}
-                  {waiting.length>0&&showWaiting&&<div style={{ maxHeight:"36vh",overflowY:"auto" }}>{waiting.map((c)=><ConfirmChangeCard key={c.confirmationId} confirm={c} onDone={onCardDone}/>)}</div>}
+                  {waiting.length>0&&showWaiting&&<div style={{ maxHeight:"36vh",overflowY:"auto" }}>{waiting.map((c)=><ConfirmChangeCard key={c.confirmationId} confirm={c} onDone={onCardDone} onSend={(text)=>sendMessage(text)}/>)}</div>}
                 </div>
               );
             })()}

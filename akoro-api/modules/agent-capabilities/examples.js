@@ -125,7 +125,9 @@ export const TOOL_EXAMPLES = Object.freeze({
 
   // Tools the agent builds
   schema_lookup: e("building", "(used while building a tool — checks what data a tool may read)"),
-  create_tool: e("building", "Make a tool that times my practice."),
+  akoro_inspect: e("building", "(plugin runtime — reads what the runtime offers: capabilities, domains, me, runtime, and the UI catalogue)"),
+  create_tool: e("building", "Make a tool that times my practice.", "Create a learning session where I teach my AI protégé everything I know about Newton's laws."),
+  run_mode_action: e("building", "(used inside a session tool — moves its state: mark covered, close the book, score a recall)"),
   await_decision: e("building", "(used right after a Keep / Allow / Confirm card is shown — waits for the learner's tap and finishes what they decided)"),
   save_computation: e("building", "Save that tool so I can reuse it."),
   submit_tool_request: e("building", "Request a tool that reads my school timetable."),

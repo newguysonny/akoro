@@ -13,6 +13,7 @@
  */
 import { useEffect, useState } from 'react';
 import ApprovalButtons from './ApprovalButtons.jsx';
+import SpecView from './SpecView.jsx';
 import { Icon } from '../../../components/common/Icons.jsx';
 import { BRAND } from '../../../constants.js';
 import { apiGet, apiPost } from '../../../services/api.js';
@@ -20,7 +21,7 @@ import { apiGet, apiPost } from '../../../services/api.js';
 const NUNITO = "'Nunito',sans-serif";
 const unwrap = (r) => r?.data || r;
 
-export default function ConfirmChangeCard({ confirm, onDone = null }) {
+export default function ConfirmChangeCard({ confirm, onDone = null, onSend = null }) {
   const [state, setState] = useState(confirm);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
@@ -48,7 +49,7 @@ export default function ConfirmChangeCard({ confirm, onDone = null }) {
   const items = state.items || [];
   const result = state.result;
   if (state.kind === 'permission') return <PermissionCard state={state} expired={expired} busy={busy} err={err} act={act} />;
-  if (state.kind === 'build') return <BuildCard state={state} expired={expired} busy={busy} err={err} act={act} />;
+  if (state.kind === 'build') return <BuildCard state={state} expired={expired} busy={busy} err={err} act={act} onSend={onSend} />;
   return (
     <div style={{ marginTop: 10, padding: '12px 13px', borderRadius: 14, background: 'var(--ak-surface)', border: `1px solid ${state.status === 'pending' && !expired ? `${BRAND}55` : 'var(--ak-border)'}`, fontFamily: NUNITO }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -127,7 +128,7 @@ function PermissionCard({ state, expired, busy, err, act }) {
   );
 }
 
-function BuildCard({ state, expired, busy, err, act }) {
+function BuildCard({ state, expired, busy, err, act, onSend = null }) {
   const result = state.result;
   const pending = state.status === 'pending' && !expired;
   const kept = state.status === 'consumed' && result?.status === 'created';
@@ -145,6 +146,12 @@ function BuildCard({ state, expired, busy, err, act }) {
       </div>
       {pending && <>
         {state.goal && <div style={{ marginTop: 9, fontSize: 12.5, fontWeight: 700, color: 'var(--ak-text)', lineHeight: 1.5 }}>{state.goal}</div>}
+        {state.ui?.presentation && (
+          <div style={{ marginTop: 10 }}>
+            <SpecView presentation={state.ui.presentation} state={state.ui.state || null} rows={state.ui.rows || null}
+              tool={{ label: state.title || '', goal: state.goal || '' }} onSend={onSend} />
+          </div>
+        )}
         <div style={{ marginTop: 8, fontSize: 11.5, fontWeight: 800, color: 'var(--ak-text-muted)' }}>{state.writes ? 'Right now it would change:' : (items.length ? 'It just answered:' : 'Nothing matched right now.')}</div>
         {items.length > 0 && (
           <ul style={{ margin: '4px 0 0', paddingLeft: 18, fontSize: 12.5, fontWeight: 700, color: 'var(--ak-text)', lineHeight: 1.6 }}>

@@ -41,6 +41,7 @@ export {
   getChatsToolState,
   getLibraryToolState,
   getMergedToolState,
+  getToolView,
   learnerToolDefs,
   learnerToolDefsWithAreas,
   listMyTools,

@@ -10,6 +10,7 @@ export {
   getChatsToolState,
   getLibraryToolState,
   getMergedToolState,
+  getToolView,
   learnerToolDefs,
   learnerToolDefsWithAreas,
   listMyTools,
@@ -54,3 +55,7 @@ export { runDefinition, validateDefinition } from "./interpreters.js";
 export { coerceInput } from "./bind.js";
 export { CODE_LIMITS, codeEnabled, runCode, staticCheck } from "./sandbox/index.js";
 export { readView } from "./viewRuntime.js";
+export { akoroInspect } from "./inspect.js";
+export { runModeAction, getToolState } from "./toolState.js";
+export { validateModeDefinition } from "./modeSpec.js";
+export { UI_COMPONENTS, UI_SLOTS, describeCatalogue, validatePresentation } from "./uiCatalogue.js";

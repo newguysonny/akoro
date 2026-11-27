@@ -13,6 +13,8 @@ import { goalTokens } from "./toolSimilarity.js";
 import { deriveToolArea } from "./areas.js";
 import { DOMAINS, genericDomain } from "./domains.js";
 import { proposeWrite } from "./confirmations.js";
+import { ensureToolState, getToolState } from "./toolState.js";
+import { initialModeState } from "./modeSpec.js";
 import { basisColumns, currentActionBasis } from "../agent-runtime/index.js";
 import { LIMITS, NAME, isDomainTool, asksAboutOthersInBattles, toolActions, toolDef, visibleActions, mergedRowRule, presentMergedToolRow } from "./rules.js";
 import { tryRun, verifyTool } from "./pipeline-verify.js";
@@ -107,7 +109,7 @@ export async function forcedSelfTool(learnerId, message) {
  * tool wins a name clash; built-in names never reach here (§7.10).
  */
 export async function learnerToolDefsWithAreas(learnerId, audience = "learner") {
-  const cols = "name, label, goal, params_schema, scope, actions, disabled_actions, views, capabilities, area";
+  const cols = "name, label, goal, params_schema, scope, actions, disabled_actions, views, capabilities, area, mode";
   const [{ data: mine }, { data: platform }] = await Promise.all([
     edu().from("agent_tools").select(cols)
       .eq("owner_id", learnerId).eq("status", "active").order("last_used_at", { ascending: false, nullsFirst: false }).limit(LIMITS.inCatalogue),
@@ -215,6 +217,19 @@ export async function runLearnerTool(name, input, learnerId, { callCapability, c
     if ((await capabilityStatus(c, { learnerId })) !== "enabled" || !(cap?.kind === "read" || cap?.target)) return { error: "This tool uses something that's no longer allowed, so it can't run." };
   }
   for (const v of t.views || []) if (!DATA_VIEWS[v]) return { error: "This tool uses data that's no longer available." };
+  // A MODE tool (Plugin Runtime): running it starts or resumes the session.
+  // The agent gets the steer + the live state and runs the protocol in the
+  // chat; state moves only through the tool's declared actions
+  // (run_mode_action). There are no rows and nothing to fail-streak.
+  if (t.definition?.kind === "mode") {
+    const state = await ensureToolState(learnerId, t, input || {});
+    await edu().from("agent_tools").update({
+      usage_count: (t.usage_count || 0) + 1, last_used_at: new Date().toISOString(), fail_streak: 0, updated_at: new Date().toISOString(),
+    }).eq("id", t.id);
+    return { tool: t.label, mode: true, steer: t.definition.steer, state,
+      actions: (t.definition.actions || []).map((a) => ({ name: a.name, description: a.description, params: a.params || {} })),
+      note: "This is an interactive session tool and YOU are now running it: follow its steer exactly. The state above is its live state — resume from it, never restart it. As the session moves, keep the state current with run_mode_action (the learner's tab renders that state). Speak as the steer says, in your own words." };
+  }
   // Always as THIS learner: views are forced to their own rows (viewRuntime).
   const r = await tryRun(t.definition, t.params_schema, input || {}, { learnerId, callCapability });
   const fail = r.ok ? 0 : (t.fail_streak || 0) + 1;
@@ -300,11 +315,32 @@ export async function archiveUnusedTools(days = 60) {
   return { archived: (data || []).length };
 }
 
+/**
+ * What the tool's own tab renders (Plugin Runtime): its presentation plus
+ * the data the presentation binds to — a mode tool's live state (or its
+ * initial state before the first run), a data tool's rows from a dry read.
+ * → the view payload, or null when the tool isn't the learner's (or a
+ * platform tool) to see.
+ */
+export async function getToolView(learnerId, toolId) {
+  const { data: t } = await edu().from("agent_tools").select("id, name, label, goal, mode, status, definition, presentation, scope")
+    .eq("id", toolId).or(`owner_id.eq.${learnerId},scope.eq.platform`).in("status", ["active", "disabled"]).maybeSingle();
+  if (!t) return null;
+  const base = { id: t.id, name: t.name, label: t.label, goal: t.goal, mode: t.mode, status: t.status, presentation: t.presentation || null };
+  if (t.definition?.kind === "mode") {
+    const live = await getToolState(learnerId, t.id);
+    return { ...base, state: live?.state || initialModeState(t.definition, {}) };
+  }
+  if (!t.presentation) return base;
+  const r = await runLearnerTool(t.name, {}, learnerId, { callCapability: undefined, dry: true });
+  return { ...base, ...(r && !r.error ? { rows: r.rows || [], total: r.total ?? null } : {}) };
+}
+
 export async function listMyTools(learnerId) {
-  const { data, error } = await edu().from("agent_tools").select("id, name, label, goal, mode, status, usage_count, last_used_at, created_at, domain, actions, disabled_actions, views, area, secondary_areas, tags")
+  const { data, error } = await edu().from("agent_tools").select("id, name, label, goal, mode, status, usage_count, last_used_at, created_at, domain, actions, disabled_actions, views, area, secondary_areas, tags, presentation")
     .eq("owner_id", learnerId).in("status", ["active", "disabled"]).order("created_at", { ascending: false }).limit(50);
   if (error) throw new Error("Couldn't load your tools");
-  return (data || []).map((t) => ({ ...t, actions: Array.isArray(t.actions) ? t.actions : [], disabled_actions: Array.isArray(t.disabled_actions) ? t.disabled_actions : [],
+  return (data || []).map((t) => ({ ...t, hasUi: !!t.presentation, presentation: undefined, actions: Array.isArray(t.actions) ? t.actions : [], disabled_actions: Array.isArray(t.disabled_actions) ? t.disabled_actions : [],
     area: t.area || deriveToolArea(t).area, secondary_areas: Array.isArray(t.secondary_areas) ? t.secondary_areas : [], tags: Array.isArray(t.tags) ? t.tags : [] }))
     .map(presentMergedToolRow).filter((t) => t !== null);
 }

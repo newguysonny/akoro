@@ -8,8 +8,11 @@
  * can withdraw while they wait). Hidden when self-tooling is off.
  */
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Section, Row, Toggle } from './shared.jsx';
 import { apiGet, apiPatch, apiPost } from '../../services/api.js';
+import { APP_HOME } from '../../config/target.js';
+import SpecView from '../../features/agent-chat/components/SpecView.jsx';
 import { confirmDialog } from '../../components/common/ConfirmHost.jsx';
 
 const NUNITO = "'Nunito',sans-serif";
@@ -35,6 +38,9 @@ export default function MyToolsSection() {
   const [err, setErr] = useState('');
   const [requests, setRequests] = useState([]);
   const [openId, setOpenId] = useState(null); // the domain tool being looked inside
+  const [viewId, setViewId] = useState(null); // the tool whose own tab (SpecView) is open
+  const [view, setView] = useState(null);     // its /tools/:id/view payload
+  const navigate = useNavigate();
   const [sheet, setSheet] = useState(false);  // the open domain's ⋮ menu
   const [renaming, setRenaming] = useState(false);
   const [draftLabel, setDraftLabel] = useState('');
@@ -43,6 +49,13 @@ export default function MyToolsSection() {
     apiGet('/api/self-tooling/tools').then((d) => setState(d?.data || d)).catch(() => setState({ enabled: false, tools: [] }));
     apiGet('/api/self-tooling/requests').then((d) => setRequests((d?.data || d)?.requests || [])).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (!viewId) { setView(null); return; }
+    let live = true;
+    apiGet(`/api/self-tooling/tools/${viewId}/view`).then((d) => { if (live) setView(d?.data || d); }).catch(() => { if (live) setView({ error: true }); });
+    return () => { live = false; };
+  }, [viewId]);
 
   if (!state?.enabled) return null;
 
@@ -114,9 +127,40 @@ export default function MyToolsSection() {
     </button>
   );
 
+  const viewTool = viewId ? state.tools.find((t) => t.id === viewId) || null : null;
+  // A tool tab's call-to-action sends its message in the chat: stash it and
+  // go to the agent tab, which sends it as the learner on arrival.
+  const sendFromTool = (text) => {
+    if (!text) return;
+    try { sessionStorage.setItem('akoro_cta_message', text); } catch { /* private mode */ }
+    navigate(`${APP_HOME}?tab=agent`);
+  };
+
   return (
     <>
-    {open ? (
+    {viewTool ? (
+    <>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '2px 4px 10px' }}>
+        <button type="button" onClick={() => setViewId(null)} aria-label="Back to my tools"
+          style={{ border: 'none', background: 'none', cursor: 'pointer', padding: 4, display: 'flex', alignItems: 'center' }}>
+          <span className="ti ti-chevron-left" style={{ fontSize: 20, color: 'var(--ak-text)' }} />
+        </button>
+        <span style={{ flex: 1, minWidth: 0, fontSize: 16, fontWeight: 900, fontFamily: NUNITO, color: 'var(--ak-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{viewTool.label}</span>
+        <Toggle on={viewTool.status === 'active'} onChange={() => flipTool(viewTool)} />
+      </div>
+      <div style={{ padding: '0 2px 6px' }}>
+        {view?.presentation ? (
+          <SpecView presentation={view.presentation} state={view.state || null} rows={view.rows || null}
+            tool={{ label: view.label || viewTool.label, goal: view.goal || viewTool.goal }} onSend={sendFromTool} />
+        ) : (
+          <div style={{ padding: '12px 14px', fontSize: 12.5, color: 'var(--ak-text-muted)', fontFamily: NUNITO, lineHeight: 1.5 }}>
+            {view ? 'This tool has no page of its own yet — ask your agent in the chat to run it.' : 'Loading…'}
+          </div>
+        )}
+      </div>
+      {err && <div style={{ padding: '6px 14px 10px', fontSize: 12, color: '#EF4444', fontFamily: NUNITO }}>{err}</div>}
+    </>
+    ) : open ? (
     <>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '2px 4px 10px' }}>
         <button type="button" onClick={() => { setOpenId(null); setRenaming(false); }} aria-label="Back to my tools"
@@ -198,8 +242,8 @@ export default function MyToolsSection() {
         <Row key={t.id} icon="ti-tool" label={t.label}
           sub={dom
             ? [`Domain · ${t.actions.length} action${t.actions.length === 1 ? '' : 's'}`, usesLine(t)].filter(Boolean).join(' · ')
-            : [t.goal, usesLine(t)].filter(Boolean).join(' · ')}
-          onClick={dom ? () => setOpenId(t.id) : undefined} noArrow={!dom}>
+            : [t.mode === 'mode' ? 'Session tool' : null, t.goal, usesLine(t)].filter(Boolean).join(' · ')}
+          onClick={dom ? () => setOpenId(t.id) : (t.hasUi ? () => setViewId(t.id) : undefined)} noArrow={!dom && !t.hasUi}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }} onClick={(e) => e.stopPropagation()}>
             <Toggle on={t.status === 'active'} onChange={() => flipTool(t)} />
             {trashBtn(t)}

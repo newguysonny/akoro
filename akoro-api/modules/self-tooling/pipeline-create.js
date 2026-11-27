@@ -23,8 +23,21 @@ import { LIMITS, NAME, reject, howToUse, needsCode, inventedDates, hardCodedTarg
 import { logEvent, retireSameView, writeOutcome } from "./pipeline-io.js";
 import { tryRun, verifyTool } from "./pipeline-verify.js";
 import { buildDomain as runDomainBuild } from "./pipeline-dry.js";
+import { validateModeDefinition, initialModeState } from "./modeSpec.js";
+import { validatePresentation } from "./uiCatalogue.js";
 
 const edu = () => db.schema("edu");
+
+/** Learner-readable lines for a mode tool's build card: the titles of the
+ *  first checklist in its initial state (coverage, key points), if any. */
+function modeCardItems(state) {
+  for (const v of Object.values(state || {})) {
+    if (Array.isArray(v) && v.length && v.every((x) => x && typeof x === "object" && typeof x.title === "string")) {
+      return v.slice(0, 5).map((x) => x.title);
+    }
+  }
+  return [];
+}
 
 /** create_tool (§7.1). `builtIn`: names of built-in tools (never shadowed). */
 /**
@@ -142,9 +155,9 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
   // Never route a CHANGE goal to a read domain: "delete a task by position"
   // matched the "by <field>" read regex and answered with a count instead of
   // reaching the learner's write tool.
-  const dkey = audience === "learner" && !asksForChange(goal) ? domainForGoal(goal) : null;
+  const dkey = audience === "learner" && hint.mode !== "mode" && !asksForChange(goal) ? domainForGoal(goal) : null;
   if (dkey) return await buildDomain(DOMAINS[dkey]);
-  if (audience === "learner" && !asksForChange(goal)) {
+  if (audience === "learner" && hint.mode !== "mode" && !asksForChange(goal)) {
     try {
       const lookupD = await schemaLookup(goal, { audience, learnerId });
       const top = (lookupD.views || []).find((x) => DATA_VIEWS[x?.name] && DATA_VIEWS[x.name].scope === "self");
@@ -239,6 +252,11 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
   const slice = docGoal
     ? registrySlice({ views: [], capabilities: [] }, { views: ["my_library"] }, audience)
     : registrySlice(lookup, hint, audience);
+  // A MODE tool (Plugin Runtime): an interactive session/protocol the learner
+  // runs with the agent in chat — a steer, a state document, declared state
+  // actions and a presentation. Not a data answer, so it skips the stages
+  // loop, the capability escalation and the domain routes entirely.
+  if (hint.mode === "mode" && audience === "learner") return await buildModeTool();
   // A resume after an approval must USE what was approved — a gate run once
   // 'resumed' into a tool that answered from an unrelated view instead.
   let mustUse = resumed ? [].concat(hint.capabilities || []).filter((c) => c in CAPABILITIES) : [];
@@ -418,12 +436,83 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
       refs: runNow.write ? (runNow.write.targets || []).map((t) => String(t.ref)) : [],
       proposed: { name, label, goal, run: { ...(input?.run && typeof input.run === "object" ? input.run : {}), ...autoTargetValues } },
       does: runNow.write ? "It can change your data — only ever after you confirm each change on a card." : "It only reads your own data.",
-      writes: !!runNow.write, items, more: runNow.write?.more || 0 });
+      writes: !!runNow.write, items, more: runNow.write?.more || 0,
+      ui: def.presentation ? { presentation: def.presentation, rows: (runNow.rows || []).slice(0, 20) } : null });
     await finish("escalated", {});
     return { status: "needs_consent", drafted: true, tool: name, label, mode: def.mode, confirmation: card.confirmation,
       result: runNow.ok ? (runNow.write ? await writeOutcome({ learnerId, dry: true, tool: { label }, write: runNow.write })
         : { rows: runNow.rows, total: runNow.total, truncated: runNow.truncated }) : { error: runNow.error },
       note: `The tool is built and checked, but it is NOT on: it is drafted and OFF, and a card is asking the learner to Keep it. ` + "`result`" + ` is its answer for this request — use it now, and be honest about anything it cannot do. In your own words: say you've built "${label}", what it does, and that tapping Keep on the card saves it in their tools; if they want it different — another grouping, range or field — say you'll rebuild it, and call create_tool again with the same name and ` + "`replace`" + ` set to "${name}". Never say it is saved or on.${droppedNote}` };
+  }
+
+  /**
+   * Build a MODE tool (hint.mode === "mode"): the builder proposes a steer +
+   * state + actions + presentation in one call; validation is structural
+   * (modeSpec + the UI catalogue) — there are no rows to verify against.
+   * Same consent shape as a data tool: drafted OFF, Keep card with the live
+   * preview; a resumed or replacing build was already approved, so it saves
+   * active. The session itself starts when the tool is RUN (runLearnerTool
+   * returns the steer + live state).
+   */
+  async function buildModeTool() {
+    ev.stages_tried.push("mode");
+    let feedback = null, lastProblem = null;
+    for (let attempt = 1; attempt <= 2 && ev.builder_calls < LIMITS.builderCalls; attempt++) {
+      ev.builder_calls++;
+      let built;
+      try { built = await buildDefinition({ stage: "mode", goal, params, slice, feedback, learnerId, platformPays: dry || resumed }); }
+      catch (e) {
+        if (/coin|balance/i.test(String(e?.message))) return finish("rejected", reject("Not enough coins to build a tool."));
+        lastProblem = `builder failed: ${e.message}`; break;
+      }
+      if (built.notExpressible) { lastProblem = built.notExpressible; break; }
+      if (!built.definition) { feedback = built.error || "no definition"; lastProblem = feedback; continue; }
+      const mv = validateModeDefinition(built.definition);
+      const pv = built.presentation
+        ? validatePresentation(built.presentation, { stateKeys: Object.keys(built.definition?.state || {}) })
+        : { ok: false, errors: ["a mode tool needs a presentation — its tab is how the learner sees the session"] };
+      const errors = [...mv.errors, ...pv.errors];
+      if (errors.length) { feedback = errors.slice(0, 6).join("; "); lastProblem = feedback; continue; }
+      ev.mode = "mode";
+      const runInput = { ...(input?.run && typeof input.run === "object" ? input.run : (built.samples || [])[0] || {}) };
+      const initialState = initialModeState(built.definition, runInput);
+      const verification = { verdict: "PASS", at: new Date().toISOString(),
+        assertions: [{ name: "mode shape", passed: true }, { name: "presentation bindings", passed: true }], samples: built.samples || [] };
+      const def = { name, label, goal, mode: "mode", definition: built.definition, params_schema: params,
+        capabilities: [], views: [], verification, presentation: built.presentation };
+      Object.assign(def, deriveToolArea(def));
+      if (dry) {
+        await finish("created", {});
+        return { status: "created", dryRun: true, tool: name, label, mode: "mode", verified: true, definition: built.definition, presentation: built.presentation,
+          result: { mode: true, state: initialState },
+          note: "DRY RUN — the session tool was built and checked but NOT saved. Describe the session it would run from `result`." + droppedNote };
+      }
+      await retireReplacedBeforeInsert();
+      const directSave = resumed || !!replaced;
+      const { data: row, error } = await edu().from("agent_tools").insert({ owner_id: learnerId, scope: "learner", audience, ...def,
+        domain: null, actions: null, usage_count: 0,
+        ...(directSave ? {} : { status: "disabled", verification: { ...verification, awaitingBuild: true } }) }).select("id").single();
+      if (error) return finish("failed", reject(`Couldn't save the tool: ${error.message}`));
+      ev.tool_id = row.id;
+      await archiveReplaced(row.id);
+      if (directSave) {
+        await finish("created", {});
+        return { status: "created", tool: name, label, mode: "mode", verified: true,
+          result: { mode: true, steer: built.definition.steer, state: initialState, actions: built.definition.actions.map((a) => a.name) },
+          note: `Saved as the learner's session tool "${label}". Call ${name} by name to start or resume the session — it returns the steer and the live state.${droppedNote}` };
+      }
+      ev.stages_tried.push("consent");
+      const card = await proposeBuild({ learnerId, conversationId, toolId: row.id,
+        refs: [], proposed: { name, label, goal, run: runInput },
+        does: "It runs an interactive session with you in this chat, and keeps its progress in its own tab. It only reads your own data.",
+        writes: false, items: modeCardItems(initialState), more: 0,
+        ui: { presentation: built.presentation, state: initialState } });
+      await finish("escalated", {});
+      return { status: "needs_consent", drafted: true, tool: name, label, mode: "mode", confirmation: card.confirmation,
+        result: { mode: true, steer: built.definition.steer, state: initialState, actions: built.definition.actions.map((a) => a.name) },
+        note: `The session tool is built and checked, but it is NOT on: it is drafted and OFF, and a card is asking the learner to Keep it. ` + "`result`" + ` shows the session it will run — use it to describe the session now, in your own words: say you've built "${label}", what it will be like, and that tapping Keep on the card starts it. When they keep it, call await_decision as usual to finish the keep, then call the tool by name — it returns its steer and live state, and you run the session from there. Never say it is saved or on.${droppedNote}` };
+    }
+    return finish("rejected", reject(`Couldn't build it safely: ${String(lastProblem || "the mode builder couldn't express it").slice(0, 240)}`));
   }
 
   async function register({ stage, built, v, check }) {
@@ -453,6 +542,13 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
     const runNow = await tryRun(built.definition, runParams, runInput, ctx);
     const def = { name, label, goal, mode: stage, definition: built.definition, params_schema: runParams,
       capabilities: v.uses.capabilities, views: [...new Set(v.uses.views)], verification };
+    // A presentation the builder proposed rides along when every binding
+    // resolves against the verified run's fields; a bad one is dropped,
+    // never a failed build (Plugin Runtime, 2026-11-27).
+    if (built.presentation) {
+      const rowFields = runNow.ok && Array.isArray(runNow.rows) && runNow.rows[0] ? Object.keys(runNow.rows[0]) : [];
+      if (validatePresentation(built.presentation, { rowFields }).ok) def.presentation = built.presentation;
+    }
     // One taxonomy: the area is derived from the main read, never chosen.
     Object.assign(def, deriveToolArea(def));
     if (draftCap) return draftAndAsk({ def, runNow });

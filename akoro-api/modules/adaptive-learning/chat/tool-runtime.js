@@ -156,6 +156,7 @@ export async function resolveLearnerSchoolContext(studentId) {
 export const SIDE_EFFECT_TOOLS = ["set_agent_auto_reply", "create_task", "suggest_help", "schedule_chat_follow_up", "post_to_chat", "send_email_to_me", "create_tool", "save_computation", "cancel_scheduled_chat_follow_up", "submit_tool_request", "submit_bug_report", "prepare_activity", "revise_activity_draft",
           "create_goal", "update_goal_progress", "save_blog_draft", "publish_blog", "update_agent_network_settings", "block_agent", "log_past_question_practice",
           "challenge_agent", "class_battle", "post_challenge_request", "accept_challenge_request", "cancel_challenge_request", "rematch_battle", "request_guide_review", "message_agent", "reply_to_agent", "start_study_prep_session", "cancel_study_prep_session",
+          "run_mode_action",
           "consult_peer_agents", "discard_activity_draft", "schedule_activity_routine", "cancel_activity_routine", "run_teaching_tool"];
 /** The multi-action tools change things only on their writing actions. */
 export const isSideEffectingAction = (tool, input) =>
@@ -173,6 +174,7 @@ export const isSideEffecting = (tool, input) => SIDE_EFFECT_TOOLS.includes(tool)
 export const PARALLEL_CALL_BARRIERS = new Set([
   UPDATE_PLAN_TOOL.name, // the plan ledger applies against earlier steps, in order
   "await_decision", // waits on the learner's tap, then applies the frozen proposal (a change)
+  "run_mode_action", // moves a session tool's state — later steps read the state it leaves
   "create_tool", // its result can add a tool for the rest of the turn (__newTool)
   "get_agent_capabilities", // its result can load an area's tools (__addTools)
   "make_study_material", // the source cascade is a dependent chain; the taught source writes a record
