@@ -210,7 +210,14 @@ export async function runLearnerTool(name, input, learnerId, { callCapability, c
   if (t && (t.audience || "learner") !== audience) return null;   // never run another audience's tool
   if (!t) return null;
   const platform = t.scope === "platform";
-  if (t.status !== "active") return { error: platform ? "This Akoro tool is turned off for now." : "This tool is turned off — rebuild it or turn it back on in Settings → Agent → My tools." };
+  if (t.status !== "active") {
+    // A build-consent draft is OFF because its Keep card is still waiting —
+    // that is the designed state, not a failure. Saying "turned off, rebuild
+    // it" here made the agent narrate a breakdown and tell the learner to
+    // fix it in Settings while the card sat waiting (live, 2026-11-27).
+    if (t.verification?.awaitingBuild) return { error: "This tool is a draft — its card is still waiting for the learner to tap Keep. It isn't on yet and nothing is wrong: don't treat this as a failure, don't say it was turned off, and don't tell the learner to rebuild it or switch it on in Settings. Just remind them the card is waiting for their Keep tap." };
+    return { error: platform ? "This Akoro tool is turned off for now." : "This tool is turned off — rebuild it or turn it back on in Settings → Agent → My tools." };
+  }
   // An action the learner switched off (or deleted) must not run even if the
   // model asks for it by name — the catalogue already hides it (toolDef).
   if (input?.action && toolActions(t).length && !visibleActions(t).includes(input.action)) {
