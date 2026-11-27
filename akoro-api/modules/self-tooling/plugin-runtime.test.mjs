@@ -129,3 +129,16 @@ test("embedded $refs in content templates interpolate; unknown refs stay literal
   assert.equal(out.content, "State what Parts of speech is and why it matters in English Language. Cost: $5.");
   assert.equal(out.other, "$missing");
 });
+
+test("contentProblems flags scaffold content, accepts real content and content-less items", async () => {
+  const { contentProblems } = await import("./modeSpec.js");
+  const scaffold = { keyPoints: [
+    { title: "Definition", state: "todo", content: "A clear one-sentence definition of Photosynthesis, in plain language." },
+    { title: "Mechanism", state: "todo", content: "" },
+  ] };
+  assert.equal(contentProblems(scaffold).length, 2);
+  const real = { keyPoints: [
+    { title: "Definition", state: "todo", content: "Photosynthesis is the process by which green plants use sunlight energy, captured by chlorophyll in their chloroplasts, to convert carbon dioxide and water into glucose and oxygen." },
+  ], coverage: [{ title: "Core idea", state: "todo" }] };
+  assert.deepEqual(contentProblems(real), []);
+});

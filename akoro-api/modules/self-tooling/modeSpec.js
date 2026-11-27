@@ -132,6 +132,36 @@ function setPath(obj, parts, value) {
   cur[parts[parts.length - 1]] = value;
 }
 
+const SCAFFOLD_CONTENT = [
+  /^(a|an)\s+(clear|simple|short|brief)\b[^.]*\b(definition|explanation|description)\b/i,
+  /^state what\b/i,
+  /\bin plain language\b/i,
+  /^(name|list|explain|describe|state)\s+(the|what|how)\b[^.]{0,60}$/i,
+];
+
+/**
+ * Teaching content that isn't content: a state item that HAS a "content"
+ * field whose value is empty, very short, or a scaffold — a description of
+ * the material ("A clear one-sentence definition of Photosynthesis, in
+ * plain language") instead of the material itself. The agent then has
+ * nothing to teach from and (rightly) refuses. Items with no content field
+ * at all are fine — in a learner-teaches session the learner supplies the
+ * content in the chat. → a list of problem strings for builder feedback.
+ */
+export function contentProblems(state, path = "state", out = []) {
+  if (Array.isArray(state)) { state.forEach((x, i) => contentProblems(x, `${path}[${i}]`, out)); return out; }
+  if (!isObj(state)) return out;
+  if ("content" in state) {
+    const c = typeof state.content === "string" ? state.content.trim() : "";
+    const title = typeof state.title === "string" ? state.title : path;
+    if (c.length < 40 || SCAFFOLD_CONTENT.some((re) => re.test(c))) {
+      out.push(`the item "${title}" has placeholder content ("${c.slice(0, 60) || "empty"}") — write the actual fact, definition or worked example into its content field, in full`);
+    }
+  }
+  for (const [k, v] of Object.entries(state)) if (k !== "content") contentProblems(v, `${path}.${k}`, out);
+  return out;
+}
+
 /**
  * Apply one declared action's effects to a state document.
  * → { ok, state } | { ok: false, error }. Never mutates the input state.

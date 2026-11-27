@@ -23,7 +23,7 @@ import { LIMITS, NAME, reject, howToUse, needsCode, inventedDates, hardCodedTarg
 import { logEvent, retireSameView, writeOutcome } from "./pipeline-io.js";
 import { tryRun, verifyTool } from "./pipeline-verify.js";
 import { buildDomain as runDomainBuild } from "./pipeline-dry.js";
-import { validateModeDefinition, initialModeState } from "./modeSpec.js";
+import { validateModeDefinition, initialModeState, contentProblems } from "./modeSpec.js";
 import { validatePresentation } from "./uiCatalogue.js";
 
 const edu = () => db.schema("edu");
@@ -473,6 +473,15 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
         : { ok: false, errors: ["a mode tool needs a presentation — its tab is how the learner sees the session"] };
       const errors = [...mv.errors, ...pv.errors];
       if (errors.length) { feedback = errors.slice(0, 6).join("; "); lastProblem = feedback; continue; }
+      // Content that isn't content: key points whose content field is an
+      // empty/short scaffold leave the agent nothing to teach from (live,
+      // 2026-11-27 — one build authored full facts, the next only titles
+      // with placeholder text). One repair attempt with the problems
+      // named; on the last attempt, accept what the builder produced.
+      if (attempt < 2) {
+        const cp = contentProblems(built.definition?.state || {});
+        if (cp.length) { feedback = cp.slice(0, 4).join("; "); lastProblem = feedback; continue; }
+      }
       ev.mode = "mode";
       const runInput = { ...(input?.run && typeof input.run === "object" ? input.run : (built.samples || [])[0] || {}) };
       const initialState = initialModeState(built.definition, runInput);
