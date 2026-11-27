@@ -160,6 +160,25 @@ export const classroomStudentAny = (userId, cids) => db
 export const courseCountByInstructors = (ids) => db
   .from("courses").select("id", { count: "exact", head: true }).in("instructor_id", ids);
 
+export const courseIdsByInstructors = (ids) => db
+  .from("courses").select("id").in("instructor_id", ids);
+
+// Live sessions for a set of courses, from `fromIso` onward (no upper bound:
+// the school dashboard filters to today client-side, and upcoming sessions
+// are the other natural read). Same select as the instructor store's.
+export const sessionsForCourses = (courseIds, fromIso) => db
+  .from("live_sessions")
+  .select(`
+    id, title, description, session_type, module_id, order_index,
+    scheduled_start, scheduled_end, status, platform, meeting_url,
+    max_participants, current_participants, recording_url, course_id,
+    courses ( id, title )
+  `)
+  .in("course_id", courseIds)
+  .gte("scheduled_start", fromIso)
+  .order("scheduled_start", { ascending: true })
+  .limit(500);
+
 export const coursesByInstructors = (ids) => db
   .from("courses")
   .select("id, slug, title, description, subject, level, is_published, is_free, price, course_type, cover_image_url, total_students, rating, total_hours, created_at, instructor:users!instructor_id(full_name)")

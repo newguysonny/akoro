@@ -38,6 +38,10 @@ required action, read [Migrations](migrations/database-migrations.md).
 
 ### Added
 
+- `GET /api/school/sessions` — live sessions across every course owned by
+  a school's teachers (from 24 h ago onward, dashboard-mapped shape). The
+  school-scoped counterpart of `GET /api/instructor/sessions`.
+
 - Documentation system expansion following
   docs/PLATFORM-DOCUMENTATION-SYSTEM-PLAN.md:
   - `02-api`: [Authorization](../02-api/authorization.md),
@@ -69,7 +73,14 @@ required action, read [Migrations](migrations/database-migrations.md).
 
 ### Fixed
 
-- Nothing yet.
+- School dashboard (akoro-school HomePage) permanently showed "We couldn't
+  load your profile, today's sessions": it read the instructor-only
+  `/api/instructor/profile` and `/api/instructor/sessions`, which 403 for
+  the `school_admin` role. It now reads the school's own agent
+  (`/api/school/agent`) and the new `/api/school/sessions`. The agent card
+  also showed invented fallback figures (342 responses, 94% satisfaction)
+  whenever the profile call failed; it now shows the agent's real XP and
+  guide, and no fabricated stats.
 
 ### Security
 

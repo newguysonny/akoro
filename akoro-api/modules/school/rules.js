@@ -140,3 +140,15 @@ export function templateColorStyle(colors) {
 }
 
 export const toNaira = (kobo) => Math.round((kobo || 0) / 100);
+
+// The dashboard's session shape — the same mapping the instructor module
+// applies (modules/instructor/rules.js mapSession), kept local so the
+// school module carries no cross-module import for one pure function.
+export const mapSchoolSession = (row) => ({
+  ...row,
+  startTime:     row.scheduled_start,
+  enrolledCount: row.current_participants ?? 0,
+  courseId:      row.course_id,
+  moduleId:      row.module_id ?? null,
+  meetingUrl:    row.meeting_url ?? null,
+});

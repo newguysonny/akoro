@@ -13,7 +13,7 @@ import { notifyUser } from "../notify.js";
 import { invalidateCachedUser } from "../auth/index.js";
 import { urlFor } from "../../lib/urls.js";
 import * as store from "./store.js";
-import { sanitizeAuditBody, pickEntityLabel, slugify } from "./rules.js";
+import { sanitizeAuditBody, pickEntityLabel, slugify, mapSchoolSession } from "./rules.js";
 
 // =============================================================
 // SHARED REQUEST HELPERS
@@ -126,6 +126,31 @@ export async function getStats(req, res) {
       teacherIds.length ? store.courseCountByInstructors(teacherIds) : Promise.resolve({ count: 0 }),
     ]);
     res.json({ success: true, data: { classrooms: cids.length, instructors: teacherIds.length, students: students || 0, courses: courses || 0 } });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+}
+
+// ── GET /api/school/sessions ─────────────────────────────────────────────────
+// Live sessions across every course owned by the school's teachers — the
+// school-scoped counterpart of GET /api/instructor/sessions, which is
+// role-gated to instructors and so always 403'd for a school admin (the
+// dashboard's "today's sessions" could never load). Window: from 24 h ago
+// onward, so today's sessions are included in every timezone; the client
+// filters to its own calendar day.
+export async function listSessions(req, res) {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const { data: teachers } = await store.teacherIdsBySchool(school.id);
+    const teacherIds = (teachers || []).map((t) => t.teacher_id);
+    if (!teacherIds.length) return res.json({ success: true, data: [] });
+    const { data: courses, error: cErr } = await store.courseIdsByInstructors(teacherIds);
+    if (cErr) throw new Error(cErr.message);
+    const courseIds = (courses || []).map((c) => c.id);
+    if (!courseIds.length) return res.json({ success: true, data: [] });
+    const from = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+    const { data: sessions, error } = await store.sessionsForCourses(courseIds, from);
+    if (error) throw new Error(error.message);
+    res.json({ success: true, data: (sessions || []).map(mapSchoolSession) });
   } catch (e) { res.status(500).json({ error: e.message }); }
 }
 

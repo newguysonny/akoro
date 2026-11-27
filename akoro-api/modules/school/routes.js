@@ -47,6 +47,7 @@ router.get("/teacher-requests", authenticateToken, requireRole(SCHOOL_ROLES), se
 router.post("/teacher-requests/:teacherId", authenticateToken, requireRole(SCHOOL_ROLES), service.decideTeacherRequest);
 router.post("/instructors/invite", authenticateToken, requireRole(SCHOOL_ROLES), service.inviteInstructor);
 router.get("/courses", authenticateToken, service.listCourses);
+router.get("/sessions", authenticateToken, service.listSessions);
 router.get("/students", authenticateToken, service.listStudents);
 router.get("/classrooms", authenticateToken, service.listClassrooms);
 router.post("/classrooms", authenticateToken, requireRole(SCHOOL_ROLES), service.createClassroom);

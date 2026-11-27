@@ -8,7 +8,6 @@ import { Ico } from '../../theme/Ico.jsx';
 import { PageLayout } from '../../components/Layout.jsx';
 import { Btn, Toast, Skeleton, Modal, Inp } from '../../components/Primitives.jsx';
 import { useStatsAPI } from '../../hooks/useStatsAPI.js';
-import { useCoursesAPI } from '../../hooks/useCoursesAPI.js';
 import { useAuth } from '../../contexts/AuthContext.jsx';
 import { apiGet, apiPost, apiDelete, API } from '../../services/api.js';
 import { GREEN, PURPLE, BLUE } from '../../constants.js';
@@ -26,11 +25,10 @@ import { MOCK_STATS, STREAM_META, SOCIAL_META, MOCK_PROFILE, MOCK_SESSIONS, Stat
 export default function HomePage() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { getStats, getProfile } = useStatsAPI();
-  const { getSessions } = useCoursesAPI();
+  const { getStats, getAgent, getSchoolSessions } = useStatsAPI();
 
   const [stats,    setStats]    = useState(null);
-  const [profile,  setProfile]  = useState(null);
+  const [agent,    setAgent]    = useState(null);
   const [sessions, setSessions] = useState([]);
   const [coins,    setCoins]    = useState(null);   // school coin balance
   const [loading,  setLoading]  = useState(true);
@@ -54,10 +52,10 @@ export default function HomePage() {
     let cancelled = false;
     const load = async () => {
       try {
-        const [statsRes, profileRes, sessionsRes] = await Promise.allSettled([
+        const [statsRes, agentRes, sessionsRes] = await Promise.allSettled([
           getStats(),
-          getProfile(),
-          getSessions(),
+          getAgent(),
+          getSchoolSessions(),
         ]);
         if (cancelled) return;
 
@@ -69,8 +67,8 @@ export default function HomePage() {
         if (statsRes.status === 'fulfilled')   setStats(statsRes.value?.data ?? EMPTY_STATS);
         else { setStats(EMPTY_STATS); failed.push('your stats'); console.warn('[home] stats:', statsRes.reason?.detail || statsRes.reason); }
 
-        if (profileRes.status === 'fulfilled') setProfile(profileRes.value?.data ?? null);
-        else { failed.push('your profile'); console.warn('[home] profile:', profileRes.reason?.detail || profileRes.reason); }
+        if (agentRes.status === 'fulfilled') setAgent(agentRes.value?.data?.agent ?? null);
+        else { failed.push('your agent'); console.warn('[home] agent:', agentRes.reason?.detail || agentRes.reason); }
 
         const allSessions = sessionsRes.status === 'fulfilled' ? (sessionsRes.value?.data ?? []) : [];
         if (sessionsRes.status === 'rejected') { failed.push("today's sessions"); console.warn('[home] sessions:', sessionsRes.reason?.detail || sessionsRes.reason); }
@@ -233,28 +231,28 @@ export default function HomePage() {
                     <Ico ti="ti-robot" size={16} color="#fff" />
                   </div>
                   <div>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: C.ink }}>{loading ? '…' : (profile?.agent?.agent_name || profile?.agentName || 'AI Agent')}</div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: C.ink }}>{loading ? '…' : (agent?.agent_name || 'AI Agent')}</div>
                     <div style={{ fontSize: 10, color: C.muted }}>Teaching Assistant</div>
                   </div>
                 </div>
                 <span style={{
                   padding: '3px 8px', borderRadius: 20, fontSize: 10, fontWeight: 700,
-                  background: '#DCFCE7', color: GREEN,
+                  background: agent?.is_active === false ? C.bg : '#DCFCE7', color: agent?.is_active === false ? C.muted : GREEN,
                 }}>
-                  Active
+                  {agent?.is_active === false ? 'Paused' : 'Active'}
                 </span>
               </div>
               <p style={{ fontSize: 12, color: C.muted, margin: '0 0 14px', lineHeight: 1.5 }}>
-                {loading ? 'Loading…' : (profile?.agentDescription || 'Your AI teaching assistant handles student questions 24/7.')}
+                {loading ? 'Loading…' : (agent?.personality || 'Your AI teaching assistant handles student questions 24/7.')}
               </p>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                 <div style={{ textAlign: 'center', background: C.bg, borderRadius: 10, padding: '10px' }}>
-                  <div style={{ fontSize: 18, fontWeight: 800, color: C.ink }}>{loading ? '—' : (profile?.totalResponses ?? 342)}</div>
-                  <div style={{ fontSize: 10, color: C.muted }}>Responses</div>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: C.ink }}>{loading ? '—' : (agent?.total_xp ?? 0)}</div>
+                  <div style={{ fontSize: 10, color: C.muted }}>Agent XP</div>
                 </div>
                 <div style={{ textAlign: 'center', background: C.bg, borderRadius: 10, padding: '10px' }}>
-                  <div style={{ fontSize: 18, fontWeight: 800, color: C.ink }}>{loading ? '—' : `${profile?.studentsSatisfied ?? 94}%`}</div>
-                  <div style={{ fontSize: 10, color: C.muted }}>Satisfaction</div>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: C.ink }}>{loading ? '—' : (agent?.guide_name || '—')}</div>
+                  <div style={{ fontSize: 10, color: C.muted }}>Guide</div>
                 </div>
               </div>
               <Btn
