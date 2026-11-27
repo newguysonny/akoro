@@ -34,7 +34,7 @@ export default function SessionToolPage() {
   const load = useCallback(async () => {
     try {
       const d = await apiGet(`/api/self-tooling/tools/${id}/view`, { cache: false });
-      setView(d);
+      setView(d?.data || d);
     } catch (e) {
       setLoadErr(e?.message || 'Could not load this session.');
     }
@@ -54,7 +54,8 @@ export default function SessionToolPage() {
     setBusy(true); setErr('');
     try {
       const d = await apiPost(`/api/self-tooling/tools/${id}/session-turn`, { text: value, action: step.action || undefined });
-      setView((v) => (v ? { ...v, state: d.state } : v));
+      const out = d?.data || d;
+      setView((v) => (v ? { ...v, state: out.state } : v));
       setText('');
       requestAnimationFrame(() => { scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' }); });
     } catch (e) {

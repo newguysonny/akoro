@@ -638,7 +638,7 @@ export default function LearnerDashboard() {
     // Kept session tools join the sessions list as sessions (their own UI
     // opens on tap — see toolSessionRows below).
     apiGet("/api/self-tooling/tools", { cache: false })
-      .then(d=>{ const tools = (d?.tools || []).filter(t=>t.mode==="mode" && t.status==="active"); setSessionTools(tools); })
+      .then(d=>{ const tools = ((d?.data || d)?.tools || []).filter(t=>t.mode==="mode" && t.status==="active"); setSessionTools(tools); })
       .catch(()=>{});
 
     // Challenges + battles. Both answer { success, data } with the card shape
