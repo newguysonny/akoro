@@ -222,18 +222,18 @@ export async function runLearnerTool(name, input, learnerId, { callCapability, c
     if ((await capabilityStatus(c, { learnerId })) !== "enabled" || !(cap?.kind === "read" || cap?.target)) return { error: "This tool uses something that's no longer allowed, so it can't run." };
   }
   for (const v of t.views || []) if (!DATA_VIEWS[v]) return { error: "This tool uses data that's no longer available." };
-  // A MODE tool (Plugin Runtime): running it starts or resumes the session.
-  // The agent gets the steer + the live state and runs the protocol in the
-  // chat; state moves only through the tool's declared actions
-  // (run_mode_action). There are no rows and nothing to fail-streak.
+  // A MODE tool (Plugin Runtime): the session runs in its OWN UI, opened
+  // from the learner's dashboard sessions list (2026-11-27) — the chat
+  // never hosts it. Calling it by name reports where it has got to, so the
+  // agent can answer questions about it and point the learner to it.
   if (t.definition?.kind === "mode") {
     const state = await ensureToolState(learnerId, t, input || {});
     await edu().from("agent_tools").update({
       usage_count: (t.usage_count || 0) + 1, last_used_at: new Date().toISOString(), fail_streak: 0, updated_at: new Date().toISOString(),
     }).eq("id", t.id);
-    return { tool: t.label, mode: true, steer: t.definition.steer, state,
-      actions: (t.definition.actions || []).map((a) => ({ name: a.name, description: a.description, params: a.params || {} })),
-      note: "This is an interactive session tool and YOU are now running it: follow its steer exactly. The state above is its live state — resume from it, never restart it. As the session moves, keep the state current with run_mode_action (the learner's tab renders that state). Speak as the steer says, in your own words. Take ONE step per learner message: when the session needs the learner's input, ask and STOP — never simulate their answers, never write their recall for them, never score anything they didn't actually send. The material in its state (e.g. key points with their content) IS the session's source material — teach from it directly. This is not the teach-me feature: here YOU teach the learner from the tool's material, not from what the learner taught you, so the protégé rule about only teaching back taught topics does not apply to this session." };
+    const s = sessionSummary(state);
+    return { tool: t.label, mode: true, phase: s?.phase || null, progress: s ? `${s.done} of ${s.total}` : null,
+      note: "This is a session tool: it runs in its own UI, not in this chat. The learner opens it from their sessions list on the dashboard and it picks up exactly where it left off — its current phase and progress are above. Tell them that if they want to start or continue it; never run the session here, never teach its material in chat, and never score answers or recall sent here — anything they paste belongs in the session's own screen." };
   }
   // Always as THIS learner: views are forced to their own rows (viewRuntime).
   const r = await tryRun(t.definition, t.params_schema, input || {}, { learnerId, callCapability });
@@ -341,11 +341,37 @@ export async function getToolView(learnerId, toolId) {
   return { ...base, ...(r && !r.error ? { rows: r.rows || [], total: r.total ?? null } : {}) };
 }
 
+/**
+ * A mode tool's progress at a glance, for list rows (the dashboard
+ * sessions list renders it through the ordinary session card): the phase
+ * plus how many items of the state's main tracked list have been reached
+ * (any state other than a not-started one: todo / hidden / pending).
+ */
+export function sessionSummary(state) {
+  if (!state || typeof state !== "object") return null;
+  let best = null;
+  for (const v of Object.values(state)) {
+    if (Array.isArray(v) && v.length && v.every((i) => i && typeof i === "object") && v.some((i) => typeof i.state === "string")) {
+      if (!best || v.length > best.length) best = v;
+    }
+  }
+  const notStarted = new Set(["todo", "hidden", "pending", ""]);
+  const total = best ? best.length : 0;
+  const done = best ? best.filter((i) => !notStarted.has(String(i.state || "").toLowerCase())).length : 0;
+  return { phase: typeof state.phase === "string" ? state.phase : null, done, total };
+}
+
 export async function listMyTools(learnerId) {
   const { data, error } = await edu().from("agent_tools").select("id, name, label, goal, mode, status, usage_count, last_used_at, created_at, domain, actions, disabled_actions, views, area, secondary_areas, tags, presentation")
     .eq("owner_id", learnerId).in("status", ["active", "disabled"]).order("created_at", { ascending: false }).limit(50);
   if (error) throw new Error("Couldn't load your tools");
-  return (data || []).map((t) => ({ ...t, hasUi: !!t.presentation, presentation: undefined, actions: Array.isArray(t.actions) ? t.actions : [], disabled_actions: Array.isArray(t.disabled_actions) ? t.disabled_actions : [],
+  const modeIds = (data || []).filter((t) => t.mode === "mode").map((t) => t.id);
+  const states = new Map();
+  if (modeIds.length) {
+    const { data: st } = await edu().from("agent_tool_state").select("tool_id, state").eq("owner_id", learnerId).in("tool_id", modeIds);
+    for (const r of st || []) states.set(r.tool_id, r.state);
+  }
+  return (data || []).map((t) => ({ ...t, hasUi: !!t.presentation, presentation: undefined, session: t.mode === "mode" ? sessionSummary(states.get(t.id)) : undefined, actions: Array.isArray(t.actions) ? t.actions : [], disabled_actions: Array.isArray(t.disabled_actions) ? t.disabled_actions : [],
     area: t.area || deriveToolArea(t).area, secondary_areas: Array.isArray(t.secondary_areas) ? t.secondary_areas : [], tags: Array.isArray(t.tags) ? t.tags : [] }))
     .map(presentMergedToolRow).filter((t) => t !== null);
 }

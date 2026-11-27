@@ -11,9 +11,10 @@ export const SUBJECTS = {
   maths:   { label:"Maths",      color:"#6C3BFF", icon:"ti-math-function" },
   english: { label:"English",    color:"#0EA5E9", icon:"ti-book-2" },
   science: { label:"Science",    color:"#10B981", icon:"ti-microscope" },
+  session_tool: { label:"Session tool", color:"#6C3BFF", icon:"ti-tools" },
 };
 
-export const SUBJECT_COLORS = { maths:"#6C3BFF", english:"#0EA5E9", science:"#10B981" };
+export const SUBJECT_COLORS = { maths:"#6C3BFF", english:"#0EA5E9", science:"#10B981", session_tool:"#6C3BFF" };
 
 /**
  * SUBJECTS above is keyed by three demo slugs. Real battles carry the school's

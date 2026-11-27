@@ -508,18 +508,18 @@ export async function createTool({ learnerId, input, dry = false, builtIn = new 
         await finish("created", {});
         return { status: "created", tool: name, label, mode: "mode", verified: true,
           result: { mode: true, steer: built.definition.steer, state: initialState, actions: built.definition.actions.map((a) => a.name) },
-          note: `Saved as the learner's session tool "${label}". Call ${name} by name to start or resume the session — it returns the steer and the live state.${droppedNote}` };
+          note: `Saved as the learner's session tool "${label}". It sits in their sessions list on the dashboard with its own UI — tell them it's ready there. The session does not run in this chat.${droppedNote}` };
       }
       ev.stages_tried.push("consent");
       const card = await proposeBuild({ learnerId, conversationId, toolId: row.id,
         refs: [], proposed: { name, label, goal, run: runInput },
-        does: "It runs an interactive session with you in this chat, and keeps its progress in its own tab. It only reads your own data.",
+        does: "It runs as its own session in the app — it appears in your sessions list on the dashboard and keeps its progress there. It only reads your own data.",
         writes: false, items: modeCardItems(initialState), more: 0,
         ui: { presentation: built.presentation, state: initialState } });
       await finish("escalated", {});
       return { status: "needs_consent", drafted: true, tool: name, label, mode: "mode", confirmation: card.confirmation,
         result: { mode: true, steer: built.definition.steer, state: initialState, actions: built.definition.actions.map((a) => a.name) },
-        note: `The session tool is built and checked, but it is NOT on: it is drafted and OFF, and a card is asking the learner to Keep it. ` + "`result`" + ` shows the session it will run — use it to describe the session now, in your own words: say you've built "${label}", what it will be like, and that tapping Keep on the card starts it. When they keep it, call await_decision as usual to finish the keep — its result carries the session itself (steer + live state), and you run the session from there. Never say it is saved or on.${droppedNote}` };
+        note: `The session tool is built and checked, but it is NOT on: it is drafted and OFF, and a card is asking the learner to Keep it. ` + "`result`" + ` shows the session it will run — use it to describe the session now, in your own words: say you've built "${label}", what it will be like, and that tapping Keep on the card puts it in their sessions list on the dashboard, where it runs in its own UI. When they keep it, call await_decision as usual to finish the keep — its result confirms the session is ready, and your job is just to tell them it's ready and where to open it; the learning happens in the session's own UI, never in this chat. Never say it is saved or on.${droppedNote}` };
     }
     return finish("rejected", reject(`Couldn't build it safely: ${String(lastProblem || "the mode builder couldn't express it").slice(0, 240)}`));
   }

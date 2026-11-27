@@ -241,6 +241,7 @@ export default function LearnerDashboard() {
 
   // ── API-driven state ─────────────────────────────────────────────────────
   const [sessions,     setSessions]     = useState([]);
+  const [sessionTools, setSessionTools] = useState([]); // kept session (mode) tools — listed as sessions (2026-11-27)
   const [challenges,   setChallenges]   = useState([]);
   const [agentProfile, setAgentProfile] = useState({
     name:             '',
@@ -332,6 +333,13 @@ export default function LearnerDashboard() {
       snapshot: s,
     });
   }, [nowActs]);
+
+  // A session-tool row opens the session's own UI; any other row opens the
+  // ordinary session sheet.
+  const onTapSessionCard = useCallback((s) => {
+    if (s?.sessionToolId) { navigate(`/session-tool/${s.sessionToolId}`); return; }
+    openSessionTracked(s);
+  }, [navigate, openSessionTracked]);
 
   // Opening a record tracks it in the Now-Studying bar AND opens it as a
   // TEACHING session — the learner teaches their agent over the record's
@@ -627,6 +635,12 @@ export default function LearnerDashboard() {
       .then(d=>{ if(d.sessions?.length) setSessions(d.sessions); })
       .catch(()=>{});
 
+    // Kept session tools join the sessions list as sessions (their own UI
+    // opens on tap — see toolSessionRows below).
+    apiGet("/api/self-tooling/tools", { cache: false })
+      .then(d=>{ const tools = (d?.tools || []).filter(t=>t.mode==="mode" && t.status==="active"); setSessionTools(tools); })
+      .catch(()=>{});
+
     // Challenges + battles. Both answer { success, data } with the card shape
     // the tabs render, so we set them straight through — including the empty
     // case, which is a real answer ("nothing pending"), not a reason to keep
@@ -827,13 +841,26 @@ export default function LearnerDashboard() {
   }, {});
 
   const bySubject = subjectFilter==="all" ? sessions : sessions.filter(s=>s.subject===subjectFilter);
+  // Kept session tools, shaped as session rows: the existing SessionCard
+  // renders them unchanged — title in the title slot, "Session tool" in the
+  // subject slot, phase + progress in the topic line. Tapping one opens the
+  // session's own UI (onTapSessionCard), not the session sheet.
+  const toolSessionRows = sessionTools.map(t => {
+    const s = t.session || null;
+    const when = t.lastUsedAt || t.createdAt;
+    const d = when ? new Date(when) : null;
+    const dayLabel = !d ? "" : (d.toDateString() === new Date().toDateString() ? "Today" : d.toLocaleDateString("en-GB", { weekday: "short", month: "short", day: "numeric" }));
+    const phase = s?.phase ? s.phase.charAt(0).toUpperCase() + s.phase.slice(1) : null;
+    const topic = s ? (s.total > 0 ? `${phase || "Session"} · ${s.done} of ${s.total}` : (phase || t.goal || "Session tool")) : (t.goal || "Session tool");
+    return { id: `tool-${t.id}`, sessionToolId: t.id, title: t.label, subject: "session_tool", topic, nextSession: dayLabel };
+  });
   const liveBase  = liveSubjectFilter==="all" ? sessions : sessions.filter(s=>s.subject===liveSubjectFilter);
   // Each live sub-tab matches its own bucket — Live now and Starting soon are
   // separate pills so a live class shows under "Live now" for its whole window.
   const liveMatch = (s, tab) => s.type==="live" && s.scheduleBucket===tab;
-  const filtered  = sessionTab==="all"   ? bySubject
+  const filtered  = sessionTab==="all"   ? (subjectFilter==="all" ? [...toolSessionRows, ...bySubject] : bySubject)
                   : sessionTab==="live"  ? liveBase.filter(s=>liveMatch(s, liveSubTab))
-                  : bySubject.filter(s=>s.type==="agent");
+                  : (subjectFilter==="all" ? [...toolSessionRows, ...bySubject.filter(s=>s.type==="agent")] : bySubject.filter(s=>s.type==="agent"));
   /* The composed sessions list is fetched whole (live + agent merged and
      bucket-sorted server-side) — it reveals 10 at a time locally. */
   const sessionsLocal = useLocalList(filtered, 10, `${sessionTab}|${liveSubTab}|${subjectFilter}|${liveSubjectFilter}`);
@@ -1181,7 +1208,7 @@ export default function LearnerDashboard() {
                   :(<>
                     {sessionsLocal.visible.map(s=>(
                       <SessionCard key={s.id} session={s}
-                        onTap={openSessionTracked}
+                        onTap={onTapSessionCard}
                         decayAlert={decayBySession[s.id]||null}
                         agentProfile={agentProfile}/>
                     ))}

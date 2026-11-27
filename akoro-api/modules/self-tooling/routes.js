@@ -14,6 +14,7 @@
 import express from "express";
 import { authenticateToken } from "../auth/index.js";
 import { listMyTools, updateMyTool, getToolView } from "./pipeline.js";
+import { runSessionTurn } from "./sessionTurn.js";
 import { selfToolingAllowedFor } from "./access.js";
 import { listMyRequests, cancelMyRequest } from "./escalation.js";
 import { getConfirmation, decideConfirmation, listPendingConfirmations } from "./confirmations.js";
@@ -29,7 +30,7 @@ const asyncHandler = (fn) => (req, res, next) => Promise.resolve(fn(req, res, ne
 router.get("/tools", authenticateToken, asyncHandler(async (req, res) => {
   const enabled = await selfToolingAllowedFor(req.user.id);
   const tools = enabled ? await listMyTools(req.user.id) : [];
-  res.json({ success: true, data: { enabled, tools: tools.map((t) => ({ id: t.id, label: t.label, goal: t.goal, mode: t.mode || null, hasUi: !!t.hasUi, status: t.status, uses: t.usage_count, lastUsedAt: t.last_used_at, createdAt: t.created_at, domain: t.domain || null, actions: t.actions || [], disabledActions: t.disabled_actions || [], area: t.area || null, secondaryAreas: t.secondary_areas || [], tags: t.tags || [] })) } });
+  res.json({ success: true, data: { enabled, tools: tools.map((t) => ({ id: t.id, label: t.label, goal: t.goal, mode: t.mode || null, hasUi: !!t.hasUi, status: t.status, uses: t.usage_count, lastUsedAt: t.last_used_at, createdAt: t.created_at, domain: t.domain || null, actions: t.actions || [], disabledActions: t.disabled_actions || [], area: t.area || null, secondaryAreas: t.secondary_areas || [], tags: t.tags || [], session: t.session || null })) } });
 }));
 
 router.get("/tools/:id/view", authenticateToken, asyncHandler(async (req, res) => {
@@ -37,6 +38,20 @@ router.get("/tools/:id/view", authenticateToken, asyncHandler(async (req, res) =
   const view = await getToolView(req.user.id, req.params.id);
   if (!view) return res.status(404).json({ success: false, error: "Tool not found" });
   res.json({ success: true, data: view });
+}));
+
+// One turn of a session tool inside its own UI (2026-11-27): the learner's
+// submission is evaluated by the model under the tool's steer, one declared
+// action may move the state, and the reply carries the new state — whose
+// `ui` describes the next step the screen asks for.
+router.post("/tools/:id/session-turn", authenticateToken, asyncHandler(async (req, res) => {
+  if (!/^[0-9a-f-]{36}$/i.test(req.params.id)) return res.status(400).json({ success: false, error: "Bad tool id" });
+  try {
+    const out = await runSessionTurn({ learnerId: req.user.id, toolId: req.params.id, text: req.body?.text, action: req.body?.action });
+    res.json({ success: true, data: out });
+  } catch (e) {
+    res.status(e.status || 500).json({ success: false, error: e.message });
+  }
 }));
 
 router.patch("/tools/:id", authenticateToken, asyncHandler(async (req, res) => {

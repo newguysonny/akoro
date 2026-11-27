@@ -355,15 +355,15 @@ async function executeBuild(row, { userId, toolDeps, callTool }) {
     found: next ? (next.items || []).length : null,
     changed: appliedChange?.result?.done ?? null, changeFailed: appliedChange?.result?.failed ?? null, at: new Date().toISOString() };
   const stored = await storeResult(row.id, claimed, result);
-  // A kept SESSION (mode) tool has already run once above — hand the agent
-  // that run's steer + live state in this result, so the session continues
-  // from THIS tool. Without it the agent must pick a session tool by name
-  // to resume, and with two session tools it can open the wrong one
-  // (live, 2026-11-27: a teach-then-recall keep continued into the
-  // learner's Newton's-laws protégé session instead).
+  // A kept SESSION (mode) tool now lives in the learner's sessions list on
+  // the dashboard, with its own UI where the learning happens (2026-11-27)
+  // — the chat's role ends at this handover. The result tells the agent so,
+  // so it announces the session instead of trying to run it here (the old
+  // steer hand-off made the chat host the session, and with two session
+  // tools the agent could continue the wrong one).
   const session = out?.result?.mode
-    ? { tool: out.tool, label: out.label, steer: out.result.steer, state: out.result.state, actions: out.result.actions,
-        note: "The learner kept this session tool and it has just run once — YOU are now running this session. Follow its steer from its live state above. Do not open or resume a different session tool for this request." }
+    ? { tool: out.tool, label: out.label,
+        note: "The learner kept this session tool. It is now in their sessions list on the dashboard, with its own UI — the learning happens there, not in this chat. Tell them it's ready and to open it from their sessions; do not start teaching it here, and do not open or resume a different session tool for this request." }
     : null;
   return { confirmation: publicConfirmation(stored), kind: "build", result, next: appliedChange ? null : next, appliedChange, ...(session ? { session } : {}) };
 }

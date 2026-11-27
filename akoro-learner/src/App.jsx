@@ -37,6 +37,7 @@ const ForgotPasswordPage = PRODUCT_BUILD ? lazyWithRetry(() => import('./pages/a
 const ResetPasswordPage = PRODUCT_BUILD ? lazyWithRetry(() => import('./pages/auth/ResetPasswordPage.jsx')) : null;
 const FDEAdminPage = PRODUCT_BUILD ? lazyWithRetry(() => import('./pages/FDEAdminPage.jsx')) : null;
 const NotificationsPage = PRODUCT_BUILD ? lazyWithRetry(() => import('./pages/NotificationsPage.jsx')) : null;
+const SessionToolPage = PRODUCT_BUILD ? lazyWithRetry(() => import('./pages/SessionToolPage.jsx')) : null;
 const ActivityPage = PRODUCT_BUILD ? lazyWithRetry(() => import('./pages/ActivityPage.jsx')) : null;
 const ActivityDetailPage = PRODUCT_BUILD ? lazyWithRetry(() => import('./pages/ActivityDetailPage.jsx')) : null;
 const GradebookPage = PRODUCT_BUILD ? lazyWithRetry(() => import('./pages/GradebookPage.jsx')) : null;
@@ -156,6 +157,7 @@ export function AppRoutes() {
       {product && <Route path="/settings/*" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>}/>}
       {product && <Route path="/fde-admin" element={<ProtectedRoute><FDEAdminPage /></ProtectedRoute>}/>}
       {product && <Route path="/notifications" element={<ProtectedRoute><NotificationsPage /></ProtectedRoute>}/>}
+      {product && <Route path="/session-tool/:id" element={<ProtectedRoute><SessionToolPage /></ProtectedRoute>}/>}
       {product && <Route path="/activities" element={<ProtectedRoute><ActivityPage /></ProtectedRoute>}/>}
       {product && <Route path="/activities/:id" element={<ProtectedRoute><ActivityDetailPage /></ProtectedRoute>}/>}
       {product && <Route path="/gradebook" element={<ProtectedRoute><GradebookPage /></ProtectedRoute>}/>}

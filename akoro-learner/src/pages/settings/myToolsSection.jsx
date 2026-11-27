@@ -243,7 +243,7 @@ export default function MyToolsSection() {
           sub={dom
             ? [`Domain · ${t.actions.length} action${t.actions.length === 1 ? '' : 's'}`, usesLine(t)].filter(Boolean).join(' · ')
             : [t.mode === 'mode' ? 'Session tool' : null, t.goal, usesLine(t)].filter(Boolean).join(' · ')}
-          onClick={dom ? () => setOpenId(t.id) : (t.hasUi ? () => setViewId(t.id) : undefined)} noArrow={!dom && !t.hasUi}>
+          onClick={dom ? () => setOpenId(t.id) : (t.mode === 'mode' ? () => navigate(`/session-tool/${t.id}`) : (t.hasUi ? () => setViewId(t.id) : undefined))} noArrow={!dom && t.mode !== 'mode' && !t.hasUi}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }} onClick={(e) => e.stopPropagation()}>
             <Toggle on={t.status === 'active'} onChange={() => flipTool(t)} />
             {trashBtn(t)}
