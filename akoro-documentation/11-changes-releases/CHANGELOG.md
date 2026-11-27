@@ -41,6 +41,17 @@ required action, read [Migrations](migrations/database-migrations.md).
 - `GET /api/school/sessions` — live sessions across every course owned by
   a school's teachers (from 24 h ago onward, dashboard-mapped shape). The
   school-scoped counterpart of `GET /api/instructor/sessions`.
+- School-scoped course management under `/api/school`: `POST /courses`,
+  `PATCH /courses/:id`, `DELETE /courses/:id`; `POST /sessions`,
+  `PATCH /sessions/:id`, `DELETE /sessions/:id`; course modules
+  (`GET/POST /courses/:courseId/modules`, `PATCH/DELETE /modules/:id`);
+  `POST /courses/:courseId/schedule/preview`,
+  `POST /courses/:courseId/schedule/commit`,
+  `POST /courses/:courseId/curriculum`; and session materials
+  (`GET/POST /sessions/:id/materials`, `DELETE /materials/:id`). Ownership
+  is the school's scope — its teachers' courses plus the admin's own —
+  and `GET /api/school/sessions?courseId=` now returns every session of
+  one course (newest first) for the course-management view.
 - `GET /api/school/profile`, `PATCH /api/school/profile`, and
   `PATCH /api/school/profile/notifications` — the school admin's own
   account profile, agent, notification preferences, and school-wide
@@ -92,6 +103,14 @@ required action, read [Migrations](migrations/database-migrations.md).
   showing cached data"), every field save failed, and its stats fetch to
   `/api/instructor/stats` failed silently. It now uses the school-scoped
   `/api/school/profile` endpoints, which also return the stats block.
+- School Courses page (akoro-school) managed everything except the
+  course list through the instructor-only endpoints
+  (`/api/instructor/courses`, `/sessions`, `/modules`, schedule,
+  curriculum, and materials routes), which 403 for the `school_admin`
+  role: the page showed a "couldn't load your sessions" banner, and
+  creating or editing courses, sessions, modules, and materials all
+  failed. `useCoursesAPI` now uses the school-scoped `/api/school`
+  course-management endpoints throughout.
 
 ### Security
 

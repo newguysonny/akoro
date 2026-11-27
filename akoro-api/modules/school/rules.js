@@ -174,3 +174,27 @@ export const mapNotifPrefs = (n) => (n ? {
   announcements:    n.notify_new_announcements,
   qaReplies:        n.notify_qa_replies,
 } : null);
+
+// ── Course management (school-scoped mirrors of the instructor shapes) ───────
+export const VALID_LEVELS = ["beginner", "intermediate", "advanced", "all"];
+
+// course_type: DB allows 'live' | 'video'. Frontend speaks 'live' | 'on-demand'.
+export const courseTypeToDb = (t) => (t === "on-demand" || t === "ondemand" || t === "video" ? "video" : "live");
+export const courseTypeToApi = (t) => (t === "video" ? "on-demand" : "live");
+
+export const mapSchoolCourse = (row, enrolledCount = 0) => ({
+  ...row,
+  type:             courseTypeToApi(row.course_type),
+  status:           row.is_published ? "active" : "draft",
+  studentsEnrolled: enrolledCount,
+  thumbnail:        row.cover_image_url ?? null,
+});
+
+export const mapSchoolModule = (row, sessions = []) => ({
+  id:          row.id,
+  courseId:    row.course_id,
+  title:       row.title,
+  description: row.description ?? null,
+  orderIndex:  row.order_index ?? 0,
+  sessions:    sessions.map(mapSchoolSession),
+});

@@ -48,6 +48,24 @@ router.post("/teacher-requests/:teacherId", authenticateToken, requireRole(SCHOO
 router.post("/instructors/invite", authenticateToken, requireRole(SCHOOL_ROLES), service.inviteInstructor);
 router.get("/courses", authenticateToken, service.listCourses);
 router.get("/sessions", authenticateToken, service.listSessions);
+
+// ── Course management (courses, sessions, modules, materials) ────────────────
+router.post("/courses", authenticateToken, requireRole(SCHOOL_ROLES), service.createCourse);
+router.patch("/courses/:id", authenticateToken, requireRole(SCHOOL_ROLES), service.updateCourse);
+router.delete("/courses/:id", authenticateToken, requireRole(SCHOOL_ROLES), service.deleteCourse);
+router.post("/sessions", authenticateToken, requireRole(SCHOOL_ROLES), service.createSession);
+router.patch("/sessions/:id", authenticateToken, requireRole(SCHOOL_ROLES), service.updateSession);
+router.delete("/sessions/:id", authenticateToken, requireRole(SCHOOL_ROLES), service.deleteSession);
+router.get("/courses/:courseId/modules", authenticateToken, service.listModules);
+router.post("/courses/:courseId/modules", authenticateToken, requireRole(SCHOOL_ROLES), service.createModule);
+router.patch("/modules/:id", authenticateToken, requireRole(SCHOOL_ROLES), service.updateModule);
+router.delete("/modules/:id", authenticateToken, requireRole(SCHOOL_ROLES), service.deleteModule);
+router.post("/courses/:courseId/schedule/preview", authenticateToken, requireRole(SCHOOL_ROLES), service.previewSchedule);
+router.post("/courses/:courseId/schedule/commit", authenticateToken, requireRole(SCHOOL_ROLES), service.commitSchedule);
+router.post("/courses/:courseId/curriculum", authenticateToken, requireRole(SCHOOL_ROLES), service.commitCurriculum);
+router.get("/sessions/:id/materials", authenticateToken, service.listMaterials);
+router.post("/sessions/:id/materials", authenticateToken, requireRole(SCHOOL_ROLES), service.addMaterial);
+router.delete("/materials/:id", authenticateToken, requireRole(SCHOOL_ROLES), service.deleteMaterial);
 router.get("/students", authenticateToken, service.listStudents);
 router.get("/classrooms", authenticateToken, service.listClassrooms);
 router.post("/classrooms", authenticateToken, requireRole(SCHOOL_ROLES), service.createClassroom);

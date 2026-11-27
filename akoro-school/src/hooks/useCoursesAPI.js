@@ -3,27 +3,27 @@ import { apiGet, apiPost, apiPatch, apiDelete } from '../services/api.js';
 
 export function useCoursesAPI() {
   const getCourses    = () => apiGet('/api/school/courses');   // school-scoped: all instructors' courses
-  const createCourse  = (data) => apiPost('/api/instructor/courses', data);
-  const updateCourse  = (id, data) => apiPatch(`/api/instructor/courses/${id}`, data);
-  const deleteCourse  = (id) => apiDelete(`/api/instructor/courses/${id}`);
-  const getSessions   = (courseId) => apiGet(`/api/instructor/sessions${courseId ? '?courseId=' + courseId : ''}`);
-  const createSession = (data) => apiPost('/api/instructor/sessions', data);
-  const updateSession = (id, data) => apiPatch(`/api/instructor/sessions/${id}`, data);
-  const deleteSession = (id) => apiDelete(`/api/instructor/sessions/${id}`);
+  const createCourse  = (data) => apiPost('/api/school/courses', data);
+  const updateCourse  = (id, data) => apiPatch(`/api/school/courses/${id}`, data);
+  const deleteCourse  = (id) => apiDelete(`/api/school/courses/${id}`);
+  const getSessions   = (courseId) => apiGet(`/api/school/sessions${courseId ? '?courseId=' + courseId : ''}`);
+  const createSession = (data) => apiPost('/api/school/sessions', data);
+  const updateSession = (id, data) => apiPatch(`/api/school/sessions/${id}`, data);
+  const deleteSession = (id) => apiDelete(`/api/school/sessions/${id}`);
 
   // Modules + recurrence schedule
-  const getModules      = (courseId) => apiGet(`/api/instructor/courses/${courseId}/modules`);
-  const createModule    = (courseId, data) => apiPost(`/api/instructor/courses/${courseId}/modules`, data);
-  const updateModule    = (id, data) => apiPatch(`/api/instructor/modules/${id}`, data);
-  const deleteModule    = (id) => apiDelete(`/api/instructor/modules/${id}`);
-  const previewSchedule = (courseId, spec) => apiPost(`/api/instructor/courses/${courseId}/schedule/preview`, spec);
-  const commitSchedule  = (courseId, payload) => apiPost(`/api/instructor/courses/${courseId}/schedule/commit`, payload);
-  const commitCurriculum = (courseId, payload) => apiPost(`/api/instructor/courses/${courseId}/curriculum`, payload);
+  const getModules      = (courseId) => apiGet(`/api/school/courses/${courseId}/modules`);
+  const createModule    = (courseId, data) => apiPost(`/api/school/courses/${courseId}/modules`, data);
+  const updateModule    = (id, data) => apiPatch(`/api/school/modules/${id}`, data);
+  const deleteModule    = (id) => apiDelete(`/api/school/modules/${id}`);
+  const previewSchedule = (courseId, spec) => apiPost(`/api/school/courses/${courseId}/schedule/preview`, spec);
+  const commitSchedule  = (courseId, payload) => apiPost(`/api/school/courses/${courseId}/schedule/commit`, payload);
+  const commitCurriculum = (courseId, payload) => apiPost(`/api/school/courses/${courseId}/curriculum`, payload);
 
   // Session materials
-  const getMaterials    = (sessionId) => apiGet(`/api/instructor/sessions/${sessionId}/materials`);
-  const addMaterial     = (sessionId, data) => apiPost(`/api/instructor/sessions/${sessionId}/materials`, data);
-  const deleteMaterial  = (id) => apiDelete(`/api/instructor/materials/${id}`);
+  const getMaterials    = (sessionId) => apiGet(`/api/school/sessions/${sessionId}/materials`);
+  const addMaterial     = (sessionId, data) => apiPost(`/api/school/sessions/${sessionId}/materials`, data);
+  const deleteMaterial  = (id) => apiDelete(`/api/school/materials/${id}`);
 
   return useMemo(() => ({
     getCourses, createCourse, updateCourse, deleteCourse,

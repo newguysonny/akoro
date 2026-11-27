@@ -13,7 +13,8 @@ import { notifyUser } from "../notify.js";
 import { invalidateCachedUser } from "../auth/index.js";
 import { urlFor } from "../../lib/urls.js";
 import * as store from "./store.js";
-import { sanitizeAuditBody, pickEntityLabel, slugify, mapSchoolSession, PROFILE_FIELDS, levelFromXp, mapNotifPrefs } from "./rules.js";
+import { sanitizeAuditBody, pickEntityLabel, slugify, mapSchoolSession, PROFILE_FIELDS, levelFromXp, mapNotifPrefs, VALID_LEVELS, courseTypeToDb, mapSchoolCourse, mapSchoolModule } from "./rules.js";
+import { generateSchedule } from "../instructor/schedule.js";
 
 // =============================================================
 // SHARED REQUEST HELPERS
@@ -129,21 +130,76 @@ export async function getStats(req, res) {
   } catch (e) { res.status(500).json({ error: e.message }); }
 }
 
+// ── Course-management scope ──────────────────────────────────────────────────
+// The school's course-ownership scope: its teachers plus the admin — the
+// admin's own courses are the school's too (the same set listCourses
+// reads). The handlers below are the school-scoped counterparts of the
+// instructor course/session/module/material handlers, which are
+// role-gated to instructors and scope by the caller's own instructor id;
+// here ownership means the course belongs to someone in this scope.
+async function schoolOwnerIds(req, school) {
+  const { data: teachers } = await store.teacherIdsBySchool(school.id);
+  return [...new Set([...(teachers || []).map((t) => t.teacher_id), req.user.id])];
+}
+
+// Resolve a course inside the school's scope: the course row when the
+// school owns it; otherwise the error is sent and null returned.
+async function ownSchoolCourse(req, res, courseId) {
+  const school = await getMySchool(req, res);
+  if (!school) return null;
+  const { data: course } = await store.courseOwnerById(courseId);
+  if (!course) { res.status(404).json({ error: "Course not found" }); return null; }
+  const ownerIds = await schoolOwnerIds(req, school);
+  if (!ownerIds.includes(course.instructor_id)) { res.status(403).json({ error: "You do not own this course" }); return null; }
+  return course;
+}
+
+async function ownSchoolSession(req, res, sessionId) {
+  const { data: session } = await store.sessionById(sessionId);
+  if (!session) { res.status(404).json({ error: "Session not found" }); return null; }
+  const course = await ownSchoolCourse(req, res, session.course_id);
+  if (!course) return null;
+  return { session, course };
+}
+
+// The instructor fan-out, on the school store: one bulk insert into the
+// shared notifications table. Best-effort — never fails the request.
+const notifyManyUsers = async (userIds, { type, title, content = null, relatedId = null }) => {
+  const ids = [...new Set((userIds ?? []).filter(Boolean))];
+  if (!ids.length) return;
+  const rows = ids.map((id) => ({ user_id: id, type, title, content, related_id: relatedId }));
+  try {
+    const { error } = await store.insertNotifications(rows);
+    if (error) console.warn("[school notify] bulk insert failed:", error.message);
+  } catch (e) { console.warn("[school notify] bulk insert threw:", e.message); }
+};
+
+const enrolledIds = async (courseId) => {
+  const { data } = await store.enrolledUserIdsByCourse(courseId);
+  return (data ?? []).map((r) => r.user_id);
+};
+
 // ── GET /api/school/sessions ─────────────────────────────────────────────────
-// Live sessions across every course owned by the school's teachers — the
-// school-scoped counterpart of GET /api/instructor/sessions, which is
-// role-gated to instructors and so always 403'd for a school admin (the
-// dashboard's "today's sessions" could never load). Window: from 24 h ago
-// onward, so today's sessions are included in every timezone; the client
-// filters to its own calendar day.
+// Two reads share this route. Without a query: the dashboard read — live
+// sessions across the school's courses from 24 h ago onward (the client
+// filters to its own calendar day). With ?courseId=: the course-
+// management read — every session of that one course, newest first,
+// ownership-checked like the writes below. Both replace reads of
+// GET /api/instructor/sessions, which 403s for a school admin.
 export async function listSessions(req, res) {
   try {
     const school = await getMySchool(req, res);
     if (!school) return;
-    const { data: teachers } = await store.teacherIdsBySchool(school.id);
-    const teacherIds = (teachers || []).map((t) => t.teacher_id);
-    if (!teacherIds.length) return res.json({ success: true, data: [] });
-    const { data: courses, error: cErr } = await store.courseIdsByInstructors(teacherIds);
+    const ownerIds = await schoolOwnerIds(req, school);
+    if (req.query.courseId) {
+      const { data: course } = await store.courseOwnerById(req.query.courseId);
+      if (!course) return res.status(404).json({ error: "Course not found" });
+      if (!ownerIds.includes(course.instructor_id)) return res.status(403).json({ error: "You do not own this course" });
+      const { data: sessions, error } = await store.sessionsByCourseAll(req.query.courseId);
+      if (error) throw new Error(error.message);
+      return res.json({ success: true, data: (sessions || []).map(mapSchoolSession) });
+    }
+    const { data: courses, error: cErr } = await store.courseIdsByInstructors(ownerIds);
     if (cErr) throw new Error(cErr.message);
     const courseIds = (courses || []).map((c) => c.id);
     if (!courseIds.length) return res.json({ success: true, data: [] });
@@ -179,8 +235,7 @@ export async function getProfile(req, res) {
     };
     const { data: school } = await store.schoolProfileByAdmin(req.user.id);
     if (school) {
-      const { data: teachers } = await store.teacherIdsBySchool(school.id);
-      const teacherIds = (teachers || []).map((t) => t.teacher_id);
+      const teacherIds = await schoolOwnerIds(req, school);
       if (teacherIds.length) {
         const { data: courses } = await store.coursesByInstructors(teacherIds);
         const list = courses || [];
@@ -245,6 +300,426 @@ export async function updateNotifications(req, res) {
     if (error) throw new Error(error.message);
     notifyUser({ userId: req.user.id, type: "settings_updated", title: "Notification preferences updated", content: "Your notification settings were saved" });
     res.json({ success: true, data: { saved: true } });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+}
+
+// ── POST /api/school/courses ─────────────────────────────────────────────────
+// School-scoped counterpart of the instructor create: the course is
+// owned by the admin creating it (instructor_id = the caller), which the
+// school's course scope includes, so it lists with the teachers' courses.
+export async function createCourse(req, res) {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const {
+      title, description, subject = null, category = null,
+      level, type, course_type, status,
+      language      = "English",
+      price         = 0,
+      discountPrice, discount_price,
+      isFree, is_free,
+      thumbnail, thumbnail_url,
+    } = req.body || {};
+    if (!title) return res.status(400).json({ error: "title is required" });
+
+    const lvl       = VALID_LEVELS.includes(level) ? level : "all";
+    const dbType    = courseTypeToDb(type ?? course_type);
+    const published = status === "active" || status === "live" || status === "published";
+    const priceVal  = Math.round(Number(price) || 0);
+    const discount  = discountPrice ?? discount_price;
+    const free      = isFree ?? is_free ?? (priceVal === 0);
+    const nowIso    = new Date().toISOString();
+    // Instructor slugs carry a random suffix so duplicate titles never collide.
+    const slug      = `${slugify(title) || "course"}-${crypto.randomBytes(3).toString("hex")}`;
+
+    const { data, error } = await store.insertCourse({
+      instructor_id:   req.user.id,
+      title,
+      slug,
+      description:     description ?? null,
+      subject:         subject ?? category,
+      level:           lvl,
+      language,
+      price:           priceVal,
+      discount_price:  discount != null && discount !== "" ? Math.round(Number(discount)) : null,
+      is_free:         !!free,
+      course_type:     dbType,
+      cover_image_url: thumbnail ?? thumbnail_url ?? null,
+      is_published:    published,
+      published_at:    published ? nowIso : null,
+      created_at:      nowIso,
+      updated_at:      nowIso,
+    });
+    if (error) throw new Error(error.message);
+    notifyUser({ userId: req.user.id, type: "course_created", title: `Course "${title}" created`, content: `${dbType === "video" ? "on-demand" : "live"} · ${lvl}`, relatedId: data.id });
+    res.status(201).json({ success: true, data: mapSchoolCourse(data, 0) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+}
+
+// ── PATCH /api/school/courses/:id ────────────────────────────────────────────
+export async function updateCourse(req, res) {
+  try {
+    const course = await ownSchoolCourse(req, res, req.params.id);
+    if (!course) return;
+    const b = req.body || {};
+    const updates = {};
+    if (b.title       !== undefined) updates.title           = b.title;
+    if (b.description !== undefined) updates.description     = b.description;
+    if (b.subject     !== undefined) updates.subject         = b.subject;
+    if (b.language    !== undefined) updates.language        = b.language;
+    if (b.price       !== undefined) updates.price           = Math.round(Number(b.price) || 0);
+    if (b.level       !== undefined) updates.level           = VALID_LEVELS.includes(b.level) ? b.level : "all";
+    if (b.type !== undefined || b.course_type !== undefined) updates.course_type = courseTypeToDb(b.type ?? b.course_type);
+    if (b.thumbnail !== undefined || b.thumbnail_url !== undefined) updates.cover_image_url = b.thumbnail ?? b.thumbnail_url;
+    if (b.status !== undefined) {
+      const pub = b.status === "active" || b.status === "live" || b.status === "published";
+      updates.is_published = pub;
+      updates.published_at = pub ? new Date().toISOString() : null;
+    }
+    if (Object.keys(updates).length === 0) return res.status(400).json({ error: "No updatable fields provided" });
+    updates.updated_at = new Date().toISOString();
+    const { data, error } = await store.updateCourseRow(req.params.id, updates);
+    if (error) throw new Error(error.message);
+    notifyUser({ userId: req.user.id, type: "course_updated", title: `Course "${data.title}" updated`, content: "Changes saved", relatedId: data.id });
+    res.json({ success: true, data: mapSchoolCourse(data, 0) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+}
+
+// ── DELETE /api/school/courses/:id ───────────────────────────────────────────
+// No 'archived' state in schema — hard delete (cascades sessions/enrollments),
+// exactly as the instructor delete behaves.
+export async function deleteCourse(req, res) {
+  try {
+    const course = await ownSchoolCourse(req, res, req.params.id);
+    if (!course) return;
+    const { error } = await store.deleteCourseRow(req.params.id);
+    if (error) throw new Error(error.message);
+    notifyUser({ userId: req.user.id, type: "course_deleted", title: "Course deleted", content: "The course and its sessions were removed" });
+    res.json({ success: true, data: { message: "Course deleted" } });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+}
+
+// ── POST /api/school/sessions ────────────────────────────────────────────────
+// The session belongs to the course's teacher (instructor_id = the
+// course's owner), so it also appears in that teacher's own app.
+export async function createSession(req, res) {
+  try {
+    const b = req.body || {};
+    const courseId       = b.courseId ?? b.course_id;
+    const title          = b.title;
+    const scheduledStart = b.startTime ?? b.scheduled_start;
+    const durationMin    = Number(b.duration ?? b.duration_minutes ?? 60);
+    const platform       = b.platform ?? "zoom";
+    const meetingUrl     = b.meetingLink ?? b.meeting_url ?? null;
+    if (!courseId)       return res.status(400).json({ error: "courseId is required" });
+    if (!title)          return res.status(400).json({ error: "title is required" });
+    if (!scheduledStart) return res.status(400).json({ error: "startTime is required" });
+
+    const course = await ownSchoolCourse(req, res, courseId);
+    if (!course) return;
+
+    const scheduledEnd = new Date(new Date(scheduledStart).getTime() + durationMin * 60000).toISOString();
+    const nowIso = new Date().toISOString();
+    const { data, error } = await store.insertSession({
+      course_id:        courseId,
+      instructor_id:    course.instructor_id,
+      module_id:        b.moduleId ?? b.module_id ?? null,
+      order_index:      Number(b.orderIndex ?? b.order_index ?? 0),
+      title,
+      description:      b.description ?? null,
+      scheduled_start:  scheduledStart,
+      scheduled_end:    scheduledEnd,
+      platform,
+      meeting_url:      meetingUrl,
+      status:           "scheduled",
+      max_participants: 50,
+      created_at:       nowIso,
+      updated_at:       nowIso,
+    });
+    if (error) throw new Error(error.message);
+    notifyUser({ userId: req.user.id, type: "session_reminder", title: `Session "${title}" scheduled`, content: `Starts ${new Date(scheduledStart).toLocaleString()}`, relatedId: data.id });
+    notifyManyUsers(await enrolledIds(courseId), {
+      type:      "session_scheduled",
+      title:     `New session: "${title}"`,
+      content:   `Starts ${new Date(scheduledStart).toLocaleString()}`,
+      relatedId: data.id,
+    });
+    res.status(201).json({ success: true, data: mapSchoolSession(data) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+}
+
+// ── PATCH /api/school/sessions/:id ───────────────────────────────────────────
+export async function updateSession(req, res) {
+  try {
+    const found = await ownSchoolSession(req, res, req.params.id);
+    if (!found) return;
+    const b = req.body || {};
+    const updates = {};
+    if (b.title       !== undefined) updates.title           = b.title;
+    if (b.description !== undefined) updates.description     = b.description;
+    if (b.platform    !== undefined) updates.platform        = b.platform;
+    if (b.status      !== undefined) updates.status          = b.status;
+    if (b.startTime !== undefined || b.scheduled_start !== undefined) updates.scheduled_start = b.startTime ?? b.scheduled_start;
+    if (b.meetingLink !== undefined || b.meeting_url !== undefined) updates.meeting_url = b.meetingLink ?? b.meeting_url;
+    if (b.moduleId !== undefined || b.module_id !== undefined) updates.module_id = b.moduleId ?? b.module_id;
+    if (b.orderIndex !== undefined || b.order_index !== undefined) updates.order_index = Number(b.orderIndex ?? b.order_index);
+    if (Object.keys(updates).length === 0) return res.status(400).json({ error: "No updatable fields provided" });
+    updates.updated_at = new Date().toISOString();
+    const { data, error } = await store.updateSessionRow(req.params.id, updates);
+    if (error) throw new Error(error.message);
+    notifyUser({ userId: req.user.id, type: "session_updated", title: `Session "${data.title}" updated`, content: "Changes saved", relatedId: data.id });
+    // Students are only notified when the time changes (avoid noise).
+    if (updates.scheduled_start) {
+      notifyManyUsers(await enrolledIds(found.session.course_id), {
+        type:      "session_rescheduled",
+        title:     `Session "${data.title}" rescheduled`,
+        content:   `Now starts ${new Date(updates.scheduled_start).toLocaleString()}`,
+        relatedId: data.id,
+      });
+    }
+    res.json({ success: true, data: mapSchoolSession(data) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+}
+
+// ── DELETE /api/school/sessions/:id ──────────────────────────────────────────
+export async function deleteSession(req, res) {
+  try {
+    const found = await ownSchoolSession(req, res, req.params.id);
+    if (!found) return;
+    const { error } = await store.deleteSessionRow(req.params.id);
+    if (error) throw new Error(error.message);
+    notifyUser({ userId: req.user.id, type: "session_deleted", title: "Session deleted", content: "A live session was removed" });
+    res.json({ success: true, data: { message: "Session deleted" } });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+}
+
+// ── GET /api/school/courses/:courseId/modules ────────────────────────────────
+// Modules + their sessions, the curriculum view the Courses page renders.
+export async function listModules(req, res) {
+  try {
+    const course = await ownSchoolCourse(req, res, req.params.courseId);
+    if (!course) return;
+    const { data: modules, error } = await store.modulesByCourse(req.params.courseId);
+    if (error) throw new Error(error.message);
+    const ids = (modules ?? []).map((m) => m.id);
+    let byModule = {};
+    if (ids.length) {
+      const { data: sessions } = await store.sessionsByModuleIds(ids);
+      for (const s of sessions ?? []) (byModule[s.module_id] ??= []).push(s);
+    }
+    res.json({ success: true, data: (modules ?? []).map((m) => mapSchoolModule(m, byModule[m.id] ?? [])) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+}
+
+// ── POST /api/school/courses/:courseId/modules ───────────────────────────────
+export async function createModule(req, res) {
+  try {
+    const course = await ownSchoolCourse(req, res, req.params.courseId);
+    if (!course) return;
+    const { title, description, orderIndex } = req.body || {};
+    if (!title) return res.status(400).json({ error: "title is required" });
+    const { data, error } = await store.insertModule({ course_id: req.params.courseId, title, description: description ?? null, order_index: Number(orderIndex ?? 0) });
+    if (error) throw new Error(error.message);
+    res.status(201).json({ success: true, data: mapSchoolModule(data) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+}
+
+// ── PATCH /api/school/modules/:id ────────────────────────────────────────────
+export async function updateModule(req, res) {
+  try {
+    const { data: mod } = await store.moduleById(req.params.id);
+    if (!mod) return res.status(404).json({ error: "Module not found" });
+    const course = await ownSchoolCourse(req, res, mod.course_id);
+    if (!course) return;
+    const b = req.body || {}, updates = {};
+    if (b.title !== undefined)       updates.title = b.title;
+    if (b.description !== undefined) updates.description = b.description;
+    if (b.orderIndex !== undefined)  updates.order_index = Number(b.orderIndex);
+    if (Object.keys(updates).length === 0) return res.status(400).json({ error: "No updatable fields provided" });
+    const { data, error } = await store.updateModuleRow(req.params.id, updates);
+    if (error) throw new Error(error.message);
+    res.json({ success: true, data: mapSchoolModule(data) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+}
+
+// ── DELETE /api/school/modules/:id ───────────────────────────────────────────
+// Sessions keep existing; their module_id is nulled by the schema.
+export async function deleteModule(req, res) {
+  try {
+    const { data: mod } = await store.moduleById(req.params.id);
+    if (!mod) return res.status(404).json({ error: "Module not found" });
+    const course = await ownSchoolCourse(req, res, mod.course_id);
+    if (!course) return;
+    const { error } = await store.deleteModuleRow(req.params.id);
+    if (error) throw new Error(error.message);
+    res.json({ success: true, data: { message: "Module deleted" } });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+}
+
+// ── POST /api/school/courses/:courseId/schedule/preview ──────────────────────
+// Expand a recurrence spec into a module→sessions tree (no writes). The
+// generator is the instructor module's pure schedule expander, shared.
+export async function previewSchedule(req, res) {
+  try {
+    const course = await ownSchoolCourse(req, res, req.params.courseId);
+    if (!course) return;
+    const tree = generateSchedule(req.body || {});
+    res.json({ success: true, data: tree });
+  } catch (e) { res.status(400).json({ error: e.message }); }
+}
+
+// ── POST /api/school/courses/:courseId/schedule/commit ───────────────────────
+// Persist an edited module→sessions tree (+ optional per-session
+// materials) and save the reusable schedule_config on the course.
+export async function commitSchedule(req, res) {
+  try {
+    const course = await ownSchoolCourse(req, res, req.params.courseId);
+    if (!course) return;
+    const courseId = req.params.courseId;
+    const { modules = [], scheduleConfig } = req.body || {};
+    if (!Array.isArray(modules) || modules.length === 0) return res.status(400).json({ error: "modules array is required" });
+    if (scheduleConfig) await store.updateCourseConfig(courseId, scheduleConfig);
+
+    const nowIso = new Date().toISOString();
+    const createdModules = [];
+    for (const [mi, m] of modules.entries()) {
+      const { data: modRow, error: mErr } = await store.insertModule({
+        course_id: courseId, title: m.title || `Week ${mi + 1}`, description: m.description ?? null, order_index: Number(m.orderIndex ?? mi),
+      });
+      if (mErr) throw new Error(mErr.message);
+
+      const createdSessions = [];
+      for (const [si, s] of (m.sessions ?? []).entries()) {
+        if (!s.scheduled_start && !s.startTime) continue;
+        const startIso = s.scheduled_start ?? s.startTime;
+        const durationMin = Number(s.duration_min ?? s.duration ?? 60);
+        const endIso = s.scheduled_end ?? new Date(new Date(startIso).getTime() + durationMin * 60000).toISOString();
+        const { data: sess, error: sErr } = await store.insertSession({
+          course_id:       courseId,
+          instructor_id:   course.instructor_id,
+          module_id:       modRow.id,
+          order_index:     Number(s.order_index ?? si),
+          title:           s.title || `Session ${si + 1}`,
+          description:     s.description ?? null,
+          topic:           s.topic ?? s.title ?? null,
+          scheduled_start: startIso,
+          scheduled_end:   endIso,
+          platform:        s.platform ?? "zoom",
+          status:          "scheduled",
+          max_participants: 50,
+          created_at:      nowIso,
+          updated_at:      nowIso,
+        });
+        if (sErr) throw new Error(sErr.message);
+
+        const mats = (s.materials ?? []).filter((x) => x && (x.title || x.url || x.body));
+        for (const [xi, x] of mats.entries()) {
+          await store.insertMaterial({
+            session_id:  sess.id,
+            title:       x.title || x.url || "Material",
+            kind:        ["file", "link", "note"].includes(x.kind) ? x.kind : "file",
+            url:         x.url ?? null,
+            body:        x.body ?? null,
+            file_type:   x.fileType ?? x.file_type ?? null,
+            order_index: xi,
+          });
+        }
+        createdSessions.push(sess);
+      }
+      createdModules.push(mapSchoolModule(modRow, createdSessions));
+    }
+    res.status(201).json({ success: true, data: { modules: createdModules } });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+}
+
+// ── POST /api/school/courses/:courseId/curriculum ────────────────────────────
+// Persist an on-demand course's sections → video lessons tree. Sections
+// map to course_modules; lessons map to the lessons table.
+export async function commitCurriculum(req, res) {
+  try {
+    const course = await ownSchoolCourse(req, res, req.params.courseId);
+    if (!course) return;
+    const courseId = req.params.courseId;
+    const { sections = [] } = req.body || {};
+    if (!Array.isArray(sections) || sections.length === 0) return res.status(400).json({ error: "sections array is required" });
+
+    const createdSections = [];
+    for (const [si, s] of sections.entries()) {
+      const { data: modRow, error: mErr } = await store.insertModule({
+        course_id:   courseId,
+        title:       s.title || `Section ${si + 1}`,
+        description: s.description ?? null,
+        order_index: Number(s.orderIndex ?? si),
+      });
+      if (mErr) throw new Error(mErr.message);
+
+      const createdLessons = [];
+      for (const [li, l] of (s.lessons ?? []).entries()) {
+        const durationSec = l.durationSeconds != null
+          ? Number(l.durationSeconds)
+          : Math.round((Number(l.duration) || 0) * 60);  // wizard sends minutes
+        const { data: lesson, error: lErr } = await store.insertLesson({
+          module_id:        modRow.id,
+          title:            l.title || `Lesson ${li + 1}`,
+          description:      l.description ?? null,
+          video_url:        l.videoUrl ?? l.video_url ?? null,
+          thumbnail_url:    l.thumbnailUrl ?? l.thumbnail_url ?? null,
+          duration_seconds: durationSec || null,
+          order_index:      Number(l.orderIndex ?? li),
+          is_preview:       !!(l.preview ?? l.is_preview),
+          lesson_type:      ["video", "quiz", "assignment", "reading"].includes(l.lessonType) ? l.lessonType : "video",
+        });
+        if (lErr) throw new Error(lErr.message);
+        createdLessons.push(lesson);
+      }
+      createdSections.push({ ...modRow, lessons: createdLessons });
+    }
+    res.status(201).json({ success: true, data: { sections: createdSections } });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+}
+
+// ── GET /api/school/sessions/:id/materials ───────────────────────────────────
+export async function listMaterials(req, res) {
+  try {
+    const found = await ownSchoolSession(req, res, req.params.id);
+    if (!found) return;
+    const { data, error } = await store.materialsBySession(req.params.id);
+    if (error) throw new Error(error.message);
+    res.json({ success: true, data: data ?? [] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+}
+
+// ── POST /api/school/sessions/:id/materials ──────────────────────────────────
+export async function addMaterial(req, res) {
+  try {
+    const found = await ownSchoolSession(req, res, req.params.id);
+    if (!found) return;
+    const b = req.body || {};
+    if (!b.title && !b.url && !b.body) return res.status(400).json({ error: "title, url, or body is required" });
+    const { data, error } = await store.insertMaterial({
+      session_id:  req.params.id,
+      title:       b.title || b.url || "Material",
+      kind:        ["file", "link", "note"].includes(b.kind) ? b.kind : "file",
+      url:         b.url ?? null,
+      body:        b.body ?? null,
+      file_type:   b.fileType ?? b.file_type ?? null,
+      order_index: Number(b.orderIndex ?? b.order_index ?? 0),
+    });
+    if (error) throw new Error(error.message);
+    res.status(201).json({ success: true, data });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+}
+
+// ── DELETE /api/school/materials/:id ─────────────────────────────────────────
+export async function deleteMaterial(req, res) {
+  try {
+    const { data: mat } = await store.materialById(req.params.id);
+    if (!mat) return res.status(404).json({ error: "Material not found" });
+    const found = await ownSchoolSession(req, res, mat.session_id);
+    if (!found) return;
+    const { error } = await store.deleteMaterialRow(req.params.id);
+    if (error) throw new Error(error.message);
+    res.json({ success: true, data: { message: "Material deleted" } });
   } catch (e) { res.status(500).json({ error: e.message }); }
 }
 

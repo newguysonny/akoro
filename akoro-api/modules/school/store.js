@@ -166,6 +166,76 @@ export const courseIdsByInstructors = (ids) => db
 // Live sessions for a set of courses, from `fromIso` onward (no upper bound:
 // the school dashboard filters to today client-side, and upcoming sessions
 // are the other natural read). Same select as the instructor store's.
+// ── course management (courses / modules / sessions / materials) ─────────────
+export const courseOwnerById = (id) => db
+  .from("courses").select("id, instructor_id").eq("id", id).maybeSingle();
+
+export const insertCourse = (row) => db.from("courses").insert(row).select().single();
+
+export const updateCourseRow = (id, updates) => db
+  .from("courses").update(updates).eq("id", id).select().single();
+
+export const deleteCourseRow = (id) => db.from("courses").delete().eq("id", id);
+
+export const updateCourseConfig = (id, scheduleConfig) => db
+  .from("courses").update({ schedule_config: scheduleConfig, updated_at: new Date().toISOString() }).eq("id", id);
+
+// Every session of one course, newest first (the course-management view;
+// the dashboard read is sessionsForCourses below).
+export const sessionsByCourseAll = (courseId) => db
+  .from("live_sessions")
+  .select(`
+    id, title, description, session_type, module_id, order_index,
+    scheduled_start, scheduled_end, status, platform, meeting_url,
+    max_participants, current_participants, recording_url, course_id,
+    courses ( id, title )
+  `)
+  .eq("course_id", courseId)
+  .order("scheduled_start", { ascending: false });
+
+export const sessionById = (id) => db
+  .from("live_sessions").select("id, course_id, instructor_id").eq("id", id).maybeSingle();
+
+export const insertSession = (row) => db.from("live_sessions").insert(row).select().single();
+
+export const updateSessionRow = (id, updates) => db
+  .from("live_sessions").update(updates).eq("id", id).select().single();
+
+export const deleteSessionRow = (id) => db.from("live_sessions").delete().eq("id", id);
+
+export const modulesByCourse = (courseId) => db
+  .from("course_modules").select("*").eq("course_id", courseId).order("order_index", { ascending: true });
+
+export const sessionsByModuleIds = (ids) => db
+  .from("live_sessions").select("*").in("module_id", ids).order("scheduled_start", { ascending: true });
+
+export const insertModule = (row) => db.from("course_modules").insert(row).select().single();
+
+export const moduleById = (id) => db
+  .from("course_modules").select("id, course_id").eq("id", id).maybeSingle();
+
+export const updateModuleRow = (id, updates) => db
+  .from("course_modules").update(updates).eq("id", id).select().single();
+
+export const deleteModuleRow = (id) => db.from("course_modules").delete().eq("id", id);
+
+export const insertLesson = (row) => db.from("lessons").insert(row).select().single();
+
+export const materialsBySession = (sessionId) => db
+  .from("session_materials").select("*").eq("session_id", sessionId).order("order_index", { ascending: true });
+
+export const insertMaterial = (row) => db.from("session_materials").insert(row).select().single();
+
+export const materialById = (id) => db
+  .from("session_materials").select("id, session_id").eq("id", id).maybeSingle();
+
+export const deleteMaterialRow = (id) => db.from("session_materials").delete().eq("id", id);
+
+export const enrolledUserIdsByCourse = (courseId) => db
+  .from("enrollments").select("user_id").eq("course_id", courseId).eq("status", "active");
+
+export const insertNotifications = (rows) => db.from("notifications").insert(rows);
+
 export const sessionsForCourses = (courseIds, fromIso) => db
   .from("live_sessions")
   .select(`
