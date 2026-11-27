@@ -13,9 +13,10 @@
  * proxy or a trailing-slash redirect to drop.
  */
 import { useState } from 'react';
-import {Loader2, Bot } from 'lucide-react';
 import { API } from '../../services/api.js';
-import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, RED, FONT } from '../../constants.js';
+import { RED } from '../../constants.js';
+import { C, tint } from '../../theme/colors.js';
+import { Ico } from '../../theme/Ico.jsx';
 
 const ROLES = [
   { key: 'student', label: 'Student' },
@@ -64,22 +65,22 @@ export default function SiteSignIn({ onSignedIn }) {
 
   return (
     <form onSubmit={submit} style={card}>
-      <div style={{ display: 'flex', justifyContent: 'center' }}><Bot size={34} /></div>
-      <h1 style={{ fontSize: 18, fontWeight: 800, color: INK, textAlign: 'center', margin: '8px 0 4px' }}>
+      <div style={{ display: 'flex', justifyContent: 'center' }}><Ico ti="ti-robot" size={34} /></div>
+      <h1 style={{ fontSize: 18, fontWeight: 800, color: C.ink, textAlign: 'center', margin: '8px 0 4px' }}>
         AI Study Assistant
       </h1>
-      <p style={{ fontSize: 12.5, color: MUTED, textAlign: 'center', margin: '0 0 16px', lineHeight: 1.55 }}>
+      <p style={{ fontSize: 12.5, color: C.muted, textAlign: 'center', margin: '0 0 16px', lineHeight: 1.55 }}>
         Sign in with your school account to start chatting.
       </p>
 
       <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
         {ROLES.map((r) => (
           <button key={r.key} type="button" onClick={() => setRole(r.key)}
-            style={{ flex: 1, padding: '8px 4px', borderRadius: 9, cursor: 'pointer', fontFamily: FONT,
+            style={{ flex: 1, padding: '8px 4px', borderRadius: 9, cursor: 'pointer', fontFamily: C.font,
               fontSize: 12, fontWeight: 700,
-              border: `1.5px solid ${role === r.key ? AMBER : BORDER}`,
-              background: role === r.key ? `${AMBER}14` : WHITE,
-              color: role === r.key ? AMBER : MUTED }}>
+              border: `1.5px solid ${role === r.key ? C.brand : C.border}`,
+              background: role === r.key ? tint(8) : C.surface,
+              color: role === r.key ? C.brand : C.muted }}>
             {r.label}
           </button>
         ))}
@@ -93,16 +94,16 @@ export default function SiteSignIn({ onSignedIn }) {
       {error && <div style={{ fontSize: 12, color: RED, fontWeight: 700, margin: '2px 0 10px' }}>{error}</div>}
 
       <button type="submit" disabled={busy} style={{ ...primary, opacity: busy ? .7 : 1 }}>
-        {busy ? <><Loader2 size={15} style={{ animation: 'spin .8s linear infinite' }} /> Signing in…</> : 'Sign in'}
+        {busy ? <><Ico ti="ti-loader-2" size={15} style={{ animation: 'spin .8s linear infinite' }} /> Signing in…</> : 'Sign in'}
       </button>
 
-      <p style={{ fontSize: 11, color: MUTED2, textAlign: 'center', margin: '12px 0 0', lineHeight: 1.5 }}>
+      <p style={{ fontSize: 11, color: C.muted2, textAlign: 'center', margin: '12px 0 0', lineHeight: 1.5 }}>
         Only students, parents, teachers and staff of this school can use its assistant.
       </p>
     </form>
   );
 }
 
-const card = { width: '100%', maxWidth: 360, background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 18, padding: '26px 24px', fontFamily: FONT, boxShadow: '0 2px 14px rgba(0,0,0,.05)' };
-const input = { width: '100%', boxSizing: 'border-box', padding: '11px 12px', borderRadius: 10, border: `1.5px solid ${BORDER}`, fontSize: 13.5, fontFamily: FONT, color: INK, background: LIGHT, marginBottom: 10, outline: 'none' };
-const primary = { width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7, padding: '12px', borderRadius: 11, border: 'none', background: `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: WHITE, fontSize: 14, fontWeight: 800, cursor: 'pointer', fontFamily: FONT };
+const card = { width: '100%', maxWidth: 360, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 18, padding: '26px 24px', fontFamily: C.font, boxShadow: '0 2px 14px rgba(0,0,0,.05)' };
+const input = { width: '100%', boxSizing: 'border-box', padding: '11px 12px', borderRadius: 10, border: `1.5px solid ${C.border}`, fontSize: 13.5, fontFamily: C.font, color: C.ink, background: C.bg, marginBottom: 10, outline: 'none' };
+const primary = { width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7, padding: '12px', borderRadius: 11, border: 'none', background: `linear-gradient(135deg, ${C.brand}, ${C.brandDeep})`, color: '#fff', fontSize: 14, fontWeight: 800, cursor: 'pointer', fontFamily: C.font };

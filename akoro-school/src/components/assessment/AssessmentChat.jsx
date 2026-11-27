@@ -1,6 +1,7 @@
 import { useRef, useEffect } from 'react';
-import {Volume2, Mic, ShieldAlert, AlertTriangle, Zap, Lightbulb } from 'lucide-react';
-import { AMBER, BRAND, RED, GREEN, GOLD } from '../../constants.js';
+import { Ico } from '../../theme/Ico.jsx';
+import { BRAND, RED, GREEN, GOLD } from '../../constants.js';
+import { C, tint } from '../../theme/colors.js';
 
 /**
  * AssessmentChat — renders the Sergeant proctored-exam transcript.
@@ -52,8 +53,8 @@ function AssessmentChat({ blocks, input, onInputChange, onSend, loading, disable
           <button onClick={onToggleVoiceMode} disabled={disabled} title="Voice mode"
             style={{ width:40, height:40, flexShrink:0, borderRadius:12, cursor: disabled?"default":"pointer",
               border:`1px solid ${voiceMode ? BRAND : "rgba(255,255,255,.12)"}`,
-              background: voiceMode ? `${BRAND}22` : "rgba(255,255,255,.05)",
-              color: voiceMode ? BRAND : "#94A3B8", fontSize:17 }}><Volume2 size={17} /></button>
+              background: voiceMode ? tint(13, BRAND) : "rgba(255,255,255,.05)",
+              color: voiceMode ? BRAND : "#94A3B8", fontSize:17 }}><Ico ti="ti-volume" size={17} /></button>
         )}
 
         {voiceMode ? (
@@ -64,7 +65,7 @@ function AssessmentChat({ blocks, input, onInputChange, onSend, loading, disable
               display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}>
             {listening
               ? <><span style={{ width:9, height:9, borderRadius:"50%", background:"#fff", animation:"pulse-dot 1s ease-in-out infinite" }} /> Stop & submit</>
-              : <><Mic size={13} style={{ verticalAlign: '-2px' }} /> Hold to answer</>}
+              : <><Ico ti="ti-microphone" size={13} style={{ verticalAlign: '-2px' }} /> Hold to answer</>}
           </button>
         ) : (
           <>
@@ -91,14 +92,14 @@ function Block({ b }) {
   switch (b.type) {
     case "proctor-banner":
       return <div style={{ background:"rgba(108,59,255,.1)", border:"1px solid rgba(108,59,255,.25)", borderRadius:12,
-        padding:"10px 12px", fontSize:11.5, fontWeight:700, color:"#C4B5FD", textAlign:"center" }}><ShieldAlert size={12} style={{ verticalAlign: '-2px' }} /> {b.text}</div>;
+        padding:"10px 12px", fontSize:11.5, fontWeight:700, color:"#C4B5FD", textAlign:"center" }}><Ico ti="ti-shield-exclamation" size={12} style={{ verticalAlign: '-2px' }} /> {b.text}</div>;
 
     case "sergeant":
       return (
         <div style={{ alignSelf:"flex-start", maxWidth:"88%", background:"rgba(255,255,255,.05)",
           border:"1px solid rgba(255,255,255,.08)", borderRadius:"14px 14px 14px 4px", padding:"10px 13px" }}>
           <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:4 }}>
-            <span style={{ fontSize:14, display: 'inline-flex' }}>{b.emoji ? <Zap size={14} color={AMBER} /> : <Zap size={14} color={AMBER} />}</span>
+            <span style={{ fontSize:14, display: 'inline-flex' }}>{b.emoji ? <Ico ti="ti-bolt" size={14} color={C.brand} /> : <Ico ti="ti-bolt" size={14} color={C.brand} />}</span>
             <span style={{ fontSize:11, fontWeight:800, color:GOLD }}>{b.agent || "Sergeant"}</span>
             {b.score != null && (
               <span style={{ marginLeft:"auto", fontSize:10.5, fontWeight:900,
@@ -131,11 +132,11 @@ function Block({ b }) {
 
     case "hint":
       return <div style={{ alignSelf:"flex-start", maxWidth:"88%", background:"rgba(245,158,11,.08)",
-        border:"1px solid rgba(245,158,11,.22)", borderRadius:12, padding:"9px 12px", fontSize:12.5, fontWeight:600, color:"#FDE68A" }}><Lightbulb size={12} style={{ verticalAlign: '-2px' }} /> {b.text}</div>;
+        border:"1px solid rgba(245,158,11,.22)", borderRadius:12, padding:"9px 12px", fontSize:12.5, fontWeight:600, color:"#FDE68A" }}><Ico ti="ti-bulb" size={12} style={{ verticalAlign: '-2px' }} /> {b.text}</div>;
 
     case "proctor-flag":
       return <div style={{ alignSelf:"center", background:"rgba(248,113,113,.1)", border:"1px solid rgba(248,113,113,.25)",
-        borderRadius:10, padding:"7px 12px", fontSize:11, fontWeight:700, color:"#FCA5A5", textAlign:"center" }}><AlertTriangle size={12} style={{ verticalAlign: '-2px' }} /> {b.text}</div>;
+        borderRadius:10, padding:"7px 12px", fontSize:11, fontWeight:700, color:"#FCA5A5", textAlign:"center" }}><Ico ti="ti-alert-triangle" size={12} style={{ verticalAlign: '-2px' }} /> {b.text}</div>;
 
     case "system-divider":
       return <div style={{ alignSelf:"center", fontSize:11, fontWeight:700, color:"#64748B", padding:"4px 0" }}>{b.label}</div>;

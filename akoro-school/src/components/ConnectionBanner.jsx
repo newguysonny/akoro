@@ -1,4 +1,3 @@
-import { WifiOff, AlertTriangle } from 'lucide-react';
 /**
  * ConnectionBanner — the safety net under every swallowed request.
  *
@@ -15,7 +14,8 @@ import { WifiOff, AlertTriangle } from 'lucide-react';
  */
 import { useState, useEffect } from 'react';
 import { onConnectionChange } from '../services/api.js';
-import { WHITE, FONT } from '../constants.js';
+import { C, tint } from '../theme/colors.js';
+import { Ico } from '../theme/Ico.jsx';
 
 export default function ConnectionBanner() {
   const [down, setDown] = useState(false);
@@ -43,11 +43,11 @@ export default function ConnectionBanner() {
     <div role="status" style={{
       position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 3500,
       display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
-      padding: '10px 16px', background: '#7C2D12', color: WHITE,
-      fontFamily: FONT, fontSize: 12.5, fontWeight: 700,
+      padding: '10px 16px', background: '#7C2D12', color: '#fff',
+      fontFamily: C.font, fontSize: 12.5, fontWeight: 700,
       boxShadow: '0 -4px 16px rgba(0,0,0,.18)',
     }}>
-      <span style={{ display: 'flex', alignItems: 'center' }}>{offline ? <WifiOff size={14} /> : <AlertTriangle size={14} />}</span>
+      <span style={{ display: 'flex', alignItems: 'center' }}>{offline ? <Ico ti="ti-wifi-off" size={14} /> : <Ico ti="ti-alert-triangle" size={14} />}</span>
       <span>
         {offline
           ? "You're offline — anything on this page may be out of date."
@@ -55,8 +55,8 @@ export default function ConnectionBanner() {
       </span>
       <button onClick={() => window.location.reload()} style={{
         marginLeft: 4, padding: '4px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,.35)',
-        background: 'transparent', color: WHITE, fontSize: 11.5, fontWeight: 800,
-        cursor: 'pointer', fontFamily: FONT,
+        background: 'transparent', color: '#fff', fontSize: 11.5, fontWeight: 800,
+        cursor: 'pointer', fontFamily: C.font,
       }}>Retry</button>
     </div>
   );

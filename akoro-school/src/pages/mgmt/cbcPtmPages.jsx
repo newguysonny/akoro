@@ -6,31 +6,32 @@ import ResourcePage from '../../components/mgmt/ResourcePage.jsx';
 import StatCards from '../../components/mgmt/StatCards.jsx';
 import { GuidePage } from '../../components/mgmt/extras.jsx';
 import { apiGet } from '../../services/api.js';
-import { AMBER, MUTED2, GREEN, RED, BLUE, PURPLE } from '../../constants.js';
+import { GREEN, RED, BLUE, PURPLE } from '../../constants.js';
+import { C, tint } from '../../theme/colors.js';
 
 const BASE = '/api/school/mgmt';
 const studentOpts = { resource: 'students', labelFn: (r) => `${r.first_name} ${r.last_name} (${r.admission_no})` };
 const pill = (v, map) => {
-  const c = map[v] || MUTED2;
-  return <span style={{ padding: '3px 10px', borderRadius: 999, background: `${c}15`, color: c, fontSize: 11, fontWeight: 800, textTransform: 'capitalize' }}>{String(v).replace('_', ' ')}</span>;
+  const c = map[v] || C.muted2;
+  return <span style={{ padding: '3px 10px', borderRadius: 999, background: tint(8, c), color: c, fontSize: 11, fontWeight: 800, textTransform: 'capitalize' }}>{String(v).replace('_', ' ')}</span>;
 };
 const LEVELS = [
   { value: 'exceeding', label: 'Exceeding Expectations' }, { value: 'meeting', label: 'Meeting Expectations' },
   { value: 'approaching', label: 'Approaching Expectations' }, { value: 'below', label: 'Below Expectations' },
 ];
-const LEVEL_COLORS = { exceeding: GREEN, meeting: BLUE, approaching: AMBER, below: RED };
+const LEVEL_COLORS = { exceeding: GREEN, meeting: BLUE, approaching: C.brand, below: RED };
 
 /* ═══ CBC ═══ */
 export function CBCDashboardPage() {
   const [s, setS] = useState(null);
   useEffect(() => { apiGet(`${BASE}/dashboard/cbc`).then((r) => setS(r.data)).catch(() => setS({})); }, []);
   const cards = s ? [
-    { n: s.strands, label: 'Strands & Outcomes', icon: Layers, c: BLUE, to: '/mgmt/cbc-strands' },
-    { n: s.assessments, label: 'Assessments', icon: ListChecks, c: PURPLE, to: '/mgmt/cbc-assessments' },
-    { n: s.competencies, label: 'Core Competencies', icon: Trophy, c: AMBER, to: '/mgmt/core-competencies' },
-    { n: s.pathways, label: 'Pathways & Tracks', icon: Route, c: GREEN, to: '/mgmt/cbc-pathways' },
-    { n: s.exceeding, label: 'Exceeding', icon: Trophy, c: GREEN },
-    { n: s.below, label: 'Below Expectations', icon: ListChecks, c: RED },
+    { n: s.strands, label: 'Strands & Outcomes', icon: Layers, ti: 'ti-stack-2', c: BLUE, to: '/mgmt/cbc-strands' },
+    { n: s.assessments, label: 'Assessments', icon: ListChecks, ti: 'ti-list-check', c: PURPLE, to: '/mgmt/cbc-assessments' },
+    { n: s.competencies, label: 'Core Competencies', icon: Trophy, ti: 'ti-trophy', c: C.brand, to: '/mgmt/core-competencies' },
+    { n: s.pathways, label: 'Pathways & Tracks', icon: Route, ti: 'ti-route', c: GREEN, to: '/mgmt/cbc-pathways' },
+    { n: s.exceeding, label: 'Exceeding', icon: Trophy, ti: 'ti-trophy', c: GREEN },
+    { n: s.below, label: 'Below Expectations', icon: ListChecks, ti: 'ti-list-check', c: RED },
   ] : [];
   return <PageLayout title="CBC Dashboard" subtitle="Competency-based curriculum overview"><StatCards cards={cards} loading={!s} /></PageLayout>;
 }
@@ -86,11 +87,11 @@ export function CBCReportsPage() {
   const [s, setS] = useState(null);
   useEffect(() => { apiGet(`${BASE}/dashboard/cbc`).then((r) => setS(r.data)).catch(() => setS({})); }, []);
   const cards = s ? [
-    { n: s.exceeding, label: 'Exceeding Expectations', icon: Trophy, c: GREEN },
-    { n: s.meeting, label: 'Meeting Expectations', icon: CheckCircle2, c: BLUE },
-    { n: s.approaching, label: 'Approaching Expectations', icon: ListChecks, c: AMBER },
-    { n: s.below, label: 'Below Expectations', icon: ListChecks, c: RED },
-    { n: s.assessments, label: 'Total Assessments', icon: Layers, c: PURPLE, to: '/mgmt/cbc-assessments' },
+    { n: s.exceeding, label: 'Exceeding Expectations', icon: Trophy, ti: 'ti-trophy', c: GREEN },
+    { n: s.meeting, label: 'Meeting Expectations', icon: CheckCircle2, ti: 'ti-circle-check', c: BLUE },
+    { n: s.approaching, label: 'Approaching Expectations', icon: ListChecks, ti: 'ti-list-check', c: C.brand },
+    { n: s.below, label: 'Below Expectations', icon: ListChecks, ti: 'ti-list-check', c: RED },
+    { n: s.assessments, label: 'Total Assessments', icon: Layers, ti: 'ti-stack-2', c: PURPLE, to: '/mgmt/cbc-assessments' },
   ] : [];
   return <PageLayout title="CBC Reports" subtitle="Competency-level distribution"><StatCards cards={cards} loading={!s} /></PageLayout>;
 }
@@ -102,11 +103,11 @@ export function PTMDashboardPage() {
   const [s, setS] = useState(null);
   useEffect(() => { apiGet(`${BASE}/dashboard/ptm`).then((r) => setS(r.data)).catch(() => setS({})); }, []);
   const cards = s ? [
-    { n: s.meetings, label: 'Meetings', icon: CalendarClock, c: BLUE, to: '/mgmt/ptm-meetings' },
-    { n: s.scheduled, label: 'Scheduled', icon: CalendarClock, c: AMBER, to: '/mgmt/ptm-meetings' },
-    { n: s.attendanceRecords, label: 'Attendance Records', icon: Users, c: PURPLE, to: '/mgmt/ptm-attendance' },
-    { n: s.attended, label: 'Guardians Attended', icon: CheckCircle2, c: GREEN, to: '/mgmt/ptm-attendance' },
-    { n: s.openFollowups, label: 'Open Follow-ups', icon: ListTodo, c: RED, to: '/mgmt/ptm-followups' },
+    { n: s.meetings, label: 'Meetings', icon: CalendarClock, ti: 'ti-calendar-clock', c: BLUE, to: '/mgmt/ptm-meetings' },
+    { n: s.scheduled, label: 'Scheduled', icon: CalendarClock, ti: 'ti-calendar-clock', c: C.brand, to: '/mgmt/ptm-meetings' },
+    { n: s.attendanceRecords, label: 'Attendance Records', icon: Users, ti: 'ti-users', c: PURPLE, to: '/mgmt/ptm-attendance' },
+    { n: s.attended, label: 'Guardians Attended', icon: CheckCircle2, ti: 'ti-circle-check', c: GREEN, to: '/mgmt/ptm-attendance' },
+    { n: s.openFollowups, label: 'Open Follow-ups', icon: ListTodo, ti: 'ti-checklist', c: RED, to: '/mgmt/ptm-followups' },
   ] : [];
   return <PageLayout title="PTM Dashboard" subtitle="Parent–teacher meeting overview"><StatCards cards={cards} loading={!s} /></PageLayout>;
 }
@@ -115,7 +116,7 @@ export function PTMScheduleMeetingsPage() {
   return <ResourcePage title="PTM Schedule Meetings" subtitle="Plan parent–teacher meetings" resource="ptm-meetings"
     columns={[
       { key: 'title', label: 'Meeting' }, { key: 'meeting_date', label: 'Date' }, { key: 'class_name', label: 'Class' },
-      { key: 'venue', label: 'Venue' }, { key: 'status', label: 'Status', render: (r) => pill(r.status, { scheduled: AMBER, completed: GREEN, cancelled: RED }) },
+      { key: 'venue', label: 'Venue' }, { key: 'status', label: 'Status', render: (r) => pill(r.status, { scheduled: C.brand, completed: GREEN, cancelled: RED }) },
     ]}
     fields={[
       { key: 'title', label: 'Meeting Title', required: true },
@@ -157,7 +158,7 @@ export function PTMFollowupsPage() {
   return <ResourcePage title="PTM Follow-ups" subtitle="Actions agreed with parents" resource="ptm-followups"
     columns={[
       { key: 'note', label: 'Follow-up' }, { key: 'meeting_name', label: 'Meeting' }, { key: 'student_name', label: 'Student' },
-      { key: 'due_on', label: 'Due' }, { key: 'status', label: 'Status', render: (r) => pill(r.status, { open: AMBER, done: GREEN }) },
+      { key: 'due_on', label: 'Due' }, { key: 'status', label: 'Status', render: (r) => pill(r.status, { open: C.brand, done: GREEN }) },
     ]}
     fields={[
       { key: 'note', label: 'Follow-up', type: 'textarea', required: true, full: true },
@@ -173,10 +174,10 @@ export function PTMReportsPage() {
   useEffect(() => { apiGet(`${BASE}/dashboard/ptm`).then((r) => setS(r.data)).catch(() => setS({})); }, []);
   const rate = s?.attendanceRecords ? Math.round((s.attended / s.attendanceRecords) * 100) : 0;
   const cards = s ? [
-    { n: s.meetings, label: 'Total Meetings', icon: CalendarClock, c: BLUE },
-    { n: `${rate}%`, label: 'Attendance Rate', icon: Users, c: rate >= 60 ? GREEN : AMBER },
-    { n: s.attended, label: 'Guardians Attended', icon: CheckCircle2, c: GREEN },
-    { n: s.openFollowups, label: 'Open Follow-ups', icon: ListTodo, c: RED, to: '/mgmt/ptm-followups' },
+    { n: s.meetings, label: 'Total Meetings', icon: CalendarClock, ti: 'ti-calendar-clock', c: BLUE },
+    { n: `${rate}%`, label: 'Attendance Rate', icon: Users, ti: 'ti-users', c: rate >= 60 ? GREEN : C.brand },
+    { n: s.attended, label: 'Guardians Attended', icon: CheckCircle2, ti: 'ti-circle-check', c: GREEN },
+    { n: s.openFollowups, label: 'Open Follow-ups', icon: ListTodo, ti: 'ti-checklist', c: RED, to: '/mgmt/ptm-followups' },
   ] : [];
   return <PageLayout title="PTM Reports" subtitle="Engagement metrics"><StatCards cards={cards} loading={!s} /></PageLayout>;
 }

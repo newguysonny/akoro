@@ -3,18 +3,13 @@
  */
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import {
-  Users, UserCheck, UserX, Home, Tags, ShieldAlert, Loader2, Save, ClipboardCheck,
-  Eye, Pencil, Trash2, UserPlus, Search, ArrowLeft, Phone, Mail, MapPin, Droplet,
-  Cake, CreditCard, ShieldCheck, CircleDot, X, Copy, Printer, Columns, Image,
-  FileUp, Upload, Sheet, Download, CheckSquare, FileText,
-  FolderOpen, Key, HeartPulse, Bus, Bed, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, RefreshCw,
-  ClipboardList, ThumbsUp, ThumbsDown, Plus,
-} from 'lucide-react';
+import { Users, UserCheck, UserX, Home, Tags, ShieldAlert, ClipboardCheck } from 'lucide-react';
+import { Ico } from '../../../theme/Ico.jsx';
 import { PageLayout } from '../../../components/Layout.jsx';
 import ResourcePage, { inputStyle } from '../../../components/mgmt/ResourcePage.jsx';
 import { API, apiGet, apiPost, apiPut, apiDelete } from '../../../services/api.js';
-import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, BLUE, PURPLE, FONT } from '../../../constants.js';
+import { GREEN, RED, BLUE, PURPLE } from '../../../constants.js';
+import { C, tint } from '../../../theme/colors.js';
 import { BASE, fullName, studentOpts, STATUS_PILL, STUDENT_FIELDS, STUDENT_COLUMNS, STUDENT_SEARCH, CLASS_FILTER, naira, STATUS_OPTS, InfoRow, GridInfo, InfoGrid, SectionCard, Ring, statPill, FEE_STATUS_COLOR, ModalShell } from './shared.jsx';
 
 /* ── Student Dashboard ───────────────────────────────────────────── */
@@ -23,29 +18,29 @@ export function StudentDashboardPage() {
   const [stats, setStats] = useState(null);
   useEffect(() => { apiGet(`${BASE}/dashboard/students`).then((r) => setStats(r.data)).catch(() => setStats({})); }, []);
   const cards = stats ? [
-    { n: stats.total, label: 'Total Students', icon: Users, c: BLUE, to: '/mgmt/students' },
-    { n: stats.active, label: 'Active Students', icon: UserCheck, c: GREEN, to: '/mgmt/students' },
-    { n: stats.presentToday, label: 'Present Today', icon: ClipboardCheck, c: GREEN, to: '/mgmt/student-attendance' },
-    { n: stats.absentToday, label: 'Absent Today', icon: UserX, c: RED, to: '/mgmt/student-attendance' },
-    { n: stats.disabled, label: 'Disabled Students', icon: ShieldAlert, c: AMBER, to: '/mgmt/disabled-students' },
-    { n: stats.behaviorIncidents, label: 'Behavior Records', icon: ShieldAlert, c: PURPLE, to: '/mgmt/behavior-records' },
-    { n: stats.houses, label: 'Houses', icon: Home, c: BLUE, to: '/mgmt/student-houses' },
-    { n: stats.categories, label: 'Categories', icon: Tags, c: AMBER, to: '/mgmt/student-categories' },
+    { n: stats.total, label: 'Total Students', icon: Users, ti: 'ti-users', c: BLUE, to: '/mgmt/students' },
+    { n: stats.active, label: 'Active Students', icon: UserCheck, ti: 'ti-user-check', c: GREEN, to: '/mgmt/students' },
+    { n: stats.presentToday, label: 'Present Today', icon: ClipboardCheck, ti: 'ti-clipboard-check', c: GREEN, to: '/mgmt/student-attendance' },
+    { n: stats.absentToday, label: 'Absent Today', icon: UserX, ti: 'ti-user-x', c: RED, to: '/mgmt/student-attendance' },
+    { n: stats.disabled, label: 'Disabled Students', icon: ShieldAlert, ti: 'ti-shield-exclamation', c: C.brand, to: '/mgmt/disabled-students' },
+    { n: stats.behaviorIncidents, label: 'Behavior Records', icon: ShieldAlert, ti: 'ti-shield-exclamation', c: PURPLE, to: '/mgmt/behavior-records' },
+    { n: stats.houses, label: 'Houses', icon: Home, ti: 'ti-home', c: BLUE, to: '/mgmt/student-houses' },
+    { n: stats.categories, label: 'Categories', icon: Tags, ti: 'ti-tags', c: C.brand, to: '/mgmt/student-categories' },
   ] : [];
   return (
     <PageLayout title="Student Dashboard" subtitle="Overview of your student body">
       {!stats ? (
-        <div style={{ padding: '50px 0', textAlign: 'center', color: MUTED2 }}><Loader2 size={20} style={{ animation: 'spin .8s linear infinite' }} /></div>
+        <div style={{ padding: '50px 0', textAlign: 'center', color: C.muted2 }}><Ico ti="ti-loader-2" size={20} style={{ animation: 'spin .8s linear infinite' }} /></div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 14 }}>
           {cards.map((c) => (
-            <div key={c.label} onClick={() => navigate(c.to)} style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 14, padding: '18px 20px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 14 }}>
-              <div style={{ width: 42, height: 42, borderRadius: 11, background: `${c.c}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <c.icon size={19} color={c.c} />
+            <div key={c.label} onClick={() => navigate(c.to)} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: '18px 20px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 14 }}>
+              <div style={{ width: 42, height: 42, borderRadius: 11, background: tint(8, c.c), display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <Ico lucide={c.icon} ti={c.ti} size={19} color={c.c} />
               </div>
               <div>
-                <div style={{ fontSize: 24, fontWeight: 800, color: INK, fontFamily: FONT }}>{c.n ?? 0}</div>
-                <div style={{ fontSize: 12, color: MUTED2, fontFamily: FONT }}>{c.label}</div>
+                <div style={{ fontSize: 24, fontWeight: 800, color: C.ink, fontFamily: C.font }}>{c.n ?? 0}</div>
+                <div style={{ fontSize: 12, color: C.muted2, fontFamily: C.font }}>{c.label}</div>
               </div>
             </div>
           ))}
@@ -70,7 +65,7 @@ export function BehaviorRecordsPage() {
   return <ResourcePage title="Behavior Records" subtitle="Student behavior incidents" resource="behavior-records"
     columns={[
       { key: 'student_name', label: 'Student' }, { key: 'incident_type', label: 'Incident' },
-      { key: 'severity', label: 'Severity', render: (r) => STATUS_PILL(r.severity, { low: { c: GREEN }, medium: { c: AMBER }, high: { c: RED } }) },
+      { key: 'severity', label: 'Severity', render: (r) => STATUS_PILL(r.severity, { low: { c: GREEN }, medium: { c: C.brand }, high: { c: RED } }) },
       { key: 'action_taken', label: 'Action Taken' }, { key: 'recorded_on', label: 'Date' },
     ]}
     fields={[
@@ -103,7 +98,7 @@ export function HealthRecordsPage() {
   return <ResourcePage title="Health Records" subtitle="Allergies, conditions, vaccinations & checkups" resource="health-records"
     columns={[
       { key: 'student_name', label: 'Student' },
-      { key: 'record_type', label: 'Type', render: (r) => STATUS_PILL(r.record_type, { allergy: { c: RED }, condition: { c: AMBER }, vaccination: { c: GREEN }, checkup: { c: BLUE } }) },
+      { key: 'record_type', label: 'Type', render: (r) => STATUS_PILL(r.record_type, { allergy: { c: RED }, condition: { c: C.brand }, vaccination: { c: GREEN }, checkup: { c: BLUE } }) },
       { key: 'title', label: 'Title' }, { key: 'recorded_on', label: 'Date' },
     ]}
     fields={[

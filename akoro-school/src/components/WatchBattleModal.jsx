@@ -22,11 +22,12 @@
  */
 import { useState, useEffect, useRef } from 'react';
 import { io } from 'socket.io-client';
-import { X, Trophy, Users, Radio, Square, Gavel , Flame, Swords, Flag, Ban, XOctagon } from 'lucide-react';
 import { apiGet, apiPost } from '../services/api.js';
 import { socketOptions } from '../client/socket';
 import { WS_URL } from '../constants.js';
-import { AMBER, INK, MUTED, BORDER, LIGHT, WHITE, GREEN, PURPLE, BLUE, RED, FONT } from '../constants.js';
+import { C, tint } from '../theme/colors.js';
+import { Ico } from '../theme/Ico.jsx';
+import { GREEN, PURPLE, BLUE, RED } from '../constants.js';
 import { confirmDialog } from './ConfirmHost.jsx';
 
 const B = '/api/battle';
@@ -192,16 +193,16 @@ export default function WatchBattleModal({ battle, onClose, onEnded }) {
       <div style={{
         position: 'fixed', zIndex: 3001, top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
         width: 'min(880px, 94vw)', maxHeight: '90vh', overflowY: 'auto',
-        background: WHITE, borderRadius: 18, boxShadow: '0 24px 60px rgba(0,0,0,.24)', fontFamily: FONT,
+        background: C.surface, borderRadius: 18, boxShadow: '0 24px 60px rgba(0,0,0,.24)', fontFamily: C.font,
       }}>
         {/* Header */}
         <div style={{
           display: 'flex', alignItems: 'center', gap: 12, padding: '16px 20px',
-          borderBottom: `1px solid ${BORDER}`, position: 'sticky', top: 0, background: WHITE, zIndex: 1,
+          borderBottom: `1px solid ${C.border}`, position: 'sticky', top: 0, background: C.surface, zIndex: 1,
         }}>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 15, fontWeight: 800, color: INK }}>{battle.title}</div>
-            <div style={{ fontSize: 11.5, color: MUTED }}>
+            <div style={{ fontSize: 15, fontWeight: 800, color: C.ink }}>{battle.title}</div>
+            <div style={{ fontSize: 11.5, color: C.muted }}>
               {battle.subject || battle.topic}
               {battle.totalQuestions ? ` · ${battle.totalQuestions} questions` : ''}
               {viewers ? ` · ${viewers} watching` : ''}
@@ -212,21 +213,21 @@ export default function WatchBattleModal({ battle, onClose, onEnded }) {
               display: 'inline-flex', alignItems: 'center', gap: 5, background: '#FEE2E2',
               color: RED, fontSize: 10.5, fontWeight: 800, padding: '4px 10px', borderRadius: 20,
             }}>
-              <Radio size={11} /> LIVE
+              <Ico ti="ti-radio" size={11} /> LIVE
             </span>
           )}
           {isLive && battle.mine && (
             <button onClick={endNow} disabled={ending} title="End the battle now"
               style={{
-                display: 'inline-flex', alignItems: 'center', gap: 5, border: `1px solid ${BORDER}`,
-                background: WHITE, color: RED, fontSize: 11.5, fontWeight: 700, padding: '5px 11px',
+                display: 'inline-flex', alignItems: 'center', gap: 5, border: `1px solid ${C.border}`,
+                background: C.surface, color: RED, fontSize: 11.5, fontWeight: 700, padding: '5px 11px',
                 borderRadius: 8, cursor: ending ? 'default' : 'pointer', opacity: ending ? 0.6 : 1,
               }}>
-              <Square size={11} /> {ending ? 'Ending…' : 'End now'}
+              <Ico ti="ti-square" size={11} /> {ending ? 'Ending…' : 'End now'}
             </button>
           )}
-          <button onClick={onClose} style={{ border: 'none', background: 'none', cursor: 'pointer', color: MUTED, padding: 4 }}>
-            <X size={18} />
+          <button onClick={onClose} style={{ border: 'none', background: 'none', cursor: 'pointer', color: C.muted, padding: 4 }}>
+            <Ico ti="ti-x" size={18} />
           </button>
         </div>
 
@@ -239,11 +240,11 @@ export default function WatchBattleModal({ battle, onClose, onEnded }) {
         <div style={{ padding: 20, display: 'grid', gridTemplateColumns: '1.15fr 1fr', gap: 18 }}>
           {/* ── Standings ─────────────────────────────────────────────── */}
           <div>
-            <div style={{ fontSize: 11, fontWeight: 800, color: MUTED, marginBottom: 9, letterSpacing: .3 }}>
-              <Users size={11} style={{ marginRight: 4, verticalAlign: -1 }} />STANDINGS
+            <div style={{ fontSize: 11, fontWeight: 800, color: C.muted, marginBottom: 9, letterSpacing: .3 }}>
+              <Ico ti="ti-users" size={11} style={{ marginRight: 4, verticalAlign: -1 }} />STANDINGS
             </div>
             {ranked.length === 0 ? (
-              <div style={{ fontSize: 12.5, color: MUTED }}>
+              <div style={{ fontSize: 12.5, color: C.muted }}>
                 {waiting ? 'Waiting for learners to accept — nobody is in yet.' : 'No participants.'}
               </div>
             ) : (
@@ -251,20 +252,20 @@ export default function WatchBattleModal({ battle, onClose, onEnded }) {
                 {ranked.map((p, i) => (
                   <div key={p.userId} style={{
                     display: 'flex', alignItems: 'center', gap: 9, padding: '9px 11px',
-                    border: `1px solid ${i === 0 && leader > 0 ? AMBER : BORDER}`, borderRadius: 10,
-                    background: i === 0 && leader > 0 ? '#FFFBEB' : WHITE,
+                    border: `1px solid ${i === 0 && leader > 0 ? C.brand : C.border}`, borderRadius: 10,
+                    background: i === 0 && leader > 0 ? '#FFFBEB' : C.surface,
                   }}>
-                    <span style={{ fontSize: 11, fontWeight: 800, color: MUTED, width: 16 }}>{i + 1}</span>
-                    <span style={{ fontSize: 17 }}>{(() => { const I = p.agentEmoji === '🏆' ? Trophy : Users; return <I size={16} color={p.agentColor || AMBER} />; })()}</span>
+                    <span style={{ fontSize: 11, fontWeight: 800, color: C.muted, width: 16 }}>{i + 1}</span>
+                    <span style={{ fontSize: 17 }}>{(() => { const ti = p.agentEmoji === '🏆' ? 'ti-trophy' : 'ti-users'; return <Ico ti={ti} size={16} color={p.agentColor || C.brand} />; })()}</span>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 12.5, fontWeight: 700, color: INK }}>{p.agentName}</div>
+                      <div style={{ fontSize: 12.5, fontWeight: 700, color: C.ink }}>{p.agentName}</div>
                       {/* HP is the learner-facing health bar; for a teacher it
                           reads as "still standing", which is what matters. */}
-                      <div style={{ height: 4, borderRadius: 4, background: LIGHT, marginTop: 4, overflow: 'hidden' }}>
+                      <div style={{ height: 4, borderRadius: 4, background: C.bg, marginTop: 4, overflow: 'hidden' }}>
                         <div style={{ width: `${Math.max(0, Math.min(100, p.hp))}%`, height: '100%', background: p.hp > 40 ? GREEN : RED }} />
                       </div>
                     </div>
-                    {p.streak > 1 && <span style={{ fontSize: 10.5, fontWeight: 700, color: AMBER, display: 'inline-flex', alignItems: 'center', gap: 2 }}><Flame size={11} color={AMBER} />{p.streak}</span>}
+                    {p.streak > 1 && <span style={{ fontSize: 10.5, fontWeight: 700, color: C.brand, display: 'inline-flex', alignItems: 'center', gap: 2 }}><Ico ti="ti-flame" size={11} color={C.brand} />{p.streak}</span>}
                     <span style={{ fontSize: 13, fontWeight: 900, color: p.agentColor }}>{p.score}</span>
                   </div>
                 ))}
@@ -272,11 +273,11 @@ export default function WatchBattleModal({ battle, onClose, onEnded }) {
             )}
 
             {over && (
-              <div style={{ marginTop: 14, padding: '12px 14px', borderRadius: 12, background: '#FFFBEB', border: `1px solid ${AMBER}44` }}>
-                <div style={{ fontSize: 11, fontWeight: 800, color: AMBER, marginBottom: 6 }}>
-                  <Trophy size={11} style={{ marginRight: 4, verticalAlign: -1 }} />RESULT
+              <div style={{ marginTop: 14, padding: '12px 14px', borderRadius: 12, background: '#FFFBEB', border: `1px solid ${tint(27)}` }}>
+                <div style={{ fontSize: 11, fontWeight: 800, color: C.brand, marginBottom: 6 }}>
+                  <Ico ti="ti-trophy" size={11} style={{ marginRight: 4, verticalAlign: -1 }} />RESULT
                 </div>
-                <div style={{ fontSize: 13, fontWeight: 800, color: INK }}>
+                <div style={{ fontSize: 13, fontWeight: 800, color: C.ink }}>
                   {over.review
                     ? `${over.review.learner ? `${over.review.learner}: ` : ''}${over.review.correct} of ${over.review.total} correct (${over.review.percent}%)`
                     : over.reviewScore
@@ -288,11 +289,11 @@ export default function WatchBattleModal({ battle, onClose, onEnded }) {
                     : 'No winner — every agent ran out of HP'}
                 </div>
                 {over.durationFormatted && (
-                  <div style={{ fontSize: 11.5, color: MUTED, marginTop: 2 }}>Lasted {over.durationFormatted}</div>
+                  <div style={{ fontSize: 11.5, color: C.muted, marginTop: 2 }}>Lasted {over.durationFormatted}</div>
                 )}
                 {over.verdict && (
-                  <div style={{ fontSize: 12, color: INK, marginTop: 8, lineHeight: 1.5 }}>
-                    <Gavel size={11} style={{ marginRight: 4, verticalAlign: -1, color: AMBER }} /><b>Sergeant's verdict:</b> {over.verdict}
+                  <div style={{ fontSize: 12, color: C.ink, marginTop: 8, lineHeight: 1.5 }}>
+                    <Ico ti="ti-gavel" size={11} style={{ marginRight: 4, verticalAlign: -1, color: C.brand }} /><b>Sergeant's verdict:</b> {over.verdict}
                   </div>
                 )}
               </div>
@@ -301,17 +302,17 @@ export default function WatchBattleModal({ battle, onClose, onEnded }) {
 
           {/* ── The question, and what they made of it ────────────────── */}
           <div>
-            <div style={{ fontSize: 11, fontWeight: 800, color: MUTED, marginBottom: 9, letterSpacing: .3 }}>CURRENT QUESTION</div>
+            <div style={{ fontSize: 11, fontWeight: 800, color: C.muted, marginBottom: 9, letterSpacing: .3 }}>CURRENT QUESTION</div>
             {!question ? (
-              <div style={{ fontSize: 12.5, color: MUTED, padding: '10px 0' }}>
+              <div style={{ fontSize: 12.5, color: C.muted, padding: '10px 0' }}>
                 {waiting ? 'Not started yet.' : status === 'completed' ? 'Finished.' : 'Waiting for the next question…'}
               </div>
             ) : (
-              <div style={{ border: `1px solid ${BORDER}`, borderRadius: 12, padding: 13 }}>
+              <div style={{ border: `1px solid ${C.border}`, borderRadius: 12, padding: 13 }}>
                 <div style={{ fontSize: 10.5, fontWeight: 800, color: PURPLE, marginBottom: 5 }}>
                   Q{question.questionOrder}{question.topic ? ` · ${question.topic}` : ''}
                 </div>
-                <div style={{ fontSize: 13, fontWeight: 700, color: INK, lineHeight: 1.45, marginBottom: 10 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: C.ink, lineHeight: 1.45, marginBottom: 10 }}>
                   {question.questionText}
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
@@ -324,38 +325,38 @@ export default function WatchBattleModal({ battle, onClose, onEnded }) {
                     return (
                       <div key={ix} style={{
                         display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderRadius: 9,
-                        border: `1px solid ${isRight ? GREEN : BORDER}`,
-                        background: isRight ? '#DCFCE7' : WHITE,
+                        border: `1px solid ${isRight ? GREEN : C.border}`,
+                        background: isRight ? '#DCFCE7' : C.surface,
                       }}>
-                        <span style={{ fontSize: 11, fontWeight: 800, color: isRight ? GREEN : MUTED }}>
+                        <span style={{ fontSize: 11, fontWeight: 800, color: isRight ? GREEN : C.muted }}>
                           {String.fromCharCode(65 + ix)}
                         </span>
-                        <span style={{ flex: 1, fontSize: 12, color: INK }}>{opt}</span>
+                        <span style={{ flex: 1, fontSize: 12, color: C.ink }}>{opt}</span>
                         {chose > 0 && (
-                          <span style={{ fontSize: 10.5, fontWeight: 800, color: isRight ? GREEN : MUTED }}>{chose}</span>
+                          <span style={{ fontSize: 10.5, fontWeight: 800, color: isRight ? GREEN : C.muted }}>{chose}</span>
                         )}
                       </div>
                     );
                   })}
                 </div>
                 {reveal?.judge && reveal.questionOrder === question.questionOrder && (
-                  <div style={{ marginTop: 9, fontSize: 11.5, color: INK, lineHeight: 1.45 }}>
-                    <Gavel size={11} style={{ marginRight: 4, verticalAlign: -1, color: AMBER }} /><b>Sergeant:</b> {reveal.judge.answer}{reveal.judge.why ? ` — ${reveal.judge.why}` : ''}
+                  <div style={{ marginTop: 9, fontSize: 11.5, color: C.ink, lineHeight: 1.45 }}>
+                    <Ico ti="ti-gavel" size={11} style={{ marginRight: 4, verticalAlign: -1, color: C.brand }} /><b>Sergeant:</b> {reveal.judge.answer}{reveal.judge.why ? ` — ${reveal.judge.why}` : ''}
                   </div>
                 )}
               </div>
             )}
 
-            <div style={{ fontSize: 11, fontWeight: 800, color: MUTED, margin: '16px 0 8px', letterSpacing: .3 }}>COMMENTARY</div>
+            <div style={{ fontSize: 11, fontWeight: 800, color: C.muted, margin: '16px 0 8px', letterSpacing: .3 }}>COMMENTARY</div>
             <div ref={logBox} style={{
-              height: 168, overflowY: 'auto', border: `1px solid ${BORDER}`, borderRadius: 12,
-              padding: 11, background: LIGHT, display: 'flex', flexDirection: 'column', gap: 5,
+              height: 168, overflowY: 'auto', border: `1px solid ${C.border}`, borderRadius: 12,
+              padding: 11, background: C.bg, display: 'flex', flexDirection: 'column', gap: 5,
             }}>
               {log.length === 0
-                ? <div style={{ fontSize: 12, color: MUTED }}>Nothing yet.</div>
+                ? <div style={{ fontSize: 12, color: C.muted }}>Nothing yet.</div>
                 : log.map((l, i) => (
-                    <div key={i} style={{ fontSize: 11.5, color: INK, lineHeight: 1.4 }}>
-                      <span style={{ color: MUTED, marginRight: 6 }}>{l.ts}</span>{l.msg}
+                    <div key={i} style={{ fontSize: 11.5, color: C.ink, lineHeight: 1.4 }}>
+                      <span style={{ color: C.muted, marginRight: 6 }}>{l.ts}</span>{l.msg}
                     </div>
                   ))}
             </div>

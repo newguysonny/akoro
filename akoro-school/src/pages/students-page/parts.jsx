@@ -2,16 +2,16 @@
  * StudentsPage — constants + child components.
  */
 import { useState, useEffect, useRef } from 'react';
-import {Search, Plus, X, User, Mail, Calendar, BookOpen, TrendingUp, Trash2, ChevronRight, Copy, Check, Upload, Download, Link2, UserPlus, PencilLine, ClipboardList } from 'lucide-react';
+import { BookOpen, TrendingUp } from 'lucide-react';
+import { Ico } from '../../theme/Ico.jsx';
 import { useSearchParams } from 'react-router-dom';
 import { PageLayout } from '../../components/Layout.jsx';
 import { Btn, Modal, Inp, StatusPill, Toast } from '../../components/Primitives.jsx';
 import { apiGet } from '../../services/api.js';
 import { useStudentsAPI } from '../../hooks/useStudentsAPI.js';
 import { useCoursesAPI }  from '../../hooks/useCoursesAPI.js';
-import {
-  AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, PURPLE, BLUE, RED, FONT,
-} from '../../constants.js';
+import { GREEN, PURPLE, BLUE, RED } from '../../constants.js';
+import { C, tint } from '../../theme/colors.js';
 
 /* ── Enrol Modal — tabs: Manual | Invite Link | Bulk CSV ─────────────── */
 
@@ -200,45 +200,45 @@ function EnrolModal({ open, onClose, onDone, courses = [] }) {
 
   const TAB_STYLE = (active) => ({
     flex: 1, padding: '8px 4px', border: 'none', borderRadius: 8,
-    background: active ? WHITE : 'transparent',
-    color: active ? AMBER : MUTED, fontWeight: active ? 700 : 500,
-    fontSize: 12, fontFamily: FONT, cursor: 'pointer',
-    boxShadow: active ? `0 1px 4px ${AMBER}22` : 'none',
+    background: active ? C.surface : 'transparent',
+    color: active ? C.brand : C.muted, fontWeight: active ? 700 : 500,
+    fontSize: 12, fontFamily: C.font, cursor: 'pointer',
+    boxShadow: active ? `0 1px 4px ${tint(13)}` : 'none',
     transition: 'all .15s',
   });
 
   const CourseChecklist = ({ selected, onToggle, onToggleAll }) => (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-        <label style={{ fontSize: 12, fontWeight: 700, color: INK, fontFamily: FONT }}>
-          Enrol in Course(s) <span style={{ fontWeight: 500, color: MUTED }}>— optional</span>
+        <label style={{ fontSize: 12, fontWeight: 700, color: C.ink, fontFamily: C.font }}>
+          Enrol in Course(s) <span style={{ fontWeight: 500, color: C.muted }}>— optional</span>
         </label>
         <button
           type="button"
           onClick={onToggleAll}
-          style={{ fontSize: 11, color: AMBER, background: 'none', border: 'none', cursor: 'pointer', fontFamily: FONT, fontWeight: 700 }}
+          style={{ fontSize: 11, color: C.brand, background: 'none', border: 'none', cursor: 'pointer', fontFamily: C.font, fontWeight: 700 }}
         >
           {selected.length === courses.length && courses.length > 0 ? 'Deselect all' : 'All courses'}
         </button>
       </div>
       <div style={{
-        border: `1.5px solid ${BORDER}`, borderRadius: 10, padding: 8,
+        border: `1.5px solid ${C.border}`, borderRadius: 10, padding: 8,
         maxHeight: 180, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4,
-        background: WHITE,
+        background: C.surface,
       }}>
         {courses.length === 0 && (
-          <div style={{ fontSize: 12, color: MUTED, padding: '6px 4px', fontFamily: FONT }}>No courses yet — create one first.</div>
+          <div style={{ fontSize: 12, color: C.muted, padding: '6px 4px', fontFamily: C.font }}>No courses yet — create one first.</div>
         )}
         {courses.map(c => (
           <label key={c.id} style={{
             display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer',
-            fontSize: 13, color: INK, fontFamily: FONT, padding: '5px 4px', borderRadius: 6,
+            fontSize: 13, color: C.ink, fontFamily: C.font, padding: '5px 4px', borderRadius: 6,
           }}>
             <input
               type="checkbox"
               checked={selected.includes(c.id)}
               onChange={() => onToggle(c.id)}
-              style={{ accentColor: AMBER, width: 15, height: 15 }}
+              style={{ accentColor: C.brand, width: 15, height: 15 }}
             />
             {c.title}
           </label>
@@ -249,7 +249,7 @@ function EnrolModal({ open, onClose, onDone, courses = [] }) {
 
   const CourseSelect = ({ value, onChange }) => (
     <div>
-      <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: INK, marginBottom: 6, fontFamily: FONT }}>
+      <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: C.ink, marginBottom: 6, fontFamily: C.font }}>
         Enrol in Course *
       </label>
       <select
@@ -257,8 +257,8 @@ function EnrolModal({ open, onClose, onDone, courses = [] }) {
         onChange={e => onChange(e.target.value)}
         style={{
           width: '100%', padding: '10px 12px', borderRadius: 10,
-          border: `1.5px solid ${BORDER}`, fontFamily: FONT, fontSize: 13,
-          color: value ? INK : MUTED, background: WHITE, outline: 'none',
+          border: `1.5px solid ${C.border}`, fontFamily: C.font, fontSize: 13,
+          color: value ? C.ink : C.muted, background: C.surface, outline: 'none',
         }}
       >
         <option value="">— Select a course —</option>
@@ -285,15 +285,15 @@ function EnrolModal({ open, onClose, onDone, courses = [] }) {
   return (
     <Modal open={open} onClose={onClose} title="Add a Student">
       {/* Tab bar */}
-      <div style={{ display: 'flex', background: LIGHT, borderRadius: 10, padding: 4, marginBottom: 20, gap: 2 }}>
+      <div style={{ display: 'flex', background: C.bg, borderRadius: 10, padding: 4, marginBottom: 20, gap: 2 }}>
         <button style={TAB_STYLE(tab === 'manual')} onClick={() => { setTab('manual'); reset(); }}>
-          <PencilLine size={13} style={{ verticalAlign: '-2px', marginRight: 4 }} />Manual Entry
+          <Ico ti="ti-pencil" size={13} style={{ verticalAlign: '-2px', marginRight: 4 }} />Manual Entry
         </button>
         <button style={TAB_STYLE(tab === 'invite')} onClick={() => { setTab('invite'); reset(); }}>
-          <Mail size={13} style={{ verticalAlign: '-2px', marginRight: 4 }} />Invite Link
+          <Ico ti="ti-mail" size={13} style={{ verticalAlign: '-2px', marginRight: 4 }} />Invite Link
         </button>
         <button style={TAB_STYLE(tab === 'csv')} onClick={() => { setTab('csv'); reset(); }}>
-          <ClipboardList size={13} style={{ verticalAlign: '-2px', marginRight: 4 }} />Bulk CSV
+          <Ico ti="ti-clipboard-list" size={13} style={{ verticalAlign: '-2px', marginRight: 4 }} />Bulk CSV
         </button>
       </div>
 
@@ -317,7 +317,7 @@ function EnrolModal({ open, onClose, onDone, courses = [] }) {
           {/* Class first: it is what a student BELONGS to. A course is
               something they may or may not also be taking. */}
           <div>
-            <label style={{ fontSize: 12, fontWeight: 700, color: INK, fontFamily: FONT, display: 'block', marginBottom: 6 }}>
+            <label style={{ fontSize: 12, fontWeight: 700, color: C.ink, fontFamily: C.font, display: 'block', marginBottom: 6 }}>
               Class
             </label>
             <select
@@ -325,8 +325,8 @@ function EnrolModal({ open, onClose, onDone, courses = [] }) {
               onChange={e => setM('classId', e.target.value)}
               style={{
                 width: '100%', padding: '10px 14px', borderRadius: 10,
-                border: `1.5px solid ${BORDER}`, outline: 'none', fontSize: 14,
-                fontFamily: FONT, color: INK, background: WHITE, cursor: 'pointer', boxSizing: 'border-box',
+                border: `1.5px solid ${C.border}`, outline: 'none', fontSize: 14,
+                fontFamily: C.font, color: C.ink, background: C.surface, cursor: 'pointer', boxSizing: 'border-box',
               }}
             >
               <option value="">{classesLoading ? 'Loading classes…' : 'No class'}</option>
@@ -337,14 +337,14 @@ function EnrolModal({ open, onClose, onDone, courses = [] }) {
               ))}
             </select>
             {!classesLoading && !classes.length && (
-              <p style={{ fontSize: 11, color: MUTED2, fontFamily: FONT, margin: '5px 0 0' }}>
+              <p style={{ fontSize: 11, color: C.muted2, fontFamily: C.font, margin: '5px 0 0' }}>
                 No classes yet — create one under Academics → Classes.
               </p>
             )}
           </div>
 
           <CourseChecklist selected={manual.courseIds} onToggle={toggleManualCourse} onToggleAll={toggleAllManualCourses} />
-          <p style={{ fontSize: 12, color: MUTED, margin: 0 }}>
+          <p style={{ fontSize: 12, color: C.muted, margin: 0 }}>
             Courses are optional — a student can be in a class without taking any.
             If they don't have an Akoro account yet, one is created automatically and
             they set their password via the welcome email.
@@ -363,7 +363,7 @@ function EnrolModal({ open, onClose, onDone, courses = [] }) {
           <CourseChecklist selected={inv.courseIds} onToggle={toggleInvCourse} onToggleAll={toggleAllInvCourses} />
 
           <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: INK, marginBottom: 6, fontFamily: FONT }}>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: C.ink, marginBottom: 6, fontFamily: C.font }}>
               Link Expires In
             </label>
             <select
@@ -371,8 +371,8 @@ function EnrolModal({ open, onClose, onDone, courses = [] }) {
               onChange={e => setI('expiresInDays', e.target.value)}
               style={{
                 width: '100%', padding: '10px 12px', borderRadius: 10,
-                border: `1.5px solid ${BORDER}`, fontFamily: FONT, fontSize: 13,
-                color: INK, background: WHITE, outline: 'none',
+                border: `1.5px solid ${C.border}`, fontFamily: C.font, fontSize: 13,
+                color: C.ink, background: C.surface, outline: 'none',
               }}
             >
               <option value={1}>1 day</option>
@@ -393,29 +393,29 @@ function EnrolModal({ open, onClose, onDone, courses = [] }) {
 
           {inviteUrl && (
             <div style={{
-              background: LIGHT, border: `1.5px solid ${BORDER}`, borderRadius: 10,
+              background: C.bg, border: `1.5px solid ${C.border}`, borderRadius: 10,
               padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 8,
             }}>
-              <Link2 size={14} color={AMBER} style={{ flexShrink: 0 }} />
-              <span style={{ flex: 1, fontSize: 11, color: INK, fontFamily: FONT, wordBreak: 'break-all' }}>
+              <Ico ti="ti-link" size={14} color={C.brand} style={{ flexShrink: 0 }} />
+              <span style={{ flex: 1, fontSize: 11, color: C.ink, fontFamily: C.font, wordBreak: 'break-all' }}>
                 {inviteUrl}
               </span>
               <button
                 type="button"
                 onClick={copyLink}
                 style={{
-                  background: copied ? GREEN : AMBER, border: 'none', borderRadius: 7,
-                  padding: '6px 10px', cursor: 'pointer', color: WHITE,
-                  display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, fontFamily: FONT,
+                  background: copied ? GREEN : C.brand, border: 'none', borderRadius: 7,
+                  padding: '6px 10px', cursor: 'pointer', color: '#fff',
+                  display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, fontFamily: C.font,
                 }}
               >
-                {copied ? <Check size={12} /> : <Copy size={12} />}
+                {copied ? <Ico ti="ti-check" size={12} /> : <Ico ti="ti-copy" size={12} />}
                 {copied ? 'Copied!' : 'Copy'}
               </button>
             </div>
           )}
 
-          <p style={{ fontSize: 12, color: MUTED, margin: 0 }}>
+          <p style={{ fontSize: 12, color: C.muted, margin: 0 }}>
             Anyone with this link can join the selected course(s). Share it in a WhatsApp group, email, or anywhere.
           </p>
 
@@ -434,7 +434,7 @@ function EnrolModal({ open, onClose, onDone, courses = [] }) {
           {/* Same order as Manual: the class is what they join, the course is
               extra. A register is usually a class register. */}
           <div>
-            <label style={{ fontSize: 12, fontWeight: 700, color: INK, fontFamily: FONT, display: 'block', marginBottom: 6 }}>
+            <label style={{ fontSize: 12, fontWeight: 700, color: C.ink, fontFamily: C.font, display: 'block', marginBottom: 6 }}>
               Add to class
             </label>
             <select
@@ -442,8 +442,8 @@ function EnrolModal({ open, onClose, onDone, courses = [] }) {
               onChange={e => setCsv(f => ({ ...f, classId: e.target.value }))}
               style={{
                 width: '100%', padding: '10px 14px', borderRadius: 10,
-                border: `1.5px solid ${BORDER}`, outline: 'none', fontSize: 14,
-                fontFamily: FONT, color: INK, background: WHITE, cursor: 'pointer', boxSizing: 'border-box',
+                border: `1.5px solid ${C.border}`, outline: 'none', fontSize: 14,
+                fontFamily: C.font, color: C.ink, background: C.surface, cursor: 'pointer', boxSizing: 'border-box',
               }}
             >
               <option value="">{classesLoading ? 'Loading classes…' : 'No class'}</option>
@@ -461,9 +461,9 @@ function EnrolModal({ open, onClose, onDone, courses = [] }) {
           <div
             onClick={() => fileRef.current?.click()}
             style={{
-              border: `2px dashed ${csv.file ? AMBER : BORDER}`, borderRadius: 12,
+              border: `2px dashed ${csv.file ? C.brand : C.border}`, borderRadius: 12,
               padding: '24px', textAlign: 'center', cursor: 'pointer',
-              background: csv.file ? `${AMBER}08` : LIGHT, transition: 'all .15s',
+              background: csv.file ? tint(3) : C.bg, transition: 'all .15s',
             }}
             onDragOver={e => e.preventDefault()}
             onDrop={e => {
@@ -472,12 +472,12 @@ function EnrolModal({ open, onClose, onDone, courses = [] }) {
               if (f) setCsv(c => ({ ...c, file: f }));
             }}
           >
-            <Upload size={22} color={csv.file ? AMBER : MUTED} style={{ marginBottom: 8 }} />
-            <div style={{ fontSize: 13, fontWeight: 600, color: csv.file ? AMBER : INK, fontFamily: FONT }}>
+            <Ico ti="ti-upload" size={22} color={csv.file ? C.brand : C.muted} style={{ marginBottom: 8 }} />
+            <div style={{ fontSize: 13, fontWeight: 600, color: csv.file ? C.brand : C.ink, fontFamily: C.font }}>
               {csv.file ? csv.file.name : 'Drop CSV file here or click to browse'}
             </div>
             {csv.file && (
-              <div style={{ fontSize: 11, color: MUTED, marginTop: 4, fontFamily: FONT }}>
+              <div style={{ fontSize: 11, color: C.muted, marginTop: 4, fontFamily: C.font }}>
                 {(csv.file.size / 1024).toFixed(1)} KB
               </div>
             )}
@@ -490,26 +490,26 @@ function EnrolModal({ open, onClose, onDone, courses = [] }) {
             />
           </div>
 
-          <div style={{ background: LIGHT, borderRadius: 10, padding: '10px 14px' }}>
+          <div style={{ background: C.bg, borderRadius: 10, padding: '10px 14px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 6 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: INK, fontFamily: FONT }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: C.ink, fontFamily: C.font }}>
                 CSV format — one student per row:
               </div>
               <button type="button" onClick={downloadTemplate} style={{
                 display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 11px',
-                borderRadius: 8, border: `1px solid ${BORDER}`, background: WHITE,
-                color: AMBER, fontSize: 11, fontWeight: 800, cursor: 'pointer', fontFamily: FONT,
+                borderRadius: 8, border: `1px solid ${C.border}`, background: C.surface,
+                color: C.brand, fontSize: 11, fontWeight: 800, cursor: 'pointer', fontFamily: C.font,
                 flexShrink: 0,
               }}>
-                <Download size={12} /> Starter file
+                <Ico ti="ti-download" size={12} /> Starter file
               </button>
             </div>
-            <code style={{ fontSize: 11, color: MUTED, fontFamily: 'monospace' }}>
+            <code style={{ fontSize: 11, color: C.muted, fontFamily: 'monospace' }}>
               name,email,phone<br />
               Jane Doe,jane@example.com,+2348012345678<br />
               John Smith,john@example.com,
             </code>
-            <div style={{ fontSize: 10.5, color: MUTED2, fontFamily: FONT, marginTop: 6, lineHeight: 1.45 }}>
+            <div style={{ fontSize: 10.5, color: C.muted2, fontFamily: C.font, marginTop: 6, lineHeight: 1.45 }}>
               Download the starter file, replace the two example rows with your students,
               and upload it back. Phone is optional; extra columns are ignored.
             </div>
@@ -517,7 +517,7 @@ function EnrolModal({ open, onClose, onDone, courses = [] }) {
 
           {csvResult && (
             <div style={{ background: '#F0FDF4', border: `1px solid #BBF7D0`, borderRadius: 10, padding: '12px 14px' }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: GREEN, marginBottom: 6, fontFamily: FONT }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: GREEN, marginBottom: 6, fontFamily: C.font }}>
                 Import complete
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
@@ -527,7 +527,7 @@ function EnrolModal({ open, onClose, onDone, courses = [] }) {
                   { label: 'Enrolled', value: (csvResult.accounts_created ?? 0) + (csvResult.already_existed ?? 0) },
                   { label: 'Failed rows', value: csvResult.failed ?? 0, warn: true },
                 ].map(({ label, value, warn }) => (
-                  <div key={label} style={{ fontSize: 12, color: warn && value ? RED : INK, fontFamily: FONT }}>
+                  <div key={label} style={{ fontSize: 12, color: warn && value ? RED : C.ink, fontFamily: C.font }}>
                     <span style={{ fontWeight: 700 }}>{value}</span> {label}
                   </div>
                 ))}
@@ -587,36 +587,36 @@ function StudentSheet({ student, courses = [], onClose, onRemove }) {
   return (
     <div
       onClick={onClose}
-      style={{ position: 'fixed', inset: 0, background: 'rgba(26,26,46,.3)', zIndex: 200, display: 'flex', justifyContent: 'flex-end' }}
+      style={{ position: 'fixed', inset: 0, background: C.overlay, zIndex: 200, display: 'flex', justifyContent: 'flex-end' }}
     >
       <div
         onClick={e => e.stopPropagation()}
         style={{
-          width: 360, height: '100vh', background: WHITE, boxShadow: '-8px 0 40px rgba(0,0,0,.12)',
+          width: 360, height: '100vh', background: C.surface, boxShadow: '-8px 0 40px rgba(0,0,0,.12)',
           padding: '24px', overflowY: 'auto', animation: 'sheet-up .25s ease both',
           display: 'flex', flexDirection: 'column', gap: 20,
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <h2 style={{ fontSize: 18, fontWeight: 700, color: INK, margin: 0, fontFamily: FONT }}>Student Profile</h2>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: MUTED }}>
-            <X size={18} />
+          <h2 style={{ fontSize: 18, fontWeight: 700, color: C.ink, margin: 0, fontFamily: C.font }}>Student Profile</h2>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.muted }}>
+            <Ico ti="ti-x" size={18} />
           </button>
         </div>
 
         {/* Avatar + name */}
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, padding: '20px', background: LIGHT, borderRadius: 16 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, padding: '20px', background: C.bg, borderRadius: 16 }}>
           <div style={{
             width: 64, height: 64, borderRadius: '50%',
-            background: `linear-gradient(135deg, ${AMBER}, ${PURPLE})`,
+            background: `linear-gradient(135deg, ${C.brand}, ${PURPLE})`,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 24, color: WHITE, fontWeight: 700,
+            fontSize: 24, color: '#fff', fontWeight: 700,
           }}>
             {(student.fullName || student.email || '?')[0].toUpperCase()}
           </div>
           <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: 16, fontWeight: 700, color: INK, fontFamily: FONT }}>{student.fullName || 'Unknown'}</div>
-            <div style={{ fontSize: 13, color: MUTED, fontFamily: FONT }}>{student.email}</div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: C.ink, fontFamily: C.font }}>{student.fullName || 'Unknown'}</div>
+            <div style={{ fontSize: 13, color: C.muted, fontFamily: C.font }}>{student.email}</div>
           </div>
           <StatusPill status={student.status} />
         </div>
@@ -624,13 +624,13 @@ function StudentSheet({ student, courses = [], onClose, onRemove }) {
         {/* Stats */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           {[
-            { label: 'Courses', value: student.coursesEnrolled || 0, icon: BookOpen, color: BLUE },
-            { label: 'Progress', value: `${student.progress || 0}%`, icon: TrendingUp, color: GREEN },
-          ].map(({ label, value, icon: Icon, color }) => (
-            <div key={label} style={{ background: LIGHT, borderRadius: 12, padding: '14px', textAlign: 'center' }}>
-              <Icon size={18} color={color} style={{ marginBottom: 6 }} />
-              <div style={{ fontSize: 20, fontWeight: 800, color: INK, fontFamily: FONT }}>{value}</div>
-              <div style={{ fontSize: 11, color: MUTED, fontFamily: FONT }}>{label}</div>
+            { label: 'Courses', value: student.coursesEnrolled || 0, icon: BookOpen, ti: 'ti-book', color: BLUE },
+            { label: 'Progress', value: `${student.progress || 0}%`, icon: TrendingUp, ti: 'ti-trending-up', color: GREEN },
+          ].map(({ label, value, icon: Icon, ti, color }) => (
+            <div key={label} style={{ background: C.bg, borderRadius: 12, padding: '14px', textAlign: 'center' }}>
+              <Ico lucide={Icon} ti={ti} size={18} color={color} style={{ marginBottom: 6 }} />
+              <div style={{ fontSize: 20, fontWeight: 800, color: C.ink, fontFamily: C.font }}>{value}</div>
+              <div style={{ fontSize: 11, color: C.muted, fontFamily: C.font }}>{label}</div>
             </div>
           ))}
         </div>
@@ -638,12 +638,12 @@ function StudentSheet({ student, courses = [], onClose, onRemove }) {
         {/* Details */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <Mail size={14} color={MUTED} />
-            <span style={{ fontSize: 13, color: MUTED, fontFamily: FONT }}>{student.email}</span>
+            <Ico ti="ti-mail" size={14} color={C.muted} />
+            <span style={{ fontSize: 13, color: C.muted, fontFamily: C.font }}>{student.email}</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <Calendar size={14} color={MUTED} />
-            <span style={{ fontSize: 13, color: MUTED, fontFamily: FONT }}>
+            <Ico ti="ti-calendar" size={14} color={C.muted} />
+            <span style={{ fontSize: 13, color: C.muted, fontFamily: C.font }}>
               Joined {student.joinedAt ? new Date(student.joinedAt).toLocaleDateString() : 'Unknown'}
             </span>
           </div>
@@ -652,34 +652,34 @@ function StudentSheet({ student, courses = [], onClose, onRemove }) {
         {/* Progress bar */}
         <div>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-            <span style={{ fontSize: 12, fontWeight: 600, color: INK, fontFamily: FONT }}>Overall Progress</span>
-            <span style={{ fontSize: 12, fontWeight: 700, color: AMBER }}>{student.progress || 0}%</span>
+            <span style={{ fontSize: 12, fontWeight: 600, color: C.ink, fontFamily: C.font }}>Overall Progress</span>
+            <span style={{ fontSize: 12, fontWeight: 700, color: C.brand }}>{student.progress || 0}%</span>
           </div>
-          <div style={{ height: 8, background: BORDER, borderRadius: 4, overflow: 'hidden' }}>
-            <div style={{ height: '100%', width: `${student.progress || 0}%`, background: `linear-gradient(90deg, ${AMBER}, ${GREEN})`, borderRadius: 4 }} />
+          <div style={{ height: 8, background: C.border, borderRadius: 4, overflow: 'hidden' }}>
+            <div style={{ height: '100%', width: `${student.progress || 0}%`, background: `linear-gradient(90deg, ${C.brand}, ${GREEN})`, borderRadius: 4 }} />
           </div>
         </div>
 
         {/* Enrol in another course — multi-select */}
         {courses.length > 0 && (
-          <div style={{ background: LIGHT, borderRadius: 12, padding: 14 }}>
+          <div style={{ background: C.bg, borderRadius: 12, padding: 14 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: INK, fontFamily: FONT }}>Enrol in course(s)</div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: C.ink, fontFamily: C.font }}>Enrol in course(s)</div>
               <button
                 onClick={toggleAll}
-                style={{ fontSize: 11, color: AMBER, background: 'none', border: 'none', cursor: 'pointer', fontFamily: FONT, fontWeight: 600 }}
+                style={{ fontSize: 11, color: C.brand, background: 'none', border: 'none', cursor: 'pointer', fontFamily: C.font, fontWeight: 600 }}
               >
                 {enrolCourses.length === courses.length ? 'Deselect all' : 'All courses'}
               </button>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 160, overflowY: 'auto', marginBottom: 10 }}>
               {courses.map(c => (
-                <label key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 12, color: INK, fontFamily: FONT }}>
+                <label key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 12, color: C.ink, fontFamily: C.font }}>
                   <input
                     type="checkbox"
                     checked={enrolCourses.includes(c.id)}
                     onChange={() => toggleCourse(c.id)}
-                    style={{ accentColor: AMBER, width: 14, height: 14 }}
+                    style={{ accentColor: C.brand, width: 14, height: 14 }}
                   />
                   {c.title}
                 </label>
@@ -694,7 +694,7 @@ function StudentSheet({ student, courses = [], onClose, onRemove }) {
               {enrolLoading ? '…' : `Enrol in ${enrolCourses.length || ''} course${enrolCourses.length !== 1 ? 's' : ''}`}
             </Btn>
             {enrolOk && (
-              <div style={{ fontSize: 12, color: enrolOk.startsWith('Error') ? RED : GREEN, marginTop: 6, fontFamily: FONT }}>
+              <div style={{ fontSize: 12, color: enrolOk.startsWith('Error') ? RED : GREEN, marginTop: 6, fontFamily: C.font }}>
                 {enrolOk}
               </div>
             )}
@@ -704,7 +704,7 @@ function StudentSheet({ student, courses = [], onClose, onRemove }) {
         {/* Actions */}
         <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: 8 }}>
           <Btn variant="danger" onClick={() => { onRemove(student.enrollmentId); onClose(); }}>
-            <Trash2 size={14} /> Remove from courses
+            <Ico ti="ti-trash" size={14} /> Remove from courses
           </Btn>
         </div>
       </div>
@@ -719,31 +719,31 @@ function StudentRow({ student, onClick }) {
       onClick={() => onClick(student)}
       style={{
         display: 'flex', alignItems: 'center', gap: 14,
-        padding: '12px 16px', background: WHITE, borderRadius: 12,
-        border: `1px solid ${BORDER}`, cursor: 'pointer', transition: 'all .15s',
+        padding: '12px 16px', background: C.surface, borderRadius: 12,
+        border: `1px solid ${C.border}`, cursor: 'pointer', transition: 'all .15s',
       }}
-      onMouseEnter={e => { e.currentTarget.style.borderColor = AMBER; e.currentTarget.style.boxShadow = `0 2px 12px ${AMBER}18`; }}
-      onMouseLeave={e => { e.currentTarget.style.borderColor = BORDER; e.currentTarget.style.boxShadow = 'none'; }}
+      onMouseEnter={e => { e.currentTarget.style.borderColor = C.brand; e.currentTarget.style.boxShadow = `0 2px 12px ${tint(9)}`; }}
+      onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.boxShadow = 'none'; }}
     >
       <div style={{
         width: 40, height: 40, borderRadius: '50%', flexShrink: 0,
-        background: `linear-gradient(135deg, ${AMBER}88, ${PURPLE}88)`,
+        background: `linear-gradient(135deg, ${tint(53)}, ${PURPLE}88)`,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: 14, fontWeight: 700, color: WHITE,
+        fontSize: 14, fontWeight: 700, color: '#fff',
       }}>
         {(student.fullName || student.email || '?')[0].toUpperCase()}
       </div>
       <div style={{ flex: 1, overflow: 'hidden' }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: INK, fontFamily: FONT }}>{student.fullName || 'Unknown'}</div>
-        <div style={{ fontSize: 11, color: MUTED, fontFamily: FONT }}>{student.email}</div>
+        <div style={{ fontSize: 13, fontWeight: 600, color: C.ink, fontFamily: C.font }}>{student.fullName || 'Unknown'}</div>
+        <div style={{ fontSize: 11, color: C.muted, fontFamily: C.font }}>{student.email}</div>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         <div style={{ textAlign: 'right' }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: INK, fontFamily: FONT }}>{student.progress || 0}%</div>
-          <div style={{ fontSize: 10, color: MUTED, fontFamily: FONT }}>progress</div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: C.ink, fontFamily: C.font }}>{student.progress || 0}%</div>
+          <div style={{ fontSize: 10, color: C.muted, fontFamily: C.font }}>progress</div>
         </div>
         <StatusPill status={student.status} />
-        <ChevronRight size={14} color={MUTED} />
+        <Ico ti="ti-chevron-right" size={14} color={C.muted} />
       </div>
     </div>
   );

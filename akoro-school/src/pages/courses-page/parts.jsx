@@ -2,14 +2,15 @@
  * CoursesPage — constants + child components.
  */
 import { useState, useEffect } from 'react';
-import { Plus, Video, BookOpen, Users, Clock, Calendar, Trash2, Edit2, ChevronRight, Share2, Check } from 'lucide-react';
+import { Ico } from '../../theme/Ico.jsx';
 import { PageLayout } from '../../components/Layout.jsx';
 import { Btn, Modal, Inp, Sel, StatusPill, PlatBadge, CoursTypeBadge, Toast } from '../../components/Primitives.jsx';
 import { useCoursesAPI } from '../../hooks/useCoursesAPI.js';
 import LiveClassWizard from '../../components/LiveClassWizard.jsx';
 import OnDemandWizard from '../../components/OnDemandWizard.jsx';
 import CourseCurriculum from '../../components/CourseCurriculum.jsx';
-import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, PURPLE, BLUE, FONT } from '../../constants.js';
+import { GREEN, PURPLE, BLUE } from '../../constants.js';
+import { C, tint } from '../../theme/colors.js';
 import { LEARNER_URL as APP_LEARNER_URL } from '../../config/urls.js';
 
 /* ── Mock data ─────────────────────────────────────────────────────── */
@@ -106,7 +107,7 @@ function EditCourseModal({ open, course, onClose, onSave }) {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
         <Inp label="Course Title" value={form.title} onChange={e => setField('title', e.target.value)} placeholder="Course title" />
         <div>
-          <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: INK, marginBottom: 6, fontFamily: FONT }}>Description</label>
+          <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: C.ink, marginBottom: 6, fontFamily: C.font }}>Description</label>
           <textarea
             value={form.description}
             onChange={e => setField('description', e.target.value)}
@@ -114,8 +115,8 @@ function EditCourseModal({ open, course, onClose, onSave }) {
             placeholder="What is this course about?"
             style={{
               width: '100%', padding: '10px 12px', borderRadius: 10,
-              border: `1.5px solid ${BORDER}`, fontFamily: FONT, fontSize: 13,
-              color: INK, background: WHITE, outline: 'none', resize: 'vertical',
+              border: `1.5px solid ${C.border}`, fontFamily: C.font, fontSize: 13,
+              color: C.ink, background: C.surface, outline: 'none', resize: 'vertical',
             }}
           />
         </div>
@@ -158,7 +159,7 @@ function CourseCard({ course, onManage, onEdit, onDelete }) {
   };
   return (
     <div style={{
-      background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 16,
+      background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16,
       overflow: 'hidden', transition: 'box-shadow .15s', position: 'relative',
     }}
     onMouseEnter={e => e.currentTarget.style.boxShadow = '0 4px 20px rgba(0,0,0,.08)'}
@@ -166,34 +167,34 @@ function CourseCard({ course, onManage, onEdit, onDelete }) {
     >
       {/* Thumbnail */}
       <div style={{
-        height: 100, background: course.thumbnail ? `url(${course.thumbnail})` : `linear-gradient(135deg, ${AMBER}22, ${PURPLE}22)`,
+        height: 100, background: course.thumbnail ? `url(${course.thumbnail})` : `linear-gradient(135deg, ${tint(13)}, ${PURPLE}22)`,
         backgroundSize: 'cover', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative',
       }}>
         {!course.thumbnail && (
-          course.type === 'live' ? <Video size={32} color={AMBER} /> : <BookOpen size={32} color={PURPLE} />
+          course.type === 'live' ? <Ico ti="ti-video" size={32} color={C.brand} /> : <Ico ti="ti-book" size={32} color={PURPLE} />
         )}
         {/* Edit/Delete actions */}
         <div style={{ position: 'absolute', top: 8, right: 8, display: 'flex', gap: 6 }}>
           <button
             onClick={shareLink}
             title="Copy course link"
-            style={{ background: copied ? GREEN : 'rgba(255,255,255,.92)', border: 'none', borderRadius: 8, padding: 6, cursor: 'pointer', color: copied ? '#fff' : INK, display: 'flex', boxShadow: '0 1px 4px rgba(0,0,0,.1)' }}
+            style={{ background: copied ? GREEN : 'rgba(255,255,255,.92)', border: 'none', borderRadius: 8, padding: 6, cursor: 'pointer', color: copied ? '#fff' : C.ink, display: 'flex', boxShadow: '0 1px 4px rgba(0,0,0,.1)' }}
           >
-            {copied ? <Check size={13} /> : <Share2 size={13} />}
+            {copied ? <Ico ti="ti-check" size={13} /> : <Ico ti="ti-share" size={13} />}
           </button>
           <button
             onClick={(e) => { e.stopPropagation(); onEdit?.(course); }}
             title="Edit course"
-            style={{ background: 'rgba(255,255,255,.92)', border: 'none', borderRadius: 8, padding: 6, cursor: 'pointer', color: INK, display: 'flex', boxShadow: '0 1px 4px rgba(0,0,0,.1)' }}
+            style={{ background: 'rgba(255,255,255,.92)', border: 'none', borderRadius: 8, padding: 6, cursor: 'pointer', color: C.ink, display: 'flex', boxShadow: '0 1px 4px rgba(0,0,0,.1)' }}
           >
-            <Edit2 size={13} />
+            <Ico ti="ti-pencil" size={13} />
           </button>
           <button
             onClick={(e) => { e.stopPropagation(); onDelete?.(course); }}
             title="Delete course"
             style={{ background: 'rgba(255,255,255,.92)', border: 'none', borderRadius: 8, padding: 6, cursor: 'pointer', color: '#DC2626', display: 'flex', boxShadow: '0 1px 4px rgba(0,0,0,.1)' }}
           >
-            <Trash2 size={13} />
+            <Ico ti="ti-trash" size={13} />
           </button>
         </div>
       </div>
@@ -202,16 +203,16 @@ function CourseCard({ course, onManage, onEdit, onDelete }) {
           <CoursTypeBadge type={course.type} />
           <StatusPill status={course.status} />
         </div>
-        <h3 style={{ fontSize: 14, fontWeight: 700, color: INK, margin: '8px 0 4px', fontFamily: FONT }}>{course.title}</h3>
-        <p style={{ fontSize: 12, color: MUTED, margin: '0 0 12px', fontFamily: FONT, lineHeight: 1.4 }}>
+        <h3 style={{ fontSize: 14, fontWeight: 700, color: C.ink, margin: '8px 0 4px', fontFamily: C.font }}>{course.title}</h3>
+        <p style={{ fontSize: 12, color: C.muted, margin: '0 0 12px', fontFamily: C.font, lineHeight: 1.4 }}>
           {course.description}
         </p>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span style={{ fontSize: 12, color: MUTED, display: 'flex', alignItems: 'center', gap: 4 }}>
-            <Users size={12} /> {course.studentsEnrolled || 0} students
+          <span style={{ fontSize: 12, color: C.muted, display: 'flex', alignItems: 'center', gap: 4 }}>
+            <Ico ti="ti-users" size={12} /> {course.studentsEnrolled || 0} students
           </span>
-          <button onClick={() => onManage?.(course)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: AMBER, display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 600, fontFamily: FONT }}>
-            {course.type === 'live' ? 'Curriculum' : 'Manage'} <ChevronRight size={12} />
+          <button onClick={() => onManage?.(course)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.brand, display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 600, fontFamily: C.font }}>
+            {course.type === 'live' ? 'Curriculum' : 'Manage'} <Ico ti="ti-chevron-right" size={12} />
           </button>
         </div>
       </div>
@@ -225,23 +226,23 @@ function SessionRow({ session, onDelete }) {
   return (
     <div style={{
       display: 'flex', alignItems: 'center', gap: 14,
-      padding: '12px 16px', background: WHITE, borderRadius: 12,
-      border: `1px solid ${BORDER}`,
+      padding: '12px 16px', background: C.surface, borderRadius: 12,
+      border: `1px solid ${C.border}`,
     }}>
-      <div style={{ width: 40, height: 40, borderRadius: 10, background: `${AMBER}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-        <Video size={18} color={AMBER} />
+      <div style={{ width: 40, height: 40, borderRadius: 10, background: tint(8), display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+        <Ico ti="ti-video" size={18} color={C.brand} />
       </div>
       <div style={{ flex: 1, overflow: 'hidden' }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: INK, fontFamily: FONT }}>{session.title}</div>
-        <div style={{ fontSize: 11, color: MUTED, fontFamily: FONT }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: C.ink, fontFamily: C.font }}>{session.title}</div>
+        <div style={{ fontSize: 11, color: C.muted, fontFamily: C.font }}>
           {time.toLocaleDateString()} at {time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
         </div>
       </div>
       <PlatBadge platform={session.platform} />
       <StatusPill status={session.status} />
       {onDelete && (
-        <button onClick={() => onDelete(session.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: MUTED, padding: 4, borderRadius: 6 }}>
-          <Trash2 size={14} />
+        <button onClick={() => onDelete(session.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.muted, padding: 4, borderRadius: 6 }}>
+          <Ico ti="ti-trash" size={14} />
         </button>
       )}
     </div>

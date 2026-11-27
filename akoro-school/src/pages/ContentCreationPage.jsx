@@ -5,11 +5,13 @@
  */
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Copy, Check, Clock, Loader2, ImagePlus, Trash2, Film } from 'lucide-react';
+
 import { PageLayout } from '../components/Layout.jsx';
 import BackButton from '../components/BackButton.jsx';
 import { apiGet, apiDelete, API } from '../services/api.js';
-import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, BLUE, PURPLE, RED, FONT } from '../constants.js';
+import { GREEN, BLUE, PURPLE, RED } from '../constants.js';
+import { C, tint } from '../theme/colors.js';
+import { Ico } from '../theme/Ico.jsx';
 import { AiPostPill, BLOG_LABEL, fmtDateTime } from './content/parts.jsx';
 import ContentView, { contentViewStyles } from '../components/ContentView.jsx';
 
@@ -64,7 +66,7 @@ export default function ContentCreationPage() {
     const isBlog = c.kind === 'blog';
     const color = isBlog ? BLUE : PURPLE;
     const label = isBlog ? (BLOG_LABEL[c.subtype] || c.subtype) : c.subtype;
-    return <span style={{ fontSize: 10.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: .4, color, background: `${color}12`, borderRadius: 20, padding: '3px 10px' }}>{label}</span>;
+    return <span style={{ fontSize: 10.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: .4, color, background: tint(7, color), borderRadius: 20, padding: '3px 10px' }}>{label}</span>;
   };
 
   return (
@@ -73,46 +75,46 @@ export default function ContentCreationPage() {
         <BackButton onClick={() => navigate(-1)} label="Back" />
 
         {notFound ? (
-          <div style={{ fontFamily: FONT, color: MUTED }}>This creation was not found.</div>
+          <div style={{ fontFamily: C.font, color: C.muted }}>This creation was not found.</div>
         ) : c === null ? (
-          <div style={{ padding: '60px 0', textAlign: 'center', color: MUTED2, fontFamily: FONT }}><Loader2 size={22} style={{ animation: 'spin .8s linear infinite' }} /></div>
+          <div style={{ padding: '60px 0', textAlign: 'center', color: C.muted2, fontFamily: C.font }}><Ico ti="ti-loader-2" size={22} style={{ animation: 'spin .8s linear infinite' }} /></div>
         ) : (
-          <div style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 16, overflow: 'hidden' }}>
-            <div style={{ padding: '18px 20px', borderBottom: `1px solid ${BORDER}` }}>
+          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, overflow: 'hidden' }}>
+            <div style={{ padding: '18px 20px', borderBottom: `1px solid ${C.border}` }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
                 {subtypeBadge()}
                 <AiPostPill creation={c} onUpdated={(u) => setC(u)} onToast={showToast} />
-                <button onClick={copy} style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 5, background: 'none', border: 'none', cursor: 'pointer', color: copied ? GREEN : MUTED, fontSize: 12.5, fontWeight: 700, fontFamily: FONT }}>
-                  {copied ? <Check size={14} /> : <Copy size={14} />}{copied ? 'Copied' : 'Copy'}
+                <button onClick={copy} style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 5, background: 'none', border: 'none', cursor: 'pointer', color: copied ? GREEN : C.muted, fontSize: 12.5, fontWeight: 700, fontFamily: C.font }}>
+                  {copied ? <Ico ti="ti-check" size={14} /> : <Ico ti="ti-copy" size={14} />}{copied ? 'Copied' : 'Copy'}
                 </button>
               </div>
-              <div style={{ fontSize: 17, fontWeight: 800, color: INK, fontFamily: FONT }}>{c.topic || 'Untitled'}</div>
-              <div style={{ fontSize: 11.5, color: MUTED2, marginTop: 4, display: 'inline-flex', alignItems: 'center', gap: 4, fontFamily: FONT }}>
-                <Clock size={11} /> {fmtDateTime(c.created_at)}
+              <div style={{ fontSize: 17, fontWeight: 800, color: C.ink, fontFamily: C.font }}>{c.topic || 'Untitled'}</div>
+              <div style={{ fontSize: 11.5, color: C.muted2, marginTop: 4, display: 'inline-flex', alignItems: 'center', gap: 4, fontFamily: C.font }}>
+                <Ico ti="ti-clock" size={11} /> {fmtDateTime(c.created_at)}
                 {c.posted_at && <span style={{ color: GREEN, fontWeight: 700, marginLeft: 8 }}>· Posted {(c.posted_channels || []).length ? `to ${c.posted_channels.join(', ')}` : ''}</span>}
               </div>
             </div>
             {/* Media attachment */}
-            <div style={{ padding: '14px 20px', borderBottom: `1px solid ${BORDER}` }}>
-              <div style={{ fontSize: 11.5, fontWeight: 800, color: MUTED, textTransform: 'uppercase', letterSpacing: .4, marginBottom: 10, fontFamily: FONT }}>Media {c.media_url ? '' : '(needed for Instagram / TikTok)'}</div>
+            <div style={{ padding: '14px 20px', borderBottom: `1px solid ${C.border}` }}>
+              <div style={{ fontSize: 11.5, fontWeight: 800, color: C.muted, textTransform: 'uppercase', letterSpacing: .4, marginBottom: 10, fontFamily: C.font }}>Media {c.media_url ? '' : '(needed for Instagram / TikTok)'}</div>
               {c.media_url ? (
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, flexWrap: 'wrap' }}>
                   {c.media_type === 'video'
-                    ? <video src={c.media_url} controls style={{ width: 200, borderRadius: 10, border: `1px solid ${BORDER}` }} />
-                    : <img src={c.media_url} alt="attachment" style={{ width: 160, borderRadius: 10, border: `1px solid ${BORDER}` }} />}
-                  <button onClick={removeMedia} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 9, border: `1.5px solid ${RED}44`, background: `${RED}0C`, color: RED, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}><Trash2 size={14} /> Remove</button>
+                    ? <video src={c.media_url} controls style={{ width: 200, borderRadius: 10, border: `1px solid ${C.border}` }} />
+                    : <img src={c.media_url} alt="attachment" style={{ width: 160, borderRadius: 10, border: `1px solid ${C.border}` }} />}
+                  <button onClick={removeMedia} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 9, border: `1.5px solid ${RED}44`, background: `${RED}0C`, color: RED, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: C.font }}><Ico ti="ti-trash" size={14} /> Remove</button>
                 </div>
               ) : (
                 <>
                   <input ref={fileRef} type="file" accept="image/*,video/*" onChange={onPickMedia} style={{ display: 'none' }} />
-                  <button onClick={() => fileRef.current?.click()} disabled={uploading} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 16px', borderRadius: 9, border: `1.5px solid ${BORDER}`, background: WHITE, color: INK, fontSize: 12.5, fontWeight: 800, cursor: uploading ? 'default' : 'pointer', fontFamily: FONT }}>
-                    {uploading ? <Loader2 size={14} style={{ animation: 'spin .8s linear infinite' }} /> : <ImagePlus size={15} />}{uploading ? 'Uploading…' : 'Attach image or video'}
+                  <button onClick={() => fileRef.current?.click()} disabled={uploading} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 16px', borderRadius: 9, border: `1.5px solid ${C.border}`, background: C.surface, color: C.ink, fontSize: 12.5, fontWeight: 800, cursor: uploading ? 'default' : 'pointer', fontFamily: C.font }}>
+                    {uploading ? <Ico ti="ti-loader-2" size={14} style={{ animation: 'spin .8s linear infinite' }} /> : <Ico ti="ti-photo-plus" size={15} />}{uploading ? 'Uploading…' : 'Attach image or video'}
                   </button>
                 </>
               )}
             </div>
 
-            <div style={{ background: LIGHT }}>
+            <div style={{ background: C.bg }}>
               <ContentView content={c.content} kind={c.kind} />
             </div>
           </div>
@@ -121,7 +123,7 @@ export default function ContentCreationPage() {
 
       <style>{contentViewStyles}</style>
       {toast && (
-        <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: INK, color: WHITE, padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999, whiteSpace: 'nowrap', boxShadow: '0 4px 14px rgba(0,0,0,.2)' }}>{toast}</div>
+        <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: C.ink, color: '#fff', padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999, whiteSpace: 'nowrap', boxShadow: '0 4px 14px rgba(0,0,0,.2)' }}>{toast}</div>
       )}
     </PageLayout>
   );

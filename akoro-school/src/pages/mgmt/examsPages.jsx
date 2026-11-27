@@ -1,29 +1,31 @@
 /** Offline + Online Examinations module pages (mgmt schema). */
 import { useState, useEffect, useCallback } from 'react';
-import { ClipboardList, CalendarDays, FileCheck, Layers, Upload, Loader2, Save, Printer } from 'lucide-react';
+import { ClipboardList, CalendarDays, FileCheck, Layers, Upload } from 'lucide-react';
 import { PageLayout } from '../../components/Layout.jsx';
 import ResourcePage, { inputStyle } from '../../components/mgmt/ResourcePage.jsx';
 import StatCards from '../../components/mgmt/StatCards.jsx';
 import { apiGet, apiPost } from '../../services/api.js';
-import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, BLUE, PURPLE, FONT } from '../../constants.js';
+import { GREEN, RED, BLUE, PURPLE } from '../../constants.js';
+import { C, tint } from '../../theme/colors.js';
+import { Ico } from '../../theme/Ico.jsx';
 
 const BASE = '/api/school/mgmt';
 const studentOpts = { resource: 'students', labelFn: (r) => `${r.first_name} ${r.last_name} (${r.admission_no})` };
 const pill = (v, map) => {
-  const c = map[v] || MUTED2;
-  return <span style={{ padding: '3px 10px', borderRadius: 999, background: `${c}15`, color: c, fontSize: 11, fontWeight: 800, textTransform: 'capitalize' }}>{v}</span>;
+  const c = map[v] || C.muted2;
+  return <span style={{ padding: '3px 10px', borderRadius: 999, background: tint(8, c), color: c, fontSize: 11, fontWeight: 800, textTransform: 'capitalize' }}>{v}</span>;
 };
 
 export function ExamDashboardPage() {
   const [s, setS] = useState(null);
   useEffect(() => { apiGet(`${BASE}/dashboard/exams`).then((r) => setS(r.data)).catch(() => setS({})); }, []);
   const cards = s ? [
-    { n: s.exams, label: 'Exams', icon: ClipboardList, c: BLUE, to: '/mgmt/offline-exams' },
-    { n: s.upcoming, label: 'Upcoming', icon: CalendarDays, c: AMBER, to: '/mgmt/offline-exams' },
-    { n: s.schedules, label: 'Scheduled Papers', icon: Layers, c: PURPLE, to: '/mgmt/exam-schedules' },
-    { n: s.marksEntered, label: 'Marks Entered', icon: FileCheck, c: GREEN, to: '/mgmt/enter-marks' },
-    { n: s.examTypes, label: 'Exam Types', icon: Layers, c: BLUE, to: '/mgmt/exam-types' },
-    { n: s.uploads, label: 'Marksheet Uploads', icon: Upload, c: AMBER, to: '/mgmt/manage-uploads' },
+    { n: s.exams, label: 'Exams', icon: ClipboardList, ti: 'ti-clipboard-list', c: BLUE, to: '/mgmt/offline-exams' },
+    { n: s.upcoming, label: 'Upcoming', icon: CalendarDays, ti: 'ti-calendar', c: C.brand, to: '/mgmt/offline-exams' },
+    { n: s.schedules, label: 'Scheduled Papers', icon: Layers, ti: 'ti-stack-2', c: PURPLE, to: '/mgmt/exam-schedules' },
+    { n: s.marksEntered, label: 'Marks Entered', icon: FileCheck, ti: 'ti-file-check', c: GREEN, to: '/mgmt/enter-marks' },
+    { n: s.examTypes, label: 'Exam Types', icon: Layers, ti: 'ti-stack-2', c: BLUE, to: '/mgmt/exam-types' },
+    { n: s.uploads, label: 'Marksheet Uploads', icon: Upload, ti: 'ti-upload', c: C.brand, to: '/mgmt/manage-uploads' },
   ] : [];
   return <PageLayout title="Exam Dashboard" subtitle="Offline examination overview"><StatCards cards={cards} loading={!s} /></PageLayout>;
 }
@@ -33,7 +35,7 @@ export function ManageOfflineExamsPage() {
   return <ResourcePage title="Manage Offline Exams" subtitle="Exam events" resource="exams"
     columns={[
       { key: 'name', label: 'Exam' }, { key: 'exam_type_name', label: 'Type' }, { key: 'session_name', label: 'Session' },
-      { key: 'starts_on', label: 'Starts' }, { key: 'status', label: 'Status', render: (r) => pill(r.status, { upcoming: AMBER, ongoing: BLUE, completed: GREEN }) },
+      { key: 'starts_on', label: 'Starts' }, { key: 'status', label: 'Status', render: (r) => pill(r.status, { upcoming: C.brand, ongoing: BLUE, completed: GREEN }) },
     ]}
     fields={[
       { key: 'name', label: 'Exam Name', required: true },
@@ -104,32 +106,32 @@ export function EnterMarksPage() {
       </select>
 
       {register && (
-        <div style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 14, overflow: 'hidden' }}>
+        <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, overflow: 'hidden' }}>
           {register.length === 0 ? (
-            <div style={{ padding: '30px', textAlign: 'center', color: MUTED2, fontSize: 13, fontFamily: FONT }}>No active students in that class.</div>
+            <div style={{ padding: '30px', textAlign: 'center', color: C.muted2, fontSize: 13, fontFamily: C.font }}>No active students in that class.</div>
           ) : (
             <>
               {register.map((s) => (
-                <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', borderBottom: `1px solid ${BORDER}`, fontFamily: FONT }}>
+                <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', borderBottom: `1px solid ${C.border}`, fontFamily: C.font }}>
                   <div style={{ flex: 1 }}>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: INK }}>{s.name}</span>
-                    <span style={{ fontSize: 11, color: MUTED2, marginLeft: 8 }}>{s.admission_no}</span>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: C.ink }}>{s.name}</span>
+                    <span style={{ fontSize: 11, color: C.muted2, marginLeft: 8 }}>{s.admission_no}</span>
                   </div>
                   <input type="number" min="0" max={maxMarks} value={s.marks ?? ''} placeholder={`/ ${maxMarks}`}
                     onChange={(e) => setRegister((prev) => prev.map((r) => (r.id === s.id ? { ...r, marks: e.target.value } : r)))}
                     style={{ ...inputStyle, width: 110 }} />
                 </div>
               ))}
-              <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '14px 16px', background: LIGHT }}>
-                <button onClick={save} disabled={saving} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '11px 22px', borderRadius: 10, border: 'none', background: saving ? '#E5E7EB' : `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: saving ? '#9CA3AF' : WHITE, fontSize: 13, fontWeight: 800, cursor: saving ? 'default' : 'pointer', fontFamily: FONT }}>
-                  {saving ? <Loader2 size={14} style={{ animation: 'spin .8s linear infinite' }} /> : <Save size={14} />} Save Marks
+              <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '14px 16px', background: C.bg }}>
+                <button onClick={save} disabled={saving} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '11px 22px', borderRadius: 10, border: 'none', background: saving ? C.borderSoft : `linear-gradient(135deg, ${C.brand}, ${C.brandDeep})`, color: saving ? C.muted2 : '#fff', fontSize: 13, fontWeight: 800, cursor: saving ? 'default' : 'pointer', fontFamily: C.font }}>
+                  {saving ? <Ico ti="ti-loader-2" size={14} style={{ animation: 'spin .8s linear infinite' }} /> : <Ico ti="ti-device-floppy" size={14} />} Save Marks
                 </button>
               </div>
             </>
           )}
         </div>
       )}
-      {toast && <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: INK, color: WHITE, padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999 }}>{toast}</div>}
+      {toast && <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: C.hero, color: '#fff', padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999 }}>{toast}</div>}
     </PageLayout>
   );
 }
@@ -199,29 +201,29 @@ export function GenerateMarksheetPage() {
         <select value={classId} onChange={(e) => setClassId(e.target.value)} style={{ ...inputStyle, width: 160, cursor: 'pointer' }}>
           <option value="">— class —</option>{classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
-        <button onClick={generate} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 16px', borderRadius: 9, border: 'none', background: BLUE, color: WHITE, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
-          <Printer size={13} /> {loading ? 'Generating…' : 'Generate'}
+        <button onClick={generate} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 16px', borderRadius: 9, border: 'none', background: BLUE, color: '#fff', fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: C.font }}>
+          <Ico ti="ti-printer" size={13} /> {loading ? 'Generating…' : 'Generate'}
         </button>
       </div>
 
       {sheet && (
-        <div style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 14, overflow: 'auto' }}>
+        <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, overflow: 'auto' }}>
           {!sheet.subjects?.length ? (
-            <div style={{ padding: '30px', textAlign: 'center', color: MUTED2, fontSize: 13, fontFamily: FONT }}>No scheduled papers for that exam/class yet.</div>
+            <div style={{ padding: '30px', textAlign: 'center', color: C.muted2, fontSize: 13, fontFamily: C.font }}>No scheduled papers for that exam/class yet.</div>
           ) : (
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: FONT, minWidth: 640 }}>
-              <thead><tr style={{ background: LIGHT }}>
-                <th style={{ textAlign: 'left', padding: '10px 14px', fontSize: 10.5, fontWeight: 800, color: MUTED2 }}>STUDENT</th>
-                {sheet.subjects.map((s) => <th key={s.id} style={{ textAlign: 'center', padding: '10px 10px', fontSize: 10.5, fontWeight: 800, color: MUTED2 }}>{s.name.toUpperCase()}</th>)}
-                <th style={{ textAlign: 'center', padding: '10px 14px', fontSize: 10.5, fontWeight: 800, color: MUTED2 }}>TOTAL</th>
-                <th style={{ textAlign: 'center', padding: '10px 14px', fontSize: 10.5, fontWeight: 800, color: MUTED2 }}>%</th>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: C.font, minWidth: 640 }}>
+              <thead><tr style={{ background: C.bg }}>
+                <th style={{ textAlign: 'left', padding: '10px 14px', fontSize: 10.5, fontWeight: 800, color: C.muted2 }}>STUDENT</th>
+                {sheet.subjects.map((s) => <th key={s.id} style={{ textAlign: 'center', padding: '10px 10px', fontSize: 10.5, fontWeight: 800, color: C.muted2 }}>{s.name.toUpperCase()}</th>)}
+                <th style={{ textAlign: 'center', padding: '10px 14px', fontSize: 10.5, fontWeight: 800, color: C.muted2 }}>TOTAL</th>
+                <th style={{ textAlign: 'center', padding: '10px 14px', fontSize: 10.5, fontWeight: 800, color: C.muted2 }}>%</th>
               </tr></thead>
               <tbody>
                 {sheet.data.map((r) => (
-                  <tr key={r.student_id} style={{ borderTop: `1px solid ${BORDER}` }}>
-                    <td style={{ padding: '10px 14px', fontSize: 12.5, fontWeight: 700, color: INK }}>{r.name}<span style={{ fontSize: 10.5, color: MUTED2, marginLeft: 6 }}>{r.admission_no}</span></td>
-                    {r.scores.map((v, i) => <td key={i} style={{ padding: '10px', textAlign: 'center', fontSize: 12.5, color: v === null ? MUTED2 : INK }}>{v === null ? '—' : v}</td>)}
-                    <td style={{ padding: '10px 14px', textAlign: 'center', fontSize: 12.5, fontWeight: 800, color: INK }}>{r.total}</td>
+                  <tr key={r.student_id} style={{ borderTop: `1px solid ${C.border}` }}>
+                    <td style={{ padding: '10px 14px', fontSize: 12.5, fontWeight: 700, color: C.ink }}>{r.name}<span style={{ fontSize: 10.5, color: C.muted2, marginLeft: 6 }}>{r.admission_no}</span></td>
+                    {r.scores.map((v, i) => <td key={i} style={{ padding: '10px', textAlign: 'center', fontSize: 12.5, color: v === null ? C.muted2 : C.ink }}>{v === null ? '—' : v}</td>)}
+                    <td style={{ padding: '10px 14px', textAlign: 'center', fontSize: 12.5, fontWeight: 800, color: C.ink }}>{r.total}</td>
                     <td style={{ padding: '10px 14px', textAlign: 'center', fontSize: 12.5, fontWeight: 800, color: r.percent >= 40 ? GREEN : RED }}>{r.percent}%</td>
                   </tr>
                 ))}
@@ -273,7 +275,7 @@ export function ManageOnlineExamsPage() {
     columns={[
       { key: 'title', label: 'Exam' }, { key: 'class_name', label: 'Class' }, { key: 'subject_name', label: 'Subject' },
       { key: 'exam_date', label: 'Date' }, { key: 'duration_minutes', label: 'Duration (min)' },
-      { key: 'status', label: 'Status', render: (r) => pill(r.status, { draft: AMBER, published: GREEN, closed: MUTED2 }) },
+      { key: 'status', label: 'Status', render: (r) => pill(r.status, { draft: C.brand, published: GREEN, closed: C.muted2 }) },
     ]}
     fields={[
       { key: 'title', label: 'Exam Title', required: true },

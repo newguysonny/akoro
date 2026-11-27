@@ -1,30 +1,32 @@
 /** Library + Inventory module pages (mgmt schema). */
 import { useState, useEffect, useCallback } from 'react';
-import { Library, BookOpen, PackageOpen, Package, AlertTriangle, ShoppingCart, Truck, Loader2, Save, Undo2 } from 'lucide-react';
+import { Library, BookOpen, PackageOpen, Package, AlertTriangle, ShoppingCart, Truck, Undo2 } from 'lucide-react';
 import { PageLayout } from '../../components/Layout.jsx';
 import ResourcePage, { inputStyle } from '../../components/mgmt/ResourcePage.jsx';
 import StatCards from '../../components/mgmt/StatCards.jsx';
 import { apiGet, apiPost } from '../../services/api.js';
-import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, BLUE, PURPLE, FONT } from '../../constants.js';
+import { GREEN, RED, BLUE, PURPLE } from '../../constants.js';
+import { C, tint } from '../../theme/colors.js';
+import { Ico } from '../../theme/Ico.jsx';
 
 const BASE = '/api/school/mgmt';
 const naira = (n) => `₦${Number(n || 0).toLocaleString('en-NG')}`;
 const pill = (v, map) => {
-  const c = map[v] || MUTED2;
-  return <span style={{ padding: '3px 10px', borderRadius: 999, background: `${c}15`, color: c, fontSize: 11, fontWeight: 800, textTransform: 'capitalize' }}>{v}</span>;
+  const c = map[v] || C.muted2;
+  return <span style={{ padding: '3px 10px', borderRadius: 999, background: tint(8, c), color: c, fontSize: 11, fontWeight: 800, textTransform: 'capitalize' }}>{v}</span>;
 };
-const lbl = { fontSize: 12, fontWeight: 700, color: INK, fontFamily: FONT, display: 'block', marginBottom: 5 };
+const lbl = { fontSize: 12, fontWeight: 700, color: C.ink, fontFamily: C.font, display: 'block', marginBottom: 5 };
 
 /* ═══ LIBRARY ═══ */
 export function LibraryDashboardPage() {
   const [s, setS] = useState(null);
   useEffect(() => { apiGet(`${BASE}/dashboard/library`).then((r) => setS(r.data)).catch(() => setS({})); }, []);
   const cards = s ? [
-    { n: s.titles, label: 'Book Titles', icon: Library, c: BLUE, to: '/mgmt/manage-books' },
-    { n: s.totalCopies, label: 'Total Copies', icon: BookOpen, c: PURPLE, to: '/mgmt/manage-books' },
-    { n: s.availableCopies, label: 'Available Copies', icon: BookOpen, c: GREEN, to: '/mgmt/manage-books' },
-    { n: s.activeLoans, label: 'Books Out', icon: Undo2, c: AMBER, to: '/mgmt/issue-return-book' },
-    { n: s.categories, label: 'Categories', icon: Library, c: BLUE, to: '/mgmt/book-categories' },
+    { n: s.titles, label: 'Book Titles', icon: Library, ti: 'ti-books', c: BLUE, to: '/mgmt/manage-books' },
+    { n: s.totalCopies, label: 'Total Copies', icon: BookOpen, ti: 'ti-book', c: PURPLE, to: '/mgmt/manage-books' },
+    { n: s.availableCopies, label: 'Available Copies', icon: BookOpen, ti: 'ti-book', c: GREEN, to: '/mgmt/manage-books' },
+    { n: s.activeLoans, label: 'Books Out', icon: Undo2, ti: 'ti-arrow-back-up', c: C.brand, to: '/mgmt/issue-return-book' },
+    { n: s.categories, label: 'Categories', icon: Library, ti: 'ti-books', c: BLUE, to: '/mgmt/book-categories' },
   ] : [];
   return <PageLayout title="Library Dashboard" subtitle="Collection and loans at a glance"><StatCards cards={cards} loading={!s} /></PageLayout>;
 }
@@ -68,8 +70,8 @@ export function IssueReturnBookPage() {
   return (
     <PageLayout title="Issue / Return Book" subtitle="Lend and collect library books">
       <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-        <div style={{ flex: '1 1 300px', maxWidth: 400, background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 14, padding: '20px 22px' }}>
-          <p style={{ fontSize: 13.5, fontWeight: 800, color: INK, margin: '0 0 14px', fontFamily: FONT }}>Issue a Book</p>
+        <div style={{ flex: '1 1 300px', maxWidth: 400, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: '20px 22px' }}>
+          <p style={{ fontSize: 13.5, fontWeight: 800, color: C.ink, margin: '0 0 14px', fontFamily: C.font }}>Issue a Book</p>
           <label style={lbl}>Book</label>
           <select value={bookId} onChange={(e) => setBookId(e.target.value)} style={{ ...inputStyle, cursor: 'pointer', marginBottom: 12 }}>
             <option value="">— select book —</option>
@@ -84,29 +86,29 @@ export function IssueReturnBookPage() {
           <input value={borrower} onChange={(e) => setBorrower(e.target.value)} placeholder="Staff / external borrower" style={{ ...inputStyle, marginBottom: 12 }} />
           <label style={lbl}>Due Date</label>
           <input type="date" value={dueOn} onChange={(e) => setDueOn(e.target.value)} style={{ ...inputStyle, marginBottom: 16 }} />
-          <button onClick={issue} disabled={busy} style={{ width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '12px', borderRadius: 10, border: 'none', background: busy ? '#E5E7EB' : `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: busy ? '#9CA3AF' : WHITE, fontSize: 13.5, fontWeight: 800, cursor: busy ? 'default' : 'pointer', fontFamily: FONT }}>
-            {busy ? <Loader2 size={14} style={{ animation: 'spin .8s linear infinite' }} /> : <BookOpen size={14} />} Issue Book
+          <button onClick={issue} disabled={busy} style={{ width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '12px', borderRadius: 10, border: 'none', background: busy ? C.borderSoft : `linear-gradient(135deg, ${C.brand}, ${C.brandDeep})`, color: busy ? C.muted2 : '#fff', fontSize: 13.5, fontWeight: 800, cursor: busy ? 'default' : 'pointer', fontFamily: C.font }}>
+            {busy ? <Ico ti="ti-loader-2" size={14} style={{ animation: 'spin .8s linear infinite' }} /> : <Ico ti="ti-book" size={14} />} Issue Book
           </button>
         </div>
 
-        <div style={{ flex: '1.4 1 380px', background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 14, overflow: 'hidden' }}>
-          <div style={{ padding: '12px 16px', borderBottom: `1px solid ${BORDER}`, fontFamily: FONT, fontSize: 13, fontWeight: 800, color: INK }}>Books Out ({loans.length})</div>
+        <div style={{ flex: '1.4 1 380px', background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, overflow: 'hidden' }}>
+          <div style={{ padding: '12px 16px', borderBottom: `1px solid ${C.border}`, fontFamily: C.font, fontSize: 13, fontWeight: 800, color: C.ink }}>Books Out ({loans.length})</div>
           {loans.length === 0 ? (
-            <div style={{ padding: '26px', textAlign: 'center', color: MUTED2, fontSize: 12.5, fontFamily: FONT }}>No books currently on loan.</div>
+            <div style={{ padding: '26px', textAlign: 'center', color: C.muted2, fontSize: 12.5, fontFamily: C.font }}>No books currently on loan.</div>
           ) : loans.map((l) => (
-            <div key={l.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', borderBottom: `1px solid ${BORDER}`, fontFamily: FONT, flexWrap: 'wrap' }}>
+            <div key={l.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', borderBottom: `1px solid ${C.border}`, fontFamily: C.font, flexWrap: 'wrap' }}>
               <div style={{ flex: 1, minWidth: 180 }}>
-                <span style={{ fontSize: 12.5, fontWeight: 700, color: INK }}>{l.book_name}</span>
-                <span style={{ display: 'block', fontSize: 11, color: MUTED2 }}>{l.student_name || l.borrower_name || 'Unknown'} · due {l.due_on || '—'}</span>
+                <span style={{ fontSize: 12.5, fontWeight: 700, color: C.ink }}>{l.book_name}</span>
+                <span style={{ display: 'block', fontSize: 11, color: C.muted2 }}>{l.student_name || l.borrower_name || 'Unknown'} · due {l.due_on || '—'}</span>
               </div>
-              <button onClick={() => doReturn(l.id)} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 8, border: 'none', background: `${GREEN}15`, color: GREEN, fontSize: 11.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
-                <Undo2 size={12} /> Return
+              <button onClick={() => doReturn(l.id)} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 8, border: 'none', background: tint(8, GREEN), color: GREEN, fontSize: 11.5, fontWeight: 800, cursor: 'pointer', fontFamily: C.font }}>
+                <Ico ti="ti-arrow-back-up" size={12} /> Return
               </button>
             </div>
           ))}
         </div>
       </div>
-      {toast && <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: INK, color: WHITE, padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999 }}>{toast}</div>}
+      {toast && <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: C.hero, color: '#fff', padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999 }}>{toast}</div>}
     </PageLayout>
   );
 }
@@ -139,12 +141,12 @@ export function InventoryDashboardPage() {
   const [s, setS] = useState(null);
   useEffect(() => { apiGet(`${BASE}/dashboard/inventory`).then((r) => setS(r.data)).catch(() => setS({})); }, []);
   const cards = s ? [
-    { n: s.items, label: 'Items', icon: Package, c: BLUE, to: '/mgmt/item-list' },
-    { n: s.lowStock, label: 'Low Stock', icon: AlertTriangle, c: RED, to: '/mgmt/item-list' },
-    { n: naira(s.stockValue), label: 'Stock Value', icon: Package, c: GREEN },
-    { n: naira(s.salesTotal), label: 'POS Sales', icon: ShoppingCart, c: PURPLE, to: '/mgmt/sales-history' },
-    { n: s.suppliers, label: 'Suppliers', icon: Truck, c: AMBER, to: '/mgmt/suppliers' },
-    { n: s.openOrders, label: 'Open Purchase Orders', icon: PackageOpen, c: BLUE, to: '/mgmt/purchase-orders' },
+    { n: s.items, label: 'Items', icon: Package, ti: 'ti-package', c: BLUE, to: '/mgmt/item-list' },
+    { n: s.lowStock, label: 'Low Stock', icon: AlertTriangle, ti: 'ti-alert-triangle', c: RED, to: '/mgmt/item-list' },
+    { n: naira(s.stockValue), label: 'Stock Value', icon: Package, ti: 'ti-package', c: GREEN },
+    { n: naira(s.salesTotal), label: 'POS Sales', icon: ShoppingCart, ti: 'ti-shopping-cart', c: PURPLE, to: '/mgmt/sales-history' },
+    { n: s.suppliers, label: 'Suppliers', icon: Truck, ti: 'ti-truck', c: C.brand, to: '/mgmt/suppliers' },
+    { n: s.openOrders, label: 'Open Purchase Orders', icon: PackageOpen, ti: 'ti-package', c: BLUE, to: '/mgmt/purchase-orders' },
   ] : [];
   return <PageLayout title="Inventory Dashboard" subtitle="Stock, sales and suppliers"><StatCards cards={cards} loading={!s} /></PageLayout>;
 }
@@ -183,7 +185,7 @@ function InventoryTxnPage({ title, subtitle, endpoint, cta, fields, listResource
   return (
     <PageLayout title={title} subtitle={subtitle}>
       <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-        <div style={{ flex: '1 1 300px', maxWidth: 380, background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 14, padding: '20px 22px' }}>
+        <div style={{ flex: '1 1 300px', maxWidth: 380, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: '20px 22px' }}>
           {fields.map((f) => (
             <div key={f.key} style={{ marginBottom: 12 }}>
               <label style={lbl}>{f.label}</label>
@@ -197,29 +199,29 @@ function InventoryTxnPage({ title, subtitle, endpoint, cta, fields, listResource
               )}
             </div>
           ))}
-          <button onClick={submit} disabled={busy} style={{ width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '12px', borderRadius: 10, border: 'none', background: busy ? '#E5E7EB' : `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: busy ? '#9CA3AF' : WHITE, fontSize: 13.5, fontWeight: 800, cursor: busy ? 'default' : 'pointer', fontFamily: FONT, marginTop: 4 }}>
-            {busy ? <Loader2 size={14} style={{ animation: 'spin .8s linear infinite' }} /> : <Save size={14} />} {cta}
+          <button onClick={submit} disabled={busy} style={{ width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '12px', borderRadius: 10, border: 'none', background: busy ? C.borderSoft : `linear-gradient(135deg, ${C.brand}, ${C.brandDeep})`, color: busy ? C.muted2 : '#fff', fontSize: 13.5, fontWeight: 800, cursor: busy ? 'default' : 'pointer', fontFamily: C.font, marginTop: 4 }}>
+            {busy ? <Ico ti="ti-loader-2" size={14} style={{ animation: 'spin .8s linear infinite' }} /> : <Ico ti="ti-device-floppy" size={14} />} {cta}
           </button>
         </div>
 
-        <div style={{ flex: '1.4 1 380px', background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 14, overflow: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: FONT, minWidth: 460 }}>
-            <thead><tr style={{ background: LIGHT }}>
-              {columns.map((c) => <th key={c.key} style={{ textAlign: 'left', padding: '10px 14px', fontSize: 10.5, fontWeight: 800, color: MUTED2 }}>{c.label.toUpperCase()}</th>)}
+        <div style={{ flex: '1.4 1 380px', background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, overflow: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: C.font, minWidth: 460 }}>
+            <thead><tr style={{ background: C.bg }}>
+              {columns.map((c) => <th key={c.key} style={{ textAlign: 'left', padding: '10px 14px', fontSize: 10.5, fontWeight: 800, color: C.muted2 }}>{c.label.toUpperCase()}</th>)}
             </tr></thead>
             <tbody>
               {rows.length === 0 ? (
-                <tr><td colSpan={columns.length} style={{ padding: '26px', textAlign: 'center', color: MUTED2, fontSize: 12.5 }}>No records yet.</td></tr>
+                <tr><td colSpan={columns.length} style={{ padding: '26px', textAlign: 'center', color: C.muted2, fontSize: 12.5 }}>No records yet.</td></tr>
               ) : rows.slice(0, 20).map((r) => (
-                <tr key={r.id} style={{ borderTop: `1px solid ${BORDER}` }}>
-                  {columns.map((c) => <td key={c.key} style={{ padding: '10px 14px', fontSize: 12.5, color: INK }}>{c.render ? c.render(r) : (r[c.key] ?? '—')}</td>)}
+                <tr key={r.id} style={{ borderTop: `1px solid ${C.border}` }}>
+                  {columns.map((c) => <td key={c.key} style={{ padding: '10px 14px', fontSize: 12.5, color: C.ink }}>{c.render ? c.render(r) : (r[c.key] ?? '—')}</td>)}
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       </div>
-      {toast && <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: INK, color: WHITE, padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999 }}>{toast}</div>}
+      {toast && <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: C.hero, color: '#fff', padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999 }}>{toast}</div>}
     </PageLayout>
   );
 }
@@ -316,7 +318,7 @@ export function PurchaseOrdersPage() {
     columns={[
       { key: 'order_no', label: 'Order No' }, { key: 'supplier_name', label: 'Supplier' },
       { key: 'total_amount', label: 'Total', render: (r) => naira(r.total_amount) },
-      { key: 'status', label: 'Status', render: (r) => pill(r.status, { draft: MUTED2, ordered: AMBER, received: GREEN, cancelled: RED }) },
+      { key: 'status', label: 'Status', render: (r) => pill(r.status, { draft: C.muted2, ordered: C.brand, received: GREEN, cancelled: RED }) },
       { key: 'ordered_on', label: 'Date' },
     ]}
     fields={[

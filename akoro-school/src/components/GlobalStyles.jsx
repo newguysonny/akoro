@@ -7,8 +7,8 @@ export default function GlobalStyles() {
 
       body {
         font-family: 'DM Sans', sans-serif;
-        background: #FAF8F5;
-        color: #1A1A2E;
+        background: var(--ak-bg);
+        color: var(--ak-text);
         -webkit-font-smoothing: antialiased;
       }
 
@@ -69,7 +69,7 @@ export default function GlobalStyles() {
       .sidebar {
         width: 240px;
         flex-shrink: 0;
-        background: #1A1A2E;
+        background: var(--ak-hero);
         display: flex;
         flex-direction: column;
         overflow-y: auto;
@@ -78,18 +78,18 @@ export default function GlobalStyles() {
       .main-content {
         flex: 1;
         overflow-y: auto;
-        background: #FAF8F5;
+        background: var(--ak-bg);
       }
 
       /* Scrollbar */
       ::-webkit-scrollbar { width: 6px; height: 6px; }
       ::-webkit-scrollbar-track { background: transparent; }
-      ::-webkit-scrollbar-thumb { background: #EDE8E1; border-radius: 3px; }
+      ::-webkit-scrollbar-thumb { background: var(--ak-border); border-radius: 3px; }
       ::-webkit-scrollbar-thumb:hover { background: #D4CFC8; }
 
       /* Skeleton shimmer */
       .skeleton {
-        background: linear-gradient(90deg, #EDE8E1 25%, #F5F2EE 50%, #EDE8E1 75%);
+        background: linear-gradient(90deg, var(--ak-skel-1, #EDE8E1) 25%, var(--ak-skel-2, #F5F2EE) 50%, var(--ak-skel-1, #EDE8E1) 75%);
         background-size: 200% 100%;
         animation: shimmer 1.5s infinite;
         border-radius: 8px;

@@ -1,17 +1,19 @@
 import { useState, useEffect } from 'react';
-import {Star, Info, Search, Braces, Droplet, Share2, Layers, Save, Loader2, GripVertical, Facebook, Twitter, Instagram, Youtube, Linkedin, MessageCircle, Palette } from 'lucide-react';
+import {Star, Info, Search, Braces, Droplet, Share2, Layers, Facebook, Twitter, Instagram, Youtube, Linkedin, MessageCircle } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import { apiGet, apiPut, apiPost } from '../services/api.js';
-import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, BLUE, FONT } from '../constants.js';
+import { GREEN, RED, BLUE } from '../constants.js';
+import { C, tint } from '../theme/colors.js';
+import { Ico } from '../theme/Ico.jsx';
 
 /* ── Reusable bits ───────────────────────────────────────────────────────── */
-const inputStyle = { width: '100%', padding: '10px 13px', borderRadius: 10, border: `1.5px solid ${BORDER}`, outline: 'none', fontSize: 13.5, fontFamily: FONT, color: INK, background: WHITE, boxSizing: 'border-box' };
-function Card({ icon: Icon, iconColor, title, children }) {
+const inputStyle = { width: '100%', padding: '10px 13px', borderRadius: 10, border: `1.5px solid ${C.border}`, outline: 'none', fontSize: 13.5, fontFamily: C.font, color: C.ink, background: C.surface, boxSizing: 'border-box' };
+function Card({ icon: Icon, ti, iconColor, title, children }) {
   return (
-    <div style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 14, padding: '16px 18px', marginBottom: 14 }}>
+    <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: '16px 18px', marginBottom: 14 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 14 }}>
-        <Icon size={16} color={iconColor || AMBER} />
-        <span style={{ fontSize: 13.5, fontWeight: 800, color: INK, fontFamily: FONT }}>{title}</span>
+        <Ico lucide={Icon} ti={ti} size={16} color={iconColor || C.brand} />
+        <span style={{ fontSize: 13.5, fontWeight: 800, color: C.ink, fontFamily: C.font }}>{title}</span>
       </div>
       {children}
     </div>
@@ -20,9 +22,9 @@ function Card({ icon: Icon, iconColor, title, children }) {
 function Field({ label, hint, children }) {
   return (
     <div style={{ marginBottom: 14 }}>
-      <label style={{ fontSize: 12.5, fontWeight: 700, color: INK, fontFamily: FONT, display: 'block', marginBottom: 6 }}>{label}</label>
+      <label style={{ fontSize: 12.5, fontWeight: 700, color: C.ink, fontFamily: C.font, display: 'block', marginBottom: 6 }}>{label}</label>
       {children}
-      {hint && <p style={{ fontSize: 11, color: MUTED2, margin: '5px 0 0', fontFamily: FONT }}>{hint}</p>}
+      {hint && <p style={{ fontSize: 11, color: C.muted2, margin: '5px 0 0', fontFamily: C.font }}>{hint}</p>}
     </div>
   );
 }
@@ -30,19 +32,19 @@ function ColorField({ label, value, onChange }) {
   return (
     <Field label={label}>
       <div style={{ display: 'flex', gap: 8 }}>
-        <input type="color" value={value} onChange={(e) => onChange(e.target.value)} style={{ width: 44, height: 38, borderRadius: 10, border: `1.5px solid ${BORDER}`, padding: 2, cursor: 'pointer', background: WHITE }} />
+        <input type="color" value={value} onChange={(e) => onChange(e.target.value)} style={{ width: 44, height: 38, borderRadius: 10, border: `1.5px solid ${C.border}`, padding: 2, cursor: 'pointer', background: C.surface }} />
         <input value={value} onChange={(e) => onChange(e.target.value)} style={{ ...inputStyle, flex: 1, fontFamily: 'ui-monospace, Menlo, monospace' }} />
       </div>
     </Field>
   );
 }
 const SOCIAL_FIELDS = [
-  { key: 'facebook', icon: Facebook, placeholder: 'Facebook URL' },
-  { key: 'twitter', icon: Twitter, placeholder: 'Twitter URL' },
-  { key: 'instagram', icon: Instagram, placeholder: 'Instagram URL' },
-  { key: 'youtube', icon: Youtube, placeholder: 'Youtube URL' },
-  { key: 'linkedin', icon: Linkedin, placeholder: 'Linkedin URL' },
-  { key: 'whatsapp', icon: MessageCircle, placeholder: 'Whatsapp number' },
+  { key: 'facebook', icon: Facebook, ti: 'ti-brand-facebook', placeholder: 'Facebook URL' },
+  { key: 'twitter', icon: Twitter, ti: 'ti-brand-twitter', placeholder: 'Twitter URL' },
+  { key: 'instagram', icon: Instagram, ti: 'ti-brand-instagram', placeholder: 'Instagram URL' },
+  { key: 'youtube', icon: Youtube, ti: 'ti-brand-youtube', placeholder: 'Youtube URL' },
+  { key: 'linkedin', icon: Linkedin, ti: 'ti-brand-linkedin', placeholder: 'Linkedin URL' },
+  { key: 'whatsapp', icon: MessageCircle, ti: 'ti-brand-whatsapp', placeholder: 'Whatsapp number' },
 ];
 const DEFAULT_SECTIONS = [
   { key: 'hero', label: 'Hero', on: true }, { key: 'about', label: 'About', on: true },
@@ -120,22 +122,22 @@ export default function AppearancePage() {
   return (
     <PageLayout title="Appearance" subtitle="Design your website's home page and global look — with a live preview">
       <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-        {saved && <span style={{ fontSize: 12.5, fontWeight: 700, color: GREEN, fontFamily: FONT }}>Saved ✓</span>}
-        <button onClick={save} disabled={saving || loading} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 22px', borderRadius: 10, border: 'none', background: saving ? '#E5E7EB' : `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: saving ? '#9CA3AF' : WHITE, fontSize: 13.5, fontWeight: 800, cursor: saving ? 'default' : 'pointer', fontFamily: FONT }}>
-          {saving ? <Loader2 size={15} style={{ animation: 'spin .8s linear infinite' }} /> : <Save size={15} />} {saving ? 'Saving…' : 'Save Appearance'}
+        {saved && <span style={{ fontSize: 12.5, fontWeight: 700, color: GREEN, fontFamily: C.font }}>Saved ✓</span>}
+        <button onClick={save} disabled={saving || loading} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 22px', borderRadius: 10, border: 'none', background: saving ? C.borderSoft : `linear-gradient(135deg, ${C.brand}, ${C.brandDeep})`, color: saving ? C.muted2 : '#fff', fontSize: 13.5, fontWeight: 800, cursor: saving ? 'default' : 'pointer', fontFamily: C.font }}>
+          {saving ? <Ico ti="ti-loader-2" size={15} style={{ animation: 'spin .8s linear infinite' }} /> : <Ico ti="ti-device-floppy" size={15} />} {saving ? 'Saving…' : 'Save Appearance'}
         </button>
       </div>
 
       {loading ? (
-        <div style={{ padding: '60px 0', textAlign: 'center', color: MUTED2, fontFamily: FONT }}><Loader2 size={22} style={{ animation: 'spin .8s linear infinite' }} /></div>
+        <div style={{ padding: '60px 0', textAlign: 'center', color: C.muted2, fontFamily: C.font }}><Ico ti="ti-loader-2" size={22} style={{ animation: 'spin .8s linear infinite' }} /></div>
       ) : (
         <div style={{ display: 'flex', gap: 18, alignItems: 'flex-start', flexWrap: 'wrap' }}>
           {/* Left: panels */}
           <div style={{ flex: '1 1 380px', minWidth: 320, maxWidth: 480, maxHeight: 'calc(100vh - 170px)', overflowY: 'auto', paddingRight: 4 }}>
             {templateActive && (
-              <div style={{ background: `${BLUE}0C`, border: `1px solid ${BLUE}33`, borderRadius: 12, padding: '13px 16px', marginBottom: 14, fontFamily: FONT }}>
-                <div style={{ fontSize: 12.5, fontWeight: 800, color: INK, marginBottom: 4 }}><Palette size={13} style={{ verticalAlign: '-2px', marginRight: 4 }} />A template is powering your site</div>
-                <p style={{ fontSize: 12, color: MUTED, margin: 0, lineHeight: 1.6 }}>
+              <div style={{ background: `${BLUE}0C`, border: `1px solid ${BLUE}33`, borderRadius: 12, padding: '13px 16px', marginBottom: 14, fontFamily: C.font }}>
+                <div style={{ fontSize: 12.5, fontWeight: 800, color: C.ink, marginBottom: 4 }}><Ico ti="ti-palette" size={13} style={{ verticalAlign: '-2px', marginRight: 4 }} />A template is powering your site</div>
+                <p style={{ fontSize: 12, color: C.muted, margin: 0, lineHeight: 1.6 }}>
                   Your pages come from the active template, so the theme's Hero, About, Sections and Colors don't apply —
                   edit your pages in <b>Website Builder → Pages</b> instead. Tracking scripts and Custom CSS below are
                   injected into <b>every template page</b>.
@@ -143,8 +145,8 @@ export default function AppearancePage() {
               </div>
             )}
             {templateActive && tplVars.length > 0 && (
-              <Card icon={Droplet} iconColor="#0EA5E9" title="Brand Colors">
-                <p style={{ fontSize: 12, color: MUTED2, margin: '0 0 12px', fontFamily: FONT }}>
+              <Card icon={Droplet} ti="ti-droplet" iconColor="#0EA5E9" title="Brand Colors">
+                <p style={{ fontSize: 12, color: C.muted2, margin: '0 0 12px', fontFamily: C.font }}>
                   Your template's colour palette — change these to match your school's brand. Applies to every page.
                 </p>
                 {tplVars.map((v) => {
@@ -159,36 +161,36 @@ export default function AppearancePage() {
                   );
                 })}
                 {Object.keys(f.templateColors).length > 0 && (
-                  <button onClick={() => setF((p) => ({ ...p, templateColors: {} }))} style={{ marginTop: 4, padding: '7px 12px', borderRadius: 8, border: `1.5px solid ${BORDER}`, background: WHITE, color: MUTED, fontSize: 11.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>
+                  <button onClick={() => setF((p) => ({ ...p, templateColors: {} }))} style={{ marginTop: 4, padding: '7px 12px', borderRadius: 8, border: `1.5px solid ${C.border}`, background: C.surface, color: C.muted, fontSize: 11.5, fontWeight: 700, cursor: 'pointer', fontFamily: C.font }}>
                     Reset to template colours
                   </button>
                 )}
               </Card>
             )}
             {!templateActive && (<>
-            <Card icon={Star} iconColor="#F59E0B" title="Hero Section">
+            <Card icon={Star} ti="ti-star" iconColor="#F59E0B" title="Hero Section">
               <Field label="Hero Title" hint="Leave blank to use school name"><input value={f.heroTitle} onChange={set('heroTitle')} placeholder="Welcome to our school" style={inputStyle} /></Field>
               <Field label="Hero Subtitle"><textarea rows={2} value={f.heroSubtitle} onChange={set('heroSubtitle')} style={{ ...inputStyle, resize: 'vertical', lineHeight: 1.5 }} /></Field>
             </Card>
 
-            <Card icon={Info} iconColor={BLUE} title="About Section">
+            <Card icon={Info} ti="ti-info-circle" iconColor={BLUE} title="About Section">
               <Field label="About Your School"><textarea rows={4} value={f.aboutText} onChange={set('aboutText')} placeholder="Tell visitors about your school, mission, and values…" style={{ ...inputStyle, resize: 'vertical', lineHeight: 1.6 }} /></Field>
             </Card>
             </>)}
 
-            <Card icon={Search} iconColor={GREEN} title="SEO Settings">
+            <Card icon={Search} ti="ti-search" iconColor={GREEN} title="SEO Settings">
               <Field label="Meta Title"><input value={f.metaTitle} onChange={set('metaTitle')} style={inputStyle} /></Field>
               <Field label="Meta Keywords"><input value={f.metaKeywords} onChange={set('metaKeywords')} style={inputStyle} /></Field>
               <Field label="Meta Description"><textarea rows={2} value={f.metaDescription} onChange={set('metaDescription')} placeholder="A brief description for search engines…" style={{ ...inputStyle, resize: 'vertical' }} /></Field>
             </Card>
 
-            <Card icon={Braces} iconColor="#7C3AED" title="Tracking & Scripts">
+            <Card icon={Braces} ti="ti-braces" iconColor="#7C3AED" title="Tracking & Scripts">
               <Field label="Header Scripts (<head>)" hint="Google Analytics, Tag Manager, Facebook Pixel, etc."><textarea rows={3} value={f.headerScripts} onChange={set('headerScripts')} placeholder="<!-- Analytics, Pixel… -->" style={{ ...inputStyle, resize: 'vertical', fontFamily: 'ui-monospace, Menlo, monospace', fontSize: 12 }} /></Field>
               <Field label="Footer Scripts (before </body>)" hint="Chat widgets, custom JavaScript."><textarea rows={3} value={f.footerScripts} onChange={set('footerScripts')} placeholder="<!-- Tawk.to, Crisp, custom JS -->" style={{ ...inputStyle, resize: 'vertical', fontFamily: 'ui-monospace, Menlo, monospace', fontSize: 12 }} /></Field>
             </Card>
 
             {!templateActive && (
-            <Card icon={Droplet} iconColor="#0EA5E9" title="Color Theme">
+            <Card icon={Droplet} ti="ti-droplet" iconColor="#0EA5E9" title="Color Theme">
               <ColorField label="Primary Color" value={f.primaryColor} onChange={(v) => setF((p) => ({ ...p, primaryColor: v }))} />
               <ColorField label="Secondary Color" value={f.secondaryColor} onChange={(v) => setF((p) => ({ ...p, secondaryColor: v }))} />
               <ColorField label="Accent Color" value={f.accentColor} onChange={(v) => setF((p) => ({ ...p, accentColor: v }))} />
@@ -196,11 +198,11 @@ export default function AppearancePage() {
             </Card>
             )}
 
-            <Card icon={Share2} iconColor="#EC4899" title="Social Links">
+            <Card icon={Share2} ti="ti-share-2" iconColor="#EC4899" title="Social Links">
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {SOCIAL_FIELDS.map((s) => (
                   <div key={s.key} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <div style={{ width: 34, height: 34, borderRadius: 9, background: LIGHT, border: `1px solid ${BORDER}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><s.icon size={15} color={MUTED} /></div>
+                    <div style={{ width: 34, height: 34, borderRadius: 9, background: C.bg, border: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Ico lucide={s.icon} ti={s.ti} size={15} color={C.muted} /></div>
                     <input value={f.socialLinks[s.key] || ''} onChange={setSoc(s.key)} placeholder={s.placeholder} style={inputStyle} />
                   </div>
                 ))}
@@ -208,31 +210,31 @@ export default function AppearancePage() {
             </Card>
 
             {!templateActive && (
-            <Card icon={Layers} iconColor="#F59E0B" title="Sections">
-              <p style={{ fontSize: 12, color: MUTED2, margin: '0 0 12px', fontFamily: FONT }}>Uncheck to hide a section from the home page.</p>
+            <Card icon={Layers} ti="ti-stack-2" iconColor="#F59E0B" title="Sections">
+              <p style={{ fontSize: 12, color: C.muted2, margin: '0 0 12px', fontFamily: C.font }}>Uncheck to hide a section from the home page.</p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {f.sections.map((s) => (
-                  <div key={s.key} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 10px', border: `1px solid ${BORDER}`, borderRadius: 9, background: s.on ? WHITE : LIGHT }}>
-                    <GripVertical size={14} color={MUTED2} style={{ flexShrink: 0 }} />
-                    <input type="checkbox" checked={s.on} onChange={() => toggleSection(s.key)} style={{ width: 15, height: 15, accentColor: AMBER, cursor: 'pointer' }} />
-                    <span style={{ fontSize: 13, fontWeight: 700, color: s.on ? INK : MUTED2, fontFamily: FONT }}>{s.label}</span>
+                  <div key={s.key} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 10px', border: `1px solid ${C.border}`, borderRadius: 9, background: s.on ? C.surface : C.bg }}>
+                    <Ico ti="ti-grip-vertical" size={14} color={C.muted2} style={{ flexShrink: 0 }} />
+                    <input type="checkbox" checked={s.on} onChange={() => toggleSection(s.key)} style={{ width: 15, height: 15, accentColor: C.brand, cursor: 'pointer' }} />
+                    <span style={{ fontSize: 13, fontWeight: 700, color: s.on ? C.ink : C.muted2, fontFamily: C.font }}>{s.label}</span>
                   </div>
                 ))}
               </div>
             </Card>
             )}
 
-            <Card icon={Braces} iconColor={MUTED} title="Custom CSS">
+            <Card icon={Braces} ti="ti-braces" iconColor={C.muted} title="Custom CSS">
               <textarea rows={5} value={f.customCss} onChange={set('customCss')} placeholder="/* Advanced: custom CSS overrides */" style={{ ...inputStyle, resize: 'vertical', fontFamily: 'ui-monospace, Menlo, monospace', fontSize: 12 }} />
             </Card>
           </div>
 
           {/* Right: live preview */}
-          <div style={{ flex: '2 1 480px', minWidth: 320, display: 'flex', flexDirection: 'column', border: `1px solid ${BORDER}`, borderRadius: 14, overflow: 'hidden', background: WHITE, position: 'sticky', top: 16, minHeight: 560 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 14px', borderBottom: `1px solid ${BORDER}`, background: LIGHT }}>
-              <span style={{ display: 'inline-flex', gap: 5 }}>{[RED, AMBER, GREEN].map((c) => <span key={c} style={{ width: 8, height: 8, borderRadius: '50%', background: c }} />)}</span>
-              <span style={{ fontSize: 12, fontWeight: 700, color: MUTED2, fontFamily: FONT }}>Live Preview · Home page</span>
-              {previewing && <Loader2 size={12} color={MUTED2} style={{ animation: 'spin .8s linear infinite', marginLeft: 'auto' }} />}
+          <div style={{ flex: '2 1 480px', minWidth: 320, display: 'flex', flexDirection: 'column', border: `1px solid ${C.border}`, borderRadius: 14, overflow: 'hidden', background: C.surface, position: 'sticky', top: 16, minHeight: 560 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 14px', borderBottom: `1px solid ${C.border}`, background: C.bg }}>
+              <span style={{ display: 'inline-flex', gap: 5 }}>{[RED, C.brand, GREEN].map((c) => <span key={c} style={{ width: 8, height: 8, borderRadius: '50%', background: c }} />)}</span>
+              <span style={{ fontSize: 12, fontWeight: 700, color: C.muted2, fontFamily: C.font }}>Live Preview · Home page</span>
+              {previewing && <Ico ti="ti-loader-2" size={12} color={C.muted2} style={{ animation: 'spin .8s linear infinite', marginLeft: 'auto' }} />}
             </div>
             {/* sandbox is required, not cosmetic: srcDoc inherits THIS origin,
                 so any <script> in the site's own HTML (header/footer scripts,
@@ -240,7 +242,7 @@ export default function AppearancePage() {
                 its localStorage. An empty sandbox renders CSS and images while
                 keeping scripts and same-origin access off. */}
             <iframe title="Website preview" srcDoc={previewHtml} sandbox=""
-              style={{ flex: 1, width: '100%', border: 'none', minHeight: 520, background: WHITE }} />
+              style={{ flex: 1, width: '100%', border: 'none', minHeight: 520, background: C.surface }} />
           </div>
         </div>
       )}

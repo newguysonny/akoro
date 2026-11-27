@@ -6,30 +6,29 @@
  */
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  GraduationCap, User, Users, HeartPulse, FolderOpen, Landmark,
-  Plus, X, Trash2, ArrowLeft, ArrowRight, Save, Loader2, Wand2, Search, Building2,
-} from 'lucide-react';
+import { GraduationCap, User, Users, HeartPulse, FolderOpen } from 'lucide-react';
+import { Ico } from '../../../theme/Ico.jsx';
 import { PageLayout } from '../../../components/Layout.jsx';
 import { inputStyle } from '../../../components/mgmt/ResourcePage.jsx';
 import { API, apiGet, apiPost } from '../../../services/api.js';
-import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, BLUE, PURPLE, FONT } from '../../../constants.js';
+import { GREEN, RED, BLUE, PURPLE } from '../../../constants.js';
+import { C, tint } from '../../../theme/colors.js';
 import { BASE } from './shared.jsx';
 
 const STEPS = [
-  { key: 'academic', label: 'Academic', icon: GraduationCap },
-  { key: 'personal', label: 'Personal Info', icon: User },
-  { key: 'parents', label: 'Parents', icon: Users },
-  { key: 'health', label: 'Health & Bank', icon: HeartPulse },
-  { key: 'documents', label: 'Documents', icon: FolderOpen },
+  { key: 'academic', label: 'Academic', icon: GraduationCap, ti: 'ti-school' },
+  { key: 'personal', label: 'Personal Info', icon: User, ti: 'ti-user' },
+  { key: 'parents', label: 'Parents', icon: Users, ti: 'ti-users' },
+  { key: 'health', label: 'Health & Bank', icon: HeartPulse, ti: 'ti-heartbeat' },
+  { key: 'documents', label: 'Documents', icon: FolderOpen, ti: 'ti-folder-open' },
 ];
 
-const lbl = { display: 'block', fontSize: 11.5, fontWeight: 700, color: INK, margin: '0 0 5px', fontFamily: FONT };
+const lbl = { display: 'block', fontSize: 11.5, fontWeight: 700, color: C.ink, margin: '0 0 5px', fontFamily: C.font };
 const req = <span style={{ color: RED }}> *</span>;
 const grid2 = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '12px 14px' };
 const sectionHead = (icon, title, color) => (
-  <div style={{ display: 'flex', alignItems: 'center', gap: 9, background: `${color}0E`, borderLeft: `3px solid ${color}`, borderRadius: 8, padding: '10px 14px', marginBottom: 16 }}>
-    {icon}<span style={{ fontSize: 13, fontWeight: 800, color, fontFamily: FONT, textTransform: 'uppercase', letterSpacing: .4 }}>{title}</span>
+  <div style={{ display: 'flex', alignItems: 'center', gap: 9, background: tint(5, color), borderLeft: `3px solid ${color}`, borderRadius: 8, padding: '10px 14px', marginBottom: 16 }}>
+    {icon}<span style={{ fontSize: 13, fontWeight: 800, color, fontFamily: C.font, textTransform: 'uppercase', letterSpacing: .4 }}>{title}</span>
   </div>
 );
 
@@ -175,8 +174,8 @@ export function StudentAdmissionPage() {
 
   const next = () => setStep((s) => Math.min(STEPS.length - 1, s + 1));
   const prev = () => setStep((s) => Math.max(0, s - 1));
-  const navBtn = (variant) => ({ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '10px 18px', borderRadius: 9, border: variant === 'ghost' ? `1.5px solid ${BORDER}` : 'none', background: variant === 'ghost' ? WHITE : `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: variant === 'ghost' ? MUTED : WHITE, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT });
-  const autoBtn = { display: 'inline-flex', alignItems: 'center', gap: 4, padding: '0 10px', borderRadius: 8, border: `1.5px solid ${BLUE}55`, background: `${BLUE}0C`, color: BLUE, fontSize: 11, fontWeight: 800, cursor: 'pointer', fontFamily: FONT, whiteSpace: 'nowrap' };
+  const navBtn = (variant) => ({ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '10px 18px', borderRadius: 9, border: variant === 'ghost' ? `1.5px solid ${C.border}` : 'none', background: variant === 'ghost' ? C.surface : `linear-gradient(135deg, ${C.brand}, ${C.brandDeep})`, color: variant === 'ghost' ? C.muted : '#fff', fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: C.font });
+  const autoBtn = { display: 'inline-flex', alignItems: 'center', gap: 4, padding: '0 10px', borderRadius: 8, border: `1.5px solid ${BLUE}55`, background: `${BLUE}0C`, color: BLUE, fontSize: 11, fontWeight: 800, cursor: 'pointer', fontFamily: C.font, whiteSpace: 'nowrap' };
 
   return (
     <PageLayout title="Student Admission" subtitle="Register a new student">
@@ -185,35 +184,35 @@ export function StudentAdmissionPage() {
         <div style={{ flex: '0 1 220px', minWidth: 190, display: 'flex', flexDirection: 'column', gap: 8 }}>
           {STEPS.map((s, i) => (
             <button key={s.key} onClick={() => setStep(i)} style={{
-              display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', borderRadius: 10, cursor: 'pointer', fontFamily: FONT, textAlign: 'left',
-              border: `1px solid ${i === step ? BLUE : BORDER}`, background: i === step ? BLUE : WHITE, color: i === step ? WHITE : INK,
+              display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', borderRadius: 10, cursor: 'pointer', fontFamily: C.font, textAlign: 'left',
+              border: `1px solid ${i === step ? BLUE : C.border}`, background: i === step ? BLUE : C.surface, color: i === step ? '#fff' : C.ink,
             }}>
-              <s.icon size={16} color={i === step ? WHITE : MUTED2} />
+              <Ico lucide={s.icon} ti={s.ti} size={16} color={i === step ? '#fff' : C.muted2} />
               <span style={{ fontSize: 12.5, fontWeight: 800 }}>{i + 1}. {s.label}</span>
             </button>
           ))}
         </div>
 
         {/* Step body */}
-        <div style={{ flex: '1 1 460px', minWidth: 300, background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 14, padding: '20px 22px' }}>
+        <div style={{ flex: '1 1 460px', minWidth: 300, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: '20px 22px' }}>
           {/* progress bar */}
-          <div style={{ height: 5, borderRadius: 999, background: BORDER, overflow: 'hidden', marginBottom: 18 }}>
-            <div style={{ height: '100%', width: `${((step + 1) / STEPS.length) * 100}%`, background: `linear-gradient(90deg, ${BLUE}, ${AMBER})`, transition: 'width .2s' }} />
+          <div style={{ height: 5, borderRadius: 999, background: C.border, overflow: 'hidden', marginBottom: 18 }}>
+            <div style={{ height: '100%', width: `${((step + 1) / STEPS.length) * 100}%`, background: `linear-gradient(90deg, ${BLUE}, ${C.brand})`, transition: 'width .2s' }} />
           </div>
 
           {step === 0 && (<>
-            {sectionHead(<GraduationCap size={15} color={BLUE} />, 'Academic Details', BLUE)}
+            {sectionHead(<Ico ti="ti-school" size={15} color={BLUE} />, 'Academic Details', BLUE)}
             <div style={grid2}>
               <Field label="Admission No" required>
                 <div style={{ display: 'flex', gap: 6 }}>
                   <input value={form.admission_no} onChange={set('admission_no')} style={{ ...inputStyle, flex: 1 }} />
-                  <button onClick={() => autoCodes('admission_no')} style={autoBtn}><Wand2 size={12} /> Auto</button>
+                  <button onClick={() => autoCodes('admission_no')} style={autoBtn}><Ico ti="ti-wand" size={12} /> Auto</button>
                 </div>
               </Field>
               <Field label="Roll Number">
                 <div style={{ display: 'flex', gap: 6 }}>
                   <input value={form.roll_no} onChange={set('roll_no')} style={{ ...inputStyle, flex: 1 }} />
-                  <button onClick={() => autoCodes('roll_no')} style={autoBtn}><Wand2 size={12} /> Auto</button>
+                  <button onClick={() => autoCodes('roll_no')} style={autoBtn}><Ico ti="ti-wand" size={12} /> Auto</button>
                 </div>
               </Field>
               <Field label="Admission Date"><input type="date" value={form.admitted_on} onChange={set('admitted_on')} style={inputStyle} /></Field>
@@ -229,20 +228,20 @@ export function StudentAdmissionPage() {
               </Field>
               <Field label="Biometric ID"><input value={form.biometric_id} onChange={set('biometric_id')} placeholder="Device User ID" style={inputStyle} /></Field>
             </div>
-            {sectionHead(<Building2 size={15} color={MUTED} />, 'Previous School Details', MUTED)}
+            {sectionHead(<Ico ti="ti-building" size={15} color={C.muted} />, 'Previous School Details', C.muted)}
             <Field label="Previous School Name & Details" full>
               <textarea value={form.previous_school} onChange={set('previous_school')} rows={3} placeholder="Enter previous school name, address, and any relevant details" style={{ ...inputStyle, resize: 'vertical' }} />
             </Field>
             <div style={{ marginTop: 12 }}>
               <Field label="Opening Due Balance (If Any)">
                 <input type="number" value={form.opening_balance} onChange={set('opening_balance')} placeholder="0" style={inputStyle} />
-                <p style={{ fontSize: 11, color: MUTED2, margin: '5px 0 0', fontFamily: FONT }}>Outstanding balance from a previous school. Shows as “Opening Due Balance” in the student's fee ledger.</p>
+                <p style={{ fontSize: 11, color: C.muted2, margin: '5px 0 0', fontFamily: C.font }}>Outstanding balance from a previous school. Shows as “Opening Due Balance” in the student's fee ledger.</p>
               </Field>
             </div>
           </>)}
 
           {step === 1 && (<>
-            {sectionHead(<User size={15} color={BLUE} />, 'Student Details', BLUE)}
+            {sectionHead(<Ico ti="ti-user" size={15} color={BLUE} />, 'Student Details', BLUE)}
             <div style={grid2}>
               <Field label="First Name" required><input value={form.first_name} onChange={set('first_name')} placeholder="Enter first name" style={inputStyle} /></Field>
               <Field label="Middle Name"><input value={form.middle_name} onChange={set('middle_name')} placeholder="Middle name" style={inputStyle} /></Field>
@@ -272,20 +271,20 @@ export function StudentAdmissionPage() {
               <Field label="Student Email (Optional Login)"><input value={form.student_email} onChange={set('student_email')} style={inputStyle} /></Field>
             </div>
             <div style={{ display: 'flex', gap: 20, margin: '14px 0 4px', flexWrap: 'wrap' }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5, color: INK, fontFamily: FONT, cursor: 'pointer' }}><input type="checkbox" checked={form.bpl} onChange={set('bpl')} /> Below Poverty Line (BPL)</label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5, color: INK, fontFamily: FONT, cursor: 'pointer' }}><input type="checkbox" checked={form.rte} onChange={set('rte')} /> RTE (Right to Education)</label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5, color: C.ink, fontFamily: C.font, cursor: 'pointer' }}><input type="checkbox" checked={form.bpl} onChange={set('bpl')} /> Below Poverty Line (BPL)</label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5, color: C.ink, fontFamily: C.font, cursor: 'pointer' }}><input type="checkbox" checked={form.rte} onChange={set('rte')} /> RTE (Right to Education)</label>
             </div>
-            <div style={{ background: LIGHT, border: `1px solid ${BORDER}`, borderRadius: 10, padding: '14px 16px', marginTop: 12 }}>
+            <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, padding: '14px 16px', marginTop: 12 }}>
               <label style={lbl}>Student Photo</label>
               <input type="file" accept="image/*" onChange={(e) => setPhoto(e.target.files?.[0] || null)} />
             </div>
           </>)}
 
           {step === 2 && (<>
-            {sectionHead(<Users size={15} color={PURPLE} />, 'Parent & Guardian Details', PURPLE)}
+            {sectionHead(<Ico ti="ti-users" size={15} color={PURPLE} />, 'Parent & Guardian Details', PURPLE)}
             <div style={{ display: 'flex', gap: 16, marginBottom: 16, flexWrap: 'wrap' }}>
               {[['new', 'Create New Parent Account'], ['existing', 'Link to Existing Parent']].map(([k, l]) => (
-                <label key={k} style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5, fontWeight: 700, color: INK, fontFamily: FONT, cursor: 'pointer' }}>
+                <label key={k} style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5, fontWeight: 700, color: C.ink, fontFamily: C.font, cursor: 'pointer' }}>
                   <input type="radio" name="parentMode" checked={parentMode === k} onChange={() => setParentMode(k)} /> {l}
                 </label>
               ))}
@@ -294,15 +293,15 @@ export function StudentAdmissionPage() {
               <div style={{ position: 'relative' }}>
                 <Field label="Search Existing Parent (by an existing student)">
                   <div style={{ position: 'relative' }}>
-                    <Search size={15} color={MUTED2} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)' }} />
+                    <Ico ti="ti-search" size={15} color={C.muted2} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)' }} />
                     <input value={siblingQuery} onChange={(e) => searchSiblings(e.target.value)} placeholder="Search by parent's name, phone, or child's name…" style={{ ...inputStyle, paddingLeft: 34 }} />
                   </div>
                 </Field>
                 {siblingResults.length > 0 && (
-                  <div style={{ border: `1px solid ${BORDER}`, borderRadius: 10, marginTop: 6, overflow: 'hidden' }}>
+                  <div style={{ border: `1px solid ${C.border}`, borderRadius: 10, marginTop: 6, overflow: 'hidden' }}>
                     {siblingResults.map((s) => (
-                      <button key={s.id} onClick={() => linkSibling(s)} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '9px 13px', border: 'none', borderTop: `1px solid ${BORDER}`, background: WHITE, cursor: 'pointer', fontFamily: FONT }}>
-                        <b style={{ fontSize: 12.5 }}>{s.guardian_name || '—'}</b> <span style={{ fontSize: 11, color: MUTED2 }}>{s.guardian_phone || ''} · child: {s.first_name} {s.last_name}</span>
+                      <button key={s.id} onClick={() => linkSibling(s)} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '9px 13px', border: 'none', borderTop: `1px solid ${C.border}`, background: C.surface, cursor: 'pointer', fontFamily: C.font }}>
+                        <b style={{ fontSize: 12.5 }}>{s.guardian_name || '—'}</b> <span style={{ fontSize: 11, color: C.muted2 }}>{s.guardian_phone || ''} · child: {s.first_name} {s.last_name}</span>
                       </button>
                     ))}
                   </div>
@@ -318,7 +317,7 @@ export function StudentAdmissionPage() {
                 <Field label="Mother's Occupation"><input value={form.mother_occupation} onChange={set('mother_occupation')} style={inputStyle} /></Field>
               </div>
             )}
-            <div style={{ marginTop: 16 }}>{sectionHead(<Users size={15} color={BLUE} />, 'Primary Contact / Guardian', BLUE)}</div>
+            <div style={{ marginTop: 16 }}>{sectionHead(<Ico ti="ti-users" size={15} color={BLUE} />, 'Primary Contact / Guardian', BLUE)}</div>
             <div style={grid2}>
               <Field label="Guardian Name"><input value={form.guardian_name} onChange={set('guardian_name')} style={inputStyle} /></Field>
               <Field label="Guardian Phone"><input value={form.guardian_phone} onChange={set('guardian_phone')} style={inputStyle} /></Field>
@@ -329,7 +328,7 @@ export function StudentAdmissionPage() {
           </>)}
 
           {step === 3 && (<>
-            {sectionHead(<HeartPulse size={15} color={RED} />, 'Health & Medical Info', RED)}
+            {sectionHead(<Ico ti="ti-heartbeat" size={15} color={RED} />, 'Health & Medical Info', RED)}
             <div style={grid2}>
               <Field label="Height (cm)"><input type="number" value={form.height_cm} onChange={set('height_cm')} style={inputStyle} /></Field>
               <Field label="Weight (kg)"><input type="number" value={form.weight_kg} onChange={set('weight_kg')} style={inputStyle} /></Field>
@@ -339,7 +338,7 @@ export function StudentAdmissionPage() {
                 <textarea value={form.medical_history} onChange={set('medical_history')} rows={3} placeholder="Enter any medical history, allergies, or special requirements" style={{ ...inputStyle, resize: 'vertical' }} />
               </Field>
             </div>
-            <div style={{ marginTop: 16 }}>{sectionHead(<Landmark size={15} color={BLUE} />, 'Bank Details', BLUE)}</div>
+            <div style={{ marginTop: 16 }}>{sectionHead(<Ico ti="ti-building-bank" size={15} color={BLUE} />, 'Bank Details', BLUE)}</div>
             <div style={grid2}>
               <Field label="Bank Name"><input value={form.bank_name} onChange={set('bank_name')} style={inputStyle} /></Field>
               <Field label="Account Number"><input value={form.bank_account_no} onChange={set('bank_account_no')} style={inputStyle} /></Field>
@@ -348,60 +347,60 @@ export function StudentAdmissionPage() {
           </>)}
 
           {step === 4 && (<>
-            {sectionHead(<FolderOpen size={15} color={AMBER} />, 'Assign Fee Groups', AMBER)}
+            {sectionHead(<Ico ti="ti-folder-open" size={15} color={C.brand} />, 'Assign Fee Groups', C.brand)}
             {feeGroups.length === 0 ? (
-              <p style={{ fontSize: 12.5, color: MUTED2, fontFamily: FONT }}>No fee groups yet. Create them in Finance & Fees → Fee Groups.</p>
+              <p style={{ fontSize: 12.5, color: C.muted2, fontFamily: C.font }}>No fee groups yet. Create them in Finance & Fees → Fee Groups.</p>
             ) : (<>
               <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
                 <button onClick={() => setSelectedGroups(Object.fromEntries(feeGroups.map((g) => [g.id, true])))} style={{ ...autoBtn, color: GREEN, borderColor: `${GREEN}55`, background: `${GREEN}0C` }}>Select All</button>
-                <button onClick={() => setSelectedGroups({})} style={{ ...autoBtn, color: MUTED, borderColor: BORDER, background: WHITE }}>Clear All</button>
+                <button onClick={() => setSelectedGroups({})} style={{ ...autoBtn, color: C.muted, borderColor: C.border, background: C.surface }}>Clear All</button>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 8 }}>
                 {feeGroups.map((g) => (
-                  <label key={g.id} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '10px 12px', border: `1px solid ${selectedGroups[g.id] ? BLUE : BORDER}`, background: selectedGroups[g.id] ? `${BLUE}0A` : WHITE, borderRadius: 9, cursor: 'pointer', fontFamily: FONT }}>
+                  <label key={g.id} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '10px 12px', border: `1px solid ${selectedGroups[g.id] ? BLUE : C.border}`, background: selectedGroups[g.id] ? `${BLUE}0A` : C.surface, borderRadius: 9, cursor: 'pointer', fontFamily: C.font }}>
                     <input type="checkbox" checked={!!selectedGroups[g.id]} onChange={(e) => setSelectedGroups((p) => ({ ...p, [g.id]: e.target.checked }))} />
-                    <span style={{ fontSize: 12.5, fontWeight: 700, color: INK }}>{g.name}</span>
+                    <span style={{ fontSize: 12.5, fontWeight: 700, color: C.ink }}>{g.name}</span>
                   </label>
                 ))}
               </div>
             </>)}
 
-            <div style={{ marginTop: 18 }}>{sectionHead(<Plus size={15} color={BLUE} />, 'Additional Details', BLUE)}</div>
+            <div style={{ marginTop: 18 }}>{sectionHead(<Ico ti="ti-plus" size={15} color={BLUE} />, 'Additional Details', BLUE)}</div>
             {extraFields.map((x, i) => (
               <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
                 <input value={x.label} onChange={(e) => setExtra(i, { label: e.target.value })} placeholder="Field name" style={{ ...inputStyle, flex: 1 }} />
                 <input value={x.value} onChange={(e) => setExtra(i, { value: e.target.value })} placeholder="Value" style={{ ...inputStyle, flex: 1 }} />
-                <button onClick={() => delExtra(i)} style={{ border: 'none', background: `${RED}12`, color: RED, borderRadius: 8, width: 34, cursor: 'pointer' }}><Trash2 size={13} /></button>
+                <button onClick={() => delExtra(i)} style={{ border: 'none', background: `${RED}12`, color: RED, borderRadius: 8, width: 34, cursor: 'pointer' }}><Ico ti="ti-trash" size={13} /></button>
               </div>
             ))}
-            <button onClick={addExtra} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 8, border: `1.5px dashed ${BORDER}`, background: WHITE, color: MUTED, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}><Plus size={13} /> Add custom field</button>
+            <button onClick={addExtra} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 8, border: `1.5px dashed ${C.border}`, background: C.surface, color: C.muted, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: C.font }}><Ico ti="ti-plus" size={13} /> Add custom field</button>
 
-            <div style={{ marginTop: 18 }}>{sectionHead(<FolderOpen size={15} color={MUTED} />, 'Upload Documents', MUTED)}</div>
+            <div style={{ marginTop: 18 }}>{sectionHead(<Ico ti="ti-folder-open" size={15} color={C.muted} />, 'Upload Documents', C.muted)}</div>
             {documents.map((d, i) => (
               <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                 <input value={d.title} onChange={(e) => setDoc(i, { title: e.target.value })} placeholder="Document name (e.g. Birth Certificate)" style={{ ...inputStyle, flex: '1 1 180px' }} />
                 <input type="file" onChange={(e) => setDoc(i, { file: e.target.files?.[0] || null })} style={{ flex: '1 1 160px', fontSize: 12 }} />
-                <button onClick={() => delDoc(i)} style={{ border: 'none', background: `${RED}12`, color: RED, borderRadius: 8, width: 34, height: 34, cursor: 'pointer' }}><X size={14} /></button>
+                <button onClick={() => delDoc(i)} style={{ border: 'none', background: `${RED}12`, color: RED, borderRadius: 8, width: 34, height: 34, cursor: 'pointer' }}><Ico ti="ti-x" size={14} /></button>
               </div>
             ))}
-            <button onClick={addDoc} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 8, border: `1.5px dashed ${BORDER}`, background: WHITE, color: MUTED, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}><Plus size={13} /> Add Document</button>
+            <button onClick={addDoc} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 8, border: `1.5px dashed ${C.border}`, background: C.surface, color: C.muted, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: C.font }}><Ico ti="ti-plus" size={13} /> Add Document</button>
           </>)}
 
           {/* Nav */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 24, paddingTop: 16, borderTop: `1px solid ${BORDER}`, gap: 10 }}>
-            <button onClick={prev} disabled={step === 0} style={{ ...navBtn('ghost'), opacity: step === 0 ? 0.5 : 1 }}><ArrowLeft size={14} /> Previous</button>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 24, paddingTop: 16, borderTop: `1px solid ${C.border}`, gap: 10 }}>
+            <button onClick={prev} disabled={step === 0} style={{ ...navBtn('ghost'), opacity: step === 0 ? 0.5 : 1 }}><Ico ti="ti-arrow-left" size={14} /> Previous</button>
             {step < STEPS.length - 1 ? (
-              <button onClick={next} style={navBtn()}>Next Step <ArrowRight size={14} /></button>
+              <button onClick={next} style={navBtn()}>Next Step <Ico ti="ti-arrow-right" size={14} /></button>
             ) : (
-              <button onClick={admit} disabled={busy} style={{ ...navBtn(), background: busy ? '#E5E7EB' : `linear-gradient(135deg, ${GREEN}, #0E9F6E)`, color: busy ? '#9CA3AF' : WHITE }}>
-                {busy ? <Loader2 size={14} style={{ animation: 'spin .8s linear infinite' }} /> : <Save size={14} />} Admit Student
+              <button onClick={admit} disabled={busy} style={{ ...navBtn(), background: busy ? C.borderSoft : `linear-gradient(135deg, ${GREEN}, #0E9F6E)`, color: busy ? C.muted2 : '#fff' }}>
+                {busy ? <Ico ti="ti-loader-2" size={14} style={{ animation: 'spin .8s linear infinite' }} /> : <Ico ti="ti-device-floppy" size={14} />} Admit Student
               </button>
             )}
           </div>
         </div>
       </div>
 
-      {toast && <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: INK, color: WHITE, padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999, maxWidth: '80vw' }}>{toast}</div>}
+      {toast && <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: C.ink, color: '#fff', padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999, maxWidth: '80vw' }}>{toast}</div>}
     </PageLayout>
   );
 }

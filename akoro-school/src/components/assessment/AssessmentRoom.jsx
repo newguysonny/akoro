@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
 import { io } from 'socket.io-client';
 import { BRAND, RED, GREEN, GOLD } from '../../constants.js';
+import { tint } from '../../theme/colors.js';
+import { Ico } from '../../theme/Ico.jsx';
 import { acquireActivityLock } from '../../utils/activityLock.js';
 import { API, getPortal } from '../../services/api.js';
 import { socketOptions } from '../../client/socket';
@@ -8,7 +10,7 @@ import { useProctoring } from '../../hooks/useProctoring.js';
 import { useVoiceSession } from '../../hooks/useVoiceSession.js';
 import { useVoiceAnswer } from '../../hooks/useVoiceAnswer.js';
 import VoiceExam from './VoiceExam.jsx';
-import {X as XIcon, AlertTriangle } from 'lucide-react';
+
 
 /**
  * AssessmentRoom — the proctored Session Assessment Gateway.
@@ -212,7 +214,7 @@ function AssessmentRoom({ topic, subject, objectives = [], questionCount = 5, st
     return (
       <Shell onClose={onClose} title="Assessment Result">
         <div style={{ maxWidth:480, margin:"0 auto", display:"flex", flexDirection:"column", gap:14 }}>
-          <div style={{ background:`${vColor}1A`, border:`1.5px solid ${vColor}40`, borderRadius:18, padding:"20px 18px", textAlign:"center" }}>
+          <div style={{ background:tint(10, vColor), border:`1.5px solid ${vColor}40`, borderRadius:18, padding:"20px 18px", textAlign:"center" }}>
             <p style={{ fontSize:11, fontWeight:800, color:vColor, margin:"0 0 6px", letterSpacing:.5 }}>{summary.verdict.toUpperCase()}</p>
             <p style={{ fontSize:44, fontWeight:900, color:"#F1F5F9", margin:0, fontFamily:"monospace" }}>
               {summary.assessmentScore}<span style={{ fontSize:18, color:"#475569" }}>/100</span>
@@ -250,7 +252,7 @@ function AssessmentRoom({ topic, subject, objectives = [], questionCount = 5, st
       {terminated && (
         <div style={{ background:"rgba(248,113,113,.12)", border:"1px solid rgba(248,113,113,.3)", borderRadius:12,
           padding:"10px 14px", marginBottom:12, fontSize:12.5, fontWeight:700, color:"#FCA5A5", textAlign:"center" }}>
-          <AlertTriangle size={13} style={{ verticalAlign: '-2px', marginRight: 4 }} />{terminated.reason} This attempt has been flagged for review.
+          <Ico ti="ti-alert-triangle" size={13} style={{ verticalAlign: '-2px', marginRight: 4 }} />{terminated.reason} This attempt has been flagged for review.
         </div>
       )}
       <VoiceExam
@@ -274,7 +276,7 @@ function Shell({ children, onClose, title }) {
         <span style={{ fontSize:14, fontWeight:900, color:"#F1F5F9" }}>{title}</span>
         <div onClick={onClose} style={{ width:34, height:34, borderRadius:"50%", background:"rgba(255,255,255,.07)",
           display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer" }}>
-          <XIcon size={15} color="#64748B" />
+          <Ico ti="ti-x" size={15} color="#64748B" />
         </div>
       </div>
       <div style={{ flex:1, overflowY:"auto", padding:"14px" }}>{children}</div>

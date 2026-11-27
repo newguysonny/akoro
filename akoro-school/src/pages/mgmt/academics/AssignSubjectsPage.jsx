@@ -4,16 +4,17 @@
  * subjects for the class are listed with a remove action.
  */
 import { useState, useEffect, useCallback } from 'react';
-import { BookOpen, Search, Loader2, Trash2, Plus, GraduationCap } from 'lucide-react';
+import { Ico } from '../../../theme/Ico.jsx';
 import { PageLayout } from '../../../components/Layout.jsx';
 import { inputStyle } from '../../../components/mgmt/ResourcePage.jsx';
 import { apiGet, apiPost, apiDelete } from '../../../services/api.js';
-import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, BLUE, PURPLE, FONT } from '../../../constants.js';
+import { GREEN, RED, BLUE, PURPLE } from '../../../constants.js';
+import { C, tint } from '../../../theme/colors.js';
 import { BASE, iconBtn, toastEl } from './shared.jsx';
 import { confirmDialog } from '../../../components/ConfirmHost.jsx';
 
-const label = { display: 'block', fontSize: 12, fontWeight: 700, color: INK, fontFamily: FONT, marginBottom: 5 };
-const card = { background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 14, padding: '18px 20px' };
+const label = { display: 'block', fontSize: 12, fontWeight: 700, color: C.ink, fontFamily: C.font, marginBottom: 5 };
+const card = { background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: '18px 20px' };
 const teacherName = (t) => t?.full_name || t?.email || '';
 
 export function AssignSubjectsPage() {
@@ -79,27 +80,27 @@ export function AssignSubjectsPage() {
       </div>
 
       {!classId ? (
-        <div style={{ ...card, textAlign: 'center', color: MUTED2, padding: '40px 20px', fontFamily: FONT }}>
-          <GraduationCap size={26} style={{ opacity: .5, marginBottom: 8 }} /><div>Select a class above to assign subjects.</div>
+        <div style={{ ...card, textAlign: 'center', color: C.muted2, padding: '40px 20px', fontFamily: C.font }}>
+          <Ico ti="ti-school" size={26} style={{ opacity: .5, marginBottom: 8 }} /><div>Select a class above to assign subjects.</div>
         </div>
       ) : (
         <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
           {/* Subject picker */}
           <div style={{ ...card, flex: '1 1 360px', minWidth: 300 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-              <BookOpen size={16} color={BLUE} /><span style={{ fontSize: 14, fontWeight: 800, color: INK, fontFamily: FONT }}>Available Subjects</span>
+              <Ico ti="ti-book" size={16} color={BLUE} /><span style={{ fontSize: 14, fontWeight: 800, color: C.ink, fontFamily: C.font }}>Available Subjects</span>
             </div>
             <div style={{ position: 'relative', marginBottom: 12 }}>
-              <Search size={15} color={MUTED2} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)' }} />
+              <Ico ti="ti-search" size={15} color={C.muted2} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)' }} />
               <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search subjects by name or code…" style={{ ...inputStyle, paddingLeft: 34 }} />
             </div>
-            <div style={{ maxHeight: 320, overflowY: 'auto', border: `1px solid ${BORDER}`, borderRadius: 10 }}>
-              {subjects.length === 0 ? <div style={{ padding: 20, textAlign: 'center', color: MUTED2, fontSize: 12.5, fontFamily: FONT }}>No subjects yet. Create them in Academics → Subjects.</div> : shown.length === 0 ? <div style={{ padding: 20, textAlign: 'center', color: MUTED2, fontSize: 12.5, fontFamily: FONT }}>No subjects match “{query}”.</div> : shown.map((s) => {
+            <div style={{ maxHeight: 320, overflowY: 'auto', border: `1px solid ${C.border}`, borderRadius: 10 }}>
+              {subjects.length === 0 ? <div style={{ padding: 20, textAlign: 'center', color: C.muted2, fontSize: 12.5, fontFamily: C.font }}>No subjects yet. Create them in Academics → Subjects.</div> : shown.length === 0 ? <div style={{ padding: 20, textAlign: 'center', color: C.muted2, fontSize: 12.5, fontFamily: C.font }}>No subjects match “{query}”.</div> : shown.map((s) => {
                 const already = assignedSubjectIds.has(s.id);
                 return (
-                  <label key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderTop: `1px solid ${BORDER}`, cursor: already ? 'default' : 'pointer', fontFamily: FONT, opacity: already ? 0.55 : 1 }}>
+                  <label key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderTop: `1px solid ${C.border}`, cursor: already ? 'default' : 'pointer', fontFamily: C.font, opacity: already ? 0.55 : 1 }}>
                     <input type="checkbox" disabled={already} checked={already || !!checked[s.id]} onChange={(e) => setChecked((p) => ({ ...p, [s.id]: e.target.checked }))} />
-                    <span style={{ flex: 1, fontSize: 13, fontWeight: 700, color: INK }}>{s.name}{s.code ? <span style={{ color: MUTED2, fontWeight: 400 }}> · {s.code}</span> : ''}</span>
+                    <span style={{ flex: 1, fontSize: 13, fontWeight: 700, color: C.ink }}>{s.name}{s.code ? <span style={{ color: C.muted2, fontWeight: 400 }}> · {s.code}</span> : ''}</span>
                     {already && <span style={{ fontSize: 10.5, fontWeight: 800, color: GREEN }}>Assigned</span>}
                   </label>
                 );
@@ -113,28 +114,28 @@ export function AssignSubjectsPage() {
                   <option value="">— none —</option>{teachers.map((t) => <option key={t.id} value={t.id}>{teacherName(t)}</option>)}
                 </select>
               </div>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5, color: INK, fontFamily: FONT, cursor: 'pointer', paddingBottom: 9 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5, color: C.ink, fontFamily: C.font, cursor: 'pointer', paddingBottom: 9 }}>
                 <input type="checkbox" checked={isElective} onChange={(e) => setIsElective(e.target.checked)} /> Elective
               </label>
             </div>
-            <button onClick={addSelected} disabled={busy || !checkedIds.length} style={{ width: '100%', marginTop: 12, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '12px', borderRadius: 10, border: 'none', background: (busy || !checkedIds.length) ? '#E5E7EB' : `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: (busy || !checkedIds.length) ? '#9CA3AF' : WHITE, fontSize: 13.5, fontWeight: 800, cursor: (busy || !checkedIds.length) ? 'default' : 'pointer', fontFamily: FONT }}>
-              {busy ? <Loader2 size={14} style={{ animation: 'spin .8s linear infinite' }} /> : <Plus size={14} />} Add {checkedIds.length ? `${checkedIds.length} ` : ''}Subject{checkedIds.length === 1 ? '' : 's'} to {activeClass?.name}
+            <button onClick={addSelected} disabled={busy || !checkedIds.length} style={{ width: '100%', marginTop: 12, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '12px', borderRadius: 10, border: 'none', background: (busy || !checkedIds.length) ? C.borderSoft : `linear-gradient(135deg, ${C.brand}, ${C.brandDeep})`, color: (busy || !checkedIds.length) ? C.muted2 : '#fff', fontSize: 13.5, fontWeight: 800, cursor: (busy || !checkedIds.length) ? 'default' : 'pointer', fontFamily: C.font }}>
+              {busy ? <Ico ti="ti-loader-2" size={14} style={{ animation: 'spin .8s linear infinite' }} /> : <Ico ti="ti-plus" size={14} />} Add {checkedIds.length ? `${checkedIds.length} ` : ''}Subject{checkedIds.length === 1 ? '' : 's'} to {activeClass?.name}
             </button>
           </div>
 
           {/* Assigned subjects */}
           <div style={{ ...card, flex: '1 1 300px', minWidth: 280 }}>
-            <div style={{ fontSize: 13, fontWeight: 800, color: INK, fontFamily: FONT, marginBottom: 12 }}>Assigned Subjects — {activeClass?.name}</div>
-            {assigned === null ? <Loader2 size={16} style={{ animation: 'spin .8s linear infinite' }} /> : assigned.length === 0 ? (
-              <p style={{ fontSize: 12.5, color: MUTED2, fontFamily: FONT }}>No subjects assigned to this class yet.</p>
+            <div style={{ fontSize: 13, fontWeight: 800, color: C.ink, fontFamily: C.font, marginBottom: 12 }}>Assigned Subjects — {activeClass?.name}</div>
+            {assigned === null ? <Ico ti="ti-loader-2" size={16} style={{ animation: 'spin .8s linear infinite' }} /> : assigned.length === 0 ? (
+              <p style={{ fontSize: 12.5, color: C.muted2, fontFamily: C.font }}>No subjects assigned to this class yet.</p>
             ) : assigned.map((a) => (
-              <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderTop: `1px solid ${BORDER}` }}>
-                <BookOpen size={15} color={a.is_elective ? PURPLE : BLUE} />
+              <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderTop: `1px solid ${C.border}` }}>
+                <Ico ti="ti-book" size={15} color={a.is_elective ? PURPLE : BLUE} />
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: INK, fontFamily: FONT }}>{a.subject_name}{a.is_elective ? <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 800, color: PURPLE }}>ELECTIVE</span> : ''}</div>
-                  {a.teacher_id && teacherById[a.teacher_id] && <div style={{ fontSize: 11, color: MUTED2, fontFamily: FONT }}>{teacherName(teacherById[a.teacher_id])}</div>}
+                  <div style={{ fontSize: 13, fontWeight: 700, color: C.ink, fontFamily: C.font }}>{a.subject_name}{a.is_elective ? <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 800, color: PURPLE }}>ELECTIVE</span> : ''}</div>
+                  {a.teacher_id && teacherById[a.teacher_id] && <div style={{ fontSize: 11, color: C.muted2, fontFamily: C.font }}>{teacherName(teacherById[a.teacher_id])}</div>}
                 </div>
-                <button onClick={() => remove(a)} title="Remove" style={iconBtn(RED)}><Trash2 size={13} /></button>
+                <button onClick={() => remove(a)} title="Remove" style={iconBtn(RED)}><Ico ti="ti-trash" size={13} /></button>
               </div>
             ))}
           </div>

@@ -4,12 +4,14 @@
  * Students are custom.
  */
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { CalendarRange, School, Rows3, BookOpen, Clock3, Grid3x3, Loader2, Save, X, ArrowRightLeft, Printer, CheckCircle2, Sparkles, FileText, Video, Link2, ExternalLink, Plus, Pencil, Trash2, FolderOpen } from 'lucide-react';
+import { CalendarRange, School, Rows3, BookOpen, Clock3, Grid3x3 } from 'lucide-react';
+import { Ico } from '../../theme/Ico.jsx';
 import { PageLayout } from '../../components/Layout.jsx';
 import ResourcePage, { inputStyle } from '../../components/mgmt/ResourcePage.jsx';
 import StatCards from '../../components/mgmt/StatCards.jsx';
 import { apiGet, apiPost, apiPut, apiDelete, API } from '../../services/api.js';
-import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, BLUE, PURPLE, FONT } from '../../constants.js';
+import { AMBER, BLUE, BORDER, FONT, GREEN, INK, LIGHT, MUTED2, PURPLE, RED, WHITE } from '../../constants.js';
+import { C, tint } from '../../theme/colors.js';
 import { confirmDialog } from '../../components/ConfirmHost.jsx';
 
 const BASE = '/api/school/mgmt';
@@ -23,12 +25,12 @@ export function AcademicDashboardPage() {
   const [stats, setStats] = useState(null);
   useEffect(() => { apiGet(`${BASE}/dashboard/academics`).then((r) => setStats(r.data)).catch(() => setStats({})); }, []);
   const cards = stats ? [
-    { n: stats.sessions, label: 'Academic Sessions', icon: CalendarRange, c: BLUE, to: '/mgmt/academic-sessions' },
-    { n: stats.classes, label: 'Classes', icon: School, c: GREEN, to: '/mgmt/classes' },
-    { n: stats.sections, label: 'Sections', icon: Rows3, c: AMBER, to: '/mgmt/sections' },
-    { n: stats.subjects, label: 'Subjects', icon: BookOpen, c: PURPLE, to: '/mgmt/subjects' },
-    { n: stats.periods, label: 'Periods', icon: Clock3, c: BLUE, to: '/mgmt/periods' },
-    { n: stats.timetableSlots, label: 'Timetable Slots', icon: Grid3x3, c: GREEN, to: '/mgmt/class-timetable' },
+    { n: stats.sessions, label: 'Academic Sessions', icon: CalendarRange, ti: 'ti-calendar-month', c: BLUE, to: '/mgmt/academic-sessions' },
+    { n: stats.classes, label: 'Classes', icon: School, ti: 'ti-school', c: GREEN, to: '/mgmt/classes' },
+    { n: stats.sections, label: 'Sections', icon: Rows3, ti: 'ti-layout-rows', c: C.brand, to: '/mgmt/sections' },
+    { n: stats.subjects, label: 'Subjects', icon: BookOpen, ti: 'ti-book', c: PURPLE, to: '/mgmt/subjects' },
+    { n: stats.periods, label: 'Periods', icon: Clock3, ti: 'ti-clock', c: BLUE, to: '/mgmt/periods' },
+    { n: stats.timetableSlots, label: 'Timetable Slots', icon: Grid3x3, ti: 'ti-grid-3x3', c: GREEN, to: '/mgmt/class-timetable' },
   ] : [];
   return (
     <PageLayout title="Academic Dashboard" subtitle="Sessions, classes, subjects and timetable at a glance">
@@ -145,8 +147,8 @@ const CAL_TYPE_OPTS = [
   { value: 'event', label: 'Event / Other' },
 ];
 const CAL_TYPE_COLOR = {
-  resumption: GREEN, vacation: AMBER, holiday: RED, midterm: PURPLE,
-  exam: BLUE, ptm: '#0EA5E9', event: MUTED2,
+  resumption: GREEN, vacation: C.brand, holiday: RED, midterm: PURPLE,
+  exam: BLUE, ptm: '#0EA5E9', event: C.muted2,
 };
 const CAL_TYPE_LABEL = Object.fromEntries(CAL_TYPE_OPTS.map((o) => [o.value, o.label]));
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -218,7 +220,7 @@ export function AcademicCalendarPage() {
   const step = (n) => { const d = new Date(year, month + n, 1); setYear(d.getFullYear()); setMonth(d.getMonth()); };
   const sortedList = [...entries].sort((a, b) => (a.starts_on || '').localeCompare(b.starts_on || ''));
   const toggleBtn = (v, label) => (
-    <button onClick={() => setView(v)} style={{ padding: '8px 14px', borderRadius: 9, border: `1px solid ${view === v ? AMBER : BORDER}`, background: view === v ? `${AMBER}12` : WHITE, color: view === v ? '#B45309' : INK, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>{label}</button>
+    <button onClick={() => setView(v)} style={{ padding: '8px 14px', borderRadius: 9, border: `1px solid ${view === v ? C.brand : C.border}`, background: view === v ? tint(7) : C.surface, color: view === v ? '#B45309' : C.ink, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: C.font }}>{label}</button>
   );
 
   return (
@@ -230,27 +232,27 @@ export function AcademicCalendarPage() {
         {view === 'calendar' && (
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
             <button onClick={() => step(-1)} style={navBtn}>‹</button>
-            <span style={{ minWidth: 150, textAlign: 'center', fontSize: 14, fontWeight: 800, color: INK }}>{MONTHS[month]} {year}</span>
+            <span style={{ minWidth: 150, textAlign: 'center', fontSize: 14, fontWeight: 800, color: C.ink }}>{MONTHS[month]} {year}</span>
             <button onClick={() => step(1)} style={navBtn}>›</button>
             <button onClick={() => { setYear(today.getFullYear()); setMonth(today.getMonth()); }} style={{ ...navBtn, width: 'auto', padding: '0 12px', fontSize: 12, fontWeight: 700 }}>Today</button>
           </div>
         )}
-        <button onClick={() => openNew()} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 16px', borderRadius: 9, border: 'none', background: `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: WHITE, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}><Plus size={14} /> New Entry</button>
+        <button onClick={() => openNew()} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 16px', borderRadius: 9, border: 'none', background: `linear-gradient(135deg, ${C.brand}, #D4651E)`, color: '#fff', fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: C.font }}><Ico ti="ti-plus" size={14} /> New Entry</button>
       </div>
 
       {/* Legend */}
       <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 14 }}>
         {CAL_TYPE_OPTS.map((o) => (
-          <span key={o.value} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: MUTED, fontFamily: FONT }}>
+          <span key={o.value} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: C.muted, fontFamily: C.font }}>
             <span style={{ width: 11, height: 11, borderRadius: 3, background: CAL_TYPE_COLOR[o.value] }} /> {o.label}
           </span>
         ))}
       </div>
 
       {view === 'calendar' ? (
-        <div style={{ background: WHITE, border: `1.5px solid ${BORDER}`, borderRadius: 14, overflow: 'hidden' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', background: LIGHT }}>
-            {DOW_SHORT.map((d) => <div key={d} style={{ padding: '9px 6px', textAlign: 'center', fontSize: 11.5, fontWeight: 800, color: MUTED2, fontFamily: FONT }}>{d}</div>)}
+        <div style={{ background: C.surface, border: `1.5px solid ${C.border}`, borderRadius: 14, overflow: 'hidden' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', background: C.bg }}>
+            {DOW_SHORT.map((d) => <div key={d} style={{ padding: '9px 6px', textAlign: 'center', fontSize: 11.5, fontWeight: 800, color: C.muted2, fontFamily: C.font }}>{d}</div>)}
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)' }}>
             {grid.map((d, i) => {
@@ -260,16 +262,16 @@ export function AcademicCalendarPage() {
               const evs = eventsOn(iso);
               return (
                 <div key={i} onClick={() => openNew(iso)} title="Add entry on this day"
-                  style={{ minHeight: 92, borderRight: `1px solid ${BORDER}`, borderBottom: `1px solid ${BORDER}`, padding: 5, background: inMonth ? WHITE : '#FafafA', cursor: 'pointer', opacity: inMonth ? 1 : 0.55 }}>
+                  style={{ minHeight: 92, borderRight: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}`, padding: 5, background: inMonth ? C.surface : '#FafafA', cursor: 'pointer', opacity: inMonth ? 1 : 0.55 }}>
                   <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                    <span style={{ fontSize: 11.5, fontWeight: 700, color: isToday ? WHITE : (inMonth ? INK : MUTED2), background: isToday ? AMBER : 'transparent', borderRadius: 999, minWidth: 20, height: 20, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>{d.getDate()}</span>
+                    <span style={{ fontSize: 11.5, fontWeight: 700, color: isToday ? '#fff' : (inMonth ? C.ink : C.muted2), background: isToday ? C.brand : 'transparent', borderRadius: 999, minWidth: 20, height: 20, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>{d.getDate()}</span>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginTop: 2 }}>
                     {evs.slice(0, 3).map((e) => (
                       <div key={e.id} onClick={(ev) => { ev.stopPropagation(); openEdit(e); }} title={`${CAL_TYPE_LABEL[e.event_type] || e.event_type} · ${e.title}`}
-                        style={{ fontSize: 10.5, fontWeight: 700, color: WHITE, background: CAL_TYPE_COLOR[e.event_type] || MUTED2, borderRadius: 5, padding: '2px 5px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontFamily: FONT }}>{e.title}</div>
+                        style={{ fontSize: 10.5, fontWeight: 700, color: '#fff', background: CAL_TYPE_COLOR[e.event_type] || C.muted2, borderRadius: 5, padding: '2px 5px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontFamily: C.font }}>{e.title}</div>
                     ))}
-                    {evs.length > 3 && <span style={{ fontSize: 10, color: MUTED2, fontWeight: 700 }}>+{evs.length - 3} more</span>}
+                    {evs.length > 3 && <span style={{ fontSize: 10, color: C.muted2, fontWeight: 700 }}>+{evs.length - 3} more</span>}
                   </div>
                 </div>
               );
@@ -277,21 +279,21 @@ export function AcademicCalendarPage() {
           </div>
         </div>
       ) : (
-        <div style={{ background: WHITE, border: `1.5px solid ${BORDER}`, borderRadius: 14, overflow: 'hidden' }}>
+        <div style={{ background: C.surface, border: `1.5px solid ${C.border}`, borderRadius: 14, overflow: 'hidden' }}>
           {sortedList.length === 0 ? (
-            <div style={{ padding: 34, textAlign: 'center', color: MUTED2, fontSize: 13, fontFamily: FONT }}>No calendar entries yet. Click “New Entry” to add one.</div>
+            <div style={{ padding: 34, textAlign: 'center', color: C.muted2, fontSize: 13, fontFamily: C.font }}>No calendar entries yet. Click “New Entry” to add one.</div>
           ) : (
-            <table style={{ borderCollapse: 'collapse', width: '100%', fontFamily: FONT }}>
-              <thead><tr>{['Date', 'Ends', 'Term', 'Type', 'Title', ''].map((h) => <th key={h} style={{ textAlign: 'left', padding: '10px 12px', fontSize: 11.5, fontWeight: 800, color: MUTED2, borderBottom: `1px solid ${BORDER}`, background: LIGHT }}>{h}</th>)}</tr></thead>
+            <table style={{ borderCollapse: 'collapse', width: '100%', fontFamily: C.font }}>
+              <thead><tr>{['Date', 'Ends', 'Term', 'Type', 'Title', ''].map((h) => <th key={h} style={{ textAlign: 'left', padding: '10px 12px', fontSize: 11.5, fontWeight: 800, color: C.muted2, borderBottom: `1px solid ${C.border}`, background: C.bg }}>{h}</th>)}</tr></thead>
               <tbody>
                 {sortedList.map((e) => (
-                  <tr key={e.id} style={{ borderBottom: `1px solid ${BORDER}` }}>
+                  <tr key={e.id} style={{ borderBottom: `1px solid ${C.border}` }}>
                     <td style={listTd}>{fmtDay(e.starts_on)}</td>
                     <td style={listTd}>{e.ends_on ? fmtDay(e.ends_on) : '—'}</td>
                     <td style={listTd}>{e.term || '—'}</td>
-                    <td style={listTd}><span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><span style={{ width: 9, height: 9, borderRadius: 2, background: CAL_TYPE_COLOR[e.event_type] || MUTED2 }} />{CAL_TYPE_LABEL[e.event_type] || e.event_type}</span></td>
-                    <td style={{ ...listTd, fontWeight: 700, color: INK }}>{e.title}</td>
-                    <td style={{ ...listTd, textAlign: 'right' }}><button onClick={() => openEdit(e)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: AMBER }}><Pencil size={15} /></button></td>
+                    <td style={listTd}><span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><span style={{ width: 9, height: 9, borderRadius: 2, background: CAL_TYPE_COLOR[e.event_type] || C.muted2 }} />{CAL_TYPE_LABEL[e.event_type] || e.event_type}</span></td>
+                    <td style={{ ...listTd, fontWeight: 700, color: C.ink }}>{e.title}</td>
+                    <td style={{ ...listTd, textAlign: 'right' }}><button onClick={() => openEdit(e)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.brand }}><Ico ti="ti-pencil" size={15} /></button></td>
                   </tr>
                 ))}
               </tbody>
@@ -302,10 +304,10 @@ export function AcademicCalendarPage() {
 
       {editing && (
         <div onClick={() => !busy && setEditing(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9998, padding: 16 }}>
-          <div onClick={(e) => e.stopPropagation()} style={{ background: WHITE, borderRadius: 16, padding: 22, width: 'min(480px, 100%)', fontFamily: FONT, maxHeight: '90vh', overflowY: 'auto' }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: C.surface, borderRadius: 16, padding: 22, width: 'min(480px, 100%)', fontFamily: C.font, maxHeight: '90vh', overflowY: 'auto' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-              <div style={{ fontSize: 16, fontWeight: 900, color: INK }}>{editing.id ? 'Edit Calendar Entry' : 'New Calendar Entry'}</div>
-              <button onClick={() => setEditing(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: MUTED2 }}><X size={18} /></button>
+              <div style={{ fontSize: 16, fontWeight: 900, color: C.ink }}>{editing.id ? 'Edit Calendar Entry' : 'New Calendar Entry'}</div>
+              <button onClick={() => setEditing(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.muted2 }}><Ico ti="ti-x" size={18} /></button>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <Field label="Title"><input value={editing.title} onChange={(e) => setEditing({ ...editing, title: e.target.value })} placeholder="First Term Begins" style={inputStyle} /></Field>
@@ -321,23 +323,23 @@ export function AcademicCalendarPage() {
               <Field label="Notes"><textarea value={editing.notes} onChange={(e) => setEditing({ ...editing, notes: e.target.value })} rows={2} style={{ ...inputStyle, resize: 'vertical' }} /></Field>
             </div>
             <div style={{ display: 'flex', gap: 10, marginTop: 20, alignItems: 'center' }}>
-              <button onClick={save} disabled={busy} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '10px 18px', borderRadius: 9, border: 'none', background: `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: WHITE, fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>{busy ? <Loader2 size={14} style={{ animation: 'spin .8s linear infinite' }} /> : <Save size={14} />} Save</button>
-              {editing.id && <button onClick={remove} disabled={busy} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '10px 16px', borderRadius: 9, border: `1px solid ${RED}55`, background: `${RED}0C`, color: RED, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}><Trash2 size={14} /> Delete</button>}
+              <button onClick={save} disabled={busy} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '10px 18px', borderRadius: 9, border: 'none', background: `linear-gradient(135deg, ${C.brand}, #D4651E)`, color: '#fff', fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: C.font }}>{busy ? <Ico ti="ti-loader-2" size={14} style={{ animation: 'spin .8s linear infinite' }} /> : <Ico ti="ti-device-floppy" size={14} />} Save</button>
+              {editing.id && <button onClick={remove} disabled={busy} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '10px 16px', borderRadius: 9, border: `1px solid ${RED}55`, background: `${RED}0C`, color: RED, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: C.font }}><Ico ti="ti-trash" size={14} /> Delete</button>}
               <div style={{ flex: 1 }} />
-              <button onClick={() => setEditing(null)} disabled={busy} style={{ padding: '10px 16px', borderRadius: 9, border: `1px solid ${BORDER}`, background: WHITE, color: INK, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>Cancel</button>
+              <button onClick={() => setEditing(null)} disabled={busy} style={{ padding: '10px 16px', borderRadius: 9, border: `1px solid ${C.border}`, background: C.surface, color: C.ink, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: C.font }}>Cancel</button>
             </div>
           </div>
         </div>
       )}
 
-      {toast && <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: INK, color: WHITE, padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999 }}>{toast}</div>}
+      {toast && <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: C.ink, color: '#fff', padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999 }}>{toast}</div>}
     </PageLayout>
   );
 }
-const navBtn = { width: 32, height: 32, borderRadius: 8, border: `1px solid ${BORDER}`, background: WHITE, color: INK, fontSize: 18, fontWeight: 700, cursor: 'pointer', lineHeight: 1, fontFamily: FONT };
-const listTd = { padding: '10px 12px', fontSize: 12.5, color: MUTED, verticalAlign: 'middle' };
+const navBtn = { width: 32, height: 32, borderRadius: 8, border: `1px solid ${C.border}`, background: C.surface, color: C.ink, fontSize: 18, fontWeight: 700, cursor: 'pointer', lineHeight: 1, fontFamily: C.font };
+const listTd = { padding: '10px 12px', fontSize: 12.5, color: C.muted, verticalAlign: 'middle' };
 function Field({ label, flex, children }) {
-  return <label style={{ display: 'flex', flexDirection: 'column', gap: 5, flex: flex ? 1 : undefined }}><span style={{ fontSize: 11.5, fontWeight: 700, color: MUTED2, fontFamily: FONT }}>{label}</span>{children}</label>;
+  return <label style={{ display: 'flex', flexDirection: 'column', gap: 5, flex: flex ? 1 : undefined }}><span style={{ fontSize: 11.5, fontWeight: 700, color: C.muted2, fontFamily: C.font }}>{label}</span>{children}</label>;
 }
 
 const ASSIGN_SUBJECT_FIELDS = (elective) => [
@@ -372,8 +374,8 @@ const SPECIAL_LABEL = {
   activity: 'GAMES · CLUBS & SOCIETIES · CAREER GUIDANCE',
 };
 const specialStyle = (type) => type === 'break' || type === 'lunch'
-  ? { bg: `${AMBER}14`, fg: '#B45309' }
-  : { bg: `${INK}0A`, fg: INK };
+  ? { bg: tint(8), fg: '#B45309' }
+  : { bg: tint(4, C.ink), fg: C.ink };
 const hhmm = (t) => (t ? String(t).slice(0, 5) : '');
 
 export function ClassTimetablePage() {
@@ -491,7 +493,7 @@ export function ClassTimetablePage() {
 
   const approved = !!metaForm.approved;
   const badge = (
-    <span style={{ display: 'inline-block', padding: '3px 12px', borderRadius: 6, background: GREEN, color: WHITE, fontSize: 11, fontWeight: 900, letterSpacing: .5, transform: 'rotate(-4deg)' }}>APPROVED</span>
+    <span style={{ display: 'inline-block', padding: '3px 12px', borderRadius: 6, background: GREEN, color: '#fff', fontSize: 11, fontWeight: 900, letterSpacing: .5, transform: 'rotate(-4deg)' }}>APPROVED</span>
   );
 
   return (
@@ -512,12 +514,12 @@ export function ClassTimetablePage() {
         <select value={sectionId} onChange={(e) => setSectionId(e.target.value)} style={{ ...inputStyle, width: 150, cursor: 'pointer' }}>
           <option value="">All sections</option>{sections.filter((s) => s.class_id === classId).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
         </select>
-        {classId && <button onClick={loadTemplate} disabled={busy} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 15px', borderRadius: 9, border: `1px solid ${AMBER}66`, background: `${AMBER}0C`, color: '#B45309', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}><Sparkles size={14} /> Load starter template</button>}
-        {classId && <button onClick={() => window.print()} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 15px', borderRadius: 9, border: `1px solid ${BORDER}`, background: WHITE, color: INK, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}><Printer size={14} /> Print</button>}
+        {classId && <button onClick={loadTemplate} disabled={busy} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 15px', borderRadius: 9, border: `1px solid ${tint(40)}`, background: tint(5), color: '#B45309', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: C.font }}><Ico ti="ti-sparkles" size={14} /> Load starter template</button>}
+        {classId && <button onClick={() => window.print()} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 15px', borderRadius: 9, border: `1px solid ${C.border}`, background: C.surface, color: C.ink, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: C.font }}><Ico ti="ti-printer" size={14} /> Print</button>}
       </div>
 
       {!classId ? (
-        <div style={{ padding: 40, textAlign: 'center', color: MUTED2, fontSize: 13, fontFamily: FONT, background: WHITE, border: `1.5px dashed ${BORDER}`, borderRadius: 14 }}>
+        <div style={{ padding: 40, textAlign: 'center', color: C.muted2, fontSize: 13, fontFamily: C.font, background: C.surface, border: `1.5px dashed ${C.border}`, borderRadius: 14 }}>
           Pick a class to view and edit its timetable.
         </div>
       ) : (
@@ -598,10 +600,10 @@ export function ClassTimetablePage() {
               <FooterField label="Date" type="date" value={metaForm.approved_on || ''} onChange={(v) => setMetaForm((f) => ({ ...f, approved_on: v }))} />
               <label style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 12, fontWeight: 700, color: INK, cursor: 'pointer' }}>
                 <input type="checkbox" checked={approved} onChange={(e) => setMetaForm((f) => ({ ...f, approved: e.target.checked }))} style={{ width: 15, height: 15, accentColor: GREEN }} />
-                <CheckCircle2 size={14} color={approved ? GREEN : MUTED2} /> Approved
+                <Ico ti="ti-circle-check" size={14} color={approved ? GREEN : MUTED2} /> Approved
               </label>
               <button className="tt-noprint" onClick={saveMeta} disabled={busy} style={{ justifySelf: 'end', display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 15px', borderRadius: 8, border: 'none', background: `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: WHITE, fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
-                {busy ? <Loader2 size={13} style={{ animation: 'spin .8s linear infinite' }} /> : <Save size={13} />} Save
+                {busy ? <Ico ti="ti-loader-2" size={13} style={{ animation: 'spin .8s linear infinite' }} /> : <Ico ti="ti-device-floppy" size={13} />} Save
               </button>
             </div>
           </div>
@@ -614,7 +616,7 @@ export function ClassTimetablePage() {
           <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 380, background: WHITE, borderRadius: 16, padding: '20px 20px 22px', fontFamily: FONT }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
               <p style={{ fontSize: 14.5, fontWeight: 800, color: INK, margin: 0 }}>{DAYS.find((d) => d.n === cell.day)?.label} · {hhmm(cell.period.starts_at)}–{hhmm(cell.period.ends_at)}</p>
-              <button onClick={() => setCell(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: MUTED2 }}><X size={17} /></button>
+              <button onClick={() => setCell(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: MUTED2 }}><Ico ti="ti-x" size={17} /></button>
             </div>
             <label style={{ fontSize: 12, fontWeight: 700, color: INK, display: 'block', marginBottom: 5 }}>Subject</label>
             <select value={cellSubject} onChange={(e) => setCellSubject(e.target.value)} style={{ ...inputStyle, cursor: 'pointer', marginBottom: 12 }}>
@@ -627,7 +629,7 @@ export function ClassTimetablePage() {
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
               {cell.slot && <button onClick={clearCell} disabled={busy} style={{ padding: '9px 15px', borderRadius: 9, border: `1.5px solid ${RED}44`, background: `${RED}0C`, color: RED, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>Clear</button>}
               <button onClick={saveCell} disabled={busy} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 18px', borderRadius: 9, border: 'none', background: `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: WHITE, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
-                {busy ? <Loader2 size={13} style={{ animation: 'spin .8s linear infinite' }} /> : <Save size={13} />} Save
+                {busy ? <Ico ti="ti-loader-2" size={13} style={{ animation: 'spin .8s linear infinite' }} /> : <Ico ti="ti-device-floppy" size={13} />} Save
               </button>
             </div>
           </div>
@@ -698,33 +700,33 @@ export function PromoteStudentsPage() {
         <select value={fromClass} onChange={(e) => setFromClass(e.target.value)} style={{ ...inputStyle, width: 170, cursor: 'pointer' }}>
           <option value="">From class…</option>{classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
-        <ArrowRightLeft size={16} color={MUTED2} />
+        <Ico ti="ti-arrows-right-left" size={16} color={C.muted2} />
         <select value={toClass} onChange={(e) => setToClass(e.target.value)} style={{ ...inputStyle, width: 170, cursor: 'pointer' }}>
           <option value="">To class…</option>{classes.filter((c) => c.id !== fromClass).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
         <select value={sessionId} onChange={(e) => setSessionId(e.target.value)} style={{ ...inputStyle, width: 170, cursor: 'pointer' }}>
           <option value="">Session (optional)</option>{sessions.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
         </select>
-        <button onClick={promote} disabled={busy || !chosen.length || !toClass} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '10px 18px', borderRadius: 9, border: 'none', background: busy || !chosen.length || !toClass ? '#E5E7EB' : `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: busy || !chosen.length || !toClass ? '#9CA3AF' : WHITE, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
-          {busy ? <Loader2 size={14} style={{ animation: 'spin .8s linear infinite' }} /> : null} Promote {chosen.length ? `(${chosen.length})` : ''}
+        <button onClick={promote} disabled={busy || !chosen.length || !toClass} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '10px 18px', borderRadius: 9, border: 'none', background: busy || !chosen.length || !toClass ? '#E5E7EB' : `linear-gradient(135deg, ${C.brand}, #D4651E)`, color: busy || !chosen.length || !toClass ? '#9CA3AF' : '#fff', fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: C.font }}>
+          {busy ? <Ico ti="ti-loader-2" size={14} style={{ animation: 'spin .8s linear infinite' }} /> : null} Promote {chosen.length ? `(${chosen.length})` : ''}
         </button>
       </div>
 
       {students && (
-        <div style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 14, overflow: 'hidden' }}>
+        <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, overflow: 'hidden' }}>
           {students.length === 0 ? (
-            <div style={{ padding: '30px', textAlign: 'center', color: MUTED2, fontSize: 13, fontFamily: FONT }}>No active students in that class.</div>
+            <div style={{ padding: '30px', textAlign: 'center', color: C.muted2, fontSize: 13, fontFamily: C.font }}>No active students in that class.</div>
           ) : students.map((s) => (
-            <label key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 16px', borderBottom: `1px solid ${BORDER}`, cursor: 'pointer', fontFamily: FONT }}>
-              <input type="checkbox" checked={!!selected[s.id]} onChange={(e) => setSelected((p) => ({ ...p, [s.id]: e.target.checked }))} style={{ width: 15, height: 15, accentColor: AMBER }} />
-              <span style={{ fontSize: 13, fontWeight: 700, color: INK }}>{s.first_name} {s.last_name}</span>
-              <span style={{ fontSize: 11, color: MUTED2 }}>{s.admission_no}</span>
+            <label key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 16px', borderBottom: `1px solid ${C.border}`, cursor: 'pointer', fontFamily: C.font }}>
+              <input type="checkbox" checked={!!selected[s.id]} onChange={(e) => setSelected((p) => ({ ...p, [s.id]: e.target.checked }))} style={{ width: 15, height: 15, accentColor: C.brand }} />
+              <span style={{ fontSize: 13, fontWeight: 700, color: C.ink }}>{s.first_name} {s.last_name}</span>
+              <span style={{ fontSize: 11, color: C.muted2 }}>{s.admission_no}</span>
             </label>
           ))}
         </div>
       )}
 
-      {toast && <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: INK, color: WHITE, padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999 }}>{toast}</div>}
+      {toast && <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: C.ink, color: '#fff', padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999 }}>{toast}</div>}
     </PageLayout>
   );
 }
@@ -847,21 +849,21 @@ export function WeeklyForecastPage() {
         </select>
         <input type="date" value={weekStart} onChange={(e) => setWeekStart(mondayOf(e.target.value))} style={{ ...inputStyle, width: 160 }} title="Any day — snaps to that week's Monday" />
         {classId && <>
-          <span style={{ width: 1, alignSelf: 'stretch', background: BORDER, margin: '0 2px' }} />
+          <span style={{ width: 1, alignSelf: 'stretch', background: C.border, margin: '0 2px' }} />
           <select value={term} onChange={(e) => setTerm(e.target.value)} style={{ ...inputStyle, width: 130, cursor: 'pointer' }} title="Scheme term to pull topics from">
             {TERM_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}
           </select>
           <select value={wk} onChange={(e) => setWk(e.target.value)} style={{ ...inputStyle, width: 104, cursor: 'pointer' }} title="Scheme week to pull topics from">
             {WEEK_OPTIONS.map((w) => <option key={w} value={w}>{w}</option>)}
           </select>
-          <button onClick={generate} disabled={genBusy} title="Fill every period with its subject's scheme-of-work topic for the chosen term & week" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 15px', borderRadius: 9, border: `1px solid ${AMBER}66`, background: `${AMBER}0C`, color: '#B45309', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>{genBusy ? <Loader2 size={13} style={{ animation: 'spin .8s linear infinite' }} /> : <Sparkles size={14} />} Generate from scheme</button>
+          <button onClick={generate} disabled={genBusy} title="Fill every period with its subject's scheme-of-work topic for the chosen term & week" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 15px', borderRadius: 9, border: `1px solid ${tint(40)}`, background: tint(5), color: '#B45309', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: C.font }}>{genBusy ? <Ico ti="ti-loader-2" size={13} style={{ animation: 'spin .8s linear infinite' }} /> : <Ico ti="ti-sparkles" size={14} />} Generate from scheme</button>
         </>}
-        {classId && <button onClick={save} disabled={busy} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 16px', borderRadius: 9, border: 'none', background: `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: WHITE, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>{busy ? <Loader2 size={13} style={{ animation: 'spin .8s linear infinite' }} /> : <Save size={13} />} Save</button>}
-        {classId && <button onClick={() => window.print()} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 15px', borderRadius: 9, border: `1px solid ${BORDER}`, background: WHITE, color: INK, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}><Printer size={14} /> Print</button>}
+        {classId && <button onClick={save} disabled={busy} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 16px', borderRadius: 9, border: 'none', background: `linear-gradient(135deg, ${C.brand}, #D4651E)`, color: '#fff', fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: C.font }}>{busy ? <Ico ti="ti-loader-2" size={13} style={{ animation: 'spin .8s linear infinite' }} /> : <Ico ti="ti-device-floppy" size={13} />} Save</button>}
+        {classId && <button onClick={() => window.print()} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 15px', borderRadius: 9, border: `1px solid ${C.border}`, background: C.surface, color: C.ink, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: C.font }}><Ico ti="ti-printer" size={14} /> Print</button>}
       </div>
 
       {!classId ? (
-        <div style={{ padding: 40, textAlign: 'center', color: MUTED2, fontSize: 13, fontFamily: FONT, background: WHITE, border: `1.5px dashed ${BORDER}`, borderRadius: 14 }}>Pick a class and week to plan.</div>
+        <div style={{ padding: 40, textAlign: 'center', color: C.muted2, fontSize: 13, fontFamily: C.font, background: C.surface, border: `1.5px dashed ${C.border}`, borderRadius: 14 }}>Pick a class and week to plan.</div>
       ) : (
         <div id="wf-print" style={{ background: WHITE, border: `2px solid ${INK}`, borderRadius: 8, padding: 14, fontFamily: FONT }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 10 }}>
@@ -959,14 +961,14 @@ export function DailySchedulePage() {
           <option value="">All sections</option>{ctx.sections.filter((s) => s.class_id === classId).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
         </select>
         <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={{ ...inputStyle, width: 160 }} />
-        {classId && <button onClick={save} disabled={busy} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 16px', borderRadius: 9, border: 'none', background: `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: WHITE, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>{busy ? <Loader2 size={13} style={{ animation: 'spin .8s linear infinite' }} /> : <Save size={13} />} Save</button>}
-        {classId && <button onClick={() => window.print()} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 15px', borderRadius: 9, border: `1px solid ${BORDER}`, background: WHITE, color: INK, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}><Printer size={14} /> Print</button>}
+        {classId && <button onClick={save} disabled={busy} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 16px', borderRadius: 9, border: 'none', background: `linear-gradient(135deg, ${C.brand}, #D4651E)`, color: '#fff', fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: C.font }}>{busy ? <Ico ti="ti-loader-2" size={13} style={{ animation: 'spin .8s linear infinite' }} /> : <Ico ti="ti-device-floppy" size={13} />} Save</button>}
+        {classId && <button onClick={() => window.print()} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 15px', borderRadius: 9, border: `1px solid ${C.border}`, background: C.surface, color: C.ink, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: C.font }}><Ico ti="ti-printer" size={14} /> Print</button>}
       </div>
 
       {!classId ? (
-        <div style={{ padding: 40, textAlign: 'center', color: MUTED2, fontSize: 13, fontFamily: FONT, background: WHITE, border: `1.5px dashed ${BORDER}`, borderRadius: 14 }}>Pick a class and date.</div>
+        <div style={{ padding: 40, textAlign: 'center', color: C.muted2, fontSize: 13, fontFamily: C.font, background: C.surface, border: `1.5px dashed ${C.border}`, borderRadius: 14 }}>Pick a class and date.</div>
       ) : dow > 5 ? (
-        <div style={{ padding: 40, textAlign: 'center', color: MUTED2, fontSize: 13, fontFamily: FONT, background: WHITE, border: `1.5px dashed ${BORDER}`, borderRadius: 14 }}>{DOW_NAMES[dow - 1]} is a weekend — no scheduled periods.</div>
+        <div style={{ padding: 40, textAlign: 'center', color: C.muted2, fontSize: 13, fontFamily: C.font, background: C.surface, border: `1.5px dashed ${C.border}`, borderRadius: 14 }}>{DOW_NAMES[dow - 1]} is a weekend — no scheduled periods.</div>
       ) : (
         <div id="ds-print" style={{ background: WHITE, border: `2px solid ${INK}`, borderRadius: 8, padding: 14, fontFamily: FONT, maxWidth: 720 }}>
           <div style={{ fontSize: 16, fontWeight: 900, color: INK, marginBottom: 10 }}>{className.toUpperCase()} — {DOW_NAMES[dow - 1].toUpperCase()}, {prettyDate(date)}</div>
@@ -1011,9 +1013,9 @@ export function DailySchedulePage() {
 
 /* ── Teaching Materials (per class · section · subject) ──────────────── */
 const MAT_META = {
-  document: { label: 'Document', color: BLUE,   Icon: FileText },
-  video:    { label: 'Video',    color: RED,    Icon: Video },
-  link:     { label: 'Link',     color: PURPLE, Icon: Link2 },
+  document: { label: 'Document', color: BLUE,   ti: 'ti-file-text' },
+  video:    { label: 'Video',    color: RED,    ti: 'ti-video' },
+  link:     { label: 'Link',     color: PURPLE, ti: 'ti-link' },
 };
 export function TeachingMaterialsPage() {
   const [classId, setClassId] = useState('');
@@ -1106,23 +1108,23 @@ export function TeachingMaterialsPage() {
         <select value={subjectId} onChange={(e) => setSubjectId(e.target.value)} disabled={!classId} style={{ ...ctrl, width: 170, opacity: classId ? 1 : 0.6 }}>
           <option value="">— subject —</option>{subjectOptions.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
         </select>
-        {classId && <button onClick={seedSample} disabled={busy} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 15px', borderRadius: 9, border: `1px solid ${AMBER}66`, background: `${AMBER}0C`, color: '#B45309', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>{busy ? <Loader2 size={13} style={{ animation: 'spin .8s linear infinite' }} /> : <Sparkles size={14} />} Load sample data</button>}
-        {classId && subjectId && <button onClick={() => setModal({ resource_type: 'document' })} style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 16px', borderRadius: 9, border: 'none', background: `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: WHITE, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}><Plus size={15} /> Add material</button>}
+        {classId && <button onClick={seedSample} disabled={busy} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 15px', borderRadius: 9, border: `1px solid ${tint(40)}`, background: tint(5), color: '#B45309', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: C.font }}>{busy ? <Ico ti="ti-loader-2" size={13} style={{ animation: 'spin .8s linear infinite' }} /> : <Ico ti="ti-sparkles" size={14} />} Load sample data</button>}
+        {classId && subjectId && <button onClick={() => setModal({ resource_type: 'document' })} style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 16px', borderRadius: 9, border: 'none', background: `linear-gradient(135deg, ${C.brand}, #D4651E)`, color: '#fff', fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: C.font }}><Ico ti="ti-plus" size={15} /> Add material</button>}
       </div>
 
       {!classId || !subjectId ? (
-        <div style={{ padding: 40, textAlign: 'center', color: MUTED2, fontSize: 13, fontFamily: FONT, background: WHITE, border: `1.5px dashed ${BORDER}`, borderRadius: 14 }}>
-          <FolderOpen size={30} style={{ opacity: .4, marginBottom: 8 }} /><div>Pick a class and subject to see its teaching materials.</div>
+        <div style={{ padding: 40, textAlign: 'center', color: C.muted2, fontSize: 13, fontFamily: C.font, background: C.surface, border: `1.5px dashed ${C.border}`, borderRadius: 14 }}>
+          <Ico ti="ti-folder-open" size={30} style={{ opacity: .4, marginBottom: 8 }} /><div>Pick a class and subject to see its teaching materials.</div>
         </div>
       ) : materials === null ? (
-        <div style={{ padding: 40, textAlign: 'center', color: MUTED2 }}><Loader2 size={22} style={{ animation: 'spin .8s linear infinite' }} /></div>
+        <div style={{ padding: 40, textAlign: 'center', color: C.muted2 }}><Ico ti="ti-loader-2" size={22} style={{ animation: 'spin .8s linear infinite' }} /></div>
       ) : materials.length === 0 ? (
-        <div style={{ padding: 40, textAlign: 'center', color: MUTED2, fontSize: 13, fontFamily: FONT, background: WHITE, border: `1.5px dashed ${BORDER}`, borderRadius: 14 }}>
-          <FolderOpen size={30} style={{ opacity: .4, marginBottom: 8 }} />
+        <div style={{ padding: 40, textAlign: 'center', color: C.muted2, fontSize: 13, fontFamily: C.font, background: C.surface, border: `1.5px dashed ${C.border}`, borderRadius: 14 }}>
+          <Ico ti="ti-folder-open" size={30} style={{ opacity: .4, marginBottom: 8 }} />
           <div>No materials yet for {className} · {ctx.subjects.find((s) => s.id === subjectId)?.name}.</div>
           <div style={{ marginTop: 10, display: 'flex', gap: 8, justifyContent: 'center' }}>
-            <button onClick={() => setModal({ resource_type: 'document' })} style={{ padding: '8px 14px', borderRadius: 9, border: 'none', background: `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: WHITE, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>Add material</button>
-            <button onClick={seedSample} disabled={busy} style={{ padding: '8px 14px', borderRadius: 9, border: `1px solid ${BORDER}`, background: WHITE, color: INK, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>Load sample data</button>
+            <button onClick={() => setModal({ resource_type: 'document' })} style={{ padding: '8px 14px', borderRadius: 9, border: 'none', background: `linear-gradient(135deg, ${C.brand}, #D4651E)`, color: '#fff', fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: C.font }}>Add material</button>
+            <button onClick={seedSample} disabled={busy} style={{ padding: '8px 14px', borderRadius: 9, border: `1px solid ${C.border}`, background: C.surface, color: C.ink, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: C.font }}>Load sample data</button>
           </div>
         </div>
       ) : (
@@ -1130,19 +1132,19 @@ export function TeachingMaterialsPage() {
           {materials.map((m) => {
             const meta = MAT_META[m.resource_type] || MAT_META.document;
             return (
-              <div key={m.id} style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 14, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 8, fontFamily: FONT }}>
+              <div key={m.id} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 8, fontFamily: C.font }}>
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-                  <div style={{ width: 34, height: 34, borderRadius: 9, background: `${meta.color}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><meta.Icon size={17} color={meta.color} /></div>
+                  <div style={{ width: 34, height: 34, borderRadius: 9, background: tint(8, meta.color), display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Ico ti={meta.ti} size={17} color={meta.color} /></div>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13.5, fontWeight: 800, color: INK, wordBreak: 'break-word' }}>{m.title}</div>
-                    <span style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: .4, color: meta.color, background: `${meta.color}12`, borderRadius: 20, padding: '2px 8px' }}>{meta.label}</span>
+                    <div style={{ fontSize: 13.5, fontWeight: 800, color: C.ink, wordBreak: 'break-word' }}>{m.title}</div>
+                    <span style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: .4, color: meta.color, background: tint(7, meta.color), borderRadius: 20, padding: '2px 8px' }}>{meta.label}</span>
                   </div>
                 </div>
-                {m.note && <div style={{ fontSize: 12, color: MUTED, lineHeight: 1.5 }}>{m.note}</div>}
+                {m.note && <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.5 }}>{m.note}</div>}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 'auto', paddingTop: 4 }}>
-                  {m.url && <a href={m.url} target="_blank" rel="noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 700, color: BLUE, textDecoration: 'none' }}><ExternalLink size={12} /> Open</a>}
-                  <button onClick={() => setModal({ id: m.id, title: m.title, resource_type: m.resource_type, url: m.url || '', note: m.note || '' })} style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: MUTED }}><Pencil size={14} /></button>
-                  <button onClick={() => removeMaterial(m)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: RED }}><Trash2 size={14} /></button>
+                  {m.url && <a href={m.url} target="_blank" rel="noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 700, color: BLUE, textDecoration: 'none' }}><Ico ti="ti-external-link" size={12} /> Open</a>}
+                  <button onClick={() => setModal({ id: m.id, title: m.title, resource_type: m.resource_type, url: m.url || '', note: m.note || '' })} style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: C.muted }}><Ico ti="ti-pencil" size={14} /></button>
+                  <button onClick={() => removeMaterial(m)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: RED }}><Ico ti="ti-trash" size={14} /></button>
                 </div>
               </div>
             );
@@ -1152,10 +1154,10 @@ export function TeachingMaterialsPage() {
 
       {modal && (
         <div onClick={() => setModal(null)} style={{ position: 'fixed', inset: 0, zIndex: 3000, background: 'rgba(0,0,0,.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-          <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 440, background: WHITE, borderRadius: 16, padding: '20px 22px', fontFamily: FONT }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 440, background: C.surface, borderRadius: 16, padding: '20px 22px', fontFamily: C.font }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-              <span style={{ fontSize: 16, fontWeight: 800, color: INK }}>{modal.id ? 'Edit material' : 'Add material'}</span>
-              <button onClick={() => setModal(null)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: MUTED2 }}><X size={18} /></button>
+              <span style={{ fontSize: 16, fontWeight: 800, color: C.ink }}>{modal.id ? 'Edit material' : 'Add material'}</span>
+              <button onClick={() => setModal(null)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: C.muted2 }}><Ico ti="ti-x" size={18} /></button>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               <input value={modal.title || ''} onChange={(e) => setModal((m) => ({ ...m, title: e.target.value }))} placeholder="Title" style={inputStyle} />
@@ -1165,22 +1167,22 @@ export function TeachingMaterialsPage() {
               <input value={modal.url || ''} onChange={(e) => setModal((m) => ({ ...m, url: e.target.value, fileName: undefined }))} placeholder="Link / URL (optional)" style={inputStyle} />
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <input ref={fileRef} type="file" onChange={uploadFile} style={{ display: 'none' }} />
-                <button onClick={() => fileRef.current?.click()} disabled={uploading} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 9, border: `1.5px solid ${BORDER}`, background: WHITE, color: INK, fontSize: 12.5, fontWeight: 700, cursor: uploading ? 'default' : 'pointer', fontFamily: FONT }}>
-                  {uploading ? <Loader2 size={14} style={{ animation: 'spin .8s linear infinite' }} /> : <FileText size={14} />} {uploading ? 'Uploading…' : 'Upload file'}
+                <button onClick={() => fileRef.current?.click()} disabled={uploading} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 9, border: `1.5px solid ${C.border}`, background: C.surface, color: C.ink, fontSize: 12.5, fontWeight: 700, cursor: uploading ? 'default' : 'pointer', fontFamily: C.font }}>
+                  {uploading ? <Ico ti="ti-loader-2" size={14} style={{ animation: 'spin .8s linear infinite' }} /> : <Ico ti="ti-file-text" size={14} />} {uploading ? 'Uploading…' : 'Upload file'}
                 </button>
-                {modal.fileName && <span style={{ fontSize: 12, color: GREEN, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 4 }}><CheckCircle2 size={13} /> {modal.fileName}</span>}
+                {modal.fileName && <span style={{ fontSize: 12, color: GREEN, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 4 }}><Ico ti="ti-circle-check" size={13} /> {modal.fileName}</span>}
               </div>
               <textarea value={modal.note || ''} onChange={(e) => setModal((m) => ({ ...m, note: e.target.value }))} rows={3} placeholder="Note / description (optional)" style={{ ...inputStyle, resize: 'vertical' }} />
             </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 18 }}>
-              <button onClick={() => setModal(null)} style={{ padding: '9px 16px', borderRadius: 9, border: `1.5px solid ${BORDER}`, background: WHITE, color: INK, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>Cancel</button>
-              <button onClick={saveMaterial} disabled={busy || !modal.title?.trim()} style={{ padding: '9px 18px', borderRadius: 9, border: 'none', background: busy || !modal.title?.trim() ? '#E5E7EB' : `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: busy || !modal.title?.trim() ? '#9CA3AF' : WHITE, fontSize: 12.5, fontWeight: 800, cursor: busy || !modal.title?.trim() ? 'default' : 'pointer', fontFamily: FONT }}>{busy ? 'Saving…' : 'Save'}</button>
+              <button onClick={() => setModal(null)} style={{ padding: '9px 16px', borderRadius: 9, border: `1.5px solid ${C.border}`, background: C.surface, color: C.ink, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: C.font }}>Cancel</button>
+              <button onClick={saveMaterial} disabled={busy || !modal.title?.trim()} style={{ padding: '9px 18px', borderRadius: 9, border: 'none', background: busy || !modal.title?.trim() ? '#E5E7EB' : `linear-gradient(135deg, ${C.brand}, #D4651E)`, color: busy || !modal.title?.trim() ? '#9CA3AF' : '#fff', fontSize: 12.5, fontWeight: 800, cursor: busy || !modal.title?.trim() ? 'default' : 'pointer', fontFamily: C.font }}>{busy ? 'Saving…' : 'Save'}</button>
             </div>
           </div>
         </div>
       )}
 
-      {toast && <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: INK, color: WHITE, padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999 }}>{toast}</div>}
+      {toast && <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: C.ink, color: '#fff', padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999 }}>{toast}</div>}
     </PageLayout>
   );
 }

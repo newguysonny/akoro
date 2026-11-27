@@ -8,23 +8,24 @@ import { PageLayout } from '../../components/Layout.jsx';
 import ResourcePage from '../../components/mgmt/ResourcePage.jsx';
 import StatCards from '../../components/mgmt/StatCards.jsx';
 import { apiGet } from '../../services/api.js';
-import { AMBER, MUTED2, GREEN, RED, BLUE, PURPLE } from '../../constants.js';
+import { GREEN, RED, BLUE, PURPLE } from '../../constants.js';
+import { C, tint } from '../../theme/colors.js';
 
 const BASE = '/api/school/mgmt';
 const pill = (v, map) => {
-  const c = map[v] || MUTED2;
-  return <span style={{ padding: '3px 10px', borderRadius: 999, background: `${c}15`, color: c, fontSize: 11, fontWeight: 800, textTransform: 'capitalize' }}>{String(v).replace('_', ' ')}</span>;
+  const c = map[v] || C.muted2;
+  return <span style={{ padding: '3px 10px', borderRadius: 999, background: tint(8, c), color: c, fontSize: 11, fontWeight: 800, textTransform: 'capitalize' }}>{String(v).replace('_', ' ')}</span>;
 };
 
 export function FrontOfficeDashboardPage() {
   const [stats, setStats] = useState(null);
   useEffect(() => { apiGet(`${BASE}/dashboard/front-office`).then((r) => setStats(r.data)).catch(() => setStats({})); }, []);
   const cards = stats ? [
-    { n: stats.enquiries, label: 'Admission Enquiries', icon: DoorOpen, c: BLUE, to: '/mgmt/enquiries' },
-    { n: stats.openEnquiries, label: 'New Enquiries', icon: DoorOpen, c: AMBER, to: '/mgmt/enquiries' },
-    { n: stats.visitorsToday, label: 'Visitors Today', icon: Users, c: GREEN, to: '/mgmt/visitor-book' },
-    { n: stats.openComplaints, label: 'Open Complaints', icon: MessageSquareWarning, c: RED, to: '/mgmt/complaints' },
-    { n: stats.postalRecords, label: 'Postal Records', icon: Mail, c: PURPLE, to: '/mgmt/postal-records' },
+    { n: stats.enquiries, label: 'Admission Enquiries', icon: DoorOpen, ti: 'ti-door', c: BLUE, to: '/mgmt/enquiries' },
+    { n: stats.openEnquiries, label: 'New Enquiries', icon: DoorOpen, ti: 'ti-door', c: C.brand, to: '/mgmt/enquiries' },
+    { n: stats.visitorsToday, label: 'Visitors Today', icon: Users, ti: 'ti-users', c: GREEN, to: '/mgmt/visitor-book' },
+    { n: stats.openComplaints, label: 'Open Complaints', icon: MessageSquareWarning, ti: 'ti-message-exclamation', c: RED, to: '/mgmt/complaints' },
+    { n: stats.postalRecords, label: 'Postal Records', icon: Mail, ti: 'ti-mail', c: PURPLE, to: '/mgmt/postal-records' },
   ] : [];
   return (
     <PageLayout title="Front Office Dashboard" subtitle="Reception activity at a glance">
@@ -39,7 +40,7 @@ export function AdmissionEnquiriesPage() {
     columns={[
       { key: 'name', label: 'Name' }, { key: 'phone', label: 'Phone' },
       { key: 'class_interest', label: 'Class' }, { key: 'source', label: 'Source' },
-      { key: 'status', label: 'Status', render: (r) => pill(r.status, { new: AMBER, contacted: BLUE, admitted: GREEN, closed: MUTED2 }) },
+      { key: 'status', label: 'Status', render: (r) => pill(r.status, { new: C.brand, contacted: BLUE, admitted: GREEN, closed: C.muted2 }) },
       { key: 'follow_up_on', label: 'Follow Up' },
     ]}
     fields={[
@@ -79,7 +80,7 @@ export function ComplaintsPage() {
     columns={[
       { key: 'complainant', label: 'Complainant' }, { key: 'category', label: 'Category' },
       { key: 'description', label: 'Description' },
-      { key: 'status', label: 'Status', render: (r) => pill(r.status, { open: RED, in_progress: AMBER, resolved: GREEN }) },
+      { key: 'status', label: 'Status', render: (r) => pill(r.status, { open: RED, in_progress: C.brand, resolved: GREEN }) },
     ]}
     fields={[
       { key: 'complainant', label: 'Complainant', required: true },

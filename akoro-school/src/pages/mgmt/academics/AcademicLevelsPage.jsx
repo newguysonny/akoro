@@ -4,14 +4,12 @@
  */
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  Layers, Search, Eye, Pencil, Trash2, Copy, Printer, Columns, Sheet, Download,
-  FileText, Loader2, CheckSquare,
-} from 'lucide-react';
+import { Ico } from '../../../theme/Ico.jsx';
 import { PageLayout } from '../../../components/Layout.jsx';
 import { inputStyle } from '../../../components/mgmt/ResourcePage.jsx';
 import { apiGet, apiPost, apiPut, apiDelete } from '../../../services/api.js';
-import { AMBER, INK, MUTED, MUTED2, BORDER, WHITE, GREEN, RED, BLUE, FONT } from '../../../constants.js';
+import { GREEN, RED, BLUE } from '../../../constants.js';
+import { C, tint } from '../../../theme/colors.js';
 import { confirmDialog } from '../../../components/ConfirmHost.jsx';
 import {
   BASE, GENERIC_STATUS_OPTS, STATUS_PILL, downloadBlob, csvCell, openPrintTable,
@@ -22,7 +20,7 @@ const LEVEL_COLUMNS = [
   { key: 'code', label: 'Code' }, { key: 'name', label: 'Level Name' }, { key: 'sort_order', label: 'Order' },
   { key: 'classes_count', label: 'Classes' }, { key: 'students_count', label: 'Students' }, { key: 'status', label: 'Status' },
 ];
-const lbl = { fontSize: 11.5, fontWeight: 700, color: MUTED, fontFamily: FONT, display: 'block', margin: '10px 0 5px' };
+const lbl = { fontSize: 11.5, fontWeight: 700, color: C.muted, fontFamily: C.font, display: 'block', margin: '10px 0 5px' };
 
 function LevelFormModal({ initial, onClose, onSave }) {
   const isEdit = !!initial;
@@ -39,8 +37,8 @@ function LevelFormModal({ initial, onClose, onSave }) {
       <input type="number" value={form.sort_order} onChange={set('sort_order')} placeholder="e.g. 3" style={inputStyle} />
       <label style={lbl}>Status</label>
       <select value={form.status} onChange={set('status')} style={inputStyle}>{GENERIC_STATUS_OPTS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}</select>
-      <button onClick={() => canSave && onSave(form)} disabled={!canSave} style={{ width: '100%', marginTop: 16, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '12px', borderRadius: 10, border: 'none', background: !canSave ? '#E5E7EB' : `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: !canSave ? '#9CA3AF' : WHITE, fontSize: 13.5, fontWeight: 800, cursor: !canSave ? 'default' : 'pointer', fontFamily: FONT }}>
-        <CheckSquare size={14} /> {isEdit ? 'Save Changes' : 'Add Level'}
+      <button onClick={() => canSave && onSave(form)} disabled={!canSave} style={{ width: '100%', marginTop: 16, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '12px', borderRadius: 10, border: 'none', background: !canSave ? C.borderSoft : `linear-gradient(135deg, ${C.brand}, ${C.brandDeep})`, color: !canSave ? C.muted2 : '#fff', fontSize: 13.5, fontWeight: 800, cursor: !canSave ? 'default' : 'pointer', fontFamily: C.font }}>
+        <Ico ti="ti-square-check" size={14} /> {isEdit ? 'Save Changes' : 'Add Level'}
       </button>
     </ModalShell>
   );
@@ -120,8 +118,8 @@ export function AcademicLevelsPage() {
   return (
     <PageLayout title="Academic Levels" subtitle="All academic levels in your school">
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
-        <button onClick={() => { setEditingRow(null); setModal('form'); }} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 16px', borderRadius: 9, border: 'none', background: `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: WHITE, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
-          <Layers size={15} /> Add Academic Level
+        <button onClick={() => { setEditingRow(null); setModal('form'); }} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 16px', borderRadius: 9, border: 'none', background: `linear-gradient(135deg, ${C.brand}, ${C.brandDeep})`, color: '#fff', fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: C.font }}>
+          <Ico ti="ti-stack-2" size={15} /> Add Academic Level
         </button>
         <select value={status} onChange={(e) => setStatus(e.target.value)} style={selStyle}>
           <option value="">All Statuses</option>{GENERIC_STATUS_OPTS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
@@ -129,7 +127,7 @@ export function AcademicLevelsPage() {
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
-        <label style={{ fontSize: 12, color: MUTED, fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 6 }}>
+        <label style={{ fontSize: 12, color: C.muted, fontFamily: C.font, display: 'flex', alignItems: 'center', gap: 6 }}>
           Show
           <select value={pageSize} onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }} style={{ ...inputStyle, width: 72, padding: '6px 8px', cursor: 'pointer' }}>
             <option value={10}>10</option><option value={25}>25</option><option value={50}>50</option><option value={0}>All</option>
@@ -137,33 +135,33 @@ export function AcademicLevelsPage() {
           entries
         </label>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          <button onClick={doCopy} style={toolBtn(MUTED)}><Copy size={13} /> Copy</button>
-          <button onClick={doCSV} style={toolBtn(GREEN)}><Download size={13} /> CSV</button>
-          <button onClick={doExcel} style={toolBtn(GREEN)}><Sheet size={13} /> Excel</button>
-          <button onClick={() => openPrintTable('Academic Levels', exportHeaders, exportRows)} style={toolBtn(RED)}><FileText size={13} /> PDF</button>
-          <button onClick={() => openPrintTable('Academic Levels', exportHeaders, exportRows)} style={toolBtn(INK)}><Printer size={13} /> Print</button>
+          <button onClick={doCopy} style={toolBtn(C.muted)}><Ico ti="ti-copy" size={13} /> Copy</button>
+          <button onClick={doCSV} style={toolBtn(GREEN)}><Ico ti="ti-download" size={13} /> CSV</button>
+          <button onClick={doExcel} style={toolBtn(GREEN)}><Ico ti="ti-file-spreadsheet" size={13} /> Excel</button>
+          <button onClick={() => openPrintTable('Academic Levels', exportHeaders, exportRows)} style={toolBtn(RED)}><Ico ti="ti-file-text" size={13} /> PDF</button>
+          <button onClick={() => openPrintTable('Academic Levels', exportHeaders, exportRows)} style={toolBtn(C.ink)}><Ico ti="ti-printer" size={13} /> Print</button>
           <div style={{ position: 'relative' }}>
-            <button onClick={() => setColMenu((v) => !v)} style={toolBtn(BLUE)}><Columns size={13} /> Column Visibility</button>
+            <button onClick={() => setColMenu((v) => !v)} style={toolBtn(BLUE)}><Ico ti="ti-columns" size={13} /> Column Visibility</button>
             {colMenu && (
-              <div onMouseLeave={() => setColMenu(false)} style={{ position: 'absolute', top: '110%', left: 0, zIndex: 20, background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 10, padding: 10, minWidth: 180, boxShadow: '0 8px 24px rgba(0,0,0,.12)' }}>
+              <div onMouseLeave={() => setColMenu(false)} style={{ position: 'absolute', top: '110%', left: 0, zIndex: 20, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: 10, minWidth: 180, boxShadow: '0 8px 24px rgba(0,0,0,.12)' }}>
                 {LEVEL_COLUMNS.map((c) => (
-                  <label key={c.key} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 4px', fontSize: 12.5, fontFamily: FONT, color: INK, cursor: 'pointer' }}>
+                  <label key={c.key} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 4px', fontSize: 12.5, fontFamily: C.font, color: C.ink, cursor: 'pointer' }}>
                     <input type="checkbox" checked={!!visibleCols[c.key]} onChange={(e) => setVisibleCols((p) => ({ ...p, [c.key]: e.target.checked }))} /> {c.label}
                   </label>
                 ))}
               </div>
             )}
           </div>
-          <button onClick={bulkDelete} disabled={!selectedIds.length} style={toolBtn(RED, !selectedIds.length)}><Trash2 size={13} /> Bulk Delete{selectedIds.length ? ` (${selectedIds.length})` : ''}</button>
+          <button onClick={bulkDelete} disabled={!selectedIds.length} style={toolBtn(RED, !selectedIds.length)}><Ico ti="ti-trash" size={13} /> Bulk Delete{selectedIds.length ? ` (${selectedIds.length})` : ''}</button>
         </div>
         <div style={{ position: 'relative', marginLeft: 'auto', minWidth: 200 }}>
-          <Search size={15} color={MUTED2} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)' }} />
+          <Ico ti="ti-search" size={15} color={C.muted2} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)' }} />
           <input value={query} onChange={(e) => { setQuery(e.target.value); setPage(1); }} placeholder="Search name, code…" style={{ ...inputStyle, paddingLeft: 34 }} />
         </div>
       </div>
 
-      <div style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 14, overflow: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: FONT }}>
+      <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, overflow: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: C.font }}>
           <thead><tr>
             <th style={{ ...th, width: 34 }}><input type="checkbox" checked={allPageSelected} onChange={(e) => toggleAll(e.target.checked)} /></th>
             {visibleCols.code && <th style={th}>CODE</th>}
@@ -175,23 +173,23 @@ export function AcademicLevelsPage() {
             <th style={{ ...th, textAlign: 'right' }}>ACTIONS</th>
           </tr></thead>
           <tbody>
-            {levels === null && <tr><td style={{ ...td, textAlign: 'center', color: MUTED2 }} colSpan={colCount}><Loader2 size={18} style={{ animation: 'spin .8s linear infinite' }} /></td></tr>}
-            {levels && pageRows.length === 0 && <tr><td style={{ ...td, textAlign: 'center', color: MUTED2 }} colSpan={colCount}>No academic levels yet.</td></tr>}
+            {levels === null && <tr><td style={{ ...td, textAlign: 'center', color: C.muted2 }} colSpan={colCount}><Ico ti="ti-loader-2" size={18} style={{ animation: 'spin .8s linear infinite' }} /></td></tr>}
+            {levels && pageRows.length === 0 && <tr><td style={{ ...td, textAlign: 'center', color: C.muted2 }} colSpan={colCount}>No academic levels yet.</td></tr>}
             {pageRows.map((r) => (
               <tr key={r.id}>
                 <td style={td}><input type="checkbox" checked={!!selected[r.id]} onChange={(e) => setSelected((p) => ({ ...p, [r.id]: e.target.checked }))} /></td>
                 {visibleCols.code && <td style={{ ...td, fontWeight: 700 }}>{r.code || '—'}</td>}
-                {visibleCols.name && <td style={{ ...td, whiteSpace: 'normal' }}><button onClick={() => navigate(`/mgmt/classes?level=${r.id}`)} style={{ border: 'none', background: 'none', padding: 0, cursor: 'pointer', fontFamily: FONT, fontWeight: 700, color: BLUE, textAlign: 'left' }}>{r.name}</button></td>}
+                {visibleCols.name && <td style={{ ...td, whiteSpace: 'normal' }}><button onClick={() => navigate(`/mgmt/classes?level=${r.id}`)} style={{ border: 'none', background: 'none', padding: 0, cursor: 'pointer', fontFamily: C.font, fontWeight: 700, color: BLUE, textAlign: 'left' }}>{r.name}</button></td>}
                 {visibleCols.sort_order && <td style={td}>{r.sort_order}</td>}
                 {visibleCols.classes_count && <td style={td}>{r.classes_count}</td>}
                 {visibleCols.students_count && <td style={td}>{r.students_count}</td>}
                 {visibleCols.status && <td style={td}>{STATUS_PILL(r.status, { active: { c: GREEN }, inactive: { c: RED } })}</td>}
                 <td style={{ ...td, textAlign: 'right' }}>
-                  {busyId === r.id ? <Loader2 size={15} style={{ animation: 'spin .8s linear infinite' }} /> : (
+                  {busyId === r.id ? <Ico ti="ti-loader-2" size={15} style={{ animation: 'spin .8s linear infinite' }} /> : (
                     <div style={{ display: 'inline-flex', gap: 6 }}>
-                      <button onClick={() => navigate(`/mgmt/classes?level=${r.id}`)} title="View Classes" style={iconBtn(GREEN)}><Eye size={14} /></button>
-                      <button onClick={() => { setEditingRow(r); setModal('form'); }} title="Edit" style={iconBtn(BLUE)}><Pencil size={14} /></button>
-                      <button onClick={() => remove(r)} title="Delete" style={iconBtn(RED)}><Trash2 size={14} /></button>
+                      <button onClick={() => navigate(`/mgmt/classes?level=${r.id}`)} title="View Classes" style={iconBtn(GREEN)}><Ico ti="ti-eye" size={14} /></button>
+                      <button onClick={() => { setEditingRow(r); setModal('form'); }} title="Edit" style={iconBtn(BLUE)}><Ico ti="ti-pencil" size={14} /></button>
+                      <button onClick={() => remove(r)} title="Delete" style={iconBtn(RED)}><Ico ti="ti-trash" size={14} /></button>
                     </div>
                   )}
                 </td>
@@ -203,11 +201,11 @@ export function AcademicLevelsPage() {
 
       {levels && filtered.length > 0 && pageSize > 0 && (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 12, flexWrap: 'wrap', gap: 8 }}>
-          <span style={{ fontSize: 12, color: MUTED2, fontFamily: FONT }}>Showing {(page - 1) * pageSize + 1} to {Math.min(page * pageSize, filtered.length)} of {filtered.length} entries</span>
+          <span style={{ fontSize: 12, color: C.muted2, fontFamily: C.font }}>Showing {(page - 1) * pageSize + 1} to {Math.min(page * pageSize, filtered.length)} of {filtered.length} entries</span>
           <div style={{ display: 'flex', gap: 6 }}>
-            <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1} style={{ ...toolBtn(MUTED, page === 1) }}>Previous</button>
-            <span style={{ fontSize: 12, color: INK, fontFamily: FONT, padding: '7px 10px' }}>{page} / {totalPages}</span>
-            <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages} style={{ ...toolBtn(MUTED, page === totalPages) }}>Next</button>
+            <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1} style={{ ...toolBtn(C.muted, page === 1) }}>Previous</button>
+            <span style={{ fontSize: 12, color: C.ink, fontFamily: C.font, padding: '7px 10px' }}>{page} / {totalPages}</span>
+            <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages} style={{ ...toolBtn(C.muted, page === totalPages) }}>Next</button>
           </div>
         </div>
       )}

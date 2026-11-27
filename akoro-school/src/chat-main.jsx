@@ -14,17 +14,32 @@
  */
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import '@tabler/icons-webfont/dist/tabler-icons.min.css';
+import './ui/base.css';
+import { ThemeProvider, learnerVars, applyTheme, readMode } from './ui/theme.jsx';
+import { SCHOOL_VARS } from './theme/schoolVars.js';
 import { AuthProvider, useAuth } from './contexts/AuthContext.jsx';
 import SiteSignIn from './pages/ai-chat/SiteSignIn.jsx';
 import { entryUrlInfo, API } from './services/api.js';
 import AiChatPage from './pages/AiChatPage.jsx';
-import { FONT, INK, MUTED, AMBER } from './constants.js';
+import { C, tint } from './theme/colors.js';
+
+// The learner app's look, same as the portal's (main.jsx): the chat page is
+// shared with the portal, so this build bootstraps the same theme — its
+// colours come from the theme variables, not the legacy constants.
+document.documentElement.setAttribute('data-ui', 'next');
+const themeVars = (isDark) => ({ ...learnerVars(isDark), ...SCHOOL_VARS });
+const font = document.createElement('link');
+font.rel = 'stylesheet';
+font.href = 'https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap';
+document.head.appendChild(font);
+applyTheme(readMode(), { vars: themeVars, dark: true });
 
 function Centered({ children }) {
   return (
     <div style={{ position: 'fixed', inset: 0, display: 'flex', flexDirection: 'column',
       alignItems: 'center', justifyContent: 'center', gap: 14, padding: 24,
-      fontFamily: FONT, background: '#FAF8F5', textAlign: 'center' }}>
+      fontFamily: C.font, background: C.bg, textAlign: 'center' }}>
       {children}
     </div>
   );
@@ -33,7 +48,7 @@ function Centered({ children }) {
 function Spinner() {
   return (
     <div style={{ width: 34, height: 34, borderRadius: '50%',
-      border: `3px solid ${AMBER}33`, borderTopColor: AMBER, animation: 'spin .8s linear infinite' }} />
+      border: `3px solid ${tint(20)}`, borderTopColor: C.brand, animation: 'spin .8s linear infinite' }} />
   );
 }
 
@@ -44,8 +59,8 @@ function Gate() {
     return (
       <Centered>
         <Spinner />
-        <div style={{ fontSize: 15, fontWeight: 700, color: INK }}>Signing you in…</div>
-        <div style={{ fontSize: 13, color: MUTED }}>Connecting you to your school's AI assistant.</div>
+        <div style={{ fontSize: 15, fontWeight: 700, color: C.ink }}>Signing you in…</div>
+        <div style={{ fontSize: 13, color: C.muted }}>Connecting you to your school's AI assistant.</div>
       </Centered>
     );
   }
@@ -59,9 +74,9 @@ function Gate() {
     <Centered>
       <SiteSignIn onSignedIn={exchangeHandoff} />
       {handoffError && handoffReason && (
-        <div style={{ fontSize: 12, color: MUTED, maxWidth: 340, lineHeight: 1.5 }}>{handoffReason}</div>
+        <div style={{ fontSize: 12, color: C.muted, maxWidth: 340, lineHeight: 1.5 }}>{handoffReason}</div>
       )}
-      <div style={{ fontSize: 10.5, color: '#B9B5C2', maxWidth: 340, wordBreak: 'break-all' }}>
+      <div style={{ fontSize: 10.5, color: C.muted2, maxWidth: 340, wordBreak: 'break-all' }}>
         API <code>{API}</code>
       </div>
     </Centered>
@@ -70,8 +85,10 @@ function Gate() {
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
+    <ThemeProvider vars={themeVars} dark>
     <AuthProvider>
       <Gate />
     </AuthProvider>
+    </ThemeProvider>
   </React.StrictMode>
 );

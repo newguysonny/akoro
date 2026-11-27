@@ -1,34 +1,36 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Bell, Check, CheckCheck, Trash2, BookOpen, Users, Swords, Calendar, MessageSquare, CheckSquare, Settings, Info, Video } from 'lucide-react';
+import { Trash2, BookOpen, Users, Swords, Calendar, MessageSquare, CheckSquare, Settings, Info, Video } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import { Btn, Toast } from '../components/Primitives.jsx';
 import { apiGet, apiPost, apiDelete } from '../services/api.js';
-import { AMBER, INK, MUTED, BORDER, LIGHT, WHITE, GREEN, RED, BLUE, PURPLE, FONT } from '../constants.js';
+import { GREEN, RED, BLUE, PURPLE } from '../constants.js';
+import { C, tint } from '../theme/colors.js';
+import { Ico } from '../theme/Ico.jsx';
 
 const TYPE_META = {
-  student_enrolled:      { icon: Users,        color: GREEN,  label: 'Student enrolled'   },
-  student_removed:       { icon: Users,        color: RED,    label: 'Student removed'    },
-  course_created:        { icon: BookOpen,     color: BLUE,   label: 'Course created'     },
-  course_updated:        { icon: BookOpen,     color: AMBER,  label: 'Course updated'     },
-  course_deleted:        { icon: Trash2,       color: RED,    label: 'Course deleted'     },
-  session_reminder:      { icon: Calendar,     color: AMBER,  label: 'Session scheduled'  },
-  session_updated:       { icon: Calendar,     color: AMBER,  label: 'Session updated'    },
-  session_deleted:       { icon: Trash2,       color: RED,    label: 'Session deleted'    },
-  battle_created:        { icon: Swords,       color: PURPLE, label: 'Battle created'     },
-  battle_started:        { icon: Swords,       color: PURPLE, label: 'Battle started'     },
-  battle_updated:        { icon: Swords,       color: AMBER,  label: 'Battle updated'     },
-  battle_deleted:        { icon: Trash2,       color: RED,    label: 'Battle deleted'     },
-  profile_updated:       { icon: Settings,     color: BLUE,   label: 'Profile updated'    },
-  settings_updated:      { icon: Settings,     color: BLUE,   label: 'Settings updated'   },
-  streaming_connected:   { icon: Video,        color: GREEN,  label: 'Streaming connected'    },
-  streaming_disconnected:{ icon: Video,        color: MUTED,  label: 'Streaming disconnected' },
-  task_complete:         { icon: CheckSquare,  color: GREEN,  label: 'Task complete'      },
-  message:               { icon: MessageSquare,color: BLUE,   label: 'Message'            },
-  system:                { icon: Settings,     color: MUTED,  label: 'System'             },
+  student_enrolled:      { icon: Users, ti: 'ti-users',        color: GREEN,  label: 'Student enrolled'   },
+  student_removed:       { icon: Users, ti: 'ti-users',        color: RED,    label: 'Student removed'    },
+  course_created:        { icon: BookOpen, ti: 'ti-book',     color: BLUE,   label: 'Course created'     },
+  course_updated:        { icon: BookOpen, ti: 'ti-book',     color: C.brand,  label: 'Course updated'     },
+  course_deleted:        { icon: Trash2, ti: 'ti-trash',       color: RED,    label: 'Course deleted'     },
+  session_reminder:      { icon: Calendar, ti: 'ti-calendar',     color: C.brand,  label: 'Session scheduled'  },
+  session_updated:       { icon: Calendar, ti: 'ti-calendar',     color: C.brand,  label: 'Session updated'    },
+  session_deleted:       { icon: Trash2, ti: 'ti-trash',       color: RED,    label: 'Session deleted'    },
+  battle_created:        { icon: Swords, ti: 'ti-swords',       color: PURPLE, label: 'Battle created'     },
+  battle_started:        { icon: Swords, ti: 'ti-swords',       color: PURPLE, label: 'Battle started'     },
+  battle_updated:        { icon: Swords, ti: 'ti-swords',       color: C.brand,  label: 'Battle updated'     },
+  battle_deleted:        { icon: Trash2, ti: 'ti-trash',       color: RED,    label: 'Battle deleted'     },
+  profile_updated:       { icon: Settings, ti: 'ti-settings',     color: BLUE,   label: 'Profile updated'    },
+  settings_updated:      { icon: Settings, ti: 'ti-settings',     color: BLUE,   label: 'Settings updated'   },
+  streaming_connected:   { icon: Video, ti: 'ti-video',        color: GREEN,  label: 'Streaming connected'    },
+  streaming_disconnected:{ icon: Video, ti: 'ti-video',        color: C.muted,  label: 'Streaming disconnected' },
+  task_complete:         { icon: CheckSquare, ti: 'ti-square-check',  color: GREEN,  label: 'Task complete'      },
+  message:               { icon: MessageSquare, ti: 'ti-message',color: BLUE,   label: 'Message'            },
+  system:                { icon: Settings, ti: 'ti-settings',     color: C.muted,  label: 'System'             },
 };
 
 function getMeta(type) {
-  return TYPE_META[type] || { icon: Info, color: MUTED, label: type };
+  return TYPE_META[type] || { icon: Info, ti: 'ti-info-circle', color: C.muted, label: type };
 }
 
 function timeAgo(iso) {
@@ -42,31 +44,31 @@ function timeAgo(iso) {
 }
 
 function NotificationItem({ n, onMarkRead, onDelete }) {
-  const { icon: Icon, color } = getMeta(n.type);
+  const { icon: Icon, ti, color } = getMeta(n.type);
   return (
     <div style={{
       display: 'flex', gap: 14, padding: '14px 16px',
-      background: n.is_read ? WHITE : `${AMBER}06`,
-      borderRadius: 12, border: `1px solid ${n.is_read ? BORDER : `${AMBER}30`}`,
+      background: n.is_read ? C.surface : tint(2),
+      borderRadius: 12, border: `1px solid ${n.is_read ? C.border : tint(19)}`,
       transition: 'all .15s', position: 'relative',
     }}>
       <div style={{
         width: 38, height: 38, borderRadius: '50%', flexShrink: 0,
-        background: `${color}18`, display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: tint(9, color), display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}>
-        <Icon size={16} color={color} />
+        <Ico lucide={Icon} ti={ti} size={16} color={color} />
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
-          <div style={{ fontSize: 13, fontWeight: n.is_read ? 500 : 700, color: INK, fontFamily: FONT }}>
+          <div style={{ fontSize: 13, fontWeight: n.is_read ? 500 : 700, color: C.ink, fontFamily: C.font }}>
             {n.title}
           </div>
-          <div style={{ fontSize: 11, color: MUTED, fontFamily: FONT, flexShrink: 0 }}>
+          <div style={{ fontSize: 11, color: C.muted, fontFamily: C.font, flexShrink: 0 }}>
             {timeAgo(n.created_at)}
           </div>
         </div>
         {n.content && (
-          <div style={{ fontSize: 12, color: MUTED, fontFamily: FONT, marginTop: 3, lineHeight: 1.5 }}>
+          <div style={{ fontSize: 12, color: C.muted, fontFamily: C.font, marginTop: 3, lineHeight: 1.5 }}>
             {n.content}
           </div>
         )}
@@ -76,17 +78,17 @@ function NotificationItem({ n, onMarkRead, onDelete }) {
           <button
             onClick={() => onMarkRead(n.id)}
             title="Mark as read"
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: AMBER, padding: 4 }}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.brand, padding: 4 }}
           >
-            <Check size={14} />
+            <Ico ti="ti-check" size={14} />
           </button>
         )}
         <button
           onClick={() => onDelete(n.id)}
           title="Delete"
-          style={{ background: 'none', border: 'none', cursor: 'pointer', color: MUTED, padding: 4 }}
+          style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.muted, padding: 4 }}
         >
-          <Trash2 size={14} />
+          <Ico ti="ti-trash" size={14} />
         </button>
       </div>
     </div>
@@ -147,8 +149,8 @@ export default function NotificationsPage() {
 
   const TAB = (active) => ({
     padding: '6px 16px', borderRadius: 20, border: 'none', cursor: 'pointer',
-    fontFamily: FONT, fontSize: 12, fontWeight: active ? 700 : 500,
-    background: active ? AMBER : 'transparent', color: active ? WHITE : MUTED,
+    fontFamily: C.font, fontSize: 12, fontWeight: active ? 700 : 500,
+    background: active ? C.brand : 'transparent', color: active ? '#fff' : C.muted,
     transition: 'all .15s',
   });
 
@@ -159,7 +161,7 @@ export default function NotificationsPage() {
       action={
         unread > 0 && (
           <Btn size="sm" variant="secondary" onClick={markAllRead}>
-            <CheckCheck size={14} /> Mark all read
+            <Ico ti="ti-checks" size={14} /> Mark all read
           </Btn>
         )
       }
@@ -175,16 +177,16 @@ export default function NotificationsPage() {
       {loading ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {[1,2,3,4,5].map(i => (
-            <div key={i} style={{ height: 72, borderRadius: 12, background: BORDER, opacity: .4 }} />
+            <div key={i} style={{ height: 72, borderRadius: 12, background: C.border, opacity: .4 }} />
           ))}
         </div>
       ) : displayed.length === 0 ? (
         <div style={{
-          background: WHITE, border: `1px dashed ${BORDER}`, borderRadius: 16,
+          background: C.surface, border: `1px dashed ${C.border}`, borderRadius: 16,
           padding: '56px', textAlign: 'center',
         }}>
-          <Bell size={32} color={MUTED} style={{ marginBottom: 12 }} />
-          <p style={{ fontSize: 14, color: MUTED, fontFamily: FONT, margin: 0 }}>
+          <Ico ti="ti-bell" size={32} color={C.muted} style={{ marginBottom: 12 }} />
+          <p style={{ fontSize: 14, color: C.muted, fontFamily: C.font, margin: 0 }}>
             {filter === 'unread' ? 'No unread notifications' : 'No notifications yet'}
           </p>
         </div>

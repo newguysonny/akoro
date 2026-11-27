@@ -5,7 +5,7 @@
  * the same educational tutor backend as the in-app Agent Chat.
  */
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Send, Bot, LogOut, Loader2, Plus, Camera, Upload, FileText, Loader, Mic, ClipboardCheck, Trophy, Sparkles } from 'lucide-react';
+import { Ico } from '../theme/Ico.jsx';
 import AssessmentPicker from './ai-chat/AssessmentPicker.jsx';
 import RankingSheet from './ai-chat/RankingSheet.jsx';
 import AssessmentRoom from '../components/assessment/AssessmentRoom.jsx';
@@ -14,7 +14,8 @@ import { API, apiGet, apiPost, getPortal, withAuth } from '../services/api.js';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { Modal, FileUploadZone, Btn, Txa } from '../components/Primitives.jsx';
 import VoiceChatPanel from '../components/voice/VoiceChatPanel.jsx';
-import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, PURPLE, BLUE, GOLD, FONT } from '../constants.js';
+import { GREEN, PURPLE, BLUE, GOLD } from '../constants.js';
+import { C, tint } from '../theme/colors.js';
 
 // The chat is named after the school's own agent (set during onboarding), and
 // it opens differently for each kind of visitor. A parent asking about fees and
@@ -169,19 +170,19 @@ export default function AiChatPage() {
     // OCR / file / document uploads are for students only — teachers and parents
     // don't need them.
     ...(isStudent ? [
-      { type: 'ocr', icon: <Camera size={15} color={GREEN} />,   label: 'Photo / Image OCR', desc: 'Scan & extract text' },
-      { type: 'file', icon: <Upload size={15} color={PURPLE} />, label: 'Upload file',        desc: 'PDF, Word, Excel…' },
-      { type: 'doc', icon: <FileText size={15} color={BLUE} />,  label: 'Upload document',    desc: 'Lesson notes, worksheets' },
+      { type: 'ocr', icon: <Ico ti="ti-camera" size={15} color={GREEN} />,   label: 'Photo / Image OCR', desc: 'Scan & extract text' },
+      { type: 'file', icon: <Ico ti="ti-upload" size={15} color={PURPLE} />, label: 'Upload file',        desc: 'PDF, Word, Excel…' },
+      { type: 'doc', icon: <Ico ti="ti-file-text" size={15} color={BLUE} />,  label: 'Upload document',    desc: 'Lesson notes, worksheets' },
     ] : []),
-    { type: 'voice', icon: <Mic size={15} color={AMBER} />,    label: 'Voice Chat',         desc: 'Talk to the assistant live' },
+    { type: 'voice', icon: <Ico ti="ti-microphone" size={15} color={C.brand} />,    label: 'Voice Chat',         desc: 'Talk to the assistant live' },
     ...(isStudent ? [
-      { type: 'assessment', icon: <ClipboardCheck size={15} color={PURPLE} />, label: 'Assessment', desc: 'Live — today’s subjects & topics' },
-      { type: 'ranking',    icon: <Trophy size={15} color={GOLD} />,           label: 'Ranking',    desc: 'Class · courses · schools leaderboards' },
+      { type: 'assessment', icon: <Ico ti="ti-clipboard-check" size={15} color={PURPLE} />, label: 'Assessment', desc: 'Live — today’s subjects & topics' },
+      { type: 'ranking',    icon: <Ico ti="ti-trophy" size={15} color={GOLD} />,           label: 'Ranking',    desc: 'Class · courses · schools leaderboards' },
     ] : []),
     ...(isTeacher ? [
-      { type: 'teaching', icon: <Sparkles size={15} color={AMBER} />,  label: 'Teaching tools',  desc: 'Podcast · misconceptions · hooks · vocabulary · grading' },
-      { type: 'lesson',  icon: <FileText size={15} color={PURPLE} />, label: 'Lesson tools',    desc: 'Lesson plan · worksheet · quiz' },
-      { type: 'website', icon: <FileText size={15} color={GREEN} />,  label: 'Website content', desc: 'Newsletter · recap · social · event' },
+      { type: 'teaching', icon: <Ico ti="ti-sparkles" size={15} color={C.brand} />,  label: 'Teaching tools',  desc: 'Podcast · misconceptions · hooks · vocabulary · grading' },
+      { type: 'lesson',  icon: <Ico ti="ti-file-text" size={15} color={PURPLE} />, label: 'Lesson tools',    desc: 'Lesson plan · worksheet · quiz' },
+      { type: 'website', icon: <Ico ti="ti-file-text" size={15} color={GREEN} />,  label: 'Website content', desc: 'Newsletter · recap · social · event' },
     ] : []),
   ];
 
@@ -249,20 +250,20 @@ export default function AiChatPage() {
   const onKey = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } };
 
   return (
-    <div style={{ height: '100dvh', display: 'flex', flexDirection: 'column', background: LIGHT, fontFamily: FONT }}>
+    <div style={{ height: '100dvh', display: 'flex', flexDirection: 'column', background: C.bg, fontFamily: C.font }}>
       {/* Header */}
-      <header style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', background: WHITE, borderBottom: `1px solid ${BORDER}`, flexShrink: 0 }}>
-        <div style={{ width: 40, height: 40, borderRadius: 11, background: `linear-gradient(135deg, ${AMBER}, #D4651E)`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-          <Bot size={22} color={WHITE} />
+      <header style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', background: C.surface, borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
+        <div style={{ width: 40, height: 40, borderRadius: 11, background: `linear-gradient(135deg, ${C.brand}, #D4651E)`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <Ico ti="ti-robot" size={22} color="#fff" />
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 15, fontWeight: 800, color: INK }}>{aiName || 'AI Study Assistant'}</div>
+          <div style={{ fontSize: 15, fontWeight: 800, color: C.ink }}>{aiName || 'AI Study Assistant'}</div>
           <div style={{ fontSize: 11.5, color: GREEN, display: 'flex', alignItems: 'center', gap: 5 }}>
             <span style={{ width: 6, height: 6, borderRadius: '50%', background: GREEN }} /> Online{firstName ? ` · ${firstName}` : ''}
           </div>
         </div>
-        <button onClick={logout} title="Sign out" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 9, border: `1px solid ${BORDER}`, background: WHITE, color: MUTED, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>
-          <LogOut size={13} /> Sign out
+        <button onClick={logout} title="Sign out" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 9, border: `1px solid ${C.border}`, background: C.surface, color: C.muted, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: C.font }}>
+          <Ico ti="ti-logout" size={13} /> Sign out
         </button>
       </header>
 
@@ -288,9 +289,9 @@ export default function AiChatPage() {
             <div key={i} style={{ display: 'flex', justifyContent: m.from === 'me' ? 'flex-end' : 'flex-start' }}>
               <div style={{
                 maxWidth: '82%', padding: '11px 14px', borderRadius: 16, fontSize: 14, lineHeight: 1.6, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-                background: m.from === 'me' ? `linear-gradient(135deg, ${AMBER}, #D4651E)` : WHITE,
-                color: m.from === 'me' ? WHITE : INK,
-                border: m.from === 'me' ? 'none' : `1px solid ${BORDER}`,
+                background: m.from === 'me' ? `linear-gradient(135deg, ${C.brand}, #D4651E)` : C.surface,
+                color: m.from === 'me' ? '#fff' : C.ink,
+                border: m.from === 'me' ? 'none' : `1px solid ${C.border}`,
                 borderBottomRightRadius: m.from === 'me' ? 4 : 16,
                 borderBottomLeftRadius: m.from === 'me' ? 16 : 4,
               }}>{m.text}</div>
@@ -298,8 +299,8 @@ export default function AiChatPage() {
           ))}
           {busy && (
             <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
-              <div style={{ padding: '11px 14px', borderRadius: 16, borderBottomLeftRadius: 4, background: WHITE, border: `1px solid ${BORDER}`, color: MUTED2, fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                <Loader2 size={14} style={{ animation: 'spin .8s linear infinite' }} /> Thinking…
+              <div style={{ padding: '11px 14px', borderRadius: 16, borderBottomLeftRadius: 4, background: C.surface, border: `1px solid ${C.border}`, color: C.muted2, fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                <Ico ti="ti-loader-2" size={14} style={{ animation: 'spin .8s linear infinite' }} /> Thinking…
               </div>
             </div>
           )}
@@ -307,28 +308,28 @@ export default function AiChatPage() {
       </div>
 
       {/* Composer */}
-      <div style={{ flexShrink: 0, padding: '12px 16px', background: WHITE, borderTop: `1px solid ${BORDER}` }}>
+      <div style={{ flexShrink: 0, padding: '12px 16px', background: C.surface, borderTop: `1px solid ${C.border}` }}>
         <div style={{ maxWidth: 760, margin: '0 auto', display: 'flex', alignItems: 'flex-end', gap: 10 }}>
           {/* Attachment + menu */}
           <div style={{ position: 'relative', flexShrink: 0 }}>
             {attachMenu && (
               <>
                 <div onClick={() => setAttachMenu(false)} style={{ position: 'fixed', inset: 0, zIndex: 10 }} />
-                <div style={{ position: 'absolute', bottom: 52, left: 0, zIndex: 11, width: 240, background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 12, boxShadow: '0 8px 28px rgba(0,0,0,.14)', overflow: 'hidden' }}>
+                <div style={{ position: 'absolute', bottom: 52, left: 0, zIndex: 11, width: 240, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, boxShadow: '0 8px 28px rgba(0,0,0,.14)', overflow: 'hidden' }}>
                   {ATTACH_ITEMS.map((it) => (
-                    <button key={it.type} onClick={() => openAttach(it.type)} style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '11px 13px', border: 'none', borderBottom: `1px solid ${BORDER}`, background: WHITE, cursor: 'pointer', textAlign: 'left', fontFamily: FONT }}>
-                      <span style={{ width: 30, height: 30, borderRadius: 8, background: LIGHT, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{it.icon}</span>
+                    <button key={it.type} onClick={() => openAttach(it.type)} style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '11px 13px', border: 'none', borderBottom: `1px solid ${C.border}`, background: C.surface, cursor: 'pointer', textAlign: 'left', fontFamily: C.font }}>
+                      <span style={{ width: 30, height: 30, borderRadius: 8, background: C.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{it.icon}</span>
                       <span style={{ minWidth: 0 }}>
-                        <span style={{ display: 'block', fontSize: 13, fontWeight: 700, color: INK }}>{it.label}</span>
-                        <span style={{ display: 'block', fontSize: 11, color: MUTED2 }}>{it.desc}</span>
+                        <span style={{ display: 'block', fontSize: 13, fontWeight: 700, color: C.ink }}>{it.label}</span>
+                        <span style={{ display: 'block', fontSize: 11, color: C.muted2 }}>{it.desc}</span>
                       </span>
                     </button>
                   ))}
                 </div>
               </>
             )}
-            <button onClick={() => setAttachMenu((v) => !v)} title="Attach" style={{ width: 44, height: 44, borderRadius: 12, border: `1.5px solid ${BORDER}`, background: WHITE, color: MUTED, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Plus size={20} style={{ transform: attachMenu ? 'rotate(45deg)' : 'none', transition: 'transform .15s' }} />
+            <button onClick={() => setAttachMenu((v) => !v)} title="Attach" style={{ width: 44, height: 44, borderRadius: 12, border: `1.5px solid ${C.border}`, background: C.surface, color: C.muted, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Ico ti="ti-plus" size={20} style={{ transform: attachMenu ? 'rotate(45deg)' : 'none', transition: 'transform .15s' }} />
             </button>
           </div>
           <textarea
@@ -337,13 +338,13 @@ export default function AiChatPage() {
             onKeyDown={onKey}
             rows={1}
             placeholder="Ask your AI assistant…"
-            style={{ flex: 1, resize: 'none', maxHeight: 140, padding: '11px 14px', borderRadius: 12, border: `1.5px solid ${BORDER}`, fontSize: 14, fontFamily: FONT, color: INK, outline: 'none', lineHeight: 1.5, background: WHITE }}
+            style={{ flex: 1, resize: 'none', maxHeight: 140, padding: '11px 14px', borderRadius: 12, border: `1.5px solid ${C.border}`, fontSize: 14, fontFamily: C.font, color: C.ink, outline: 'none', lineHeight: 1.5, background: C.surface }}
           />
-          <button onClick={send} disabled={!text.trim() || busy} style={{ width: 44, height: 44, flexShrink: 0, borderRadius: 12, border: 'none', background: (!text.trim() || busy) ? '#E5E7EB' : `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: (!text.trim() || busy) ? '#9CA3AF' : WHITE, cursor: (!text.trim() || busy) ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Send size={18} />
+          <button onClick={send} disabled={!text.trim() || busy} style={{ width: 44, height: 44, flexShrink: 0, borderRadius: 12, border: 'none', background: (!text.trim() || busy) ? '#E5E7EB' : `linear-gradient(135deg, ${C.brand}, #D4651E)`, color: (!text.trim() || busy) ? '#9CA3AF' : '#fff', cursor: (!text.trim() || busy) ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Ico ti="ti-send" size={18} />
           </button>
         </div>
-        <p style={{ maxWidth: 760, margin: '8px auto 0', fontSize: 10.5, color: MUTED2, textAlign: 'center' }}>AI can make mistakes — check important information.</p>
+        <p style={{ maxWidth: 760, margin: '8px auto 0', fontSize: 10.5, color: C.muted2, textAlign: 'center' }}>AI can make mistakes — check important information.</p>
       </div>
       </>
       )}
@@ -358,8 +359,8 @@ export default function AiChatPage() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <FileUploadZone label="Upload an image to scan & extract text" accept="image/*" onUploaded={handleOcrUploaded} />
             {ocrRunning && (
-              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13, color: MUTED }}>
-                <Loader size={14} style={{ animation: 'spin .8s linear infinite' }} /> Extracting text…
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13, color: C.muted }}>
+                <Ico ti="ti-loader" size={14} style={{ animation: 'spin .8s linear infinite' }} /> Extracting text…
               </div>
             )}
             {ocrError && <p style={{ fontSize: 12.5, color: '#EF4444', margin: 0 }}>{ocrError}</p>}

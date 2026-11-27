@@ -11,10 +11,11 @@
  * their price, and unlock the moment the teacher buys them.
  */
 import { useState, useEffect, useCallback } from 'react';
-import { Sparkles, Lock, Clock, Trash2, Loader2, Info } from 'lucide-react';
+import { Ico } from '../../theme/Ico.jsx';
 import { apiGet, apiDelete } from '../../services/api.js';
 import { ToolRunner } from './TeachingTools.jsx';
-import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, BLUE, RED, FONT } from '../../constants.js';
+import { BLUE, RED } from '../../constants.js';
+import { C, tint } from '../../theme/colors.js';
 
 const naira = (kobo) => `₦${Math.round((kobo || 0) / 100).toLocaleString('en-NG')}`;
 const fmtDateTime = (iso) => {
@@ -61,24 +62,24 @@ export default function ToolsWorkbench() {
       <button onClick={() => setKey(t.key)} style={{
         display: 'flex', alignItems: 'flex-start', gap: 10, width: '100%', textAlign: 'left',
         padding: '11px 13px', borderRadius: 10, border: 'none', cursor: 'pointer',
-        background: on ? BLUE : 'transparent', color: on ? WHITE : MUTED,
-        fontSize: 13.5, fontWeight: on ? 700 : 600, fontFamily: FONT, transition: 'all .12s',
+        background: on ? BLUE : 'transparent', color: on ? '#fff' : C.muted,
+        fontSize: 13.5, fontWeight: on ? 700 : 600, fontFamily: C.font, transition: 'all .12s',
       }}
-        onMouseEnter={(e) => { if (!on) e.currentTarget.style.background = LIGHT; }}
+        onMouseEnter={(e) => { if (!on) e.currentTarget.style.background = C.bg; }}
         onMouseLeave={(e) => { if (!on) e.currentTarget.style.background = 'transparent'; }}>
         <span style={{ fontSize: 15, flexShrink: 0, marginTop: 1 }}>{t.emoji}</span>
         <span style={{ flex: 1, minWidth: 0 }}>
           <span style={{ display: 'block' }}>{t.name}</span>
           <span style={{ display: 'block', fontSize: 11, fontWeight: 600, lineHeight: 1.4, marginTop: 2,
-            color: on ? 'rgba(255,255,255,.82)' : MUTED2 }}>{t.blurb}</span>
+            color: on ? 'rgba(255,255,255,.82)' : C.muted2 }}>{t.blurb}</span>
         </span>
-        {t.locked && <Lock size={13} color={on ? WHITE : MUTED2} style={{ marginTop: 2 }} />}
+        {t.locked && <Ico ti="ti-lock" size={13} color={on ? '#fff' : C.muted2} style={{ marginTop: 2 }} />}
       </button>
     );
   };
 
-  if (err) return <div style={{ color: RED, fontSize: 13.5, fontWeight: 700, fontFamily: FONT }}>{err}</div>;
-  if (!tools) return <div style={{ color: MUTED2, fontFamily: FONT }}>Loading tools…</div>;
+  if (err) return <div style={{ color: RED, fontSize: 13.5, fontWeight: 700, fontFamily: C.font }}>{err}</div>;
+  if (!tools) return <div style={{ color: C.muted2, fontFamily: C.font }}>Loading tools…</div>;
 
   const note = NOTES[key];
 
@@ -87,7 +88,7 @@ export default function ToolsWorkbench() {
       <div style={{ display: 'flex', gap: 22, alignItems: 'flex-start', flexWrap: 'wrap' }}>
         {/* Left rail */}
         <aside style={{ width: 268, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <div style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 14, padding: 8, display: 'flex', flexDirection: 'column', gap: 3 }}>
+          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: 8, display: 'flex', flexDirection: 'column', gap: 3 }}>
             <div style={railHeading}>TEACHING TOOLS</div>
             {free.map((t) => <Rail key={t.key} t={t} />)}
             {locked.length > 0 && (
@@ -99,20 +100,20 @@ export default function ToolsWorkbench() {
           </div>
 
           {note && (
-            <div style={{ background: `${AMBER}0A`, border: `1px solid ${AMBER}33`, borderRadius: 14, padding: '13px 15px', fontFamily: FONT }}>
+            <div style={{ background: tint(4), border: `1px solid ${tint(20)}`, borderRadius: 14, padding: '13px 15px', fontFamily: C.font }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-                <Info size={13} color={AMBER} />
-                <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: .5, color: AMBER }}>WHEN TO USE IT</span>
+                <Ico ti="ti-info-circle" size={13} color={C.brand} />
+                <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: .5, color: C.brand }}>WHEN TO USE IT</span>
               </div>
-              <div style={{ fontSize: 12.5, fontWeight: 800, color: INK, marginBottom: 5 }}>{note[0]}</div>
-              <div style={{ fontSize: 12, color: MUTED, lineHeight: 1.55 }}>{note[1]}</div>
+              <div style={{ fontSize: 12.5, fontWeight: 800, color: C.ink, marginBottom: 5 }}>{note[0]}</div>
+              <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.55 }}>{note[1]}</div>
             </div>
           )}
         </aside>
 
         {/* Right card — the tool itself */}
-        <section style={{ flex: 1, minWidth: 300, background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 16, padding: '22px 24px' }}>
-          {!tool ? <div style={{ color: MUTED2, fontFamily: FONT }}>Pick a tool.</div>
+        <section style={{ flex: 1, minWidth: 300, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: '22px 24px' }}>
+          {!tool ? <div style={{ color: C.muted2, fontFamily: C.font }}>Pick a tool.</div>
             : tool.locked ? <LockedPanel tool={tool} />
             : <ToolRunner tool={tool} showHeader onDone={() => setRefreshKey((k) => k + 1)} />}
         </section>
@@ -125,14 +126,14 @@ export default function ToolsWorkbench() {
 
 function LockedPanel({ tool }) {
   return (
-    <div style={{ textAlign: 'center', padding: '34px 20px', fontFamily: FONT }}>
+    <div style={{ textAlign: 'center', padding: '34px 20px', fontFamily: C.font }}>
       <div style={{ fontSize: 34, marginBottom: 10 }}>{tool.emoji}</div>
-      <div style={{ fontSize: 16, fontWeight: 900, color: INK }}>{tool.name}</div>
-      <p style={{ fontSize: 13, color: MUTED, maxWidth: 380, margin: '8px auto 18px', lineHeight: 1.6 }}>{tool.blurb}</p>
-      <a href="/apps" style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '11px 20px', borderRadius: 10, background: `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: WHITE, fontSize: 13.5, fontWeight: 800, textDecoration: 'none' }}>
-        <Lock size={14} /> Unlock for {naira(tool.priceKobo)}
+      <div style={{ fontSize: 16, fontWeight: 900, color: C.ink }}>{tool.name}</div>
+      <p style={{ fontSize: 13, color: C.muted, maxWidth: 380, margin: '8px auto 18px', lineHeight: 1.6 }}>{tool.blurb}</p>
+      <a href="/apps" style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '11px 20px', borderRadius: 10, background: `linear-gradient(135deg, ${C.brand}, #D4651E)`, color: '#fff', fontSize: 13.5, fontWeight: 800, textDecoration: 'none' }}>
+        <Ico ti="ti-lock" size={14} /> Unlock for {naira(tool.priceKobo)}
       </a>
-      <div style={{ fontSize: 11.5, color: MUTED2, marginTop: 10 }}>Bought once — it then works here and in your AI chat.</div>
+      <div style={{ fontSize: 11.5, color: C.muted2, marginTop: 10 }}>Bought once — it then works here and in your AI chat.</div>
     </div>
   );
 }
@@ -161,27 +162,27 @@ function PastGenerations({ toolKey, refreshKey }) {
   if (past && past.length === 0) return null;   // nothing yet — hide the strip
 
   return (
-    <div style={{ marginTop: 22, background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 16, padding: '16px 18px' }}>
+    <div style={{ marginTop: 22, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: '16px 18px' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-        <div style={{ fontSize: 13, fontWeight: 800, color: INK, fontFamily: FONT }}>Past generations</div>
-        <div style={{ fontSize: 11, color: MUTED2, fontFamily: FONT }}>swipe →</div>
+        <div style={{ fontSize: 13, fontWeight: 800, color: C.ink, fontFamily: C.font }}>Past generations</div>
+        <div style={{ fontSize: 11, color: C.muted2, fontFamily: C.font }}>swipe →</div>
       </div>
 
       {past === null ? (
-        <div style={{ display: 'flex', gap: 12 }}>{[0, 1, 2].map((i) => <div key={i} style={{ flex: '0 0 214px', height: 84, borderRadius: 12, background: LIGHT }} />)}</div>
+        <div style={{ display: 'flex', gap: 12 }}>{[0, 1, 2].map((i) => <div key={i} style={{ flex: '0 0 214px', height: 84, borderRadius: 12, background: C.bg }} />)}</div>
       ) : (
         <div style={{ display: 'flex', gap: 12, overflowX: 'auto', paddingBottom: 4, scrollSnapType: 'x proximity' }}>
           {past.map((o) => (
             <div key={o.id} onClick={() => openOne(o.id)} title="Open"
-              style={{ flex: '0 0 auto', width: 214, scrollSnapAlign: 'start', cursor: 'pointer', border: `1px solid ${BORDER}`, borderRadius: 12, padding: '12px 13px', fontFamily: FONT, display: 'flex', flexDirection: 'column', gap: 6 }}
-              onMouseEnter={(e) => { e.currentTarget.style.borderColor = AMBER; }}
-              onMouseLeave={(e) => { e.currentTarget.style.borderColor = BORDER; }}>
+              style={{ flex: '0 0 auto', width: 214, scrollSnapAlign: 'start', cursor: 'pointer', border: `1px solid ${C.border}`, borderRadius: 12, padding: '12px 13px', fontFamily: C.font, display: 'flex', flexDirection: 'column', gap: 6 }}
+              onMouseEnter={(e) => { e.currentTarget.style.borderColor = C.brand; }}
+              onMouseLeave={(e) => { e.currentTarget.style.borderColor = C.border; }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
-                <span style={{ fontSize: 12.5, fontWeight: 700, color: INK, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.title || 'Untitled'}</span>
-                <button onClick={(e) => remove(o.id, e)} title="Delete" style={{ background: 'none', border: 'none', cursor: 'pointer', color: MUTED2, padding: 0, flexShrink: 0 }}><Trash2 size={13} /></button>
+                <span style={{ fontSize: 12.5, fontWeight: 700, color: C.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.title || 'Untitled'}</span>
+                <button onClick={(e) => remove(o.id, e)} title="Delete" style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.muted2, padding: 0, flexShrink: 0 }}><Ico ti="ti-trash" size={13} /></button>
               </div>
-              {o.subject && <span style={{ fontSize: 10, fontWeight: 800, color: AMBER }}>{o.subject}</span>}
-              <div style={{ fontSize: 10, color: MUTED2, marginTop: 'auto', display: 'inline-flex', alignItems: 'center', gap: 4 }}><Clock size={10} />{fmtDateTime(o.created_at)}</div>
+              {o.subject && <span style={{ fontSize: 10, fontWeight: 800, color: C.brand }}>{o.subject}</span>}
+              <div style={{ fontSize: 10, color: C.muted2, marginTop: 'auto', display: 'inline-flex', alignItems: 'center', gap: 4 }}><Ico ti="ti-clock" size={10} />{fmtDateTime(o.created_at)}</div>
             </div>
           ))}
         </div>
@@ -189,10 +190,10 @@ function PastGenerations({ toolKey, refreshKey }) {
 
       {(open || busy) && (
         <div onClick={() => setOpen(null)} style={{ position: 'fixed', inset: 0, zIndex: 3200, background: 'rgba(0,0,0,.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-          <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 620, maxHeight: '86vh', overflowY: 'auto', background: WHITE, borderRadius: 16, padding: '20px 22px', fontFamily: FONT }}>
-            {busy ? <Loader2 size={20} style={{ animation: 'spin .8s linear infinite' }} />
+          <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 620, maxHeight: '86vh', overflowY: 'auto', background: C.surface, borderRadius: 16, padding: '20px 22px', fontFamily: C.font }}>
+            {busy ? <Ico ti="ti-loader-2" size={20} style={{ animation: 'spin .8s linear infinite' }} />
               : <ToolRunner.Result tool={{ key: open.kind, output: open.content?.output || guessOutput(open.content) }} out={open.content} title={open.title} />}
-            <button onClick={() => setOpen(null)} style={{ marginTop: 16, padding: '9px 16px', borderRadius: 9, border: `1px solid ${BORDER}`, background: WHITE, color: MUTED, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>Close</button>
+            <button onClick={() => setOpen(null)} style={{ marginTop: 16, padding: '9px 16px', borderRadius: 9, border: `1px solid ${C.border}`, background: C.surface, color: C.muted, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: C.font }}>Close</button>
           </div>
         </div>
       )}
@@ -211,6 +212,9 @@ function guessOutput(c) {
   return 'markdown';
 }
 
-const railHeading = { fontSize: 10, fontWeight: 800, letterSpacing: 1, color: MUTED2, padding: '8px 13px 6px', fontFamily: FONT };
+const railHeading = { fontSize: 10, fontWeight: 800, letterSpacing: 1, color: C.muted2, padding: '8px 13px 6px', fontFamily: C.font };
 
+/* Was a re-export of the lucide Sparkles; now an Ico-backed equivalent so the
+   module's public shape is unchanged. */
+const Sparkles = (props) => <Ico ti="ti-sparkles" {...props} />;
 export { Sparkles };

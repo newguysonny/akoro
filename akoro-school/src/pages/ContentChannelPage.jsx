@@ -5,18 +5,20 @@
  */
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Facebook, Instagram, Twitter, Music2, CheckCircle2, Loader2, BookOpen, Link2 } from 'lucide-react';
+import { Facebook, Instagram, Twitter, Music2 } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import BackButton from '../components/BackButton.jsx';
 import { Btn, Inp } from '../components/Primitives.jsx';
 import { apiGet, apiPost, apiDelete, API } from '../services/api.js';
-import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, BLUE, FONT } from '../constants.js';
+import { GREEN, BLUE } from '../constants.js';
+import { C, tint } from '../theme/colors.js';
+import { Ico } from '../theme/Ico.jsx';
 
 const META = {
-  facebook:  { label: 'Facebook',    color: '#1877F2', Icon: Facebook,  handle: 'Page URL' },
-  instagram: { label: 'Instagram',   color: '#E4405F', Icon: Instagram, handle: 'Profile URL' },
-  twitter:   { label: 'X (Twitter)', color: '#0F1419', Icon: Twitter,   handle: 'Profile URL' },
-  tiktok:    { label: 'TikTok',      color: '#010101', Icon: Music2,     handle: 'Profile URL' },
+  facebook:  { label: 'Facebook',    color: '#1877F2', Icon: Facebook, ti: 'ti-brand-facebook',  handle: 'Page URL' },
+  instagram: { label: 'Instagram',   color: '#E4405F', Icon: Instagram, ti: 'ti-brand-instagram', handle: 'Profile URL' },
+  twitter:   { label: 'X (Twitter)', color: '#0F1419', Icon: Twitter, ti: 'ti-brand-twitter',   handle: 'Profile URL' },
+  tiktok:    { label: 'TikTok',      color: '#010101', Icon: Music2, ti: 'ti-music',     handle: 'Profile URL' },
 };
 const GUIDE = {
   facebook:  ['Connect authorizes Akoro to publish to your Facebook Page.', 'Manual: paste a Page access token from Meta Business settings.'],
@@ -55,7 +57,7 @@ export default function ContentChannelPage() {
   }, [load, meta, platform]);
 
   if (!meta) {
-    return <PageLayout title="Channel"><p style={{ fontFamily: FONT, color: MUTED }}>Unknown channel.</p></PageLayout>;
+    return <PageLayout title="Channel"><p style={{ fontFamily: C.font, color: C.muted }}>Unknown channel.</p></PageLayout>;
   }
 
   // ?portal=school lets the API read the school session cookie (a full-page
@@ -93,33 +95,33 @@ export default function ContentChannelPage() {
       <div style={{ maxWidth: 640 }}>
         <BackButton onClick={() => navigate('/content?tab=channels')} label="Back to channels" />
 
-        <div style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 16, padding: '22px 24px' }}>
+        <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: '22px 24px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18 }}>
-            <div style={{ width: 46, height: 46, borderRadius: 12, background: `${meta.color}15`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <meta.Icon size={24} color={meta.color} />
+            <div style={{ width: 46, height: 46, borderRadius: 12, background: tint(8, meta.color), display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Ico lucide={meta.Icon} ti={meta.ti} size={24} color={meta.color} />
             </div>
             <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 16, fontWeight: 800, color: INK, fontFamily: FONT }}>{meta.label}</div>
-              <div style={{ fontSize: 12, fontWeight: 700, marginTop: 2, color: connected ? GREEN : MUTED, display: 'flex', alignItems: 'center', gap: 4, fontFamily: FONT }}>
-                {status === null ? <Loader2 size={12} style={{ animation: 'spin .8s linear infinite' }} /> : connected ? <><CheckCircle2 size={12} /> Connected</> : 'Not connected'}
+              <div style={{ fontSize: 16, fontWeight: 800, color: C.ink, fontFamily: C.font }}>{meta.label}</div>
+              <div style={{ fontSize: 12, fontWeight: 700, marginTop: 2, color: connected ? GREEN : C.muted, display: 'flex', alignItems: 'center', gap: 4, fontFamily: C.font }}>
+                {status === null ? <Ico ti="ti-loader-2" size={12} style={{ animation: 'spin .8s linear infinite' }} /> : connected ? <><Ico ti="ti-circle-check" size={12} /> Connected</> : 'Not connected'}
               </div>
             </div>
-            {connected && <Btn variant="ghost" onClick={disconnect} disabled={busy} style={{ color: MUTED }}>Disconnect</Btn>}
+            {connected && <Btn variant="ghost" onClick={disconnect} disabled={busy} style={{ color: C.muted }}>Disconnect</Btn>}
           </div>
 
           {!connected && (
             <>
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: manual ? 18 : 0 }}>
-                <button onClick={startOAuth} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '11px 20px', borderRadius: 10, border: 'none', background: meta.color, color: WHITE, fontSize: 13.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
-                  <Link2 size={15} /> Connect with {meta.label}
+                <button onClick={startOAuth} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '11px 20px', borderRadius: 10, border: 'none', background: meta.color, color: '#fff', fontSize: 13.5, fontWeight: 800, cursor: 'pointer', fontFamily: C.font }}>
+                  <Ico ti="ti-link" size={15} /> Connect with {meta.label}
                 </button>
-                <button onClick={() => setManual((m) => !m)} style={{ padding: '11px 20px', borderRadius: 10, border: `1.5px solid ${BORDER}`, background: WHITE, color: INK, fontSize: 13.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>
+                <button onClick={() => setManual((m) => !m)} style={{ padding: '11px 20px', borderRadius: 10, border: `1.5px solid ${C.border}`, background: C.surface, color: C.ink, fontSize: 13.5, fontWeight: 700, cursor: 'pointer', fontFamily: C.font }}>
                   {manual ? 'Hide manual' : 'Enter credentials manually'}
                 </button>
               </div>
 
               {manual && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 12, borderTop: `1px solid ${BORDER}`, paddingTop: 18 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12, borderTop: `1px solid ${C.border}`, paddingTop: 18 }}>
                   <Inp label={meta.handle} value={form.profileUrl} onChange={(e) => setForm((f) => ({ ...f, profileUrl: e.target.value }))} placeholder={`https://…`} />
                   <Inp label="Access token" value={form.accessToken} onChange={(e) => setForm((f) => ({ ...f, accessToken: e.target.value }))} placeholder="Paste access token" />
                   {platform === 'twitter' && (
@@ -138,24 +140,24 @@ export default function ContentChannelPage() {
           )}
 
           {connected && status?.profile_url && (
-            <div style={{ fontSize: 12.5, color: MUTED, fontFamily: FONT }}>Linked: <a href={status.profile_url} target="_blank" rel="noreferrer" style={{ color: BLUE }}>{status.profile_url}</a></div>
+            <div style={{ fontSize: 12.5, color: C.muted, fontFamily: C.font }}>Linked: <a href={status.profile_url} target="_blank" rel="noreferrer" style={{ color: BLUE }}>{status.profile_url}</a></div>
           )}
         </div>
 
         {/* Quick guide */}
         <div style={{ background: `${BLUE}08`, border: `1px solid ${BLUE}22`, borderRadius: 14, padding: '14px 15px', marginTop: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 8 }}>
-            <BookOpen size={15} color={BLUE} />
-            <span style={{ fontSize: 12.5, fontWeight: 800, color: BLUE, fontFamily: FONT }}>Quick Guide</span>
+            <Ico ti="ti-book" size={15} color={BLUE} />
+            <span style={{ fontSize: 12.5, fontWeight: 800, color: BLUE, fontFamily: C.font }}>Quick Guide</span>
           </div>
           {(GUIDE[platform] || []).map((g, i) => (
-            <p key={i} style={{ fontSize: 11.5, color: MUTED, lineHeight: 1.6, margin: i === 0 ? 0 : '8px 0 0', fontFamily: FONT }}>{g}</p>
+            <p key={i} style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.6, margin: i === 0 ? 0 : '8px 0 0', fontFamily: C.font }}>{g}</p>
           ))}
         </div>
       </div>
 
       {toast && (
-        <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: INK, color: WHITE, padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999, whiteSpace: 'nowrap', boxShadow: '0 4px 14px rgba(0,0,0,.2)' }}>{toast}</div>
+        <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: C.ink, color: '#fff', padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999, whiteSpace: 'nowrap', boxShadow: '0 4px 14px rgba(0,0,0,.2)' }}>{toast}</div>
       )}
     </PageLayout>
   );

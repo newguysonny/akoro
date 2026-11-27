@@ -7,11 +7,12 @@
  * -> stream mic PCM in, play agent PCM out, surface live transcript.
  */
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Mic, MicOff, PhoneOff, Loader2, AlertCircle } from 'lucide-react';
+import { Ico } from '../../theme/Ico.jsx';
 import { API, withAuth } from '../../services/api.js';
 import VoiceOrb from './VoiceOrb.jsx';
 import { createAudioBuffer, playAudioBuffer, downsample, convertFloat32ToInt16, normalizeVolume } from './voiceAudioUtils.js';
-import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, FONT } from '../../constants.js';
+import { GREEN, RED } from '../../constants.js';
+import { C, tint } from '../../theme/colors.js';
 
 const STATUS_LABEL = {
   none: 'Starting…', listening: 'Listening…', thinking: 'Thinking…', speaking: 'Speaking…', sleeping: 'Paused',
@@ -196,13 +197,13 @@ export default function VoiceChatPanel({ onClose, onExchange }) {
   const end = () => { teardown(); onClose?.(); };
 
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px 16px', background: `linear-gradient(180deg, ${LIGHT}, ${WHITE})` }}>
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px 16px', background: `linear-gradient(180deg, ${C.bg}, ${C.surface})` }}>
       {error ? (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, maxWidth: 320, textAlign: 'center' }}>
-          <AlertCircle size={28} color={RED} />
-          <p style={{ fontSize: 13.5, color: INK, margin: 0 }}>{error}</p>
-          <button onClick={start} style={{ padding: '8px 16px', borderRadius: 9, border: 'none', background: `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: WHITE, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>Try again</button>
-          <button onClick={onClose} style={{ padding: '8px 16px', borderRadius: 9, border: `1px solid ${BORDER}`, background: WHITE, color: MUTED, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>Back to text chat</button>
+          <Ico ti="ti-alert-circle" size={28} color={RED} />
+          <p style={{ fontSize: 13.5, color: C.ink, margin: 0 }}>{error}</p>
+          <button onClick={start} style={{ padding: '8px 16px', borderRadius: 9, border: 'none', background: `linear-gradient(135deg, ${C.brand}, #D4651E)`, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: C.font }}>Try again</button>
+          <button onClick={onClose} style={{ padding: '8px 16px', borderRadius: 9, border: `1px solid ${C.border}`, background: C.surface, color: C.muted, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: C.font }}>Back to text chat</button>
         </div>
       ) : (
         <>
@@ -210,26 +211,26 @@ export default function VoiceChatPanel({ onClose, onExchange }) {
             <VoiceOrb width={orbSize.width} height={orbSize.height} agentVolume={agentVolume} userVolume={userVolume} status={status} />
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, fontSize: 13, fontWeight: 700, color: status === 'speaking' ? AMBER : MUTED }}>
-            {status === 'none' && <Loader2 size={13} style={{ animation: 'spin .8s linear infinite' }} />}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, fontSize: 13, fontWeight: 700, color: status === 'speaking' ? C.brand : C.muted }}>
+            {status === 'none' && <Ico ti="ti-loader-2" size={13} style={{ animation: 'spin .8s linear infinite' }} />}
             {STATUS_LABEL[status] || 'Connecting…'}
           </div>
 
           <div style={{ minHeight: 44, maxWidth: 420, textAlign: 'center', marginTop: 14, padding: '0 8px' }}>
-            <p style={{ fontSize: 14, lineHeight: 1.6, color: INK, margin: 0 }}>
+            <p style={{ fontSize: 14, lineHeight: 1.6, color: C.ink, margin: 0 }}>
               {liveText.assistant || liveText.user || 'Say hello to get started…'}
             </p>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 22 }}>
-            <button onClick={toggleMute} title={muted ? 'Unmute' : 'Mute'} style={{ width: 48, height: 48, borderRadius: '50%', border: `1.5px solid ${BORDER}`, background: muted ? '#FEE2E2' : WHITE, color: muted ? RED : MUTED, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              {muted ? <MicOff size={19} /> : <Mic size={19} />}
+            <button onClick={toggleMute} title={muted ? 'Unmute' : 'Mute'} style={{ width: 48, height: 48, borderRadius: '50%', border: `1.5px solid ${C.border}`, background: muted ? '#FEE2E2' : C.surface, color: muted ? RED : C.muted, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              {muted ? <Ico ti="ti-microphone-off" size={19} /> : <Ico ti="ti-microphone" size={19} />}
             </button>
-            <button onClick={end} title="End voice chat" style={{ width: 54, height: 54, borderRadius: '50%', border: 'none', background: RED, color: WHITE, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 6px 18px rgba(239,68,68,.35)' }}>
-              <PhoneOff size={21} />
+            <button onClick={end} title="End voice chat" style={{ width: 54, height: 54, borderRadius: '50%', border: 'none', background: RED, color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 6px 18px rgba(239,68,68,.35)' }}>
+              <Ico ti="ti-phone-off" size={21} />
             </button>
           </div>
-          <p style={{ fontSize: 10.5, color: MUTED2, marginTop: 16 }}>Powered by Deepgram voice AI · AI can make mistakes</p>
+          <p style={{ fontSize: 10.5, color: C.muted2, marginTop: 16 }}>Powered by Deepgram voice AI · AI can make mistakes</p>
         </>
       )}
     </div>

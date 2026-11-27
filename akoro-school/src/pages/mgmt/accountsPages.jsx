@@ -5,7 +5,8 @@ import { PageLayout } from '../../components/Layout.jsx';
 import ResourcePage from '../../components/mgmt/ResourcePage.jsx';
 import StatCards from '../../components/mgmt/StatCards.jsx';
 import { apiGet } from '../../services/api.js';
-import { AMBER, GREEN, RED, BLUE, PURPLE } from '../../constants.js';
+import { GREEN, RED, BLUE, PURPLE } from '../../constants.js';
+import { C, tint } from '../../theme/colors.js';
 
 const BASE = '/api/school/mgmt';
 const naira = (n) => `₦${Number(n || 0).toLocaleString('en-NG')}`;
@@ -14,12 +15,12 @@ export function AccountsDashboardPage() {
   const [s, setS] = useState(null);
   useEffect(() => { apiGet(`${BASE}/dashboard/accounts`).then((r) => setS(r.data)).catch(() => setS({})); }, []);
   const cards = s ? [
-    { n: naira(s.totalIncome), label: 'Total Income', icon: TrendingUp, c: GREEN, to: '/mgmt/income' },
-    { n: naira(s.totalExpense), label: 'Total Expenses', icon: TrendingDown, c: RED, to: '/mgmt/expense' },
-    { n: naira(s.netBalance), label: 'Net Balance', icon: Wallet, c: s.netBalance >= 0 ? GREEN : RED },
-    { n: s.incomeEntries, label: 'Income Entries', icon: Receipt, c: BLUE, to: '/mgmt/income' },
-    { n: s.expenseEntries, label: 'Expense Entries', icon: Receipt, c: PURPLE, to: '/mgmt/expense' },
-    { n: s.bankAccounts, label: 'Bank Accounts', icon: Landmark, c: AMBER, to: '/mgmt/bank-accounts' },
+    { n: naira(s.totalIncome), label: 'Total Income', icon: TrendingUp, ti: 'ti-trending-up', c: GREEN, to: '/mgmt/income' },
+    { n: naira(s.totalExpense), label: 'Total Expenses', icon: TrendingDown, ti: 'ti-trending-down', c: RED, to: '/mgmt/expense' },
+    { n: naira(s.netBalance), label: 'Net Balance', icon: Wallet, ti: 'ti-wallet', c: s.netBalance >= 0 ? GREEN : RED },
+    { n: s.incomeEntries, label: 'Income Entries', icon: Receipt, ti: 'ti-receipt', c: BLUE, to: '/mgmt/income' },
+    { n: s.expenseEntries, label: 'Expense Entries', icon: Receipt, ti: 'ti-receipt', c: PURPLE, to: '/mgmt/expense' },
+    { n: s.bankAccounts, label: 'Bank Accounts', icon: Landmark, ti: 'ti-building-bank', c: C.brand, to: '/mgmt/bank-accounts' },
   ] : [];
   return (
     <PageLayout title="Accounts Dashboard" subtitle="Income, expenses and bank balances">

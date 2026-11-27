@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, Swords, Users, Clock, Trophy, Play, Zap, Search, Trash2, Pencil, Radio, ClipboardList } from 'lucide-react';
+
 import { PageLayout } from '../components/Layout.jsx';
 import { Btn, Modal, Inp, Txa, Sel, StatusPill, Badge, Toast } from '../components/Primitives.jsx';
 import { apiGet } from '../services/api.js';
@@ -10,7 +10,9 @@ import { useInstructorSocket } from '../hooks/useWebSocket.js';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import NoAgentModal, { isNoAgentError } from '../components/NoAgentModal.jsx';
 import WatchBattleModal from '../components/WatchBattleModal.jsx';
-import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, PURPLE, BLUE, RED, FONT } from '../constants.js';
+import { GREEN, PURPLE, BLUE, RED } from '../constants.js';
+import { C, tint } from '../theme/colors.js';
+import { Ico } from '../theme/Ico.jsx';
 import { confirmDialog } from '../components/ConfirmHost.jsx';
 
 /* ── New / Edit Battle Modal ────────────────────────────────────────────── */
@@ -90,7 +92,6 @@ function BattleModal({ open, onClose, onSubmit, courses, editing }) {
       ? f : { ...f, subject: chosenClass.subjects?.[0] ?? '' }));
   }, [chosenClass]);   // eslint-disable-line react-hooks/exhaustive-deps
 
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
@@ -133,7 +134,7 @@ function BattleModal({ open, onClose, onSubmit, courses, editing }) {
             past-questions bank for a subject the class studies. */}
         {!editing && (
           <div>
-            <div style={{ fontSize: 12, fontWeight: 700, color: INK, fontFamily: FONT, marginBottom: 7 }}>Battle type *</div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: C.ink, fontFamily: C.font, marginBottom: 7 }}>Battle type *</div>
             <div style={{ display: 'flex', gap: 6 }}>
               {[
                 { key: 'course', label: 'Course battle', hint: courses.length ? "From a course's question bank" : 'No courses yet', off: !courses.length },
@@ -146,13 +147,13 @@ function BattleModal({ open, onClose, onSubmit, courses, editing }) {
                   onClick={() => setField('kind', o.key)}
                   style={{
                     flex: 1, padding: '9px 8px', borderRadius: 10, textAlign: 'left',
-                    border: `1.5px solid ${form.kind === o.key ? AMBER : BORDER}`,
-                    background: form.kind === o.key ? `${AMBER}12` : WHITE,
+                    border: `1.5px solid ${form.kind === o.key ? C.brand : C.border}`,
+                    background: form.kind === o.key ? tint(7) : C.surface,
                     cursor: o.off ? 'not-allowed' : 'pointer', opacity: o.off ? 0.5 : 1,
-                    fontFamily: FONT,
+                    fontFamily: C.font,
                   }}>
-                  <div style={{ fontSize: 12, fontWeight: 800, color: form.kind === o.key ? AMBER : INK }}>{o.label}</div>
-                  <div style={{ fontSize: 10.5, color: MUTED }}>{o.hint}</div>
+                  <div style={{ fontSize: 12, fontWeight: 800, color: form.kind === o.key ? C.brand : C.ink }}>{o.label}</div>
+                  <div style={{ fontSize: 10.5, color: C.muted }}>{o.hint}</div>
                 </button>
               ))}
             </div>
@@ -218,7 +219,7 @@ function BattleModal({ open, onClose, onSubmit, courses, editing }) {
         {form.kind !== 'review' && (
           <Inp label="Minimum XP to join (0 = open to all)" type="number" min="0" value={form.minXp} onChange={e => setField('minXp', e.target.value)} />
         )}
-        <div style={{ fontSize: 11, color: MUTED, fontFamily: FONT, marginTop: -6 }}>
+        <div style={{ fontSize: 11, color: C.muted, fontFamily: C.font, marginTop: -6 }}>
           {(() => {
             const h = Math.min(50, Math.max(0, parseInt(form.hpPerMiss, 10) || 0));
             return h ? `Every agent starts on 100 HP and loses ${h} for each question it misses — out after ${Math.ceil(100 / h)} misses (then it watches, unranked).`
@@ -229,7 +230,7 @@ function BattleModal({ open, onClose, onSubmit, courses, editing }) {
             The number on its own told a teacher nothing — and until now it did
             nothing either: every battle ran at a hard 15 seconds a question
             whatever was typed here. */}
-        <div style={{ fontSize: 11, color: MUTED, fontFamily: FONT, marginTop: -6 }}>
+        <div style={{ fontSize: 11, color: C.muted, fontFamily: C.font, marginTop: -6 }}>
           {(() => {
             const q = parseInt(form.totalQuestions, 10);
             const m = parseInt(form.duration, 10);
@@ -242,7 +243,7 @@ function BattleModal({ open, onClose, onSubmit, courses, editing }) {
 
         {!editing && (
           <div>
-            <div style={{ fontSize: 12, fontWeight: 700, color: INK, fontFamily: FONT, marginBottom: 7 }}>Questions *</div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: C.ink, fontFamily: C.font, marginBottom: 7 }}>Questions *</div>
             <div style={{ display: 'flex', gap: 6 }}>
               {[
                 { key: 'auto', label: 'Bank + AI', hint: 'Real questions first, AI for the rest' },
@@ -251,16 +252,16 @@ function BattleModal({ open, onClose, onSubmit, courses, editing }) {
               ].map(o => (
                 <button key={o.key} type="button" onClick={() => setField('questionSource', o.key)} style={{
                   flex: 1, padding: '9px 8px', borderRadius: 10, textAlign: 'left', cursor: 'pointer',
-                  border: `1.5px solid ${form.questionSource === o.key ? AMBER : BORDER}`,
-                  background: form.questionSource === o.key ? `${AMBER}12` : WHITE, fontFamily: FONT,
+                  border: `1.5px solid ${form.questionSource === o.key ? C.brand : C.border}`,
+                  background: form.questionSource === o.key ? tint(7) : C.surface, fontFamily: C.font,
                 }}>
-                  <div style={{ fontSize: 12, fontWeight: 800, color: form.questionSource === o.key ? AMBER : INK }}>{o.label}</div>
-                  <div style={{ fontSize: 10.5, color: MUTED }}>{o.hint}</div>
+                  <div style={{ fontSize: 12, fontWeight: 800, color: form.questionSource === o.key ? C.brand : C.ink }}>{o.label}</div>
+                  <div style={{ fontSize: 10.5, color: C.muted }}>{o.hint}</div>
                 </button>
               ))}
             </div>
             {form.questionSource !== 'bank' && (
-              <div style={{ fontSize: 10.5, color: MUTED2, fontFamily: FONT, marginTop: 5, lineHeight: 1.45 }}>
+              <div style={{ fontSize: 10.5, color: C.muted2, fontFamily: C.font, marginTop: 5, lineHeight: 1.45 }}>
                 Generated questions are modelled on real exam questions for this subject and cost coins.
                 Nothing is charged if generation fails.
               </div>
@@ -277,7 +278,7 @@ function BattleModal({ open, onClose, onSubmit, courses, editing }) {
           <Inp label="Schedule for (optional)" type="datetime-local" value={form.scheduledAt} onChange={e => setField('scheduledAt', e.target.value)} />
         </div>
 
-        {error && <div style={{ fontSize: 12, color: RED, fontWeight: 700, fontFamily: FONT }}>{error}</div>}
+        {error && <div style={{ fontSize: 12, color: RED, fontWeight: 700, fontFamily: C.font }}>{error}</div>}
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 4 }}>
           <Btn variant="secondary" type="button" onClick={onClose}>Cancel</Btn>
@@ -302,8 +303,8 @@ function toLocalInput(iso) {
 function DiffBadge({ difficulty }) {
   const map = {
     easy:         { color: GREEN, bg: '#DCFCE7', label: 'easy' },
-    medium:       { color: AMBER, bg: '#FFF7ED', label: 'medium' },
-    intermediate: { color: AMBER, bg: '#FFF7ED', label: 'medium' },
+    medium:       { color: C.brand, bg: C.brandSoft, label: 'medium' },
+    intermediate: { color: C.brand, bg: C.brandSoft, label: 'medium' },
     hard:         { color: RED,   bg: '#FEE2E2', label: 'hard' },
   };
   const cfg = map[difficulty] || map.intermediate;
@@ -333,7 +334,7 @@ function ParticipantsModal({ open, onClose, battleId }) {
   const STATE = {
     accepted: { color: GREEN, bg: '#DCFCE7', label: 'Accepted' },
     declined: { color: RED,   bg: '#FEE2E2', label: 'Declined' },
-    invited:  { color: MUTED, bg: LIGHT,     label: 'No answer yet' },
+    invited:  { color: C.muted, bg: C.bg,     label: 'No answer yet' },
   };
   const s = data?.summary;
   const ran = data && ['live', 'completed'].includes(data.status);
@@ -341,14 +342,14 @@ function ParticipantsModal({ open, onClose, battleId }) {
   return (
     <Modal open={open} onClose={onClose} title={data?.title || 'Participants'} width={500}>
       {error ? (
-        <div style={{ fontSize: 13, color: RED, fontFamily: FONT, padding: '10px 0' }}>{error}</div>
+        <div style={{ fontSize: 13, color: RED, fontFamily: C.font, padding: '10px 0' }}>{error}</div>
       ) : !data ? (
-        <div style={{ fontSize: 13, color: MUTED, fontFamily: FONT, padding: '10px 0' }}>Loading…</div>
+        <div style={{ fontSize: 13, color: C.muted, fontFamily: C.font, padding: '10px 0' }}>Loading…</div>
       ) : (
-        <div style={{ fontFamily: FONT }}>
+        <div style={{ fontFamily: C.font }}>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 14 }}>
             <Badge color={GREEN} bg="#DCFCE7">{s.accepted} accepted</Badge>
-            {s.pending  > 0 && <Badge color={MUTED} bg={LIGHT}>{s.pending} not answered</Badge>}
+            {s.pending  > 0 && <Badge color={C.muted} bg={C.bg}>{s.pending} not answered</Badge>}
             {s.declined > 0 && <Badge color={RED} bg="#FEE2E2">{s.declined} declined</Badge>}
             <Badge color={BLUE} bg="#EFF6FF">{s.invited} invited</Badge>
           </div>
@@ -359,14 +360,14 @@ function ParticipantsModal({ open, onClose, battleId }) {
               return (
                 <div key={p.userId} style={{
                   display: 'flex', alignItems: 'center', gap: 9, padding: '9px 11px',
-                  border: `1px solid ${BORDER}`, borderRadius: 10, background: WHITE,
+                  border: `1px solid ${C.border}`, borderRadius: 10, background: C.surface,
                 }}>
-                  <span style={{ width: 22, height: 22, borderRadius: '50%', background: LIGHT, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 900, color: MUTED }}>{(p.fullName || 'P').trim().charAt(0).toUpperCase()}</span>
+                  <span style={{ width: 22, height: 22, borderRadius: '50%', background: C.bg, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 900, color: C.muted }}>{(p.fullName || 'P').trim().charAt(0).toUpperCase()}</span>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 12.5, fontWeight: 700, color: INK }}>
-                      {p.fullName}{p.isWinner && <span title="Winner" style={{ display: 'inline-flex', verticalAlign: '-2px', marginLeft: 4 }}><Trophy size={11} color={AMBER} /></span>}
+                    <div style={{ fontSize: 12.5, fontWeight: 700, color: C.ink }}>
+                      {p.fullName}{p.isWinner && <span title="Winner" style={{ display: 'inline-flex', verticalAlign: '-2px', marginLeft: 4 }}><Ico ti="ti-trophy" size={11} color={C.brand} /></span>}
                     </div>
-                    <div style={{ fontSize: 11, color: MUTED }}>@{p.username}</div>
+                    <div style={{ fontSize: 11, color: C.muted }}>@{p.username}</div>
                   </div>
                   {/* Once it has run, the score IS the status — showing
                       "Accepted" next to a finished battle says nothing. */}
@@ -377,12 +378,12 @@ function ParticipantsModal({ open, onClose, battleId }) {
               );
             })}
             {s.invited === 0 && (
-              <div style={{ fontSize: 12, color: MUTED, padding: '10px 0' }}>Nobody was invited to this battle.</div>
+              <div style={{ fontSize: 12, color: C.muted, padding: '10px 0' }}>Nobody was invited to this battle.</div>
             )}
           </div>
 
           {s.pending > 0 && !ran && (
-            <div style={{ fontSize: 11, color: MUTED, marginTop: 12, lineHeight: 1.5 }}>
+            <div style={{ fontSize: 11, color: C.muted, marginTop: 12, lineHeight: 1.5 }}>
               Learners who never answer are left out when the battle starts — they are not
               scored for it.
             </div>
@@ -419,36 +420,36 @@ function MarkSheetModal({ open, onClose, battleId }) {
   return (
     <Modal open={open} onClose={onClose} title={data?.learner?.fullName ? `${data.learner.fullName} — mark sheet` : 'Mark sheet'} width={620}>
       {error ? (
-        <div style={{ fontSize: 13, color: RED, fontFamily: FONT, padding: '10px 0' }}>{error}</div>
+        <div style={{ fontSize: 13, color: RED, fontFamily: C.font, padding: '10px 0' }}>{error}</div>
       ) : !data ? (
-        <div style={{ fontSize: 13, color: MUTED, fontFamily: FONT, padding: '10px 0' }}>Loading…</div>
+        <div style={{ fontSize: 13, color: C.muted, fontFamily: C.font, padding: '10px 0' }}>Loading…</div>
       ) : data.type !== 'review' ? (
-        <div style={{ fontSize: 13, color: MUTED, fontFamily: FONT }}>This battle is not a study review.</div>
+        <div style={{ fontSize: 13, color: C.muted, fontFamily: C.font }}>This battle is not a study review.</div>
       ) : (
-        <div style={{ fontFamily: FONT }}>
+        <div style={{ fontFamily: C.font }}>
           {/* The number first — it is the answer to "how did they do?" */}
           <div style={{
             display: 'flex', alignItems: 'baseline', gap: 10, padding: '12px 14px',
-            borderRadius: 12, background: LIGHT, marginBottom: 14,
+            borderRadius: 12, background: C.bg, marginBottom: 14,
           }}>
             <span style={{ fontSize: 26, fontWeight: 900, color: s.percent >= 50 ? GREEN : RED }}>{s.percent}%</span>
-            <span style={{ fontSize: 13, fontWeight: 700, color: INK }}>{s.correct} of {s.total} correct</span>
+            <span style={{ fontSize: 13, fontWeight: 700, color: C.ink }}>{s.correct} of {s.total} correct</span>
             <span style={{ flex: 1 }} />
             {/* What the review paid. The drawer showed the mark but not the
                 reward, so a teacher could not answer "what did they get for
                 it?" — which is the learner's first question. */}
             {data.learner?.xpEarned > 0 && (
-              <Badge color={AMBER} bg="#FFF7ED"><Zap size={10} style={{ marginRight: 3 }} />{data.learner.xpEarned} XP</Badge>
+              <Badge color={C.brand} bg={C.brandSoft}><Ico ti="ti-bolt" size={10} style={{ marginRight: 3 }} />{data.learner.xpEarned} XP</Badge>
             )}
-            {s.unanswered > 0 && <Badge color={MUTED} bg={WHITE}>{s.unanswered} unanswered</Badge>}
+            {s.unanswered > 0 && <Badge color={C.muted} bg={C.surface}>{s.unanswered} unanswered</Badge>}
             {data.battle?.duration_formatted && (
-              <Badge color={MUTED} bg={WHITE}><Clock size={10} style={{ marginRight: 3 }} />{data.battle.duration_formatted}</Badge>
+              <Badge color={C.muted} bg={C.surface}><Ico ti="ti-clock" size={10} style={{ marginRight: 3 }} />{data.battle.duration_formatted}</Badge>
             )}
           </div>
 
           {data.byTopic?.length > 1 && (
             <>
-              <div style={{ fontSize: 11, fontWeight: 800, color: MUTED, marginBottom: 7, letterSpacing: .3 }}>BY TOPIC — WEAKEST FIRST</div>
+              <div style={{ fontSize: 11, fontWeight: 800, color: C.muted, marginBottom: 7, letterSpacing: .3 }}>BY TOPIC — WEAKEST FIRST</div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 16 }}>
                 {data.byTopic.map(t => (
                   <Badge key={t.topic} color={t.percent >= 50 ? GREEN : RED} bg={t.percent >= 50 ? '#DCFCE7' : '#FEE2E2'}>
@@ -459,25 +460,25 @@ function MarkSheetModal({ open, onClose, battleId }) {
             </>
           )}
 
-          <div style={{ fontSize: 11, fontWeight: 800, color: MUTED, marginBottom: 7, letterSpacing: .3 }}>EVERY QUESTION</div>
+          <div style={{ fontSize: 11, fontWeight: 800, color: C.muted, marginBottom: 7, letterSpacing: .3 }}>EVERY QUESTION</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 380, overflowY: 'auto' }}>
             {data.markSheet.map(r => (
               <div key={r.order} style={{
-                border: `1px solid ${r.isCorrect ? GREEN + '55' : BORDER}`, borderRadius: 10, padding: '10px 12px',
-                background: r.isCorrect ? '#F0FDF4' : WHITE,
+                border: `1px solid ${r.isCorrect ? GREEN + '55' : C.border}`, borderRadius: 10, padding: '10px 12px',
+                background: r.isCorrect ? '#F0FDF4' : C.surface,
               }}>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', marginBottom: 5 }}>
                   <span style={{ fontSize: 11, fontWeight: 800, color: r.isCorrect ? GREEN : RED }}>
                     {r.isCorrect ? '✓' : '✗'} Q{r.order}
                   </span>
-                  <span style={{ fontSize: 12.5, fontWeight: 600, color: INK, flex: 1 }}>{r.question}</span>
-                  {r.topic && <span style={{ fontSize: 10, color: MUTED }}>{r.topic}</span>}
+                  <span style={{ fontSize: 12.5, fontWeight: 600, color: C.ink, flex: 1 }}>{r.question}</span>
+                  {r.topic && <span style={{ fontSize: 10, color: C.muted }}>{r.topic}</span>}
                 </div>
-                <div style={{ fontSize: 11.5, color: MUTED, lineHeight: 1.6 }}>
+                <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.6 }}>
                   {/* "No answer" is not the same as a wrong answer, and a
                       teacher reading the sheet needs to see which it was. */}
                   {!r.answered
-                    ? <span style={{ color: MUTED }}>No answer given</span>
+                    ? <span style={{ color: C.muted }}>No answer given</span>
                     : <>Chose <b style={{ color: r.isCorrect ? GREEN : RED }}>{r.chosenAnswer}</b></>}
                   {!r.isCorrect && <> · Correct answer <b style={{ color: GREEN }}>{r.correctAnswer}</b></>}
                 </div>
@@ -503,9 +504,9 @@ function BattleCard({ battle, onStart, onEdit, onDelete, onViewParticipants, onW
 
   return (
     <div style={{
-      background: WHITE, border: `1px solid ${isLive ? AMBER : BORDER}`,
+      background: C.surface, border: `1px solid ${isLive ? C.brand : C.border}`,
       borderRadius: 16, padding: '20px',
-      boxShadow: isLive ? `0 4px 20px ${AMBER}22` : 'none',
+      boxShadow: isLive ? `0 4px 20px ${tint(13)}` : 'none',
       position: 'relative', overflow: 'hidden',
     }}>
       {isLive && (
@@ -523,15 +524,15 @@ function BattleCard({ battle, onStart, onEdit, onDelete, onViewParticipants, onW
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
         <div style={{
           width: 44, height: 44, borderRadius: 12, flexShrink: 0,
-          background: isLive ? `linear-gradient(135deg, ${AMBER}, #D4651E)` : `${PURPLE}18`,
+          background: isLive ? `linear-gradient(135deg, ${C.brand}, ${C.brandDeep})` : `${PURPLE}18`,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}>
-          {isReview ? <ClipboardList size={20} color={isLive ? WHITE : PURPLE} />
-                    : <Swords size={20} color={isLive ? WHITE : PURPLE} />}
+          {isReview ? <Ico ti="ti-clipboard-list" size={20} color={isLive ? '#fff' : PURPLE} />
+                    : <Ico ti="ti-swords" size={20} color={isLive ? '#fff' : PURPLE} />}
         </div>
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 14, fontWeight: 700, color: INK, fontFamily: FONT }}>{battle.title}</div>
-          <div style={{ fontSize: 11, color: MUTED, fontFamily: FONT }}>{battle.topic || battle.subject}</div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: C.ink, fontFamily: C.font }}>{battle.title}</div>
+          <div style={{ fontSize: 11, color: C.muted, fontFamily: C.font }}>{battle.topic || battle.subject}</div>
         </div>
       </div>
 
@@ -545,15 +546,15 @@ function BattleCard({ battle, onStart, onEdit, onDelete, onViewParticipants, onW
           style={{ border: 'none', padding: 0, background: 'none', cursor: 'pointer' }}
         >
           <Badge color={BLUE} bg="#EFF6FF">
-            {isReview ? <><ClipboardList size={10} style={{ marginRight: 2 }} />Review</> : <><Users size={10} style={{ marginRight: 2 }} />{battle.participantCount}</>}
+            {isReview ? <><Ico ti="ti-clipboard-list" size={10} style={{ marginRight: 2 }} />Review</> : <><Ico ti="ti-users" size={10} style={{ marginRight: 2 }} />{battle.participantCount}</>}
           </Badge>
         </button>
-        <Badge color={MUTED} bg={LIGHT}><Clock size={10} style={{ marginRight: 2 }} />{battle.durationMin}min</Badge>
-        <Badge color={AMBER} bg="#FFF7ED"><Zap size={10} style={{ marginRight: 2 }} />{battle.xpPool} XP</Badge>
+        <Badge color={C.muted} bg={C.bg}><Ico ti="ti-clock" size={10} style={{ marginRight: 2 }} />{battle.durationMin}min</Badge>
+        <Badge color={C.brand} bg={C.brandSoft}><Ico ti="ti-bolt" size={10} style={{ marginRight: 2 }} />{battle.xpPool} XP</Badge>
       </div>
 
       {scheduled && (
-        <div style={{ fontSize: 11, color: MUTED, fontFamily: FONT, marginBottom: 14 }}>
+        <div style={{ fontSize: 11, color: C.muted, fontFamily: C.font, marginBottom: 14 }}>
           {isFinished ? 'Ended' : 'Starts'}: {scheduled.toLocaleDateString()} at {scheduled.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
         </div>
       )}
@@ -568,13 +569,13 @@ function BattleCard({ battle, onStart, onEdit, onDelete, onViewParticipants, onW
           >
             {/* When it is live this said "In Progress" and did nothing at all.
                 Live is exactly when a school wants to look in. */}
-            {isLive ? <><Radio size={14} /> Watch Live</> : <><Play size={14} /> Start Now</>}
+            {isLive ? <><Ico ti="ti-radio" size={14} /> Watch Live</> : <><Ico ti="ti-player-play" size={14} /> Start Now</>}
           </Btn>
-          <Btn size="sm" variant="secondary" onClick={() => onViewParticipants(battle)} title="View participants"><Users size={13} /></Btn>
+          <Btn size="sm" variant="secondary" onClick={() => onViewParticipants(battle)} title="View participants"><Ico ti="ti-users" size={13} /></Btn>
           {editable && (
             <>
-              <Btn size="sm" variant="secondary" onClick={() => onEdit(battle)} title="Edit"><Pencil size={13} /></Btn>
-              <Btn size="sm" variant="secondary" onClick={() => onDelete(battle)} title="Cancel battle"><Trash2 size={13} /></Btn>
+              <Btn size="sm" variant="secondary" onClick={() => onEdit(battle)} title="Edit"><Ico ti="ti-pencil" size={13} /></Btn>
+              <Btn size="sm" variant="secondary" onClick={() => onDelete(battle)} title="Cancel battle"><Ico ti="ti-trash" size={13} /></Btn>
             </>
           )}
         </div>
@@ -587,16 +588,16 @@ function BattleCard({ battle, onStart, onEdit, onDelete, onViewParticipants, onW
             onClick={() => onViewParticipants(battle)}
             style={{
               flex: 1, display: 'flex', alignItems: 'center', gap: 6, fontSize: 12,
-              color: MUTED, fontFamily: FONT, background: 'none', border: 'none',
+              color: C.muted, fontFamily: C.font, background: 'none', border: 'none',
               padding: 0, cursor: 'pointer', textAlign: 'left',
             }}
           >
-            <Trophy size={14} color={AMBER} />
+            <Ico ti="ti-trophy" size={14} color={C.brand} />
             {isReview ? 'View mark sheet' : `${battle.participantCount} participants — see results`}
           </button>
-          <Btn size="sm" variant="secondary" onClick={() => onWatch(battle)} title="Review the battle"><Radio size={13} /></Btn>
-          {editable && <Btn size="sm" variant="secondary" onClick={() => onEdit(battle)} title="Edit"><Pencil size={13} /></Btn>}
-          {deletable && <Btn size="sm" variant="secondary" onClick={() => onDelete(battle)} title="Delete"><Trash2 size={13} /></Btn>}
+          <Btn size="sm" variant="secondary" onClick={() => onWatch(battle)} title="Review the battle"><Ico ti="ti-radio" size={13} /></Btn>
+          {editable && <Btn size="sm" variant="secondary" onClick={() => onEdit(battle)} title="Edit"><Ico ti="ti-pencil" size={13} /></Btn>}
+          {deletable && <Btn size="sm" variant="secondary" onClick={() => onDelete(battle)} title="Delete"><Ico ti="ti-trash" size={13} /></Btn>}
         </div>
       )}
     </div>
@@ -767,21 +768,21 @@ export default function BattlesPage() {
       subtitle="Create and manage quiz battles across your school"
       action={
         <Btn size="sm" onClick={openNew}>
-          <Plus size={14} /> New Battle
+          <Ico ti="ti-plus" size={14} /> New Battle
         </Btn>
       }
     >
       {/* Stats row */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 24 }}>
         {[
-          { label: 'Total', value: stats.total, color: AMBER },
+          { label: 'Total', value: stats.total, color: C.brand },
           { label: 'Live Now', value: stats.live, color: GREEN },
           { label: 'Scheduled', value: stats.scheduled, color: BLUE },
           { label: 'Completed', value: stats.completed, color: PURPLE },
         ].map(({ label, value, color }) => (
-          <div key={label} style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 12, padding: '14px', textAlign: 'center' }}>
-            <div style={{ fontSize: 24, fontWeight: 800, color, fontFamily: FONT }}>{loading ? '—' : value}</div>
-            <div style={{ fontSize: 11, color: MUTED, fontFamily: FONT }}>{label}</div>
+          <div key={label} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: '14px', textAlign: 'center' }}>
+            <div style={{ fontSize: 24, fontWeight: 800, color, fontFamily: C.font }}>{loading ? '—' : value}</div>
+            <div style={{ fontSize: 11, color: C.muted, fontFamily: C.font }}>{label}</div>
           </div>
         ))}
       </div>
@@ -794,10 +795,10 @@ export default function BattlesPage() {
             onClick={() => setFilter(f)}
             style={{
               padding: '6px 14px', borderRadius: 20, fontSize: 12, fontWeight: 600,
-              background: filter === f ? AMBER : WHITE,
-              color: filter === f ? WHITE : MUTED,
-              border: `1.5px solid ${filter === f ? AMBER : BORDER}`,
-              cursor: 'pointer', fontFamily: FONT, textTransform: 'capitalize',
+              background: filter === f ? C.brand : C.surface,
+              color: filter === f ? '#fff' : C.muted,
+              border: `1.5px solid ${filter === f ? C.brand : C.border}`,
+              cursor: 'pointer', fontFamily: C.font, textTransform: 'capitalize',
             }}
           >
             {f}
@@ -811,12 +812,12 @@ export default function BattlesPage() {
           {[1,2,3].map(i => <div key={i} className="skeleton" style={{ height: 200, borderRadius: 16 }} />)}
         </div>
       ) : filtered.length === 0 ? (
-        <div style={{ background: WHITE, border: `1px dashed ${BORDER}`, borderRadius: 16, padding: '48px', textAlign: 'center' }}>
-          <Swords size={32} color={MUTED} style={{ marginBottom: 12 }} />
-          <p style={{ fontSize: 14, color: MUTED, fontFamily: FONT, margin: '0 0 16px' }}>
+        <div style={{ background: C.surface, border: `1px dashed ${C.border}`, borderRadius: 16, padding: '48px', textAlign: 'center' }}>
+          <Ico ti="ti-swords" size={32} color={C.muted} style={{ marginBottom: 12 }} />
+          <p style={{ fontSize: 14, color: C.muted, fontFamily: C.font, margin: '0 0 16px' }}>
             {filter === 'all' ? 'No battles yet' : `No ${filter} battles`}
           </p>
-          {filter === 'all' && <Btn onClick={openNew}><Plus size={14} /> Create your first battle</Btn>}
+          {filter === 'all' && <Btn onClick={openNew}><Ico ti="ti-plus" size={14} /> Create your first battle</Btn>}
         </div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>

@@ -1,4 +1,5 @@
 import { BRAND, RED, GREEN, GOLD } from '../../constants.js';
+import { C, tint } from '../../theme/colors.js';
 
 /**
  * ProctorMonitor — webcam feed + live proctoring status.
@@ -64,7 +65,7 @@ function ProctorMonitor({ videoRef, canvasRef, status, signals, probability = 0,
       {/* Signal chips */}
       <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
         {chips.map((c, i) => (
-          <span key={i} style={{ fontSize:10.5, fontWeight:700, color:c.c, background:`${c.c}1A`,
+          <span key={i} style={{ fontSize:10.5, fontWeight:700, color:c.c, background:tint(10, c.c),
             border:`1px solid ${c.c}33`, borderRadius:8, padding:"3px 9px" }}>{c.label}</span>
         ))}
       </div>

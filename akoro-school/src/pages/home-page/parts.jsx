@@ -3,14 +3,16 @@
  */
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Users, BookOpen, Plus, Eye, Clock, Video, Bot, ChevronRight, Zap, Wallet, Layers, Flame, CheckCircle2, Swords, GraduationCap, Facebook, Instagram, Twitter, Music2, Share2 } from 'lucide-react';
+import { Facebook, Instagram, Twitter, Music2, Share2 } from 'lucide-react';
+import { Ico } from '../../theme/Ico.jsx';
 import { PageLayout } from '../../components/Layout.jsx';
 import { Btn, Toast, Skeleton, Modal, Inp } from '../../components/Primitives.jsx';
 import { useStatsAPI } from '../../hooks/useStatsAPI.js';
 import { useCoursesAPI } from '../../hooks/useCoursesAPI.js';
 import { useAuth } from '../../contexts/AuthContext.jsx';
 import { apiGet, apiPost, apiDelete, API } from '../../services/api.js';
-import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, PURPLE, BLUE, FONT } from '../../constants.js';
+import { GREEN, PURPLE, BLUE } from '../../constants.js';
+import { C, tint } from '../../theme/colors.js';
 
 /* ── Mock fallback data (matches backend snake_case shape) ──────────── */
 
@@ -32,10 +34,10 @@ const STREAM_META = {
 };
 
 const SOCIAL_META = {
-  facebook:  { label: 'Facebook',    color: '#1877F2', Icon: Facebook },
-  instagram: { label: 'Instagram',   color: '#E4405F', Icon: Instagram },
-  twitter:   { label: 'X (Twitter)', color: '#0F1419', Icon: Twitter },
-  tiktok:    { label: 'TikTok',      color: '#010101', Icon: Music2 },
+  facebook:  { label: 'Facebook',    color: '#1877F2', Icon: Facebook, ti: 'ti-brand-facebook' },
+  instagram: { label: 'Instagram',   color: '#E4405F', Icon: Instagram, ti: 'ti-brand-instagram' },
+  twitter:   { label: 'X (Twitter)', color: '#0F1419', Icon: Twitter, ti: 'ti-brand-twitter' },
+  tiktok:    { label: 'TikTok',      color: '#010101', Icon: Music2, ti: 'ti-music' },
 };
 const SOCIAL_KEYS = ['facebook', 'instagram', 'twitter', 'tiktok'];
 
@@ -53,9 +55,9 @@ const MOCK_SESSIONS = [
 ];
 
 /* ── Stat card ──────────────────────────────────────────────────────── */
-function StatCard({ icon: Icon, label, value, sub, color = AMBER, loading }) {
+function StatCard({ icon: Icon, ti, label, value, sub, color = C.brand, loading }) {
   if (loading) return (
-    <div style={{ background: WHITE, borderRadius: 16, padding: '20px', border: `1px solid ${BORDER}` }}>
+    <div style={{ background: C.surface, borderRadius: 16, padding: '20px', border: `1px solid ${C.border}` }}>
       <Skeleton height={14} width={80} style={{ marginBottom: 12 }} />
       <Skeleton height={32} width={60} style={{ marginBottom: 6 }} />
       <Skeleton height={12} width={100} />
@@ -63,22 +65,22 @@ function StatCard({ icon: Icon, label, value, sub, color = AMBER, loading }) {
   );
   return (
     <div style={{
-      background: WHITE, borderRadius: 16, padding: '20px',
-      border: `1px solid ${BORDER}`,
+      background: C.surface, borderRadius: 16, padding: '20px',
+      border: `1px solid ${C.border}`,
       display: 'flex', flexDirection: 'column', gap: 8,
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <div style={{
           width: 36, height: 36, borderRadius: 10,
-          background: `${color}15`,
+          background: tint(8, color),
           display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}>
-          <Icon size={18} color={color} />
+          <Ico lucide={Icon} ti={ti} size={18} color={color} />
         </div>
-        <span style={{ fontSize: 12, color: MUTED, fontWeight: 500, fontFamily: FONT }}>{label}</span>
+        <span style={{ fontSize: 12, color: C.muted, fontWeight: 500, fontFamily: C.font }}>{label}</span>
       </div>
-      <div style={{ fontSize: 28, fontWeight: 800, color: INK, fontFamily: FONT, lineHeight: 1 }}>{value}</div>
-      {sub && <div style={{ fontSize: 12, color: MUTED, fontFamily: FONT }}>{sub}</div>}
+      <div style={{ fontSize: 28, fontWeight: 800, color: C.ink, fontFamily: C.font, lineHeight: 1 }}>{value}</div>
+      {sub && <div style={{ fontSize: 12, color: C.muted, fontFamily: C.font }}>{sub}</div>}
     </div>
   );
 }
@@ -89,21 +91,21 @@ function SessionItem({ session }) {
   return (
     <div style={{
       display: 'flex', alignItems: 'center', gap: 12,
-      padding: '12px 16px', background: WHITE, borderRadius: 12,
-      border: `1px solid ${BORDER}`,
+      padding: '12px 16px', background: C.surface, borderRadius: 12,
+      border: `1px solid ${C.border}`,
     }}>
       <div style={{
-        width: 40, height: 40, borderRadius: 10, background: `${AMBER}15`,
+        width: 40, height: 40, borderRadius: 10, background: tint(8),
         display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
       }}>
-        <Video size={18} color={AMBER} />
+        <Ico ti="ti-video" size={18} color={C.brand} />
       </div>
       <div style={{ flex: 1, overflow: 'hidden' }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: INK, fontFamily: FONT, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: C.ink, fontFamily: C.font, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {session.title}
         </div>
-        <div style={{ fontSize: 11, color: MUTED, fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 4 }}>
-          <Clock size={10} /> {time} · {session.enrolledCount || 0} enrolled
+        <div style={{ fontSize: 11, color: C.muted, fontFamily: C.font, display: 'flex', alignItems: 'center', gap: 4 }}>
+          <Ico ti="ti-clock" size={10} /> {time} · {session.enrolledCount || 0} enrolled
         </div>
       </div>
       <Btn size="sm" variant="outline">Join</Btn>
@@ -112,27 +114,27 @@ function SessionItem({ session }) {
 }
 
 /* ── Quick action card ──────────────────────────────────────────────── */
-function QuickAction({ icon: Icon, label, desc, color, onClick }) {
+function QuickAction({ icon: Icon, ti, label, desc, color, onClick }) {
   return (
     <button
       onClick={onClick}
       style={{
-        background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 14,
+        background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14,
         padding: '16px', cursor: 'pointer', textAlign: 'left',
         display: 'flex', flexDirection: 'column', gap: 8, transition: 'all .15s',
-        fontFamily: FONT,
+        fontFamily: C.font,
       }}
       onMouseEnter={e => e.currentTarget.style.borderColor = color}
-      onMouseLeave={e => e.currentTarget.style.borderColor = BORDER}
+      onMouseLeave={e => e.currentTarget.style.borderColor = C.border}
     >
       <div style={{
-        width: 40, height: 40, borderRadius: 10, background: `${color}15`,
+        width: 40, height: 40, borderRadius: 10, background: tint(8, color),
         display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}>
-        <Icon size={18} color={color} />
+        <Ico lucide={Icon} ti={ti} size={18} color={color} />
       </div>
-      <div style={{ fontSize: 13, fontWeight: 700, color: INK }}>{label}</div>
-      <div style={{ fontSize: 11, color: MUTED }}>{desc}</div>
+      <div style={{ fontSize: 13, fontWeight: 700, color: C.ink }}>{label}</div>
+      <div style={{ fontSize: 11, color: C.muted }}>{desc}</div>
     </button>
   );
 }
@@ -234,38 +236,38 @@ function StreamingPanel({ onToast }) {
   };
 
   return (
-    <div style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 20, padding: '20px', fontFamily: FONT }}>
+    <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 20, padding: '20px', fontFamily: C.font }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-        <Video size={16} color={AMBER} />
-        <h3 style={{ fontSize: 14, fontWeight: 700, color: INK, margin: 0 }}>Streaming Platforms</h3>
+        <Ico ti="ti-video" size={16} color={C.brand} />
+        <h3 style={{ fontSize: 14, fontWeight: 700, color: C.ink, margin: 0 }}>Streaming Platforms</h3>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {state === null
           ? [0, 1, 2].map((i) => <Skeleton key={i} height={44} />)
           : state.map((p) => {
-            const meta = STREAM_META[p.platform] ?? { label: p.platform, color: MUTED };
+            const meta = STREAM_META[p.platform] ?? { label: p.platform, color: C.muted };
             const sub = p.connected
               ? (p.method === 'oauth' ? 'Connected · OAuth' : 'Connected · Manual link')
               : 'Not connected';
             return (
-              <div key={p.platform} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', border: `1px solid ${BORDER}`, borderRadius: 12 }}>
-                <div style={{ width: 30, height: 30, borderRadius: 8, background: `${meta.color}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  <Video size={15} color={meta.color} />
+              <div key={p.platform} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 12 }}>
+                <div style={{ width: 30, height: 30, borderRadius: 8, background: tint(8, meta.color), display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <Ico ti="ti-video" size={15} color={meta.color} />
                 </div>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 12.5, fontWeight: 600, color: INK }}>{meta.label}</div>
-                  <div style={{ fontSize: 10.5, color: p.connected ? GREEN : MUTED, display: 'flex', alignItems: 'center', gap: 3 }}>
-                    {p.connected && <CheckCircle2 size={10} />}{sub}
+                  <div style={{ fontSize: 12.5, fontWeight: 600, color: C.ink }}>{meta.label}</div>
+                  <div style={{ fontSize: 10.5, color: p.connected ? GREEN : C.muted, display: 'flex', alignItems: 'center', gap: 3 }}>
+                    {p.connected && <Ico ti="ti-circle-check" size={10} />}{sub}
                   </div>
                 </div>
                 {p.connected ? (
-                  <Btn size="sm" variant="ghost" disabled={busy === p.platform} onClick={() => disconnect(p)} style={{ color: MUTED }}>
+                  <Btn size="sm" variant="ghost" disabled={busy === p.platform} onClick={() => disconnect(p)} style={{ color: C.muted }}>
                     {busy === p.platform ? '…' : 'Disconnect'}
                   </Btn>
                 ) : (
                   <div style={{ display: 'flex', gap: 6 }}>
                     <Btn size="sm" variant="outline" onClick={() => startOAuth(p.platform)}>Connect</Btn>
-                    <Btn size="sm" variant="ghost" onClick={() => setConnectFor(p.platform)} style={{ color: MUTED }}>Use link</Btn>
+                    <Btn size="sm" variant="ghost" onClick={() => setConnectFor(p.platform)} style={{ color: C.muted }}>Use link</Btn>
                   </div>
                 )}
               </div>
@@ -276,7 +278,7 @@ function StreamingPanel({ onToast }) {
       <Modal open={!!connectFor} onClose={() => { setConnectFor(null); setRoomUrl(''); setHostEmail(''); }}
         title={`Connect ${STREAM_META[connectFor]?.label ?? ''} with a link`}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <p style={{ fontSize: 12.5, color: MUTED, margin: 0, fontFamily: FONT, lineHeight: 1.5 }}>
+          <p style={{ fontSize: 12.5, color: C.muted, margin: 0, fontFamily: C.font, lineHeight: 1.5 }}>
             Prefer <b>Connect</b> to authorize with your account so links are generated automatically.
             Or paste a personal meeting room link to reuse for every session.
           </p>
@@ -362,30 +364,30 @@ function SocialPanel({ onToast }) {
   const hasInput = form.profileUrl.trim() || form.accessToken.trim() || form.apiKey.trim();
 
   return (
-    <div style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 20, padding: '20px', fontFamily: FONT }}>
+    <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 20, padding: '20px', fontFamily: C.font }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-        <Share2 size={16} color={AMBER} />
-        <h3 style={{ fontSize: 14, fontWeight: 700, color: INK, margin: 0 }}>Social Platforms</h3>
+        <Ico ti="ti-share" size={16} color={C.brand} />
+        <h3 style={{ fontSize: 14, fontWeight: 700, color: C.ink, margin: 0 }}>Social Platforms</h3>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {state === null
           ? [0, 1, 2].map((i) => <Skeleton key={i} height={44} />)
           : state.map((p) => {
-            const meta = SOCIAL_META[p.platform] ?? { label: p.platform, color: MUTED, Icon: Share2 };
+            const meta = SOCIAL_META[p.platform] ?? { label: p.platform, color: C.muted, Icon: Share2, ti: 'ti-share' };
             const Icon = meta.Icon;
             return (
-              <div key={p.platform} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', border: `1px solid ${BORDER}`, borderRadius: 12 }}>
-                <div style={{ width: 30, height: 30, borderRadius: 8, background: `${meta.color}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  <Icon size={15} color={meta.color} />
+              <div key={p.platform} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 12 }}>
+                <div style={{ width: 30, height: 30, borderRadius: 8, background: tint(8, meta.color), display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <Ico lucide={Icon} ti={meta.ti} size={15} color={meta.color} />
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 12.5, fontWeight: 600, color: INK }}>{meta.label}</div>
-                  <div style={{ fontSize: 10.5, color: p.connected ? GREEN : MUTED, display: 'flex', alignItems: 'center', gap: 3 }}>
-                    {p.connected && <CheckCircle2 size={10} />}{p.connected ? 'Connected' : 'Not connected'}
+                  <div style={{ fontSize: 12.5, fontWeight: 600, color: C.ink }}>{meta.label}</div>
+                  <div style={{ fontSize: 10.5, color: p.connected ? GREEN : C.muted, display: 'flex', alignItems: 'center', gap: 3 }}>
+                    {p.connected && <Ico ti="ti-circle-check" size={10} />}{p.connected ? 'Connected' : 'Not connected'}
                   </div>
                 </div>
                 {p.connected ? (
-                  <Btn size="sm" variant="ghost" disabled={busy === p.platform} onClick={() => disconnect(p)} style={{ color: MUTED }}>
+                  <Btn size="sm" variant="ghost" disabled={busy === p.platform} onClick={() => disconnect(p)} style={{ color: C.muted }}>
                     {busy === p.platform ? '…' : 'Disconnect'}
                   </Btn>
                 ) : (
@@ -399,7 +401,7 @@ function SocialPanel({ onToast }) {
       <Modal open={!!connectFor} onClose={() => { setConnectFor(null); resetForm(); }}
         title={`Connect ${SOCIAL_META[connectFor]?.label ?? ''}`}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <p style={{ fontSize: 12.5, color: MUTED, margin: 0, fontFamily: FONT, lineHeight: 1.5 }}>
+          <p style={{ fontSize: 12.5, color: C.muted, margin: 0, fontFamily: C.font, lineHeight: 1.5 }}>
             Store your {SOCIAL_META[connectFor]?.label ?? 'account'} credentials so the school can post and generate
             content later. Fill in what you have — everything is optional and stored securely.
           </p>

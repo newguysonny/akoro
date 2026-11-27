@@ -1,12 +1,13 @@
 import { useState, useRef } from 'react';
-import { Upload, X, Check } from 'lucide-react';
-import { AMBER, INK, MUTED, BORDER, LIGHT, WHITE, GREEN, RED, PURPLE, BLUE, FONT } from '../constants.js';
+import { Ico } from '../theme/Ico.jsx';
+import { GREEN, RED, PURPLE, BLUE } from '../constants.js';
+import { C, tint } from '../theme/colors.js';
 
 /* ── Button ─────────────────────────────────────────────────────────── */
 export function Btn({ children, variant = 'primary', size = 'md', onClick, disabled, style, type = 'button', ...rest }) {
   const base = {
     display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-    fontFamily: FONT, fontWeight: 600, cursor: disabled ? 'not-allowed' : 'pointer',
+    fontFamily: C.font, fontWeight: 600, cursor: disabled ? 'not-allowed' : 'pointer',
     border: 'none', borderRadius: 10, transition: 'all .15s',
     opacity: disabled ? 0.55 : 1, whiteSpace: 'nowrap',
   };
@@ -20,15 +21,15 @@ export function Btn({ children, variant = 'primary', size = 'md', onClick, disab
   };
 
   const variants = {
-    primary:   { background: AMBER, color: WHITE, boxShadow: `0 2px 8px ${AMBER}44` },
-    secondary: { background: WHITE, color: INK, border: `1.5px solid ${BORDER}` },
-    ghost:     { background: 'transparent', color: MUTED },
-    danger:    { background: RED, color: WHITE },
-    dark:      { background: INK, color: WHITE },
-    purple:    { background: PURPLE, color: WHITE, boxShadow: `0 2px 8px ${PURPLE}33` },
-    blue:      { background: BLUE, color: WHITE, boxShadow: `0 2px 8px ${BLUE}33` },
-    green:     { background: GREEN, color: WHITE },
-    outline:   { background: 'transparent', color: AMBER, border: `1.5px solid ${AMBER}` },
+    primary:   { background: C.brand, color: '#fff', boxShadow: `0 2px 8px ${tint(27)}` },
+    secondary: { background: C.surface, color: C.ink, border: `1.5px solid ${C.border}` },
+    ghost:     { background: 'transparent', color: C.muted },
+    danger:    { background: RED, color: '#fff' },
+    dark:      { background: C.ink, color: '#fff' },
+    purple:    { background: PURPLE, color: '#fff', boxShadow: `0 2px 8px ${PURPLE}33` },
+    blue:      { background: BLUE, color: '#fff', boxShadow: `0 2px 8px ${BLUE}33` },
+    green:     { background: GREEN, color: '#fff' },
+    outline:   { background: 'transparent', color: C.brand, border: `1.5px solid ${C.brand}` },
   };
 
   return (
@@ -48,14 +49,14 @@ export function Btn({ children, variant = 'primary', size = 'md', onClick, disab
 export function Inp({ label, error, style, containerStyle, ...props }) {
   const inputStyle = {
     width: '100%', padding: '10px 14px', borderRadius: 10,
-    border: `1.5px solid ${error ? RED : BORDER}`,
-    outline: 'none', fontSize: 14, fontFamily: FONT, color: INK,
-    background: WHITE, transition: 'border-color .15s',
+    border: `1.5px solid ${error ? RED : C.border}`,
+    outline: 'none', fontSize: 14, fontFamily: C.font, color: C.ink,
+    background: C.surface, transition: 'border-color .15s',
     boxSizing: 'border-box', ...style,
   };
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6, ...containerStyle }}>
-      {label && <label style={{ fontSize: 12, fontWeight: 600, color: INK }}>{label}</label>}
+      {label && <label style={{ fontSize: 12, fontWeight: 600, color: C.ink }}>{label}</label>}
       <input style={inputStyle} {...props} />
       {error && <span style={{ fontSize: 11, color: RED }}>{error}</span>}
     </div>
@@ -66,14 +67,14 @@ export function Inp({ label, error, style, containerStyle, ...props }) {
 export function Txa({ label, error, style, containerStyle, rows = 3, ...props }) {
   const taStyle = {
     width: '100%', padding: '10px 14px', borderRadius: 10,
-    border: `1.5px solid ${error ? RED : BORDER}`,
-    outline: 'none', fontSize: 14, fontFamily: FONT, color: INK,
-    background: WHITE, resize: 'vertical', minHeight: 80,
+    border: `1.5px solid ${error ? RED : C.border}`,
+    outline: 'none', fontSize: 14, fontFamily: C.font, color: C.ink,
+    background: C.surface, resize: 'vertical', minHeight: 80,
     boxSizing: 'border-box', ...style,
   };
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6, ...containerStyle }}>
-      {label && <label style={{ fontSize: 12, fontWeight: 600, color: INK }}>{label}</label>}
+      {label && <label style={{ fontSize: 12, fontWeight: 600, color: C.ink }}>{label}</label>}
       <textarea style={taStyle} rows={rows} {...props} />
       {error && <span style={{ fontSize: 11, color: RED }}>{error}</span>}
     </div>
@@ -84,13 +85,13 @@ export function Txa({ label, error, style, containerStyle, rows = 3, ...props })
 export function Sel({ label, error, style, containerStyle, children, ...props }) {
   const selStyle = {
     width: '100%', padding: '10px 14px', borderRadius: 10,
-    border: `1.5px solid ${error ? RED : BORDER}`,
-    outline: 'none', fontSize: 14, fontFamily: FONT, color: INK,
-    background: WHITE, cursor: 'pointer', boxSizing: 'border-box', ...style,
+    border: `1.5px solid ${error ? RED : C.border}`,
+    outline: 'none', fontSize: 14, fontFamily: C.font, color: C.ink,
+    background: C.surface, cursor: 'pointer', boxSizing: 'border-box', ...style,
   };
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6, ...containerStyle }}>
-      {label && <label style={{ fontSize: 12, fontWeight: 600, color: INK }}>{label}</label>}
+      {label && <label style={{ fontSize: 12, fontWeight: 600, color: C.ink }}>{label}</label>}
       <select style={selStyle} {...props}>{children}</select>
       {error && <span style={{ fontSize: 11, color: RED }}>{error}</span>}
     </div>
@@ -112,7 +113,7 @@ export function Modal({ open, onClose, title, children, width = 520, style }) {
       <div
         onClick={e => e.stopPropagation()}
         style={{
-          background: WHITE, borderRadius: 20, width: '100%', maxWidth: width,
+          background: C.surface, borderRadius: 20, width: '100%', maxWidth: width,
           maxHeight: '90vh', overflow: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,.2)',
           animation: 'fade-up .25s ease both', ...style,
         }}
@@ -122,15 +123,15 @@ export function Modal({ open, onClose, title, children, width = 520, style }) {
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
             padding: '20px 24px 0',
           }}>
-            <h2 style={{ fontSize: 18, fontWeight: 700, color: INK, margin: 0 }}>{title}</h2>
+            <h2 style={{ fontSize: 18, fontWeight: 700, color: C.ink, margin: 0 }}>{title}</h2>
             <button
               onClick={onClose}
               style={{
                 background: 'none', border: 'none', cursor: 'pointer',
-                color: MUTED, padding: 4, borderRadius: 6,
+                color: C.muted, padding: 4, borderRadius: 6,
               }}
             >
-              <X size={18} />
+              <Ico ti="ti-x" size={18} />
             </button>
           </div>
         )}
@@ -145,8 +146,8 @@ export function SectionHead({ title, subtitle, action }) {
   return (
     <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20 }}>
       <div>
-        <h2 style={{ fontSize: 18, fontWeight: 700, color: INK, margin: 0 }}>{title}</h2>
-        {subtitle && <p style={{ fontSize: 13, color: MUTED, margin: '4px 0 0' }}>{subtitle}</p>}
+        <h2 style={{ fontSize: 18, fontWeight: 700, color: C.ink, margin: 0 }}>{title}</h2>
+        {subtitle && <p style={{ fontSize: 13, color: C.muted, margin: '4px 0 0' }}>{subtitle}</p>}
       </div>
       {action && <div>{action}</div>}
     </div>
@@ -162,21 +163,21 @@ export function WizardSteps({ steps, current }) {
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
             <div style={{
               width: 28, height: 28, borderRadius: '50%',
-              background: i < current ? GREEN : i === current ? AMBER : BORDER,
+              background: i < current ? GREEN : i === current ? C.brand : C.border,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: i <= current ? WHITE : MUTED, fontSize: 12, fontWeight: 700,
+              color: i <= current ? '#fff' : C.muted, fontSize: 12, fontWeight: 700,
               flexShrink: 0,
             }}>
-              {i < current ? <Check size={14} /> : i + 1}
+              {i < current ? <Ico ti="ti-check" size={14} /> : i + 1}
             </div>
-            <span style={{ fontSize: 10, fontWeight: 600, color: i === current ? INK : MUTED, whiteSpace: 'nowrap' }}>
+            <span style={{ fontSize: 10, fontWeight: 600, color: i === current ? C.ink : C.muted, whiteSpace: 'nowrap' }}>
               {step}
             </span>
           </div>
           {i < steps.length - 1 && (
             <div style={{
               flex: 1, height: 2, margin: '0 4px', marginBottom: 16,
-              background: i < current ? GREEN : BORDER,
+              background: i < current ? GREEN : C.border,
             }} />
           )}
         </div>
@@ -190,7 +191,7 @@ export function StatusPill({ status }) {
   const map = {
     live:      { bg: '#DCFCE7', color: GREEN, label: 'Live' },
     scheduled: { bg: '#FEF3C7', color: '#D97706', label: 'Scheduled' },
-    draft:     { bg: '#F3F4F6', color: MUTED, label: 'Draft' },
+    draft:     { bg: '#F3F4F6', color: C.muted, label: 'Draft' },
     completed: { bg: '#EDE9FE', color: PURPLE, label: 'Completed' },
     cancelled: { bg: '#FEE2E2', color: RED, label: 'Cancelled' },
     active:    { bg: '#DCFCE7', color: GREEN, label: 'Active' },
@@ -216,8 +217,8 @@ export function PlatBadge({ platform }) {
     zoom:    { bg: '#EFF6FF', color: BLUE, label: 'Zoom' },
     meet:    { bg: '#F0FDF4', color: GREEN, label: 'Meet' },
     teams:   { bg: '#EDE9FE', color: PURPLE, label: 'Teams' },
-    custom:  { bg: '#FFF7ED', color: AMBER, label: 'Custom' },
-    akoro:   { bg: '#FFF7ED', color: AMBER, label: 'Akoro Live' },
+    custom:  { bg: '#FFF7ED', color: C.brand, label: 'Custom' },
+    akoro:   { bg: '#FFF7ED', color: C.brand, label: 'Akoro Live' },
   };
   const cfg = map[platform?.toLowerCase()] || map.custom;
   return (
@@ -233,7 +234,7 @@ export function PlatBadge({ platform }) {
 /* ── CourseTypeBadge ────────────────────────────────────────────────── */
 export function CoursTypeBadge({ type }) {
   const map = {
-    live:      { bg: '#FFF7ED', color: AMBER, label: 'Live Course' },
+    live:      { bg: '#FFF7ED', color: C.brand, label: 'Live Course' },
     'on-demand': { bg: '#EDE9FE', color: PURPLE, label: 'On-Demand' },
     hybrid:    { bg: '#EFF6FF', color: BLUE, label: 'Hybrid' },
     workshop:  { bg: '#F0FDF4', color: GREEN, label: 'Workshop' },
@@ -289,24 +290,24 @@ export function FileUploadZone({ label = 'Drop files here or click to upload', a
       onDragLeave={() => setDragging(false)}
       onDrop={e => { e.preventDefault(); setDragging(false); handleFiles(e.dataTransfer.files); }}
       style={{
-        border: `2px dashed ${dragging ? AMBER : BORDER}`,
+        border: `2px dashed ${dragging ? C.brand : C.border}`,
         borderRadius: 12, padding: '24px', textAlign: 'center',
         cursor: 'pointer', transition: 'all .2s',
-        background: dragging ? `${AMBER}08` : LIGHT,
+        background: dragging ? tint(3) : C.bg,
       }}
     >
       <input ref={inputRef} type="file" accept={accept} style={{ display: 'none' }}
         onChange={e => handleFiles(e.target.files)} />
       {!fileName ? (
         <>
-          <Upload size={24} color={MUTED} style={{ marginBottom: 8 }} />
-          <p style={{ fontSize: 13, color: MUTED, margin: 0 }}>{label}</p>
+          <Ico ti="ti-upload" size={24} color={C.muted} style={{ marginBottom: 8 }} />
+          <p style={{ fontSize: 13, color: C.muted, margin: 0 }}>{label}</p>
         </>
       ) : (
         <div>
-          <p style={{ fontSize: 13, fontWeight: 600, color: INK, margin: '0 0 8px' }}>{fileName}</p>
-          <div style={{ height: 4, background: BORDER, borderRadius: 2, overflow: 'hidden' }}>
-            <div style={{ height: '100%', width: `${progress}%`, background: done ? GREEN : AMBER, transition: 'width .2s' }} />
+          <p style={{ fontSize: 13, fontWeight: 600, color: C.ink, margin: '0 0 8px' }}>{fileName}</p>
+          <div style={{ height: 4, background: C.border, borderRadius: 2, overflow: 'hidden' }}>
+            <div style={{ height: '100%', width: `${progress}%`, background: done ? GREEN : C.brand, transition: 'width .2s' }} />
           </div>
           {done && !error && <p style={{ fontSize: 11, color: GREEN, marginTop: 6, fontWeight: 600 }}>Upload complete</p>}
           {error && <p style={{ fontSize: 11, color: RED, marginTop: 6, fontWeight: 600 }}>{error}</p>}
@@ -317,12 +318,12 @@ export function FileUploadZone({ label = 'Drop files here or click to upload', a
 }
 
 /* ── Badge ──────────────────────────────────────────────────────────── */
-export function Badge({ children, color = AMBER, bg, style }) {
+export function Badge({ children, color = C.brand, bg, style }) {
   return (
     <span style={{
       display: 'inline-flex', alignItems: 'center', padding: '2px 8px',
       borderRadius: 6, fontSize: 11, fontWeight: 700,
-      background: bg || `${color}18`, color,
+      background: bg || tint(9, color), color,
       ...style,
     }}>
       {children}
@@ -332,21 +333,21 @@ export function Badge({ children, color = AMBER, bg, style }) {
 
 /* ── Toast ──────────────────────────────────────────────────────────── */
 export function Toast({ message, type = 'success', onClose }) {
-  const colors = { success: GREEN, error: RED, info: BLUE, warning: AMBER };
+  const colors = { success: GREEN, error: RED, info: BLUE, warning: C.brand };
   const color = colors[type] || GREEN;
   return (
     <div style={{
       position: 'fixed', bottom: 24, right: 24, zIndex: 9999,
-      background: WHITE, borderRadius: 12, padding: '14px 18px',
+      background: C.surface, borderRadius: 12, padding: '14px 18px',
       boxShadow: '0 8px 30px rgba(0,0,0,.12)',
       display: 'flex', alignItems: 'center', gap: 10,
       animation: 'fade-up .25s ease both',
       borderLeft: `4px solid ${color}`,
       maxWidth: 360,
     }}>
-      <span style={{ fontSize: 13, fontWeight: 500, color: INK, flex: 1 }}>{message}</span>
-      <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: MUTED, padding: 2 }}>
-        <X size={14} />
+      <span style={{ fontSize: 13, fontWeight: 500, color: C.ink, flex: 1 }}>{message}</span>
+      <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.muted, padding: 2 }}>
+        <Ico ti="ti-x" size={14} />
       </button>
     </div>
   );

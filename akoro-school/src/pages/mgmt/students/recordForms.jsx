@@ -3,36 +3,31 @@
  */
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import {
-  Users, UserCheck, UserX, Home, Tags, ShieldAlert, Loader2, Save, ClipboardCheck,
-  Eye, Pencil, Trash2, UserPlus, Search, Phone, Mail, MapPin, Droplet,
-  Cake, CreditCard, ShieldCheck, CircleDot, X, Copy, Printer, Columns, Image,
-  FileUp, Upload, Sheet, Download, CheckSquare, FileText,
-  FolderOpen, Key, HeartPulse, Bus, Bed, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, RefreshCw,
-  ClipboardList, ThumbsUp, ThumbsDown, Plus,
-} from 'lucide-react';
+import { ShieldAlert, HeartPulse } from 'lucide-react';
+import { Ico } from '../../../theme/Ico.jsx';
 import { PageLayout } from '../../../components/Layout.jsx';
 import BackButton from '../../../components/BackButton.jsx';
 import ResourcePage, { inputStyle } from '../../../components/mgmt/ResourcePage.jsx';
 import { API, apiGet, apiPost, apiPut, apiDelete } from '../../../services/api.js';
-import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, BLUE, PURPLE, FONT } from '../../../constants.js';
+import { GREEN, RED, BLUE, PURPLE } from '../../../constants.js';
+import { C, tint } from '../../../theme/colors.js';
 import { BASE, fullName, studentOpts, STATUS_PILL, STUDENT_FIELDS, STUDENT_COLUMNS, STUDENT_SEARCH, CLASS_FILTER, naira, STATUS_OPTS, InfoRow, GridInfo, InfoGrid, SectionCard, Ring, statPill, FEE_STATUS_COLOR, ModalShell } from './shared.jsx';
 
 /* ── Dedicated "Add Record" pages (Health / Behavior) ────────────────────── */
-function RecordFormShell({ title, color, icon: Icon, backTo, onSave, busy, children }) {
+function RecordFormShell({ title, color, icon: Icon, ti, backTo, onSave, busy, children }) {
   const navigate = useNavigate();
   return (
     <PageLayout title={title}>
       <div style={{ maxWidth: 640 }}>
         <BackButton onClick={() => navigate(backTo)} label="Back to Profile" />
-        <div style={{ background: WHITE, border: `1px solid ${BORDER}`, borderLeft: `3px solid ${color}`, borderRadius: 12, padding: '20px 22px' }}>
+        <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderLeft: `3px solid ${color}`, borderRadius: 12, padding: '20px 22px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
-            {Icon && <Icon size={18} color={color} />}
-            <b style={{ fontSize: 15, fontFamily: FONT, color: INK }}>{title}</b>
+            {Icon && <Ico lucide={Icon} ti={ti} size={18} color={color} />}
+            <b style={{ fontSize: 15, fontFamily: C.font, color: C.ink }}>{title}</b>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>{children}</div>
-          <button onClick={onSave} disabled={busy} style={{ marginTop: 18, padding: '10px 20px', borderRadius: 9, border: 'none', background: color, color: WHITE, fontWeight: 800, fontSize: 13, cursor: 'pointer', fontFamily: FONT, display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-            {busy ? <Loader2 size={14} style={{ animation: 'spin .8s linear infinite' }} /> : <Save size={14} />} Save Record
+          <button onClick={onSave} disabled={busy} style={{ marginTop: 18, padding: '10px 20px', borderRadius: 9, border: 'none', background: color, color: '#fff', fontWeight: 800, fontSize: 13, cursor: 'pointer', fontFamily: C.font, display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+            {busy ? <Ico ti="ti-loader-2" size={14} style={{ animation: 'spin .8s linear infinite' }} /> : <Ico ti="ti-device-floppy" size={14} />} Save Record
           </button>
         </div>
       </div>
@@ -40,7 +35,7 @@ function RecordFormShell({ title, color, icon: Icon, backTo, onSave, busy, child
   );
 }
 
-const fieldLabel = { fontSize: 11.5, fontWeight: 800, color: MUTED2, fontFamily: FONT, textTransform: 'uppercase', letterSpacing: .3, marginBottom: 5, display: 'block' };
+const fieldLabel = { fontSize: 11.5, fontWeight: 800, color: C.muted2, fontFamily: C.font, textTransform: 'uppercase', letterSpacing: .3, marginBottom: 5, display: 'block' };
 
 export function HealthRecordFormPage() {
   const { id } = useParams();
@@ -61,7 +56,7 @@ export function HealthRecordFormPage() {
   };
 
   return (
-    <RecordFormShell title="Add Health Record" color={RED} icon={HeartPulse} backTo={`/mgmt/students/${id}?tab=health`} onSave={save} busy={busy}>
+    <RecordFormShell title="Add Health Record" color={RED} icon={HeartPulse} ti="ti-heartbeat" backTo={`/mgmt/students/${id}?tab=health`} onSave={save} busy={busy}>
       {error && (
         <div style={{ padding: '10px 13px', background: '#FEE2E2', border: '1px solid #FECACA', borderRadius: 11, fontSize: 12.5, fontWeight: 700, color: '#991B1B' }}>
           {error}
@@ -109,7 +104,7 @@ export function BehaviorRecordFormPage() {
   };
 
   return (
-    <RecordFormShell title="Add Behavior Record" color={AMBER} icon={ShieldAlert} backTo={`/mgmt/students/${id}?tab=behavior`} onSave={save} busy={busy}>
+    <RecordFormShell title="Add Behavior Record" color={C.brand} icon={ShieldAlert} ti="ti-shield-exclamation" backTo={`/mgmt/students/${id}?tab=behavior`} onSave={save} busy={busy}>
       {error && (
         <div style={{ padding: '10px 13px', background: '#FEE2E2', border: '1px solid #FECACA', borderRadius: 11, fontSize: 12.5, fontWeight: 700, color: '#991B1B' }}>
           {error}

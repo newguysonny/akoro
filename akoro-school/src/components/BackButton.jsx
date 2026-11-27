@@ -4,8 +4,8 @@
  * Pass `onClick` (e.g. () => navigate(-1) or navigate('/settings-billing')) and
  * an optional `label` (defaults to "Back").
  */
-import { ArrowLeft } from 'lucide-react';
-import { BORDER, WHITE, MUTED, FONT } from '../constants.js';
+import { C, tint } from '../theme/colors.js';
+import { Ico } from '../theme/Ico.jsx';
 
 export default function BackButton({ onClick, label = 'Back', style = {} }) {
   return (
@@ -13,12 +13,12 @@ export default function BackButton({ onClick, label = 'Back', style = {} }) {
       onClick={onClick}
       style={{
         display: 'inline-flex', alignItems: 'center', gap: 6,
-        padding: '8px 14px', borderRadius: 9, border: `1.5px solid ${BORDER}`,
-        background: WHITE, color: MUTED, fontSize: 12.5, fontWeight: 700,
-        cursor: 'pointer', fontFamily: FONT, ...style,
+        padding: '8px 14px', borderRadius: 9, border: `1.5px solid ${C.border}`,
+        background: C.surface, color: C.muted, fontSize: 12.5, fontWeight: 700,
+        cursor: 'pointer', fontFamily: C.font, ...style,
       }}
     >
-      <ArrowLeft size={14} /> {label}
+      <Ico ti="ti-arrow-left" size={14} /> {label}
     </button>
   );
 }

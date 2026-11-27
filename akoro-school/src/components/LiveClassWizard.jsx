@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { Plus, Trash2, Calendar, Clock, Link2, FileText, StickyNote, ChevronDown, Wand2, Pencil, Users } from 'lucide-react';
 import { Btn, Modal, Inp, Txa, Sel, WizardSteps, FileUploadZone } from './Primitives.jsx';
-import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, FONT } from '../constants.js';
+import { GREEN } from '../constants.js';
+import { C, tint } from '../theme/colors.js';
+import { Ico } from '../theme/Ico.jsx';
 import { generateSchedule, recomputeSession, FREQ_DEFAULT_DAYS, FREQ_MAX_DAYS, DAY_LABELS } from '../utils/schedule.js';
 import { fileToDataUrl } from '../utils/image.js';
 
@@ -62,7 +63,7 @@ function ScheduleStep({ spec, setSpec, onGenerate, onManual }) {
           })}
         </div>
         {maxDays && (
-          <p style={{ fontSize: 11.5, color: MUTED2, margin: '6px 0 0', fontFamily: FONT }}>
+          <p style={{ fontSize: 11.5, color: C.muted2, margin: '6px 0 0', fontFamily: C.font }}>
             {spec.frequency === 'weekly' ? 'Weekly — pick 1 day (choosing another replaces it).'
               : `${spec.frequency === 'biweekly' ? 'Bi-weekly' : '3× Weekly'} — pick up to ${maxDays} days.`}
           </p>
@@ -81,7 +82,7 @@ function ScheduleStep({ spec, setSpec, onGenerate, onManual }) {
         </Sel>
       </div>
 
-      <div style={{ background: LIGHT, borderRadius: 10, padding: '10px 12px', fontSize: 12, color: MUTED, fontFamily: FONT }}>
+      <div style={{ background: C.bg, borderRadius: 10, padding: '10px 12px', fontSize: 12, color: C.muted, fontFamily: C.font }}>
         Generates <b>{spec.weeks || 0}</b> module-weeks × <b>{spec.daysOfWeek.length}</b> day(s) ={' '}
         <b>{(Number(spec.weeks) || 0) * spec.daysOfWeek.length}</b> sessions. You can edit everything next.
       </div>
@@ -89,7 +90,7 @@ function ScheduleStep({ spec, setSpec, onGenerate, onManual }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, marginTop: 4 }}>
         <Btn variant="secondary" onClick={onManual}>Skip — build manually</Btn>
         <Btn onClick={onGenerate} disabled={!spec.startDate || !spec.daysOfWeek.length || !spec.weeks}>
-          <Wand2 size={14} /> Generate
+          <Ico ti="ti-wand" size={14} /> Generate
         </Btn>
       </div>
     </div>
@@ -98,26 +99,26 @@ function ScheduleStep({ spec, setSpec, onGenerate, onManual }) {
 
 /* ── Material editor row ────────────────────────────────────────────── */
 function MaterialRow({ mat, onChange, onRemove }) {
-  const Icon = mat.kind === 'link' ? Link2 : mat.kind === 'note' ? StickyNote : FileText;
+  const ti = mat.kind === 'link' ? 'ti-link' : mat.kind === 'note' ? 'ti-note' : 'ti-file-text';
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 8, padding: 8 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, padding: 8 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <Icon size={13} color={MUTED} />
+        <Ico ti={ti} size={13} color={C.muted} />
         <select value={mat.kind} onChange={(e) => onChange({ ...mat, kind: e.target.value })}
-          style={{ fontSize: 11, border: `1px solid ${BORDER}`, borderRadius: 6, padding: '2px 4px', fontFamily: FONT }}>
+          style={{ fontSize: 11, border: `1px solid ${C.border}`, borderRadius: 6, padding: '2px 4px', fontFamily: C.font }}>
           <option value="file">File</option><option value="link">Link</option><option value="note">Note</option>
         </select>
         <input placeholder="Title" value={mat.title} onChange={(e) => onChange({ ...mat, title: e.target.value })}
-          style={{ flex: 1, fontSize: 12, border: `1px solid ${BORDER}`, borderRadius: 6, padding: '4px 6px', fontFamily: FONT }} />
-        <button onClick={onRemove} style={{ background: 'none', border: 'none', cursor: 'pointer', color: MUTED }}><Trash2 size={13} /></button>
+          style={{ flex: 1, fontSize: 12, border: `1px solid ${C.border}`, borderRadius: 6, padding: '4px 6px', fontFamily: C.font }} />
+        <button onClick={onRemove} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.muted }}><Ico ti="ti-trash" size={13} /></button>
       </div>
       {mat.kind === 'link' && (
         <input placeholder="https://…" value={mat.url || ''} onChange={(e) => onChange({ ...mat, url: e.target.value })}
-          style={{ fontSize: 12, border: `1px solid ${BORDER}`, borderRadius: 6, padding: '4px 6px', fontFamily: FONT }} />
+          style={{ fontSize: 12, border: `1px solid ${C.border}`, borderRadius: 6, padding: '4px 6px', fontFamily: C.font }} />
       )}
       {mat.kind === 'note' && (
         <textarea placeholder="Note…" value={mat.body || ''} onChange={(e) => onChange({ ...mat, body: e.target.value })} rows={2}
-          style={{ fontSize: 12, border: `1px solid ${BORDER}`, borderRadius: 6, padding: '4px 6px', fontFamily: FONT, resize: 'vertical' }} />
+          style={{ fontSize: 12, border: `1px solid ${C.border}`, borderRadius: 6, padding: '4px 6px', fontFamily: C.font, resize: 'vertical' }} />
       )}
       {mat.kind === 'file' && !mat.url && (
         <FileUploadZone label="Upload file" onUploaded={({ fileUrl, fileName }) => onChange({ ...mat, url: fileUrl, title: mat.title || fileName })} />
@@ -134,20 +135,20 @@ function TopicRow({ topic, idx, onChange, onRemove }) {
   const mats = topic.materials || [];
 
   return (
-    <div style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 10, padding: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+    <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span style={{ fontSize: 10, fontWeight: 800, color: AMBER, fontFamily: FONT, minWidth: 18 }}>{idx + 1}</span>
+        <span style={{ fontSize: 10, fontWeight: 800, color: C.brand, fontFamily: C.font, minWidth: 18 }}>{idx + 1}</span>
         <input placeholder="Topic / lesson focus" value={topic.title} onChange={(e) => upd({ title: e.target.value })}
-          style={{ flex: 1, fontSize: 13, fontWeight: 600, border: 'none', outline: 'none', fontFamily: FONT, color: INK }} />
-        <button onClick={onRemove} style={{ background: 'none', border: 'none', cursor: 'pointer', color: MUTED }}><Trash2 size={14} /></button>
+          style={{ flex: 1, fontSize: 13, fontWeight: 600, border: 'none', outline: 'none', fontFamily: C.font, color: C.ink }} />
+        <button onClick={onRemove} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.muted }}><Ico ti="ti-trash" size={14} /></button>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1.1fr .9fr .8fr', gap: 8 }}>
         <input type="date" value={topic.date || ''} onChange={(e) => upd({ date: e.target.value })} style={miniInp} />
         <input type="time" value={topic.time || ''} onChange={(e) => upd({ time: e.target.value })} style={miniInp} />
         <input type="number" value={topic.duration_min} onChange={(e) => upd({ duration_min: e.target.value })} style={miniInp} title="Duration (min)" />
       </div>
-      <button onClick={() => setOpen((o) => !o)} style={{ alignSelf: 'flex-start', background: 'none', border: 'none', cursor: 'pointer', color: MUTED2, fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4, fontFamily: FONT }}>
-        <ChevronDown size={12} style={{ transform: open ? 'rotate(180deg)' : 'none', transition: '.15s' }} />
+      <button onClick={() => setOpen((o) => !o)} style={{ alignSelf: 'flex-start', background: 'none', border: 'none', cursor: 'pointer', color: C.muted2, fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4, fontFamily: C.font }}>
+        <Ico ti="ti-chevron-down" size={12} style={{ transform: open ? 'rotate(180deg)' : 'none', transition: '.15s' }} />
         Materials {mats.length > 0 && `(${mats.length})`}
       </button>
       {open && (
@@ -158,7 +159,7 @@ function TopicRow({ topic, idx, onChange, onRemove }) {
               onRemove={() => upd({ materials: mats.filter((_, j) => j !== i) })} />
           ))}
           <Btn variant="secondary" size="sm" onClick={() => upd({ materials: [...mats, { kind: 'file', title: '' }] })}>
-            <Plus size={12} /> Add material
+            <Ico ti="ti-plus" size={12} /> Add material
           </Btn>
         </div>
       )}
@@ -174,25 +175,25 @@ function ModuleCard({ mod, mi, onChange, onRemove }) {
   const removeTopic = (si) => onChange({ ...mod, sessions: mod.sessions.filter((_, j) => j !== si) });
 
   return (
-    <div style={{ background: LIGHT, borderRadius: 12, padding: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
+    <div style={{ background: C.bg, borderRadius: 12, padding: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <button onClick={() => setOpen((o) => !o)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: MUTED }}>
-          <ChevronDown size={16} style={{ transform: open ? 'rotate(180deg)' : 'none', transition: '.15s' }} />
+        <button onClick={() => setOpen((o) => !o)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.muted }}>
+          <Ico ti="ti-chevron-down" size={16} style={{ transform: open ? 'rotate(180deg)' : 'none', transition: '.15s' }} />
         </button>
         <input value={mod.title} onChange={(e) => onChange({ ...mod, title: e.target.value })} placeholder={`Module ${mi + 1}`}
-          style={{ flex: 1, fontSize: 14, fontWeight: 800, border: 'none', background: 'transparent', outline: 'none', fontFamily: FONT, color: INK }} />
-        <span style={{ fontSize: 11, color: MUTED, fontFamily: FONT }}>
+          style={{ flex: 1, fontSize: 14, fontWeight: 800, border: 'none', background: 'transparent', outline: 'none', fontFamily: C.font, color: C.ink }} />
+        <span style={{ fontSize: 11, color: C.muted, fontFamily: C.font }}>
           {mod.sessions.length} topic{mod.sessions.length !== 1 ? 's' : ''}
           {mod.sessions[0]?.scheduled_start && ` · ${fmtDate(mod.sessions[0].scheduled_start)}`}
         </span>
-        <button onClick={onRemove} style={{ background: 'none', border: 'none', cursor: 'pointer', color: MUTED }}><Trash2 size={14} /></button>
+        <button onClick={onRemove} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.muted }}><Ico ti="ti-trash" size={14} /></button>
       </div>
       {open && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {mod.sessions.map((s, si) => (
             <TopicRow key={si} topic={s} idx={si} onChange={(ns) => setSession(si, ns)} onRemove={() => removeTopic(si)} />
           ))}
-          <Btn variant="secondary" size="sm" onClick={addTopic}><Plus size={13} /> Add topic</Btn>
+          <Btn variant="secondary" size="sm" onClick={addTopic}><Ico ti="ti-plus" size={13} /> Add topic</Btn>
         </div>
       )}
     </div>
@@ -240,7 +241,7 @@ export default function LiveClassWizard({ open, onClose, onSubmit }) {
             <label style={lbl}>Thumbnail (optional)</label>
             <FileUploadZone label="Upload course thumbnail" accept="image/*" upload={false}
               onFile={async (f) => { try { const url = await fileToDataUrl(f); setInfo((p) => ({ ...p, thumbnail: url })); } catch { /* ignore */ } }} />
-            {info.thumbnail && <img src={info.thumbnail} alt="" style={{ marginTop: 10, width: '100%', maxHeight: 150, objectFit: 'cover', borderRadius: 10, border: `1px solid ${BORDER}` }} />}
+            {info.thumbnail && <img src={info.thumbnail} alt="" style={{ marginTop: 10, width: '100%', maxHeight: 150, objectFit: 'cover', borderRadius: 10, border: `1px solid ${C.border}` }} />}
           </div>
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 4 }}>
             <Btn variant="secondary" onClick={onClose}>Cancel</Btn>
@@ -259,13 +260,13 @@ export default function LiveClassWizard({ open, onClose, onSubmit }) {
       {step === 2 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: 12, color: MUTED, fontFamily: FONT }}>{modules.length} modules · {totalSessions} sessions</span>
-            <Btn variant="secondary" size="sm" onClick={() => setStep(1)}><Pencil size={12} /> Edit schedule</Btn>
+            <span style={{ fontSize: 12, color: C.muted, fontFamily: C.font }}>{modules.length} modules · {totalSessions} sessions</span>
+            <Btn variant="secondary" size="sm" onClick={() => setStep(1)}><Ico ti="ti-pencil" size={12} /> Edit schedule</Btn>
           </div>
           {modules.map((m, mi) => (
             <ModuleCard key={mi} mod={m} mi={mi} onChange={(nm) => setModule(mi, nm)} onRemove={() => removeModule(mi)} />
           ))}
-          <Btn variant="secondary" size="sm" onClick={addModule}><Plus size={13} /> Add module</Btn>
+          <Btn variant="secondary" size="sm" onClick={addModule}><Ico ti="ti-plus" size={13} /> Add module</Btn>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
             <Btn variant="secondary" onClick={() => setStep(1)}>Back</Btn>
             <Btn onClick={() => setStep(3)} disabled={totalSessions === 0}>Review</Btn>
@@ -275,21 +276,21 @@ export default function LiveClassWizard({ open, onClose, onSubmit }) {
 
       {step === 3 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <div style={{ background: LIGHT, borderRadius: 12, padding: 16 }}>
-            <h3 style={{ fontSize: 16, fontWeight: 800, color: INK, margin: '0 0 4px', fontFamily: FONT }}>{info.title}</h3>
-            <p style={{ fontSize: 13, color: MUTED, margin: '0 0 10px', fontFamily: FONT }}>{info.description}</p>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', fontSize: 11, color: MUTED }}>
-              <span style={tag}><Users size={10} /> Max {info.maxStudents}</span>
-              <span style={tag}><Calendar size={10} /> {modules.length} modules</span>
-              <span style={tag}><Clock size={10} /> {totalSessions} sessions</span>
+          <div style={{ background: C.bg, borderRadius: 12, padding: 16 }}>
+            <h3 style={{ fontSize: 16, fontWeight: 800, color: C.ink, margin: '0 0 4px', fontFamily: C.font }}>{info.title}</h3>
+            <p style={{ fontSize: 13, color: C.muted, margin: '0 0 10px', fontFamily: C.font }}>{info.description}</p>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', fontSize: 11, color: C.muted }}>
+              <span style={tag}><Ico ti="ti-users" size={10} /> Max {info.maxStudents}</span>
+              <span style={tag}><Ico ti="ti-calendar" size={10} /> {modules.length} modules</span>
+              <span style={tag}><Ico ti="ti-clock" size={10} /> {totalSessions} sessions</span>
             </div>
           </div>
           <div style={{ maxHeight: 220, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8 }}>
             {modules.map((m, mi) => (
-              <div key={mi} style={{ border: `1px solid ${BORDER}`, borderRadius: 10, padding: 10 }}>
-                <div style={{ fontSize: 13, fontWeight: 800, color: INK, fontFamily: FONT, marginBottom: 4 }}>{m.title}</div>
+              <div key={mi} style={{ border: `1px solid ${C.border}`, borderRadius: 10, padding: 10 }}>
+                <div style={{ fontSize: 13, fontWeight: 800, color: C.ink, fontFamily: C.font, marginBottom: 4 }}>{m.title}</div>
                 {m.sessions.map((s, si) => (
-                  <div key={si} style={{ fontSize: 12, color: MUTED, fontFamily: FONT, display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
+                  <div key={si} style={{ fontSize: 12, color: C.muted, fontFamily: C.font, display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
                     <span>{s.title || `Topic ${si + 1}`}</span>
                     <span>{fmtDate(s.scheduled_start)} · {s.time}</span>
                   </div>
@@ -308,8 +309,8 @@ export default function LiveClassWizard({ open, onClose, onSubmit }) {
 }
 
 /* ── styles ──────────────────────────────────────────────────────────── */
-const lbl = { fontSize: 12, fontWeight: 700, color: INK, display: 'block', marginBottom: 6, fontFamily: FONT };
-const miniInp = { fontSize: 12, border: `1px solid ${BORDER}`, borderRadius: 6, padding: '5px 6px', fontFamily: FONT, color: INK, width: '100%', boxSizing: 'border-box' };
-const tag = { background: WHITE, padding: '3px 10px', borderRadius: 20, border: `1px solid ${BORDER}`, display: 'inline-flex', alignItems: 'center', gap: 4 };
-const pill = (active) => ({ padding: '7px 14px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, background: active ? AMBER : WHITE, color: active ? WHITE : MUTED, border: `1.5px solid ${active ? AMBER : BORDER}` });
-const dayPill = (active) => ({ width: 42, padding: '7px 0', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, background: active ? AMBER : WHITE, color: active ? WHITE : MUTED, border: `1.5px solid ${active ? AMBER : BORDER}` });
+const lbl = { fontSize: 12, fontWeight: 700, color: C.ink, display: 'block', marginBottom: 6, fontFamily: C.font };
+const miniInp = { fontSize: 12, border: `1px solid ${C.border}`, borderRadius: 6, padding: '5px 6px', fontFamily: C.font, color: C.ink, width: '100%', boxSizing: 'border-box' };
+const tag = { background: C.surface, padding: '3px 10px', borderRadius: 20, border: `1px solid ${C.border}`, display: 'inline-flex', alignItems: 'center', gap: 4 };
+const pill = (active) => ({ padding: '7px 14px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: C.font, background: active ? C.brand : C.surface, color: active ? '#fff' : C.muted, border: `1.5px solid ${active ? C.brand : C.border}` });
+const dayPill = (active) => ({ width: 42, padding: '7px 0', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: C.font, background: active ? C.brand : C.surface, color: active ? '#fff' : C.muted, border: `1.5px solid ${active ? C.brand : C.border}` });

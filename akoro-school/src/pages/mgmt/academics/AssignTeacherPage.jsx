@@ -4,16 +4,17 @@
  * for the class are listed with a remove action.
  */
 import { useState, useEffect, useCallback } from 'react';
-import { UserCog, Search, Loader2, Trash2, Check, GraduationCap } from 'lucide-react';
+import { Ico } from '../../../theme/Ico.jsx';
 import { PageLayout } from '../../../components/Layout.jsx';
 import { inputStyle } from '../../../components/mgmt/ResourcePage.jsx';
 import { apiGet, apiPost, apiDelete } from '../../../services/api.js';
-import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, BLUE, FONT } from '../../../constants.js';
+import { GREEN, RED, BLUE } from '../../../constants.js';
+import { C, tint } from '../../../theme/colors.js';
 import { BASE, iconBtn, toolBtn, toastEl } from './shared.jsx';
 import { confirmDialog } from '../../../components/ConfirmHost.jsx';
 
-const label = { display: 'block', fontSize: 12, fontWeight: 700, color: INK, fontFamily: FONT, marginBottom: 5 };
-const card = { background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 14, padding: '18px 20px' };
+const label = { display: 'block', fontSize: 12, fontWeight: 700, color: C.ink, fontFamily: C.font, marginBottom: 5 };
+const card = { background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: '18px 20px' };
 const teacherName = (t) => t?.full_name || t?.email || 'Unknown';
 
 export function AssignClassTeacherPage() {
@@ -81,52 +82,52 @@ export function AssignClassTeacherPage() {
       </div>
 
       {!classId ? (
-        <div style={{ ...card, textAlign: 'center', color: MUTED2, padding: '40px 20px', fontFamily: FONT }}>
-          <GraduationCap size={26} style={{ opacity: .5, marginBottom: 8 }} /><div>Select a class above to assign a teacher.</div>
+        <div style={{ ...card, textAlign: 'center', color: C.muted2, padding: '40px 20px', fontFamily: C.font }}>
+          <Ico ti="ti-school" size={26} style={{ opacity: .5, marginBottom: 8 }} /><div>Select a class above to assign a teacher.</div>
         </div>
       ) : (
         <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
           {/* Teacher picker */}
           <div style={{ ...card, flex: '1 1 340px', minWidth: 300 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-              <UserCog size={16} color={BLUE} /><span style={{ fontSize: 14, fontWeight: 800, color: INK, fontFamily: FONT }}>Choose a Teacher</span>
+              <Ico ti="ti-user-cog" size={16} color={BLUE} /><span style={{ fontSize: 14, fontWeight: 800, color: C.ink, fontFamily: C.font }}>Choose a Teacher</span>
             </div>
             <div style={{ position: 'relative', marginBottom: 12 }}>
-              <Search size={15} color={MUTED2} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)' }} />
+              <Ico ti="ti-search" size={15} color={C.muted2} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)' }} />
               <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search teachers by name or email…" style={{ ...inputStyle, paddingLeft: 34 }} />
             </div>
-            <div style={{ maxHeight: 340, overflowY: 'auto', border: `1px solid ${BORDER}`, borderRadius: 10 }}>
-              {teachers.length === 0 ? <div style={{ padding: 20, textAlign: 'center', color: MUTED2, fontSize: 12.5, fontFamily: FONT }}>No teachers found. Invite staff in Human Resource / Staff.</div> : shown.length === 0 ? <div style={{ padding: 20, textAlign: 'center', color: MUTED2, fontSize: 12.5, fontFamily: FONT }}>No teachers match “{query}”.</div> : shown.map((t) => (
-                <button key={t.id} onClick={() => setPicked(t.id)} style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left', padding: '10px 12px', border: 'none', borderTop: `1px solid ${BORDER}`, background: picked === t.id ? `${BLUE}0E` : WHITE, cursor: 'pointer', fontFamily: FONT }}>
-                  <div style={{ width: 34, height: 34, borderRadius: '50%', background: LIGHT, overflow: 'hidden', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    {t.avatar_url ? <img src={t.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <UserCog size={16} color={MUTED2} />}
+            <div style={{ maxHeight: 340, overflowY: 'auto', border: `1px solid ${C.border}`, borderRadius: 10 }}>
+              {teachers.length === 0 ? <div style={{ padding: 20, textAlign: 'center', color: C.muted2, fontSize: 12.5, fontFamily: C.font }}>No teachers found. Invite staff in Human Resource / Staff.</div> : shown.length === 0 ? <div style={{ padding: 20, textAlign: 'center', color: C.muted2, fontSize: 12.5, fontFamily: C.font }}>No teachers match “{query}”.</div> : shown.map((t) => (
+                <button key={t.id} onClick={() => setPicked(t.id)} style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left', padding: '10px 12px', border: 'none', borderTop: `1px solid ${C.border}`, background: picked === t.id ? `${BLUE}0E` : C.surface, cursor: 'pointer', fontFamily: C.font }}>
+                  <div style={{ width: 34, height: 34, borderRadius: '50%', background: C.bg, overflow: 'hidden', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    {t.avatar_url ? <img src={t.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <Ico ti="ti-user-cog" size={16} color={C.muted2} />}
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: INK, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{teacherName(t)}</div>
-                    <div style={{ fontSize: 11, color: MUTED2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.email}</div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{teacherName(t)}</div>
+                    <div style={{ fontSize: 11, color: C.muted2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.email}</div>
                   </div>
-                  {picked === t.id && <Check size={16} color={BLUE} />}
+                  {picked === t.id && <Ico ti="ti-check" size={16} color={BLUE} />}
                 </button>
               ))}
             </div>
-            <button onClick={assign} disabled={busy || !picked} style={{ width: '100%', marginTop: 14, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '12px', borderRadius: 10, border: 'none', background: (busy || !picked) ? '#E5E7EB' : `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: (busy || !picked) ? '#9CA3AF' : WHITE, fontSize: 13.5, fontWeight: 800, cursor: (busy || !picked) ? 'default' : 'pointer', fontFamily: FONT }}>
-              {busy ? <Loader2 size={14} style={{ animation: 'spin .8s linear infinite' }} /> : <Check size={14} />} Assign to {activeClass?.name}{sectionId ? ` ${sections.find((s) => s.id === sectionId)?.name || ''}` : ''}
+            <button onClick={assign} disabled={busy || !picked} style={{ width: '100%', marginTop: 14, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '12px', borderRadius: 10, border: 'none', background: (busy || !picked) ? C.borderSoft : `linear-gradient(135deg, ${C.brand}, ${C.brandDeep})`, color: (busy || !picked) ? C.muted2 : '#fff', fontSize: 13.5, fontWeight: 800, cursor: (busy || !picked) ? 'default' : 'pointer', fontFamily: C.font }}>
+              {busy ? <Ico ti="ti-loader-2" size={14} style={{ animation: 'spin .8s linear infinite' }} /> : <Ico ti="ti-check" size={14} />} Assign to {activeClass?.name}{sectionId ? ` ${sections.find((s) => s.id === sectionId)?.name || ''}` : ''}
             </button>
           </div>
 
           {/* Current assignments */}
           <div style={{ ...card, flex: '1 1 300px', minWidth: 280 }}>
-            <div style={{ fontSize: 13, fontWeight: 800, color: INK, fontFamily: FONT, marginBottom: 12 }}>Assigned Teachers — {activeClass?.name}</div>
-            {assignments === null ? <Loader2 size={16} style={{ animation: 'spin .8s linear infinite' }} /> : assignments.length === 0 ? (
-              <p style={{ fontSize: 12.5, color: MUTED2, fontFamily: FONT }}>No teacher assigned to this class yet.</p>
+            <div style={{ fontSize: 13, fontWeight: 800, color: C.ink, fontFamily: C.font, marginBottom: 12 }}>Assigned Teachers — {activeClass?.name}</div>
+            {assignments === null ? <Ico ti="ti-loader-2" size={16} style={{ animation: 'spin .8s linear infinite' }} /> : assignments.length === 0 ? (
+              <p style={{ fontSize: 12.5, color: C.muted2, fontFamily: C.font }}>No teacher assigned to this class yet.</p>
             ) : assignments.map((a) => (
-              <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderTop: `1px solid ${BORDER}` }}>
-                <UserCog size={15} color={GREEN} />
+              <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderTop: `1px solid ${C.border}` }}>
+                <Ico ti="ti-user-cog" size={15} color={GREEN} />
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: INK, fontFamily: FONT }}>{teacherName(teacherById[a.teacher_id])}</div>
-                  <div style={{ fontSize: 11, color: MUTED2, fontFamily: FONT }}>{a.section_name ? `Section ${a.section_name}` : 'Whole class'}</div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: C.ink, fontFamily: C.font }}>{teacherName(teacherById[a.teacher_id])}</div>
+                  <div style={{ fontSize: 11, color: C.muted2, fontFamily: C.font }}>{a.section_name ? `Section ${a.section_name}` : 'Whole class'}</div>
                 </div>
-                <button onClick={() => remove(a)} title="Remove" style={iconBtn(RED)}><Trash2 size={13} /></button>
+                <button onClick={() => remove(a)} title="Remove" style={iconBtn(RED)}><Ico ti="ti-trash" size={13} /></button>
               </div>
             ))}
           </div>

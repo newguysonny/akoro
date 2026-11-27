@@ -9,15 +9,14 @@
  * and feeds revision like everything else.
  */
 import { useState, useEffect, useCallback } from 'react';
-import {
-  Plus, BookOpen, Sparkles, Users, Clock, Trash2, Pencil, ChevronRight,
-  Search, Loader2, X, CheckCircle2,
-} from 'lucide-react';
+
 import { PageLayout } from '../components/Layout.jsx';
 import { Btn, Modal, Inp, Txa, Sel, Badge, Toast } from '../components/Primitives.jsx';
 import { apiGet, apiPost, apiPatch, apiDelete } from '../services/api.js';
 import AudiencePicker, { audienceBody, parseHandles, BLANK_AUDIENCE } from '../components/AudiencePicker.jsx';
-import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, PURPLE, BLUE, RED, FONT } from '../constants.js';
+import { GREEN, PURPLE, BLUE, RED } from '../constants.js';
+import { C, tint } from '../theme/colors.js';
+import { Ico } from '../theme/Ico.jsx';
 import { confirmDialog } from '../components/ConfirmHost.jsx';
 
 const SUBJECTS = [
@@ -62,13 +61,13 @@ function PlanEditor({ subtopics, objectives, onChange }) {
 
   if (!subtopics.length) {
     return (
-      <div style={{ padding: '20px', textAlign: 'center', border: `1px dashed ${BORDER}`, borderRadius: 12, background: LIGHT }}>
-        <Sparkles size={20} color={MUTED} style={{ marginBottom: 6 }} />
-        <div style={{ fontSize: 12, color: MUTED, fontFamily: FONT }}>
+      <div style={{ padding: '20px', textAlign: 'center', border: `1px dashed ${C.border}`, borderRadius: 12, background: C.bg }}>
+        <Ico ti="ti-sparkles" size={20} color={C.muted} style={{ marginBottom: 6 }} />
+        <div style={{ fontSize: 12, color: C.muted, fontFamily: C.font }}>
           Enter a subject and topic, then draft the plan — or add subtopics yourself.
         </div>
         <Btn size="sm" variant="secondary" style={{ marginTop: 10 }} onClick={addSubtopic}>
-          <Plus size={13} /> Add a subtopic
+          <Ico ti="ti-plus" size={13} /> Add a subtopic
         </Btn>
       </div>
     );
@@ -77,7 +76,7 @@ function PlanEditor({ subtopics, objectives, onChange }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       {subtopics.map((st, i) => (
-        <div key={i} style={{ border: `1px solid ${BORDER}`, borderRadius: 12, padding: '10px 12px', background: WHITE }}>
+        <div key={i} style={{ border: `1px solid ${C.border}`, borderRadius: 12, padding: '10px 12px', background: C.surface }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
             <span style={{
               width: 20, height: 20, borderRadius: 6, flexShrink: 0, background: `${PURPLE}18`,
@@ -88,37 +87,37 @@ function PlanEditor({ subtopics, objectives, onChange }) {
               placeholder="Subtopic"
               style={{
                 flex: 1, border: 'none', outline: 'none', background: 'transparent',
-                fontSize: 13, fontWeight: 700, color: INK, fontFamily: FONT,
+                fontSize: 13, fontWeight: 700, color: C.ink, fontFamily: C.font,
               }}
             />
             <button type="button" onClick={() => removeSubtopic(i)} title="Remove subtopic"
-              style={{ background: 'none', border: 'none', cursor: 'pointer', color: MUTED, display: 'flex', padding: 2 }}>
-              <X size={14} />
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.muted, display: 'flex', padding: 2 }}>
+              <Ico ti="ti-x" size={14} />
             </button>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 5, paddingLeft: 28 }}>
             {(objectives[st] ?? []).map((obj, j) => (
               <div key={j} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ width: 4, height: 4, borderRadius: '50%', background: MUTED2, flexShrink: 0 }} />
+                <span style={{ width: 4, height: 4, borderRadius: '50%', background: C.muted2, flexShrink: 0 }} />
                 <input
                   value={obj} onChange={e => setObjective(st, j, e.target.value)}
                   placeholder="Learning objective"
                   style={{
                     flex: 1, border: 'none', outline: 'none', background: 'transparent',
-                    fontSize: 12, color: MUTED, fontFamily: FONT,
+                    fontSize: 12, color: C.muted, fontFamily: C.font,
                   }}
                 />
                 <button type="button" onClick={() => removeObjective(st, j)}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: MUTED2, display: 'flex', padding: 2 }}>
-                  <X size={12} />
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.muted2, display: 'flex', padding: 2 }}>
+                  <Ico ti="ti-x" size={12} />
                 </button>
               </div>
             ))}
             <button type="button" onClick={() => addObjective(st)}
               style={{
                 alignSelf: 'flex-start', background: 'none', border: 'none', cursor: 'pointer',
-                color: AMBER, fontSize: 11, fontWeight: 700, fontFamily: FONT, padding: '2px 0',
+                color: C.brand, fontSize: 11, fontWeight: 700, fontFamily: C.font, padding: '2px 0',
               }}>
               + objective
             </button>
@@ -126,7 +125,7 @@ function PlanEditor({ subtopics, objectives, onChange }) {
         </div>
       ))}
       <Btn size="sm" variant="secondary" type="button" onClick={addSubtopic} style={{ alignSelf: 'flex-start' }}>
-        <Plus size={13} /> Add a subtopic
+        <Ico ti="ti-plus" size={13} /> Add a subtopic
       </Btn>
     </div>
   );
@@ -195,7 +194,6 @@ function AssignModal({ open, onClose, onSubmit, editing }) {
     }
   };
 
-
   const submit = async (e) => {
     e.preventDefault();
     setError('');
@@ -239,18 +237,18 @@ function AssignModal({ open, onClose, onSubmit, editing }) {
         {/* Plan */}
         <div>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: INK, fontFamily: FONT }}>Study plan *</div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: C.ink, fontFamily: C.font }}>Study plan *</div>
             <Btn size="sm" variant="secondary" type="button" onClick={draft} disabled={drafting}>
               {drafting
-                ? <><Loader2 size={13} style={{ animation: 'spin .8s linear infinite' }} /> Drafting…</>
-                : <><Sparkles size={13} /> {form.subtopics.length ? 'Redraft with AI' : 'Draft with AI'}</>}
+                ? <><Ico ti="ti-loader-2" size={13} style={{ animation: 'spin .8s linear infinite' }} /> Drafting…</>
+                : <><Ico ti="ti-sparkles" size={13} /> {form.subtopics.length ? 'Redraft with AI' : 'Draft with AI'}</>}
             </Btn>
           </div>
           <PlanEditor
             subtopics={form.subtopics} objectives={form.objectives}
             onChange={(subtopics, objectives) => setForm(f => ({ ...f, subtopics, objectives }))}
           />
-          <div style={{ fontSize: 10.5, color: MUTED2, fontFamily: FONT, marginTop: 6 }}>
+          <div style={{ fontSize: 10.5, color: C.muted2, fontFamily: C.font, marginTop: 6 }}>
             Nothing is assigned until you save — edit or remove anything the AI drafted.
           </div>
         </div>
@@ -271,7 +269,7 @@ function AssignModal({ open, onClose, onSubmit, editing }) {
               ))}
             </Sel>
             {!classesLoading && !classes.length && (
-              <div style={{ fontSize: 11, color: MUTED2, fontFamily: FONT, marginTop: 5 }}>
+              <div style={{ fontSize: 11, color: C.muted2, fontFamily: C.font, marginTop: 5 }}>
                 Create one under Academics → Classes, then come back.
               </div>
             )}
@@ -290,7 +288,7 @@ function AssignModal({ open, onClose, onSubmit, editing }) {
 
         <Inp label="Due (optional)" type="datetime-local" value={form.dueAt} onChange={e => setField('dueAt', e.target.value)} />
 
-        {error && <div style={{ fontSize: 12, color: RED, fontWeight: 700, fontFamily: FONT }}>{error}</div>}
+        {error && <div style={{ fontSize: 12, color: RED, fontWeight: 700, fontFamily: C.font }}>{error}</div>}
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 4 }}>
           <Btn variant="secondary" type="button" onClick={onClose}>Cancel</Btn>
@@ -311,7 +309,7 @@ function DetailModal({ open, onClose, assignmentId }) {
   }, [open, assignmentId]);
 
   const STATUS = {
-    assigned: { color: MUTED,  bg: LIGHT,     label: 'Not started' },
+    assigned: { color: C.muted,  bg: C.bg,     label: 'Not started' },
     started:  { color: BLUE,   bg: '#EFF6FF', label: 'In progress' },
     complete: { color: GREEN,  bg: '#DCFCE7', label: 'Complete' },
   };
@@ -319,10 +317,10 @@ function DetailModal({ open, onClose, assignmentId }) {
   return (
     <Modal open={open} onClose={onClose} title={data?.title || 'Self study'} width={500}>
       {!data ? (
-        <div style={{ fontSize: 13, color: MUTED, fontFamily: FONT, padding: '10px 0' }}>Loading…</div>
+        <div style={{ fontSize: 13, color: C.muted, fontFamily: C.font, padding: '10px 0' }}>Loading…</div>
       ) : (
-        <div style={{ fontFamily: FONT }}>
-          <div style={{ fontSize: 12, color: MUTED, marginBottom: 14 }}>
+        <div style={{ fontFamily: C.font }}>
+          <div style={{ fontSize: 12, color: C.muted, marginBottom: 14 }}>
             {data.subject} · {data.topic} · {(data.subtopics ?? []).length} subtopics
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 340, overflowY: 'auto' }}>
@@ -331,19 +329,19 @@ function DetailModal({ open, onClose, assignmentId }) {
               return (
                 <div key={t.id} style={{
                   display: 'flex', alignItems: 'center', gap: 9, padding: '9px 11px',
-                  border: `1px solid ${BORDER}`, borderRadius: 10, background: WHITE,
+                  border: `1px solid ${C.border}`, borderRadius: 10, background: C.surface,
                 }}>
-                  <span style={{ width: 24, height: 24, borderRadius: '50%', background: LIGHT, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 900, color: MUTED }}>{(t.name || t.full_name || 'L').trim().charAt(0).toUpperCase()}</span>
+                  <span style={{ width: 24, height: 24, borderRadius: '50%', background: C.bg, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 900, color: C.muted }}>{(t.name || t.full_name || 'L').trim().charAt(0).toUpperCase()}</span>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 12.5, fontWeight: 700, color: INK }}>{t.full_name}</div>
-                    <div style={{ fontSize: 11, color: MUTED }}>@{t.username}</div>
+                    <div style={{ fontSize: 12.5, fontWeight: 700, color: C.ink }}>{t.full_name}</div>
+                    <div style={{ fontSize: 11, color: C.muted }}>@{t.username}</div>
                   </div>
                   <Badge color={s.color} bg={s.bg}>{s.label}</Badge>
                 </div>
               );
             })}
             {(data.targets ?? []).length === 0 && (
-              <div style={{ fontSize: 12, color: MUTED, padding: '10px 0' }}>Nobody is assigned yet.</div>
+              <div style={{ fontSize: 12, color: C.muted, padding: '10px 0' }}>Nobody is assigned yet.</div>
             )}
           </div>
         </div>
@@ -361,7 +359,7 @@ function AssignmentCard({ a, onOpen, onEdit, onDelete }) {
 
   return (
     <div style={{
-      background: WHITE, border: `1px solid ${overdue ? '#FECACA' : BORDER}`,
+      background: C.surface, border: `1px solid ${overdue ? '#FECACA' : C.border}`,
       borderRadius: 16, padding: '18px 20px',
     }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 12 }}>
@@ -369,40 +367,40 @@ function AssignmentCard({ a, onOpen, onEdit, onDelete }) {
           width: 42, height: 42, borderRadius: 12, flexShrink: 0, background: `${PURPLE}18`,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}>
-          <BookOpen size={19} color={PURPLE} />
+          <Ico ti="ti-book" size={19} color={PURPLE} />
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 14, fontWeight: 700, color: INK, fontFamily: FONT }}>{a.title}</div>
-          <div style={{ fontSize: 11, color: MUTED, fontFamily: FONT }}>{a.subject} · {a.topic}</div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: C.ink, fontFamily: C.font }}>{a.title}</div>
+          <div style={{ fontSize: 11, color: C.muted, fontFamily: C.font }}>{a.subject} · {a.topic}</div>
         </div>
         <button onClick={() => onEdit(a)} title="Edit"
-          style={{ background: 'none', border: `1px solid ${BORDER}`, borderRadius: 8, padding: '5px 6px', cursor: 'pointer', color: MUTED, display: 'flex' }}>
-          <Pencil size={13} />
+          style={{ background: 'none', border: `1px solid ${C.border}`, borderRadius: 8, padding: '5px 6px', cursor: 'pointer', color: C.muted, display: 'flex' }}>
+          <Ico ti="ti-pencil" size={13} />
         </button>
         <button onClick={() => onDelete(a)} title="Delete"
-          style={{ background: 'none', border: `1px solid ${BORDER}`, borderRadius: 8, padding: '5px 6px', cursor: 'pointer', color: RED, display: 'flex' }}>
-          <Trash2 size={13} />
+          style={{ background: 'none', border: `1px solid ${C.border}`, borderRadius: 8, padding: '5px 6px', cursor: 'pointer', color: RED, display: 'flex' }}>
+          <Ico ti="ti-trash" size={13} />
         </button>
       </div>
 
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
-        <Badge color={BLUE} bg="#EFF6FF"><Users size={10} style={{ marginRight: 2 }} />{p.assigned} assigned</Badge>
-        <Badge color={AMBER} bg="#FFF7ED">{p.started} in progress</Badge>
-        <Badge color={GREEN} bg="#DCFCE7"><CheckCircle2 size={10} style={{ marginRight: 2 }} />{p.complete} done</Badge>
+        <Badge color={BLUE} bg="#EFF6FF"><Ico ti="ti-users" size={10} style={{ marginRight: 2 }} />{p.assigned} assigned</Badge>
+        <Badge color={C.brand} bg={C.brandSoft}>{p.started} in progress</Badge>
+        <Badge color={GREEN} bg="#DCFCE7"><Ico ti="ti-circle-check" size={10} style={{ marginRight: 2 }} />{p.complete} done</Badge>
         {due && (
-          <Badge color={overdue ? RED : MUTED} bg={overdue ? '#FEE2E2' : LIGHT}>
-            <Clock size={10} style={{ marginRight: 2 }} />
+          <Badge color={overdue ? RED : C.muted} bg={overdue ? '#FEE2E2' : C.bg}>
+            <Ico ti="ti-clock" size={10} style={{ marginRight: 2 }} />
             {due.toLocaleDateString()} {due.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
           </Badge>
         )}
       </div>
 
-      <div style={{ height: 6, borderRadius: 3, background: LIGHT, overflow: 'hidden', marginBottom: 12 }}>
-        <div style={{ width: `${pct}%`, height: '100%', background: `linear-gradient(90deg, ${AMBER}, ${GREEN})`, transition: 'width .3s' }} />
+      <div style={{ height: 6, borderRadius: 3, background: C.bg, overflow: 'hidden', marginBottom: 12 }}>
+        <div style={{ width: `${pct}%`, height: '100%', background: `linear-gradient(90deg, ${C.brand}, ${GREEN})`, transition: 'width .3s' }} />
       </div>
 
       <Btn size="sm" variant="secondary" style={{ width: '100%', justifyContent: 'center' }} onClick={() => onOpen(a)}>
-        See who's done it <ChevronRight size={13} />
+        See who's done it <Ico ti="ti-chevron-right" size={13} />
       </Btn>
     </div>
   );
@@ -488,18 +486,18 @@ export default function SelfStudyPage() {
     <PageLayout
       title="AI Self Study"
       subtitle="Assign a topic for learners across your school to work through with their own AI agent"
-      action={<Btn size="sm" onClick={openNew}><Plus size={14} /> New self study</Btn>}
+      action={<Btn size="sm" onClick={openNew}><Ico ti="ti-plus" size={14} /> New self study</Btn>}
     >
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 24 }}>
         {[
           { label: 'Assignments', value: items.length, color: PURPLE },
           { label: 'Learners assigned', value: totals.assigned, color: BLUE },
-          { label: 'In progress', value: totals.started, color: AMBER },
+          { label: 'In progress', value: totals.started, color: C.brand },
           { label: 'Completed', value: totals.complete, color: GREEN },
         ].map(({ label, value, color }) => (
-          <div key={label} style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 12, padding: '14px', textAlign: 'center' }}>
-            <div style={{ fontSize: 24, fontWeight: 800, color, fontFamily: FONT }}>{loading ? '—' : value}</div>
-            <div style={{ fontSize: 11, color: MUTED, fontFamily: FONT }}>{label}</div>
+          <div key={label} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: '14px', textAlign: 'center' }}>
+            <div style={{ fontSize: 24, fontWeight: 800, color, fontFamily: C.font }}>{loading ? '—' : value}</div>
+            <div style={{ fontSize: 11, color: C.muted, fontFamily: C.font }}>{label}</div>
           </div>
         ))}
       </div>
@@ -509,14 +507,14 @@ export default function SelfStudyPage() {
           {[1, 2, 3].map(i => <div key={i} className="skeleton" style={{ height: 210, borderRadius: 16 }} />)}
         </div>
       ) : items.length === 0 ? (
-        <div style={{ background: WHITE, border: `1px dashed ${BORDER}`, borderRadius: 16, padding: '48px', textAlign: 'center' }}>
-          <BookOpen size={32} color={MUTED} style={{ marginBottom: 12 }} />
-          <p style={{ fontSize: 14, color: MUTED, fontFamily: FONT, margin: '0 0 6px', fontWeight: 700 }}>No self study assigned yet</p>
-          <p style={{ fontSize: 12.5, color: MUTED2, fontFamily: FONT, margin: '0 0 16px', maxWidth: 420, marginInline: 'auto', lineHeight: 1.55 }}>
+        <div style={{ background: C.surface, border: `1px dashed ${C.border}`, borderRadius: 16, padding: '48px', textAlign: 'center' }}>
+          <Ico ti="ti-book" size={32} color={C.muted} style={{ marginBottom: 12 }} />
+          <p style={{ fontSize: 14, color: C.muted, fontFamily: C.font, margin: '0 0 6px', fontWeight: 700 }}>No self study assigned yet</p>
+          <p style={{ fontSize: 12.5, color: C.muted2, fontFamily: C.font, margin: '0 0 16px', maxWidth: 420, marginInline: 'auto', lineHeight: 1.55 }}>
             Pick a topic, let the AI draft the subtopics and objectives, edit them, then send it to
             one learner or the whole class. Each learner works through it with their own agent.
           </p>
-          <Btn onClick={openNew}><Plus size={14} /> Create your first one</Btn>
+          <Btn onClick={openNew}><Ico ti="ti-plus" size={14} /> Create your first one</Btn>
         </div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>

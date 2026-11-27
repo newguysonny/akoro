@@ -1,9 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, Users, GraduationCap, UserPlus, Layers } from 'lucide-react';
+
 import { PageLayout } from '../components/Layout.jsx';
 import { Btn, Modal, Inp, Sel, Toast } from '../components/Primitives.jsx';
 import { apiGet, apiPost } from '../services/api.js';
-import { AMBER, INK, MUTED, MUTED2, BORDER, WHITE, GREEN, FONT } from '../constants.js';
+import { GREEN } from '../constants.js';
+import { C, tint } from '../theme/colors.js';
+import { Ico } from '../theme/Ico.jsx';
 
 /* ── Create class modal ──────────────────────────────────────────── */
 function CreateModal({ open, onClose, onDone, instructors }) {
@@ -33,7 +35,7 @@ function CreateModal({ open, onClose, onDone, instructors }) {
         {error && <p style={{ fontSize: 12.5, color: '#DC2626', fontWeight: 600, margin: '6px 0 0' }}>{error}</p>}
         <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
           <Btn variant="secondary" style={{ flex: 1 }} type="button" onClick={onClose}>Cancel</Btn>
-          <Btn variant="primary" style={{ flex: 1 }} type="submit" disabled={loading}><Plus size={14} />{loading ? 'Creating…' : 'Create class'}</Btn>
+          <Btn variant="primary" style={{ flex: 1 }} type="submit" disabled={loading}><Ico ti="ti-plus" size={14} />{loading ? 'Creating…' : 'Create class'}</Btn>
         </div>
       </form>
     </Modal>
@@ -65,7 +67,7 @@ function ManageModal({ room, onClose, onChanged, instructors, students }) {
 
   return (
     <Modal open={!!room} onClose={onClose} title={`Manage · ${room?.name || ''}`}>
-      <div style={{ fontSize: 11, fontWeight: 900, color: AMBER, letterSpacing: 1, textTransform: 'uppercase', margin: '0 0 8px' }}>Teacher</div>
+      <div style={{ fontSize: 11, fontWeight: 900, color: C.brand, letterSpacing: 1, textTransform: 'uppercase', margin: '0 0 8px' }}>Teacher</div>
       <div style={{ display: 'flex', gap: 8 }}>
         <Sel value={teacher} onChange={(e) => setTeacher(e.target.value)} style={{ flex: 1 }}>
           <option value="">— Select teacher —</option>
@@ -74,7 +76,7 @@ function ManageModal({ room, onClose, onChanged, instructors, students }) {
         <Btn variant="secondary" onClick={assignTeacher} disabled={busy === 'teacher' || !teacher}>Assign</Btn>
       </div>
 
-      <div style={{ fontSize: 11, fontWeight: 900, color: AMBER, letterSpacing: 1, textTransform: 'uppercase', margin: '18px 0 8px' }}>Add student</div>
+      <div style={{ fontSize: 11, fontWeight: 900, color: C.brand, letterSpacing: 1, textTransform: 'uppercase', margin: '18px 0 8px' }}>Add student</div>
       <Sel label="Existing student" value={stu.user_id} onChange={(e) => setStu((s) => ({ ...s, user_id: e.target.value }))}>
         <option value="">— New student by email —</option>
         {students.map((s) => <option key={s.id} value={s.id}>{s.full_name || s.email}</option>)}
@@ -85,7 +87,7 @@ function ManageModal({ room, onClose, onChanged, instructors, students }) {
           <Inp label="Full name (optional)" placeholder="e.g. Chidi Okeke" value={stu.full_name} onChange={(e) => setStu((s) => ({ ...s, full_name: e.target.value }))} />
         </>
       )}
-      <Btn variant="primary" style={{ width: '100%', marginTop: 4 }} onClick={addStudent} disabled={busy === 'student'}><UserPlus size={14} />Add to class</Btn>
+      <Btn variant="primary" style={{ width: '100%', marginTop: 4 }} onClick={addStudent} disabled={busy === 'student'}><Ico ti="ti-user-plus" size={14} />Add to class</Btn>
 
       {msg && <p style={{ fontSize: 12.5, color: GREEN, fontWeight: 700, margin: '12px 0 0' }}>{msg}</p>}
       {err && <p style={{ fontSize: 12.5, color: '#DC2626', fontWeight: 600, margin: '12px 0 0' }}>{err}</p>}
@@ -115,31 +117,31 @@ export default function ClassroomsPage() {
 
   return (
     <PageLayout title="Classes" subtitle="Create classes and manage their students & teachers"
-      action={<Btn variant="primary" size="sm" onClick={() => setCreateOpen(true)}><Plus size={14} />Create class</Btn>}>
+      action={<Btn variant="primary" size="sm" onClick={() => setCreateOpen(true)}><Ico ti="ti-plus" size={14} />Create class</Btn>}>
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
       <div style={{ maxWidth: 760, margin: '0 auto' }}>
         {loading ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {[0, 1, 2].map((i) => <div key={i} style={{ height: 76, borderRadius: 16, background: '#F3F4F6', animation: 'pulse-dot 1.5s ease-in-out infinite' }} />)}
+            {[0, 1, 2].map((i) => <div key={i} style={{ height: 76, borderRadius: 16, background: C.tagBg, animation: 'pulse-dot 1.5s ease-in-out infinite' }} />)}
           </div>
         ) : rooms.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '56px 24px', color: MUTED2 }}>
-            <Layers size={40} color="#D1D5DB" style={{ marginBottom: 14 }} />
-            <p style={{ fontSize: 15, fontWeight: 700, color: MUTED, margin: '0 0 4px' }}>No classes yet</p>
+          <div style={{ textAlign: 'center', padding: '56px 24px', color: C.muted2 }}>
+            <Ico ti="ti-stack-2" size={40} color="#D1D5DB" style={{ marginBottom: 14 }} />
+            <p style={{ fontSize: 15, fontWeight: 700, color: C.muted, margin: '0 0 4px' }}>No classes yet</p>
             <p style={{ fontSize: 13, margin: '0 0 16px' }}>Create your first class, then add students and assign a teacher.</p>
-            <Btn variant="primary" size="sm" onClick={() => setCreateOpen(true)}><Plus size={14} />Create a class</Btn>
+            <Btn variant="primary" size="sm" onClick={() => setCreateOpen(true)}><Ico ti="ti-plus" size={14} />Create a class</Btn>
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {rooms.map((c) => (
-              <div key={c.id} style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 16, padding: '16px 18px', display: 'flex', alignItems: 'center', gap: 14, fontFamily: FONT }}>
-                <div style={{ width: 44, height: 44, borderRadius: 12, flexShrink: 0, background: `${AMBER}18`, color: AMBER, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Layers size={20} /></div>
+              <div key={c.id} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: '16px 18px', display: 'flex', alignItems: 'center', gap: 14, fontFamily: C.font }}>
+                <div style={{ width: 44, height: 44, borderRadius: 12, flexShrink: 0, background: tint(9), color: C.brand, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Ico ti="ti-stack-2" size={20} /></div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 14.5, fontWeight: 800, color: INK }}>{c.name}</div>
-                  <div style={{ fontSize: 12, color: MUTED2, display: 'flex', gap: 12, marginTop: 3 }}>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><Users size={11} />{c.student_count} students</span>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><GraduationCap size={11} />{c.teacher_name || 'No teacher'}</span>
+                  <div style={{ fontSize: 14.5, fontWeight: 800, color: C.ink }}>{c.name}</div>
+                  <div style={{ fontSize: 12, color: C.muted2, display: 'flex', gap: 12, marginTop: 3 }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><Ico ti="ti-users" size={11} />{c.student_count} students</span>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><Ico ti="ti-school" size={11} />{c.teacher_name || 'No teacher'}</span>
                   </div>
                 </div>
                 <Btn variant="secondary" size="sm" onClick={() => setManage(c)}>Manage</Btn>

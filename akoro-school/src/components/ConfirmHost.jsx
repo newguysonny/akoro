@@ -1,4 +1,3 @@
-import { AlertTriangle, HelpCircle } from 'lucide-react';
 /**
  * ConfirmHost — a real confirmation dialog, replacing window.confirm().
  *
@@ -23,7 +22,9 @@ import { AlertTriangle, HelpCircle } from 'lucide-react';
  * confirmDialog({ title, message, confirmLabel, cancelLabel, danger, detail })
  */
 import { useState, useEffect, useRef } from 'react';
-import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, RED, FONT } from '../constants.js';
+import { RED } from '../constants.js';
+import { C, tint } from '../theme/colors.js';
+import { Ico } from '../theme/Ico.jsx';
 
 let listener = null;
 
@@ -76,11 +77,11 @@ export default function ConfirmHost() {
         position: 'fixed', inset: 0, zIndex: 4000,
         background: 'rgba(17,17,27,.45)', backdropFilter: 'blur(3px)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        padding: 20, fontFamily: FONT,
+        padding: 20, fontFamily: C.font,
       }}
     >
       <div style={{
-        width: '100%', maxWidth: 400, background: WHITE, borderRadius: 18,
+        width: '100%', maxWidth: 400, background: C.surface, borderRadius: 18,
         padding: '22px 22px 18px', boxShadow: '0 18px 50px rgba(0,0,0,.22)',
         animation: 'ak-confirm-in .16s ease-out',
       }}>
@@ -89,21 +90,21 @@ export default function ConfirmHost() {
         <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
           <div style={{
             width: 38, height: 38, borderRadius: 11, flexShrink: 0, fontSize: 18,
-            background: danger ? '#FEE2E2' : `${AMBER}18`,
+            background: danger ? '#FEE2E2' : tint(9),
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}>{danger ? <AlertTriangle size={18} color="#DC2626" /> : <HelpCircle size={18} color="#B45309" />}</div>
+          }}>{danger ? <Ico ti="ti-alert-triangle" size={18} color="#DC2626" /> : <Ico ti="ti-help-circle" size={18} color="#B45309" />}</div>
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 15, fontWeight: 800, color: INK, marginBottom: 4 }}>
+            <div style={{ fontSize: 15, fontWeight: 800, color: C.ink, marginBottom: 4 }}>
               {req.title || (danger ? 'Are you sure?' : 'Please confirm')}
             </div>
-            <div style={{ fontSize: 13, color: MUTED, lineHeight: 1.55, wordBreak: 'break-word' }}>
+            <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.55, wordBreak: 'break-word' }}>
               {req.message}
             </div>
             {req.detail && (
               <div style={{
                 marginTop: 10, padding: '8px 10px', borderRadius: 9,
-                background: LIGHT, border: `1px solid ${BORDER}`,
-                fontSize: 11.5, color: MUTED2, lineHeight: 1.5,
+                background: C.bg, border: `1px solid ${C.border}`,
+                fontSize: 11.5, color: C.muted2, lineHeight: 1.5,
               }}>{req.detail}</div>
             )}
           </div>
@@ -111,14 +112,14 @@ export default function ConfirmHost() {
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20 }}>
           <button type="button" onClick={() => close(false)} style={{
-            padding: '9px 16px', borderRadius: 10, border: `1.5px solid ${BORDER}`,
-            background: WHITE, color: INK, fontSize: 13, fontWeight: 700,
-            cursor: 'pointer', fontFamily: FONT,
+            padding: '9px 16px', borderRadius: 10, border: `1.5px solid ${C.border}`,
+            background: C.surface, color: C.ink, fontSize: 13, fontWeight: 700,
+            cursor: 'pointer', fontFamily: C.font,
           }}>{req.cancelLabel || 'Cancel'}</button>
           <button ref={confirmRef} type="button" onClick={() => close(true)} style={{
             padding: '9px 16px', borderRadius: 10, border: 'none',
-            background: danger ? RED : `linear-gradient(135deg, ${AMBER}, #D4651E)`,
-            color: WHITE, fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: FONT,
+            background: danger ? RED : `linear-gradient(135deg, ${C.brand}, ${C.brandDeep})`,
+            color: '#fff', fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: C.font,
           }}>{req.confirmLabel || (danger ? 'Delete' : 'Confirm')}</button>
         </div>
       </div>

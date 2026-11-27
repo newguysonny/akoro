@@ -1,17 +1,19 @@
 /** Transport + Hostel module pages (mgmt schema). */
 import { useState, useEffect, useCallback } from 'react';
-import { Bus, Route, MapPin, BedDouble, DoorClosed, Users, Loader2, Save } from 'lucide-react';
+import { Bus, Route, MapPin, BedDouble, DoorClosed, Users } from 'lucide-react';
 import { PageLayout } from '../../components/Layout.jsx';
 import ResourcePage, { inputStyle } from '../../components/mgmt/ResourcePage.jsx';
 import StatCards from '../../components/mgmt/StatCards.jsx';
 import { apiGet, apiPost } from '../../services/api.js';
-import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, BLUE, PURPLE, FONT } from '../../constants.js';
+import { GREEN, RED, BLUE, PURPLE } from '../../constants.js';
+import { C, tint } from '../../theme/colors.js';
+import { Ico } from '../../theme/Ico.jsx';
 
 const BASE = '/api/school/mgmt';
 const naira = (n) => `₦${Number(n || 0).toLocaleString('en-NG')}`;
 const pill = (v, map) => {
-  const c = map[v] || MUTED2;
-  return <span style={{ padding: '3px 10px', borderRadius: 999, background: `${c}15`, color: c, fontSize: 11, fontWeight: 800, textTransform: 'capitalize' }}>{v}</span>;
+  const c = map[v] || C.muted2;
+  return <span style={{ padding: '3px 10px', borderRadius: 999, background: tint(8, c), color: c, fontSize: 11, fontWeight: 800, textTransform: 'capitalize' }}>{v}</span>;
 };
 
 /* ═══ TRANSPORT ═══ */
@@ -19,10 +21,10 @@ export function TransportDashboardPage() {
   const [s, setS] = useState(null);
   useEffect(() => { apiGet(`${BASE}/dashboard/transport`).then((r) => setS(r.data)).catch(() => setS({})); }, []);
   const cards = s ? [
-    { n: s.vehicles, label: 'Vehicles', icon: Bus, c: BLUE, to: '/mgmt/manage-vehicles' },
-    { n: s.activeVehicles, label: 'Active Vehicles', icon: Bus, c: GREEN, to: '/mgmt/manage-vehicles' },
-    { n: s.routes, label: 'Routes', icon: Route, c: PURPLE, to: '/mgmt/manage-routes' },
-    { n: s.locationReports, label: 'Location Reports', icon: MapPin, c: AMBER, to: '/mgmt/vehicle-tracking' },
+    { n: s.vehicles, label: 'Vehicles', icon: Bus, ti: 'ti-bus', c: BLUE, to: '/mgmt/manage-vehicles' },
+    { n: s.activeVehicles, label: 'Active Vehicles', icon: Bus, ti: 'ti-bus', c: GREEN, to: '/mgmt/manage-vehicles' },
+    { n: s.routes, label: 'Routes', icon: Route, ti: 'ti-route', c: PURPLE, to: '/mgmt/manage-routes' },
+    { n: s.locationReports, label: 'Location Reports', icon: MapPin, ti: 'ti-map-pin', c: C.brand, to: '/mgmt/vehicle-tracking' },
   ] : [];
   return <PageLayout title="Transport Dashboard" subtitle="Fleet & routes at a glance"><StatCards cards={cards} loading={!s} /></PageLayout>;
 }
@@ -33,7 +35,7 @@ export function ManageVehiclesPage() {
     columns={[
       { key: 'plate_no', label: 'Plate No' }, { key: 'model', label: 'Model' }, { key: 'capacity', label: 'Capacity' },
       { key: 'driver_name', label: 'Driver' }, { key: 'driver_phone', label: 'Driver Phone' },
-      { key: 'status', label: 'Status', render: (r) => pill(r.status, { active: GREEN, maintenance: AMBER, retired: MUTED2 }) },
+      { key: 'status', label: 'Status', render: (r) => pill(r.status, { active: GREEN, maintenance: C.brand, retired: C.muted2 }) },
     ]}
     fields={[
       { key: 'plate_no', label: 'Plate Number', required: true },
@@ -93,41 +95,41 @@ export function VehicleTrackingPage() {
         </select>
         <input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Current location…" style={{ ...inputStyle, width: 240 }} />
         <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Note (optional)" style={{ ...inputStyle, width: 200 }} />
-        <button onClick={report} disabled={busy} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '10px 16px', borderRadius: 9, border: 'none', background: busy ? '#E5E7EB' : `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: busy ? '#9CA3AF' : WHITE, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
-          {busy ? <Loader2 size={14} style={{ animation: 'spin .8s linear infinite' }} /> : <MapPin size={13} />} Report Position
+        <button onClick={report} disabled={busy} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '10px 16px', borderRadius: 9, border: 'none', background: busy ? C.borderSoft : `linear-gradient(135deg, ${C.brand}, ${C.brandDeep})`, color: busy ? C.muted2 : '#fff', fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: C.font }}>
+          {busy ? <Ico ti="ti-loader-2" size={14} style={{ animation: 'spin .8s linear infinite' }} /> : <Ico ti="ti-map-pin" size={13} />} Report Position
         </button>
       </div>
 
       {fleet && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 14 }}>
           {fleet.length === 0 ? (
-            <div style={{ gridColumn: '1 / -1', padding: '30px', textAlign: 'center', color: MUTED2, fontSize: 13, fontFamily: FONT, background: WHITE, border: `1.5px dashed ${BORDER}`, borderRadius: 14 }}>No vehicles yet — add one under Manage Vehicles.</div>
+            <div style={{ gridColumn: '1 / -1', padding: '30px', textAlign: 'center', color: C.muted2, fontSize: 13, fontFamily: C.font, background: C.surface, border: `1.5px dashed ${C.border}`, borderRadius: 14 }}>No vehicles yet — add one under Manage Vehicles.</div>
           ) : fleet.map((v) => (
-            <div key={v.id} style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 14, padding: '16px 18px', fontFamily: FONT }}>
+            <div key={v.id} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: '16px 18px', fontFamily: C.font }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-                  <Bus size={16} color={BLUE} />
-                  <b style={{ fontSize: 13.5, color: INK }}>{v.plate_no}</b>
+                  <Ico ti="ti-bus" size={16} color={BLUE} />
+                  <b style={{ fontSize: 13.5, color: C.ink }}>{v.plate_no}</b>
                 </div>
-                {pill(v.status, { active: GREEN, maintenance: AMBER, retired: MUTED2 })}
+                {pill(v.status, { active: GREEN, maintenance: C.brand, retired: C.muted2 })}
               </div>
-              <p style={{ fontSize: 12, color: MUTED2, margin: '0 0 8px' }}>{v.model || '—'} · {v.driver_name || 'No driver'}</p>
+              <p style={{ fontSize: 12, color: C.muted2, margin: '0 0 8px' }}>{v.model || '—'} · {v.driver_name || 'No driver'}</p>
               {v.last ? (
-                <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', background: LIGHT, borderRadius: 9, padding: '9px 11px' }}>
-                  <MapPin size={13} color={AMBER} style={{ flexShrink: 0, marginTop: 1 }} />
+                <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', background: C.bg, borderRadius: 9, padding: '9px 11px' }}>
+                  <Ico ti="ti-map-pin" size={13} color={C.brand} style={{ flexShrink: 0, marginTop: 1 }} />
                   <div>
-                    <span style={{ fontSize: 12.5, fontWeight: 700, color: INK }}>{v.last.location}</span>
-                    <span style={{ display: 'block', fontSize: 10.5, color: MUTED2 }}>{new Date(v.last.reported_at).toLocaleString('en-NG', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}{v.last.note ? ` · ${v.last.note}` : ''}</span>
+                    <span style={{ fontSize: 12.5, fontWeight: 700, color: C.ink }}>{v.last.location}</span>
+                    <span style={{ display: 'block', fontSize: 10.5, color: C.muted2 }}>{new Date(v.last.reported_at).toLocaleString('en-NG', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}{v.last.note ? ` · ${v.last.note}` : ''}</span>
                   </div>
                 </div>
               ) : (
-                <p style={{ fontSize: 12, color: MUTED2, margin: 0 }}>No position reported yet.</p>
+                <p style={{ fontSize: 12, color: C.muted2, margin: 0 }}>No position reported yet.</p>
               )}
             </div>
           ))}
         </div>
       )}
-      {toast && <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: INK, color: WHITE, padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999 }}>{toast}</div>}
+      {toast && <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: C.hero, color: '#fff', padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999 }}>{toast}</div>}
     </PageLayout>
   );
 }
@@ -137,11 +139,11 @@ export function HostelDashboardPage() {
   const [s, setS] = useState(null);
   useEffect(() => { apiGet(`${BASE}/dashboard/hostel`).then((r) => setS(r.data)).catch(() => setS({})); }, []);
   const cards = s ? [
-    { n: s.hostels, label: 'Hostels', icon: BedDouble, c: BLUE, to: '/mgmt/manage-hostels' },
-    { n: s.rooms, label: 'Rooms', icon: DoorClosed, c: PURPLE, to: '/mgmt/manage-rooms' },
-    { n: s.capacity, label: 'Total Bed Spaces', icon: Users, c: AMBER },
-    { n: s.allocated, label: 'Students Allocated', icon: Users, c: GREEN, to: '/mgmt/student-allocation' },
-    { n: s.roomTypes, label: 'Room Types', icon: DoorClosed, c: BLUE, to: '/mgmt/room-types' },
+    { n: s.hostels, label: 'Hostels', icon: BedDouble, ti: 'ti-bed', c: BLUE, to: '/mgmt/manage-hostels' },
+    { n: s.rooms, label: 'Rooms', icon: DoorClosed, ti: 'ti-door', c: PURPLE, to: '/mgmt/manage-rooms' },
+    { n: s.capacity, label: 'Total Bed Spaces', icon: Users, ti: 'ti-users', c: C.brand },
+    { n: s.allocated, label: 'Students Allocated', icon: Users, ti: 'ti-users', c: GREEN, to: '/mgmt/student-allocation' },
+    { n: s.roomTypes, label: 'Room Types', icon: DoorClosed, ti: 'ti-door', c: BLUE, to: '/mgmt/room-types' },
   ] : [];
   return <PageLayout title="Hostel Dashboard" subtitle="Boarding facilities at a glance"><StatCards cards={cards} loading={!s} /></PageLayout>;
 }
@@ -152,7 +154,7 @@ export function StudentAllocationPage() {
     columns={[
       { key: 'student_name', label: 'Student' }, { key: 'room_name', label: 'Room' },
       { key: 'allocated_on', label: 'Allocated' }, { key: 'vacated_on', label: 'Vacated' },
-      { key: 'status', label: 'Status', render: (r) => pill(r.status, { active: GREEN, vacated: MUTED2 }) },
+      { key: 'status', label: 'Status', render: (r) => pill(r.status, { active: GREEN, vacated: C.muted2 }) },
     ]}
     fields={[
       { key: 'student_id', label: 'Student', type: 'select', required: true, optionsFrom: { resource: 'students', labelFn: (r) => `${r.first_name} ${r.last_name} (${r.admission_no})` } },

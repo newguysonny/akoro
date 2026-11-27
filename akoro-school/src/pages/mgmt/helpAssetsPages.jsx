@@ -1,21 +1,20 @@
 /** Help Center + Asset Management + Reports & Analytics pages (mgmt schema). */
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  Boxes, Wrench, Trash2 as TrashIcon, ClipboardCheck, TrendingDown, Bot,
-  Users, Wallet, BadgeCheck, ClipboardList, Library, Package, BarChart3, Loader2, ArrowRight,
-} from 'lucide-react';
+import { Boxes, Wrench, Trash2 as TrashIcon, ClipboardCheck, Users, Wallet, BadgeCheck, Library } from 'lucide-react';
 import { PageLayout } from '../../components/Layout.jsx';
 import ResourcePage from '../../components/mgmt/ResourcePage.jsx';
 import StatCards from '../../components/mgmt/StatCards.jsx';
 import { apiGet } from '../../services/api.js';
-import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, BLUE, PURPLE, FONT } from '../../constants.js';
+import { GREEN, RED, BLUE, PURPLE } from '../../constants.js';
+import { C, tint } from '../../theme/colors.js';
+import { Ico } from '../../theme/Ico.jsx';
 
 const BASE = '/api/school/mgmt';
 const naira = (n) => `₦${Number(n || 0).toLocaleString('en-NG')}`;
 const pill = (v, map) => {
-  const c = map[v] || MUTED2;
-  return <span style={{ padding: '3px 10px', borderRadius: 999, background: `${c}15`, color: c, fontSize: 11, fontWeight: 800, textTransform: 'capitalize' }}>{String(v).replace('_', ' ')}</span>;
+  const c = map[v] || C.muted2;
+  return <span style={{ padding: '3px 10px', borderRadius: 999, background: tint(8, c), color: c, fontSize: 11, fontWeight: 800, textTransform: 'capitalize' }}>{String(v).replace('_', ' ')}</span>;
 };
 
 /* ═══ HELP CENTER ═══ */
@@ -28,7 +27,7 @@ export function BrowseArticlesPage() {
   return <ResourcePage title="Browse Articles" subtitle="How-to guides & FAQs" resource="help-articles"
     columns={[
       { key: 'title', label: 'Article' }, { key: 'category_name', label: 'Category' },
-      { key: 'body', label: 'Content', render: (r) => <span style={{ color: MUTED }}>{(r.body || '').slice(0, 80)}{(r.body || '').length > 80 ? '…' : ''}</span> },
+      { key: 'body', label: 'Content', render: (r) => <span style={{ color: C.muted }}>{(r.body || '').slice(0, 80)}{(r.body || '').length > 80 ? '…' : ''}</span> },
       { key: 'published', label: 'Published' },
     ]}
     fields={[
@@ -43,16 +42,16 @@ export function AIChatbotHelpPage() {
   const navigate = useNavigate();
   return (
     <PageLayout title="AI Chatbot" subtitle="Get answers from your school agent">
-      <div style={{ maxWidth: 520, background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 16, padding: '30px 28px', textAlign: 'center', fontFamily: FONT }}>
-        <div style={{ width: 64, height: 64, borderRadius: 18, background: `${AMBER}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px' }}>
-          <Bot size={30} color={AMBER} />
+      <div style={{ maxWidth: 520, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: '30px 28px', textAlign: 'center', fontFamily: C.font }}>
+        <div style={{ width: 64, height: 64, borderRadius: 18, background: tint(8), display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px' }}>
+          <Ico ti="ti-robot" size={30} color={C.brand} />
         </div>
-        <p style={{ fontSize: 16, fontWeight: 800, color: INK, margin: '0 0 8px' }}>Ask your School Agent</p>
-        <p style={{ fontSize: 13, color: MUTED, lineHeight: 1.65, margin: '0 0 18px' }}>
+        <p style={{ fontSize: 16, fontWeight: 800, color: C.ink, margin: '0 0 8px' }}>Ask your School Agent</p>
+        <p style={{ fontSize: 13, color: C.muted, lineHeight: 1.65, margin: '0 0 18px' }}>
           Your dedicated AI agent already knows your school. Ask it how to use any module, draft notices, summarise records, or troubleshoot — it lives in AI Chat.
         </p>
-        <button onClick={() => navigate('/chat')} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '12px 24px', borderRadius: 10, border: 'none', background: `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: WHITE, fontSize: 13.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
-          Open AI Chat <ArrowRight size={15} />
+        <button onClick={() => navigate('/chat')} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '12px 24px', borderRadius: 10, border: 'none', background: `linear-gradient(135deg, ${C.brand}, ${C.brandDeep})`, color: '#fff', fontSize: 13.5, fontWeight: 800, cursor: 'pointer', fontFamily: C.font }}>
+          Open AI Chat <Ico ti="ti-arrow-right" size={15} />
         </button>
       </div>
     </PageLayout>
@@ -64,19 +63,19 @@ const ASSET_STATUSES = [
   { value: 'in_use', label: 'In Use' }, { value: 'in_store', label: 'In Store' },
   { value: 'maintenance', label: 'Maintenance' }, { value: 'disposed', label: 'Disposed' },
 ];
-const ASSET_STATUS_COLORS = { in_use: GREEN, in_store: BLUE, maintenance: AMBER, disposed: MUTED2 };
+const ASSET_STATUS_COLORS = { in_use: GREEN, in_store: BLUE, maintenance: C.brand, disposed: C.muted2 };
 const assetOpts = { resource: 'assets', labelFn: (r) => `${r.name} (${r.asset_tag})` };
 
 export function AssetDashboardPage() {
   const [s, setS] = useState(null);
   useEffect(() => { apiGet(`${BASE}/dashboard/assets`).then((r) => setS(r.data)).catch(() => setS({})); }, []);
   const cards = s ? [
-    { n: s.assets, label: 'Total Assets', icon: Boxes, c: BLUE, to: '/mgmt/asset-register' },
-    { n: naira(s.totalCost), label: 'Purchase Value', icon: Wallet, c: GREEN, to: '/mgmt/asset-depreciation' },
-    { n: s.inUse, label: 'In Use', icon: BadgeCheck, c: GREEN, to: '/mgmt/asset-register' },
-    { n: s.underMaintenance, label: 'Under Maintenance', icon: Wrench, c: AMBER, to: '/mgmt/asset-maintenance' },
-    { n: s.disposed, label: 'Disposed', icon: TrashIcon, c: MUTED2, to: '/mgmt/asset-disposals' },
-    { n: s.openAudits, label: 'Open Audits', icon: ClipboardCheck, c: RED, to: '/mgmt/asset-audits' },
+    { n: s.assets, label: 'Total Assets', icon: Boxes, ti: 'ti-packages', c: BLUE, to: '/mgmt/asset-register' },
+    { n: naira(s.totalCost), label: 'Purchase Value', icon: Wallet, ti: 'ti-wallet', c: GREEN, to: '/mgmt/asset-depreciation' },
+    { n: s.inUse, label: 'In Use', icon: BadgeCheck, ti: 'ti-rosette-discount-check', c: GREEN, to: '/mgmt/asset-register' },
+    { n: s.underMaintenance, label: 'Under Maintenance', icon: Wrench, ti: 'ti-tool', c: C.brand, to: '/mgmt/asset-maintenance' },
+    { n: s.disposed, label: 'Disposed', icon: TrashIcon, ti: 'ti-trash', c: C.muted2, to: '/mgmt/asset-disposals' },
+    { n: s.openAudits, label: 'Open Audits', icon: ClipboardCheck, ti: 'ti-clipboard-check', c: RED, to: '/mgmt/asset-audits' },
   ] : [];
   return <PageLayout title="Asset Dashboard" subtitle="Fixed assets at a glance"><StatCards cards={cards} loading={!s} /></PageLayout>;
 }
@@ -135,20 +134,20 @@ export function AssetDepreciationPage() {
   });
   return (
     <PageLayout title="Asset Depreciation" subtitle="Straight-line book values from the register">
-      <div style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 14, overflow: 'auto' }}>
+      <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, overflow: 'auto' }}>
         {!assets ? (
-          <div style={{ padding: '30px', textAlign: 'center', color: MUTED2 }}><Loader2 size={18} style={{ animation: 'spin .8s linear infinite' }} /></div>
+          <div style={{ padding: '30px', textAlign: 'center', color: C.muted2 }}><Ico ti="ti-loader-2" size={18} style={{ animation: 'spin .8s linear infinite' }} /></div>
         ) : rows.length === 0 ? (
-          <div style={{ padding: '30px', textAlign: 'center', color: MUTED2, fontSize: 13, fontFamily: FONT }}>No active assets in the register.</div>
+          <div style={{ padding: '30px', textAlign: 'center', color: C.muted2, fontSize: 13, fontFamily: C.font }}>No active assets in the register.</div>
         ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: FONT, minWidth: 640 }}>
-            <thead><tr style={{ background: LIGHT }}>
-              {['ASSET', 'COST', 'AGE (YRS)', 'RATE', 'ACCUMULATED', 'BOOK VALUE'].map((h) => <th key={h} style={{ textAlign: 'left', padding: '10px 14px', fontSize: 10.5, fontWeight: 800, color: MUTED2 }}>{h}</th>)}
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: C.font, minWidth: 640 }}>
+            <thead><tr style={{ background: C.bg }}>
+              {['ASSET', 'COST', 'AGE (YRS)', 'RATE', 'ACCUMULATED', 'BOOK VALUE'].map((h) => <th key={h} style={{ textAlign: 'left', padding: '10px 14px', fontSize: 10.5, fontWeight: 800, color: C.muted2 }}>{h}</th>)}
             </tr></thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={r.id} style={{ borderTop: `1px solid ${BORDER}` }}>
-                  <td style={{ padding: '10px 14px', fontSize: 12.5, fontWeight: 700, color: INK }}>{r.name}<span style={{ fontSize: 10.5, color: MUTED2, marginLeft: 6 }}>{r.asset_tag}</span></td>
+                <tr key={r.id} style={{ borderTop: `1px solid ${C.border}` }}>
+                  <td style={{ padding: '10px 14px', fontSize: 12.5, fontWeight: 700, color: C.ink }}>{r.name}<span style={{ fontSize: 10.5, color: C.muted2, marginLeft: 6 }}>{r.asset_tag}</span></td>
                   <td style={{ padding: '10px 14px', fontSize: 12.5 }}>{naira(r.purchase_cost)}</td>
                   <td style={{ padding: '10px 14px', fontSize: 12.5 }}>{r.years}</td>
                   <td style={{ padding: '10px 14px', fontSize: 12.5 }}>{r.depreciation_rate}%</td>
@@ -201,7 +200,7 @@ export function AssetAuditsPage() {
   return <ResourcePage title="Asset Audits" subtitle="Physical verification exercises" resource="asset-audits"
     columns={[
       { key: 'audit_date', label: 'Date' }, { key: 'auditor', label: 'Auditor' }, { key: 'findings', label: 'Findings' },
-      { key: 'status', label: 'Status', render: (r) => pill(r.status, { open: AMBER, closed: GREEN }) },
+      { key: 'status', label: 'Status', render: (r) => pill(r.status, { open: C.brand, closed: GREEN }) },
     ]}
     fields={[
       { key: 'audit_date', label: 'Audit Date', type: 'date' },
@@ -215,12 +214,12 @@ export function AssetReportsPage() {
   const [s, setS] = useState(null);
   useEffect(() => { apiGet(`${BASE}/dashboard/assets`).then((r) => setS(r.data)).catch(() => setS({})); }, []);
   const cards = s ? [
-    { n: naira(s.totalCost), label: 'Total Purchase Value', icon: Wallet, c: GREEN },
-    { n: s.assets, label: 'Assets on Register', icon: Boxes, c: BLUE, to: '/mgmt/asset-register' },
-    { n: s.inUse, label: 'In Use', icon: BadgeCheck, c: GREEN },
-    { n: s.underMaintenance, label: 'Under Maintenance', icon: Wrench, c: AMBER },
-    { n: s.disposed, label: 'Disposed', icon: TrashIcon, c: MUTED2 },
-    { n: s.openAudits, label: 'Open Audits', icon: ClipboardCheck, c: RED, to: '/mgmt/asset-audits' },
+    { n: naira(s.totalCost), label: 'Total Purchase Value', icon: Wallet, ti: 'ti-wallet', c: GREEN },
+    { n: s.assets, label: 'Assets on Register', icon: Boxes, ti: 'ti-packages', c: BLUE, to: '/mgmt/asset-register' },
+    { n: s.inUse, label: 'In Use', icon: BadgeCheck, ti: 'ti-rosette-discount-check', c: GREEN },
+    { n: s.underMaintenance, label: 'Under Maintenance', icon: Wrench, ti: 'ti-tool', c: C.brand },
+    { n: s.disposed, label: 'Disposed', icon: TrashIcon, ti: 'ti-trash', c: C.muted2 },
+    { n: s.openAudits, label: 'Open Audits', icon: ClipboardCheck, ti: 'ti-clipboard-check', c: RED, to: '/mgmt/asset-audits' },
   ] : [];
   return <PageLayout title="Asset Reports" subtitle="Register summary"><StatCards cards={cards} loading={!s} /></PageLayout>;
 }
@@ -234,12 +233,12 @@ export function ReportsAnalyticsPage() {
       .then(([students, finance, hr, library]) => setD({ students, finance, hr, library }));
   }, []);
   const cards = d ? [
-    { n: d.students.total, label: 'Students', icon: Users, c: BLUE, to: '/mgmt/student-dashboard' },
-    { n: d.hr.staff, label: 'Staff', icon: Users, c: PURPLE, to: '/mgmt/hr-dashboard' },
-    { n: naira(d.finance.collected), label: 'Fees Collected', icon: Wallet, c: GREEN, to: '/mgmt/fees-dashboard' },
-    { n: naira(d.finance.outstanding), label: 'Fees Outstanding', icon: Wallet, c: RED, to: '/mgmt/search-due-fees' },
-    { n: d.library.activeLoans, label: 'Library Books Out', icon: Library, c: AMBER, to: '/mgmt/library-dashboard' },
-    { n: d.students.presentToday, label: 'Students Present Today', icon: BadgeCheck, c: GREEN, to: '/mgmt/student-attendance' },
+    { n: d.students.total, label: 'Students', icon: Users, ti: 'ti-users', c: BLUE, to: '/mgmt/student-dashboard' },
+    { n: d.hr.staff, label: 'Staff', icon: Users, ti: 'ti-users', c: PURPLE, to: '/mgmt/hr-dashboard' },
+    { n: naira(d.finance.collected), label: 'Fees Collected', icon: Wallet, ti: 'ti-wallet', c: GREEN, to: '/mgmt/fees-dashboard' },
+    { n: naira(d.finance.outstanding), label: 'Fees Outstanding', icon: Wallet, ti: 'ti-wallet', c: RED, to: '/mgmt/search-due-fees' },
+    { n: d.library.activeLoans, label: 'Library Books Out', icon: Library, ti: 'ti-books', c: C.brand, to: '/mgmt/library-dashboard' },
+    { n: d.students.presentToday, label: 'Students Present Today', icon: BadgeCheck, ti: 'ti-rosette-discount-check', c: GREEN, to: '/mgmt/student-attendance' },
   ] : [];
   const DASHBOARDS = [
     ['Student Dashboard', '/mgmt/student-dashboard'], ['Academic Dashboard', '/mgmt/academic-dashboard'],
@@ -256,11 +255,11 @@ export function ReportsAnalyticsPage() {
     <PageLayout title="Reports & Analytics" subtitle="A whole-school overview with links to every module report">
       <StatCards cards={cards} loading={!d} />
       <div style={{ marginTop: 22 }}>
-        <p style={{ fontSize: 13, fontWeight: 800, color: INK, fontFamily: FONT, margin: '0 0 12px', display: 'flex', alignItems: 'center', gap: 7 }}><BarChart3 size={15} color={AMBER} /> Module Dashboards</p>
+        <p style={{ fontSize: 13, fontWeight: 800, color: C.ink, fontFamily: C.font, margin: '0 0 12px', display: 'flex', alignItems: 'center', gap: 7 }}><Ico ti="ti-chart-bar" size={15} color={C.brand} /> Module Dashboards</p>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 10 }}>
           {DASHBOARDS.map(([label, to]) => (
-            <button key={to} onClick={() => navigate(to)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '11px 14px', borderRadius: 10, border: `1px solid ${BORDER}`, background: WHITE, color: INK, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, textAlign: 'left' }}>
-              {label} <ArrowRight size={13} color={MUTED2} />
+            <button key={to} onClick={() => navigate(to)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '11px 14px', borderRadius: 10, border: `1px solid ${C.border}`, background: C.surface, color: C.ink, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: C.font, textAlign: 'left' }}>
+              {label} <Ico ti="ti-arrow-right" size={13} color={C.muted2} />
             </button>
           ))}
         </div>

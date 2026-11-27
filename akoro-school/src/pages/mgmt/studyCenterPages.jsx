@@ -5,12 +5,13 @@ import { PageLayout } from '../../components/Layout.jsx';
 import ResourcePage from '../../components/mgmt/ResourcePage.jsx';
 import StatCards from '../../components/mgmt/StatCards.jsx';
 import { apiGet } from '../../services/api.js';
-import { AMBER, MUTED2, GREEN, RED, BLUE, PURPLE } from '../../constants.js';
+import { GREEN, RED, BLUE, PURPLE } from '../../constants.js';
+import { C, tint } from '../../theme/colors.js';
 
 const BASE = '/api/school/mgmt';
 const pill = (v, map) => {
-  const c = map[v] || MUTED2;
-  return <span style={{ padding: '3px 10px', borderRadius: 999, background: `${c}15`, color: c, fontSize: 11, fontWeight: 800, textTransform: 'capitalize' }}>{v}</span>;
+  const c = map[v] || C.muted2;
+  return <span style={{ padding: '3px 10px', borderRadius: 999, background: tint(8, c), color: c, fontSize: 11, fontWeight: 800, textTransform: 'capitalize' }}>{v}</span>;
 };
 const classFilter = { key: 'class_id', label: 'Class', optionsFrom: { resource: 'classes' } };
 const classField = { key: 'class_id', label: 'Class', type: 'select', optionsFrom: { resource: 'classes' } };
@@ -21,12 +22,12 @@ export function StudyCenterDashboardPage() {
   useEffect(() => { apiGet(`${BASE}/dashboard/study-center`).then((r) => setS(r.data)).catch(() => setS({})); }, []);
   const pct = s?.syllabusItems ? Math.round((s.syllabusCovered / s.syllabusItems) * 100) : 0;
   const cards = s ? [
-    { n: s.syllabusItems, label: 'Syllabus Topics', icon: ListChecks, c: BLUE, to: '/mgmt/manage-syllabus' },
-    { n: `${pct}%`, label: 'Syllabus Covered', icon: BookOpenCheck, c: pct >= 50 ? GREEN : AMBER, to: '/mgmt/manage-syllabus' },
-    { n: s.classworkLogs, label: 'Classwork Logs', icon: NotebookText, c: PURPLE, to: '/mgmt/classwork-logbook' },
-    { n: s.resources, label: 'Learning Resources', icon: FolderOpen, c: AMBER, to: '/mgmt/manage-resources' },
-    { n: s.openHomework, label: 'Open Homework', icon: PencilLine, c: RED, to: '/mgmt/homework-assignments' },
-    { n: s.liveClasses, label: 'Upcoming Live Classes', icon: Video, c: GREEN, to: '/mgmt/live-classes' },
+    { n: s.syllabusItems, label: 'Syllabus Topics', icon: ListChecks, ti: 'ti-list-check', c: BLUE, to: '/mgmt/manage-syllabus' },
+    { n: `${pct}%`, label: 'Syllabus Covered', icon: BookOpenCheck, c: pct >= 50 ? GREEN : C.brand, to: '/mgmt/manage-syllabus' },
+    { n: s.classworkLogs, label: 'Classwork Logs', icon: NotebookText, ti: 'ti-notebook', c: PURPLE, to: '/mgmt/classwork-logbook' },
+    { n: s.resources, label: 'Learning Resources', icon: FolderOpen, ti: 'ti-folder-open', c: C.brand, to: '/mgmt/manage-resources' },
+    { n: s.openHomework, label: 'Open Homework', icon: PencilLine, ti: 'ti-pencil', c: RED, to: '/mgmt/homework-assignments' },
+    { n: s.liveClasses, label: 'Upcoming Live Classes', icon: Video, ti: 'ti-video', c: GREEN, to: '/mgmt/live-classes' },
   ] : [];
   return <PageLayout title="Study Center Dashboard" subtitle="Teaching & learning activity"><StatCards cards={cards} loading={!s} /></PageLayout>;
 }
@@ -36,7 +37,7 @@ export function ManageSyllabusPage() {
     columns={[
       { key: 'class_name', label: 'Class' }, { key: 'subject_name', label: 'Subject' },
       { key: 'term', label: 'Term' }, { key: 'topic', label: 'Topic' },
-      { key: 'status', label: 'Status', render: (r) => pill(r.status, { pending: AMBER, covered: GREEN }) },
+      { key: 'status', label: 'Status', render: (r) => pill(r.status, { pending: C.brand, covered: GREEN }) },
     ]}
     fields={[
       classField, subjectField,
@@ -68,7 +69,7 @@ export function ManageResourcesPage() {
   return <ResourcePage title="Manage Resources" subtitle="Teaching & study materials" resource="learning-resources"
     columns={[
       { key: 'title', label: 'Title' }, { key: 'class_name', label: 'Class' }, { key: 'subject_name', label: 'Subject' },
-      { key: 'resource_type', label: 'Type', render: (r) => pill(r.resource_type, { document: BLUE, video: PURPLE, link: AMBER }) },
+      { key: 'resource_type', label: 'Type', render: (r) => pill(r.resource_type, { document: BLUE, video: PURPLE, link: C.brand }) },
       { key: 'url', label: 'Link', render: (r) => r.url ? <a href={r.url} target="_blank" rel="noreferrer" style={{ color: BLUE, fontWeight: 700 }}>Open</a> : '—' },
     ]}
     fields={[
@@ -84,7 +85,7 @@ export function HomeworkAssignmentsPage() {
   return <ResourcePage title="Homework & Assignments" subtitle="Set and track homework" resource="homework-assignments"
     columns={[
       { key: 'title', label: 'Homework' }, { key: 'class_name', label: 'Class' }, { key: 'subject_name', label: 'Subject' },
-      { key: 'due_on', label: 'Due' }, { key: 'status', label: 'Status', render: (r) => pill(r.status, { open: AMBER, closed: GREEN }) },
+      { key: 'due_on', label: 'Due' }, { key: 'status', label: 'Status', render: (r) => pill(r.status, { open: C.brand, closed: GREEN }) },
     ]}
     fields={[
       { key: 'title', label: 'Title', required: true },
@@ -104,7 +105,7 @@ export function LiveClassesPage() {
       { key: 'platform', label: 'Platform' },
       { key: 'starts_at', label: 'Starts', render: (r) => r.starts_at ? new Date(r.starts_at).toLocaleString('en-NG', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—' },
       { key: 'meeting_url', label: 'Join', render: (r) => r.meeting_url ? <a href={r.meeting_url} target="_blank" rel="noreferrer" style={{ color: BLUE, fontWeight: 700 }}>Join</a> : '—' },
-      { key: 'status', label: 'Status', render: (r) => pill(r.status, { scheduled: AMBER, live: GREEN, ended: MUTED2 }) },
+      { key: 'status', label: 'Status', render: (r) => pill(r.status, { scheduled: C.brand, live: GREEN, ended: C.muted2 }) },
     ]}
     fields={[
       { key: 'title', label: 'Class Title', required: true },

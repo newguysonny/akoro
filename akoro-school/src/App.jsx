@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import { Lock } from 'lucide-react';
+import { C } from './theme/colors.js';
+import { Ico } from './theme/Ico.jsx';
 import { AuthProvider, useAuth } from './contexts/AuthContext.jsx';
 import GlobalStyles from './components/GlobalStyles.jsx';
 import VerificationGate, { useSchoolVerification } from './components/VerificationGate.jsx';
@@ -146,17 +147,17 @@ function AiSigninError({ reason }) {
     window.location.href = dest;
   };
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, fontFamily: 'Inter, system-ui, sans-serif', background: '#FAF8F5' }}>
-      <div style={{ maxWidth: 420, textAlign: 'center', background: '#fff', border: '1px solid #EDE8E1', borderRadius: 18, padding: '28px 24px', boxShadow: '0 2px 10px rgba(0,0,0,.05)' }}>
-        <div style={{ marginBottom: 10, display: 'flex', justifyContent: 'center' }}><Lock size={40} /></div>
-        <h2 style={{ fontSize: 18, fontWeight: 800, color: '#1A1A2E', margin: '0 0 8px' }}>We couldn’t complete your sign-in</h2>
-        <p style={{ fontSize: 14, color: '#6B6B80', lineHeight: 1.6, margin: '0 0 10px' }}>
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, fontFamily: 'Inter, system-ui, sans-serif', background: C.bg }}>
+      <div style={{ maxWidth: 420, textAlign: 'center', background: C.surface, border: `1px solid ${C.border}`, borderRadius: 18, padding: '28px 24px', boxShadow: '0 2px 10px rgba(0,0,0,.05)' }}>
+        <div style={{ marginBottom: 10, display: 'flex', justifyContent: 'center' }}><Ico ti="ti-lock" size={40} /></div>
+        <h2 style={{ fontSize: 18, fontWeight: 800, color: C.ink, margin: '0 0 8px' }}>We couldn’t complete your sign-in</h2>
+        <p style={{ fontSize: 14, color: C.muted, lineHeight: 1.6, margin: '0 0 10px' }}>
           {reason || 'Your session didn’t start — your browser may be blocking cross-site cookies.'}
         </p>
-        <p style={{ fontSize: 12.5, color: '#9A96A8', lineHeight: 1.55, margin: '0 0 18px' }}>
+        <p style={{ fontSize: 12.5, color: C.muted2, lineHeight: 1.55, margin: '0 0 18px' }}>
           Try again, or open the chat in your browser’s normal (non-private) window.
         </p>
-        <button onClick={back} style={{ padding: '11px 22px', borderRadius: 12, border: 'none', background: '#6C3BFF', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
+        <button onClick={back} style={{ padding: '11px 22px', borderRadius: 12, border: 'none', background: C.brand, color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
           Back to sign in
         </button>
       </div>
@@ -169,7 +170,7 @@ function ProtectedRoute({ children, anyRole = false }) {
   const location = useLocation();
   // Exchanging an AI-chat hand-off token — wait rather than bounce to /signin.
   if (booting) {
-    return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Inter, system-ui, sans-serif', color: '#6B6B80' }}>Signing you in…</div>;
+    return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Inter, system-ui, sans-serif', color: C.muted }}>Signing you in…</div>;
   }
   if (!isAuthenticated) {
     // AI-chat hand-off completed but no session stuck (e.g. cross-site cookie
@@ -204,7 +205,7 @@ function SchoolVerificationGuard({ user, children }) {
   const { loading, status } = useSchoolVerification(isOwner);
   if (!isOwner) return children;
   if (loading) {
-    return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'DM Sans', system-ui, sans-serif", color: '#6B6B80' }}>Loading your school…</div>;
+    return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'DM Sans', system-ui, sans-serif", color: C.muted }}>Loading your school…</div>;
   }
   if (status === 'pending' || status === 'rejected') return <VerificationGate status={status} />;
   return children;
@@ -238,11 +239,11 @@ function NotFound() {
     <div style={{
       minHeight: '100vh', display: 'flex', flexDirection: 'column',
       alignItems: 'center', justifyContent: 'center', gap: 12,
-      fontFamily: "'DM Sans', sans-serif", color: '#1A1A2E',
+      fontFamily: "'DM Sans', sans-serif", color: C.ink,
     }}>
       <div style={{ fontSize: 64 }}>404</div>
-      <p style={{ fontSize: 16, color: '#6B6B80' }}>Page not found</p>
-      <a href="/" style={{ color: '#E8884A', fontWeight: 600, textDecoration: 'none' }}>Go home</a>
+      <p style={{ fontSize: 16, color: C.muted }}>Page not found</p>
+      <a href="/" style={{ color: C.brand, fontWeight: 600, textDecoration: 'none' }}>Go home</a>
     </div>
   );
 }

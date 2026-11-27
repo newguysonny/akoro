@@ -1,15 +1,17 @@
 /** Certificates + Communicate module pages (mgmt schema). */
 import { useState, useEffect } from 'react';
-import { Award, Loader2, Printer, Megaphone } from 'lucide-react';
+
 import { PageLayout } from '../../components/Layout.jsx';
 import ResourcePage, { inputStyle } from '../../components/mgmt/ResourcePage.jsx';
 import { apiGet, apiPost } from '../../services/api.js';
-import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, BLUE, PURPLE, FONT } from '../../constants.js';
+import { GREEN, RED, BLUE, PURPLE } from '../../constants.js';
+import { C, tint } from '../../theme/colors.js';
+import { Ico } from '../../theme/Ico.jsx';
 
 const BASE = '/api/school/mgmt';
 const pill = (v, map) => {
-  const c = map[v] || MUTED2;
-  return <span style={{ padding: '3px 10px', borderRadius: 999, background: `${c}15`, color: c, fontSize: 11, fontWeight: 800, textTransform: 'capitalize' }}>{String(v).replace('_', ' ')}</span>;
+  const c = map[v] || C.muted2;
+  return <span style={{ padding: '3px 10px', borderRadius: 999, background: tint(8, c), color: c, fontSize: 11, fontWeight: 800, textTransform: 'capitalize' }}>{String(v).replace('_', ' ')}</span>;
 };
 const AUDIENCES = ['all', 'students', 'staff', 'parents'].map((a) => ({ value: a, label: a[0].toUpperCase() + a.slice(1) }));
 
@@ -56,11 +58,11 @@ export function GenerateDocumentPage() {
     finally { setBusy(false); }
   };
 
-  const lbl = { fontSize: 12, fontWeight: 700, color: INK, fontFamily: FONT, display: 'block', marginBottom: 5 };
+  const lbl = { fontSize: 12, fontWeight: 700, color: C.ink, fontFamily: C.font, display: 'block', marginBottom: 5 };
   return (
     <PageLayout title="Generate Document" subtitle="Issue a certificate from a template">
       <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-        <div style={{ flex: '1 1 320px', maxWidth: 420, background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 14, padding: '20px 22px' }}>
+        <div style={{ flex: '1 1 320px', maxWidth: 420, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: '20px 22px' }}>
           <label style={lbl}>Template</label>
           <select value={templateId} onChange={(e) => setTemplateId(e.target.value)} style={{ ...inputStyle, cursor: 'pointer', marginBottom: 12 }}>
             <option value="">— select template —</option>
@@ -73,41 +75,41 @@ export function GenerateDocumentPage() {
           </select>
           <label style={lbl}>Or recipient name</label>
           <input value={recipient} onChange={(e) => { setRecipient(e.target.value); setStudentId(''); }} placeholder="e.g. Mrs. Grace Okon" style={{ ...inputStyle, marginBottom: 16 }} />
-          <button onClick={generate} disabled={busy} style={{ width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '12px', borderRadius: 10, border: 'none', background: busy ? '#E5E7EB' : `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: busy ? '#9CA3AF' : WHITE, fontSize: 13.5, fontWeight: 800, cursor: busy ? 'default' : 'pointer', fontFamily: FONT }}>
-            {busy ? <Loader2 size={14} style={{ animation: 'spin .8s linear infinite' }} /> : <Award size={14} />} Generate
+          <button onClick={generate} disabled={busy} style={{ width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '12px', borderRadius: 10, border: 'none', background: busy ? C.borderSoft : `linear-gradient(135deg, ${C.brand}, ${C.brandDeep})`, color: busy ? C.muted2 : '#fff', fontSize: 13.5, fontWeight: 800, cursor: busy ? 'default' : 'pointer', fontFamily: C.font }}>
+            {busy ? <Ico ti="ti-loader-2" size={14} style={{ animation: 'spin .8s linear infinite' }} /> : <Ico ti="ti-award" size={14} />} Generate
           </button>
         </div>
 
         <div style={{ flex: '1.3 1 360px' }}>
           {result && (
-            <div style={{ background: WHITE, border: `2px solid ${AMBER}55`, borderRadius: 16, padding: '28px 26px', marginBottom: 16, fontFamily: FONT }}>
+            <div style={{ background: C.surface, border: `2px solid ${tint(33)}`, borderRadius: 16, padding: '28px 26px', marginBottom: 16, fontFamily: C.font }}>
               <div style={{ textAlign: 'center', marginBottom: 14 }}>
-                <Award size={30} color={AMBER} />
-                <p style={{ fontSize: 16, fontWeight: 800, color: INK, margin: '6px 0 0' }}>{result.template_name}</p>
-                <p style={{ fontSize: 11, color: MUTED2, margin: '2px 0 0' }}>Serial: {result.serial_no}</p>
+                <Ico ti="ti-award" size={30} color={C.brand} />
+                <p style={{ fontSize: 16, fontWeight: 800, color: C.ink, margin: '6px 0 0' }}>{result.template_name}</p>
+                <p style={{ fontSize: 11, color: C.muted2, margin: '2px 0 0' }}>Serial: {result.serial_no}</p>
               </div>
-              <p style={{ fontSize: 14, color: INK, lineHeight: 1.8, margin: 0, textAlign: 'center' }}>{result.body}</p>
+              <p style={{ fontSize: 14, color: C.ink, lineHeight: 1.8, margin: 0, textAlign: 'center' }}>{result.body}</p>
               <div style={{ textAlign: 'center', marginTop: 16 }}>
-                <button onClick={() => window.print()} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 9, border: `1.5px solid ${BORDER}`, background: WHITE, color: MUTED, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>
-                  <Printer size={13} /> Print
+                <button onClick={() => window.print()} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 9, border: `1.5px solid ${C.border}`, background: C.surface, color: C.muted, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: C.font }}>
+                  <Ico ti="ti-printer" size={13} /> Print
                 </button>
               </div>
             </div>
           )}
-          <div style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 14, overflow: 'hidden' }}>
-            <div style={{ padding: '12px 16px', borderBottom: `1px solid ${BORDER}`, fontFamily: FONT, fontSize: 13, fontWeight: 800, color: INK }}>Issued Documents ({history.length})</div>
+          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, overflow: 'hidden' }}>
+            <div style={{ padding: '12px 16px', borderBottom: `1px solid ${C.border}`, fontFamily: C.font, fontSize: 13, fontWeight: 800, color: C.ink }}>Issued Documents ({history.length})</div>
             {history.length === 0 ? (
-              <div style={{ padding: '24px', textAlign: 'center', color: MUTED2, fontSize: 12.5, fontFamily: FONT }}>Nothing issued yet.</div>
+              <div style={{ padding: '24px', textAlign: 'center', color: C.muted2, fontSize: 12.5, fontFamily: C.font }}>Nothing issued yet.</div>
             ) : history.slice(0, 12).map((d) => (
-              <div key={d.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '9px 16px', borderBottom: `1px solid ${BORDER}`, fontFamily: FONT, fontSize: 12.5 }}>
-                <span style={{ fontWeight: 700, color: INK }}>{d.recipient_name}</span>
-                <span style={{ color: MUTED2 }}>{d.template_name || '—'} · {d.serial_no}</span>
+              <div key={d.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '9px 16px', borderBottom: `1px solid ${C.border}`, fontFamily: C.font, fontSize: 12.5 }}>
+                <span style={{ fontWeight: 700, color: C.ink }}>{d.recipient_name}</span>
+                <span style={{ color: C.muted2 }}>{d.template_name || '—'} · {d.serial_no}</span>
               </div>
             ))}
           </div>
         </div>
       </div>
-      {toast && <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: INK, color: WHITE, padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999 }}>{toast}</div>}
+      {toast && <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: C.hero, color: '#fff', padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999 }}>{toast}</div>}
     </PageLayout>
   );
 }
@@ -117,7 +119,7 @@ export function NoticeBoardPage() {
   return <ResourcePage title="Notice Board" subtitle="School-wide announcements" resource="notices"
     columns={[
       { key: 'title', label: 'Notice' },
-      { key: 'audience', label: 'Audience', render: (r) => pill(r.audience, { all: BLUE, students: GREEN, staff: PURPLE, parents: AMBER }) },
+      { key: 'audience', label: 'Audience', render: (r) => pill(r.audience, { all: BLUE, students: GREEN, staff: PURPLE, parents: C.brand }) },
       { key: 'publish_on', label: 'Published' }, { key: 'expires_on', label: 'Expires' }, { key: 'pinned', label: 'Pinned' },
     ]}
     fields={[
@@ -151,7 +153,7 @@ const BROADCAST_COLUMNS = [
   { key: 'title', label: 'Broadcast' },
   { key: 'channel', label: 'Channel', render: (r) => pill(r.channel, { in_app: BLUE, sms: GREEN, email: PURPLE, whatsapp: GREEN }) },
   { key: 'audience', label: 'Audience' },
-  { key: 'status', label: 'Status', render: (r) => pill(r.status, { draft: AMBER, sent: GREEN }) },
+  { key: 'status', label: 'Status', render: (r) => pill(r.status, { draft: C.brand, sent: GREEN }) },
 ];
 const BROADCAST_FIELDS = [
   { key: 'title', label: 'Title', required: true },

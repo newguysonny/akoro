@@ -19,7 +19,7 @@ const KIT = path.join(HERE, 'ui');
 const CLIENT = path.join(HERE, 'client');
 const SHARED = path.join(HERE, 'shared');
 const PAGES = path.join(HERE, 'pages');
-export const TARGETS = ['akoro-instructor'];
+export const TARGETS = ['akoro-instructor', 'akoro-school'];
 // One shared HTTP core for all four apps (Grand Plan Phase 19 step 5).
 export const CLIENT_TARGETS = ['akoro-learner', 'akoro-school', 'akoro-instructor', 'akoro-admin'];
 // Framework-light page components every app may use (Phase 19 step 5).

@@ -1,25 +1,27 @@
 /** Human Resource module pages (mgmt schema). */
 import { useState, useEffect, useCallback } from 'react';
-import { Users, Building2, CalendarOff, Wallet, HandCoins, Loader2, Save, BadgeCheck, Contact, Play } from 'lucide-react';
+import { Users, Building2, CalendarOff, Wallet, HandCoins, BadgeCheck } from 'lucide-react';
 import { PageLayout } from '../../components/Layout.jsx';
 import ResourcePage, { inputStyle } from '../../components/mgmt/ResourcePage.jsx';
 import StatCards from '../../components/mgmt/StatCards.jsx';
 import { ModuleSettingsForm } from '../../components/mgmt/extras.jsx';
 import { apiGet, apiPost } from '../../services/api.js';
-import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, BLUE, PURPLE, FONT } from '../../constants.js';
+import { GREEN, RED, BLUE, PURPLE } from '../../constants.js';
+import { C, tint } from '../../theme/colors.js';
+import { Ico } from '../../theme/Ico.jsx';
 
 const BASE = '/api/school/mgmt';
 const naira = (n) => `₦${Number(n || 0).toLocaleString('en-NG')}`;
 const staffOpts = { resource: 'staff', labelFn: (r) => `${r.first_name} ${r.last_name} (${r.staff_no})` };
 const pill = (v, map) => {
-  const c = map[v] || MUTED2;
-  return <span style={{ padding: '3px 10px', borderRadius: 999, background: `${c}15`, color: c, fontSize: 11, fontWeight: 800, textTransform: 'capitalize' }}>{String(v).replace('_', ' ')}</span>;
+  const c = map[v] || C.muted2;
+  return <span style={{ padding: '3px 10px', borderRadius: 999, background: tint(8, c), color: c, fontSize: 11, fontWeight: 800, textTransform: 'capitalize' }}>{String(v).replace('_', ' ')}</span>;
 };
 const LEAVE_STATUSES = [{ value: 'pending', label: 'Pending' }, { value: 'approved', label: 'Approved' }, { value: 'rejected', label: 'Rejected' }];
 const LEAVE_COLUMNS = [
   { key: 'staff_name', label: 'Staff' }, { key: 'leave_type_name', label: 'Type' },
   { key: 'from_date', label: 'From' }, { key: 'to_date', label: 'To' },
-  { key: 'status', label: 'Status', render: (r) => pill(r.status, { pending: AMBER, approved: GREEN, rejected: RED }) },
+  { key: 'status', label: 'Status', render: (r) => pill(r.status, { pending: C.brand, approved: GREEN, rejected: RED }) },
 ];
 const LEAVE_FIELDS = [
   { key: 'staff_id', label: 'Staff', type: 'select', required: true, optionsFrom: staffOpts },
@@ -35,13 +37,13 @@ export function HRDashboardPage() {
   const [s, setS] = useState(null);
   useEffect(() => { apiGet(`${BASE}/dashboard/hr`).then((r) => setS(r.data)).catch(() => setS({})); }, []);
   const cards = s ? [
-    { n: s.staff, label: 'Total Staff', icon: Users, c: BLUE, to: '/mgmt/staff-directory' },
-    { n: s.activeStaff, label: 'Active Staff', icon: BadgeCheck, c: GREEN, to: '/mgmt/staff-directory' },
-    { n: s.presentToday, label: 'Present Today', icon: Users, c: GREEN, to: '/mgmt/staff-attendance-hr' },
-    { n: s.departments, label: 'Departments', icon: Building2, c: PURPLE, to: '/mgmt/departments' },
-    { n: s.pendingLeaves, label: 'Pending Leaves', icon: CalendarOff, c: AMBER, to: '/mgmt/approve-leave' },
-    { n: s.pendingPayroll, label: 'Pending Payroll', icon: Wallet, c: RED, to: '/mgmt/payroll' },
-    { n: s.activeLoans, label: 'Active Loans', icon: HandCoins, c: AMBER, to: '/mgmt/staff-loans' },
+    { n: s.staff, label: 'Total Staff', icon: Users, ti: 'ti-users', c: BLUE, to: '/mgmt/staff-directory' },
+    { n: s.activeStaff, label: 'Active Staff', icon: BadgeCheck, ti: 'ti-rosette-discount-check', c: GREEN, to: '/mgmt/staff-directory' },
+    { n: s.presentToday, label: 'Present Today', icon: Users, ti: 'ti-users', c: GREEN, to: '/mgmt/staff-attendance-hr' },
+    { n: s.departments, label: 'Departments', icon: Building2, ti: 'ti-building', c: PURPLE, to: '/mgmt/departments' },
+    { n: s.pendingLeaves, label: 'Pending Leaves', icon: CalendarOff, ti: 'ti-calendar-off', c: C.brand, to: '/mgmt/approve-leave' },
+    { n: s.pendingPayroll, label: 'Pending Payroll', icon: Wallet, ti: 'ti-wallet', c: RED, to: '/mgmt/payroll' },
+    { n: s.activeLoans, label: 'Active Loans', icon: HandCoins, ti: 'ti-coins', c: C.brand, to: '/mgmt/staff-loans' },
   ] : [];
   return (
     <PageLayout title="HR Dashboard" subtitle="Staff, leave and payroll at a glance">
@@ -79,7 +81,7 @@ export function StaffDirectoryPage() {
 /* ── Staff Attendance register ───────────────────────────────────── */
 const STAFF_ATT = [
   { key: 'present', label: 'Present', c: GREEN }, { key: 'absent', label: 'Absent', c: RED },
-  { key: 'late', label: 'Late', c: AMBER }, { key: 'leave', label: 'Leave', c: BLUE },
+  { key: 'late', label: 'Late', c: C.brand }, { key: 'leave', label: 'Leave', c: BLUE },
 ];
 export function StaffAttendancePage() {
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
@@ -110,37 +112,37 @@ export function StaffAttendancePage() {
         <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={{ ...inputStyle, width: 170 }} />
       </div>
       {register && (
-        <div style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 14, overflow: 'hidden' }}>
+        <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, overflow: 'hidden' }}>
           {register.length === 0 ? (
-            <div style={{ padding: '30px', textAlign: 'center', color: MUTED2, fontSize: 13, fontFamily: FONT }}>No active staff.</div>
+            <div style={{ padding: '30px', textAlign: 'center', color: C.muted2, fontSize: 13, fontFamily: C.font }}>No active staff.</div>
           ) : (
             <>
               {register.map((s) => (
-                <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 16px', borderBottom: `1px solid ${BORDER}`, flexWrap: 'wrap' }}>
+                <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 16px', borderBottom: `1px solid ${C.border}`, flexWrap: 'wrap' }}>
                   <div style={{ flex: 1, minWidth: 180 }}>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: INK, fontFamily: FONT }}>{s.name}</span>
-                    <span style={{ fontSize: 11, color: MUTED2, fontFamily: FONT, marginLeft: 8 }}>{s.staff_no}</span>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: C.ink, fontFamily: C.font }}>{s.name}</span>
+                    <span style={{ fontSize: 11, color: C.muted2, fontFamily: C.font, marginLeft: 8 }}>{s.staff_no}</span>
                   </div>
                   <div style={{ display: 'flex', gap: 6 }}>
                     {STAFF_ATT.map((st) => (
                       <button key={st.key} onClick={() => setRegister((prev) => prev.map((r) => (r.id === s.id ? { ...r, status: st.key } : r)))}
-                        style={{ padding: '6px 12px', borderRadius: 999, border: `1.5px solid ${s.status === st.key ? st.c : BORDER}`, background: s.status === st.key ? `${st.c}15` : WHITE, color: s.status === st.key ? st.c : MUTED2, fontSize: 11.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
+                        style={{ padding: '6px 12px', borderRadius: 999, border: `1.5px solid ${s.status === st.key ? st.c : C.border}`, background: s.status === st.key ? tint(8, st.c) : C.surface, color: s.status === st.key ? st.c : C.muted2, fontSize: 11.5, fontWeight: 800, cursor: 'pointer', fontFamily: C.font }}>
                         {st.label}
                       </button>
                     ))}
                   </div>
                 </div>
               ))}
-              <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '14px 16px', background: LIGHT }}>
-                <button onClick={save} disabled={saving} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '11px 22px', borderRadius: 10, border: 'none', background: saving ? '#E5E7EB' : `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: saving ? '#9CA3AF' : WHITE, fontSize: 13, fontWeight: 800, cursor: saving ? 'default' : 'pointer', fontFamily: FONT }}>
-                  {saving ? <Loader2 size={14} style={{ animation: 'spin .8s linear infinite' }} /> : <Save size={14} />} Save Attendance
+              <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '14px 16px', background: C.bg }}>
+                <button onClick={save} disabled={saving} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '11px 22px', borderRadius: 10, border: 'none', background: saving ? C.borderSoft : `linear-gradient(135deg, ${C.brand}, ${C.brandDeep})`, color: saving ? C.muted2 : '#fff', fontSize: 13, fontWeight: 800, cursor: saving ? 'default' : 'pointer', fontFamily: C.font }}>
+                  {saving ? <Ico ti="ti-loader-2" size={14} style={{ animation: 'spin .8s linear infinite' }} /> : <Ico ti="ti-device-floppy" size={14} />} Save Attendance
                 </button>
               </div>
             </>
           )}
         </div>
       )}
-      {toast && <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: INK, color: WHITE, padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999 }}>{toast}</div>}
+      {toast && <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: C.hero, color: '#fff', padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999 }}>{toast}</div>}
     </PageLayout>
   );
 }
@@ -172,33 +174,33 @@ export function PayrollPage() {
     <PageLayout title="Payroll" subtitle="Monthly salary runs">
       <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
         <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} style={{ ...inputStyle, width: 180 }} />
-        <button onClick={generate} disabled={busy} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '10px 18px', borderRadius: 9, border: 'none', background: busy ? '#E5E7EB' : `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: busy ? '#9CA3AF' : WHITE, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
-          {busy ? <Loader2 size={14} style={{ animation: 'spin .8s linear infinite' }} /> : <Play size={13} />} Generate Payroll
+        <button onClick={generate} disabled={busy} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '10px 18px', borderRadius: 9, border: 'none', background: busy ? C.borderSoft : `linear-gradient(135deg, ${C.brand}, ${C.brandDeep})`, color: busy ? C.muted2 : '#fff', fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: C.font }}>
+          {busy ? <Ico ti="ti-loader-2" size={14} style={{ animation: 'spin .8s linear infinite' }} /> : <Ico ti="ti-player-play" size={13} />} Generate Payroll
         </button>
       </div>
-      <div style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 14, overflow: 'hidden' }}>
+      <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, overflow: 'hidden' }}>
         {rows.length === 0 ? (
-          <div style={{ padding: '30px', textAlign: 'center', color: MUTED2, fontSize: 13, fontFamily: FONT }}>No payroll records for {month}. Click "Generate Payroll".</div>
+          <div style={{ padding: '30px', textAlign: 'center', color: C.muted2, fontSize: 13, fontFamily: C.font }}>No payroll records for {month}. Click "Generate Payroll".</div>
         ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: FONT }}>
-            <thead><tr style={{ background: LIGHT }}>
-              {['STAFF', 'GROSS', 'DEDUCTIONS', 'NET', 'STATUS'].map((h) => <th key={h} style={{ textAlign: 'left', padding: '10px 14px', fontSize: 10.5, fontWeight: 800, color: MUTED2 }}>{h}</th>)}
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: C.font }}>
+            <thead><tr style={{ background: C.bg }}>
+              {['STAFF', 'GROSS', 'DEDUCTIONS', 'NET', 'STATUS'].map((h) => <th key={h} style={{ textAlign: 'left', padding: '10px 14px', fontSize: 10.5, fontWeight: 800, color: C.muted2 }}>{h}</th>)}
             </tr></thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={r.id} style={{ borderTop: `1px solid ${BORDER}` }}>
-                  <td style={{ padding: '11px 14px', fontSize: 12.5, fontWeight: 700, color: INK }}>{r.staff_name}</td>
+                <tr key={r.id} style={{ borderTop: `1px solid ${C.border}` }}>
+                  <td style={{ padding: '11px 14px', fontSize: 12.5, fontWeight: 700, color: C.ink }}>{r.staff_name}</td>
                   <td style={{ padding: '11px 14px', fontSize: 12.5 }}>{naira(r.gross)}</td>
                   <td style={{ padding: '11px 14px', fontSize: 12.5, color: RED }}>{naira(r.deductions)}</td>
                   <td style={{ padding: '11px 14px', fontSize: 12.5, fontWeight: 800, color: GREEN }}>{naira(r.net)}</td>
-                  <td style={{ padding: '11px 14px' }}>{pill(r.status, { pending: AMBER, paid: GREEN })}</td>
+                  <td style={{ padding: '11px 14px' }}>{pill(r.status, { pending: C.brand, paid: GREEN })}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         )}
       </div>
-      {toast && <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: INK, color: WHITE, padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999 }}>{toast}</div>}
+      {toast && <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: C.hero, color: '#fff', padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999 }}>{toast}</div>}
     </PageLayout>
   );
 }
@@ -256,25 +258,25 @@ export function StaffIDCardPage() {
         {staff.map((x) => <option key={x.id} value={x.id}>{x.first_name} {x.last_name} ({x.staff_no})</option>)}
       </select>
       {s && (
-        <div style={{ width: 320, borderRadius: 16, overflow: 'hidden', boxShadow: '0 10px 30px rgba(26,26,46,.15)', fontFamily: FONT }}>
-          <div style={{ background: `linear-gradient(135deg, ${INK}, #2d2d52)`, padding: '18px 20px', textAlign: 'center' }}>
-            <p style={{ fontSize: 14, fontWeight: 800, color: WHITE, margin: 0 }}>Akoro School Portal</p>
+        <div style={{ width: 320, borderRadius: 16, overflow: 'hidden', boxShadow: '0 10px 30px rgba(26,26,46,.15)', fontFamily: C.font }}>
+          <div style={{ background: `linear-gradient(135deg, ${C.ink}, #2d2d52)`, padding: '18px 20px', textAlign: 'center' }}>
+            <p style={{ fontSize: 14, fontWeight: 800, color: '#fff', margin: 0 }}>Akoro School Portal</p>
             <p style={{ fontSize: 10, color: 'rgba(255,255,255,.6)', margin: '2px 0 0' }}>STAFF IDENTITY CARD</p>
           </div>
-          <div style={{ background: WHITE, padding: '18px 20px' }}>
-            <div style={{ width: 72, height: 72, borderRadius: '50%', background: `${AMBER}20`, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
-              <Contact size={30} color={AMBER} />
+          <div style={{ background: C.surface, padding: '18px 20px' }}>
+            <div style={{ width: 72, height: 72, borderRadius: '50%', background: tint(13), display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
+              <Ico ti="ti-address-book" size={30} color={C.brand} />
             </div>
-            <p style={{ fontSize: 16, fontWeight: 800, color: INK, margin: '0 0 2px', textAlign: 'center' }}>{s.first_name} {s.last_name}</p>
-            <p style={{ fontSize: 12, color: MUTED, margin: '0 0 14px', textAlign: 'center' }}>{s.designation_name || 'Staff'} · {s.department_name || '—'}</p>
+            <p style={{ fontSize: 16, fontWeight: 800, color: C.ink, margin: '0 0 2px', textAlign: 'center' }}>{s.first_name} {s.last_name}</p>
+            <p style={{ fontSize: 12, color: C.muted, margin: '0 0 14px', textAlign: 'center' }}>{s.designation_name || 'Staff'} · {s.department_name || '—'}</p>
             {[['Staff No', s.staff_no], ['Phone', s.phone || '—'], ['Joined', s.joined_on || '—']].map(([l, v]) => (
-              <div key={l} style={{ display: 'flex', justifyContent: 'space-between', padding: '7px 0', borderTop: `1px solid ${BORDER}` }}>
-                <span style={{ fontSize: 11.5, color: MUTED2 }}>{l}</span>
-                <b style={{ fontSize: 12, color: INK }}>{v}</b>
+              <div key={l} style={{ display: 'flex', justifyContent: 'space-between', padding: '7px 0', borderTop: `1px solid ${C.border}` }}>
+                <span style={{ fontSize: 11.5, color: C.muted2 }}>{l}</span>
+                <b style={{ fontSize: 12, color: C.ink }}>{v}</b>
               </div>
             ))}
           </div>
-          <div style={{ background: AMBER, height: 8 }} />
+          <div style={{ background: C.brand, height: 8 }} />
         </div>
       )}
     </PageLayout>
@@ -298,7 +300,7 @@ export function StaffLoansPage() {
       { key: 'amount', label: 'Amount', render: (r) => naira(r.amount) },
       { key: 'monthly_deduction', label: 'Monthly Deduction', render: (r) => naira(r.monthly_deduction) },
       { key: 'balance', label: 'Balance', render: (r) => <b style={{ color: RED }}>{naira(r.balance)}</b> },
-      { key: 'status', label: 'Status', render: (r) => pill(r.status, { active: AMBER, closed: GREEN }) },
+      { key: 'status', label: 'Status', render: (r) => pill(r.status, { active: C.brand, closed: GREEN }) },
     ]}
     fields={[
       { key: 'staff_id', label: 'Staff', type: 'select', required: true, optionsFrom: staffOpts },
@@ -331,7 +333,7 @@ export function AppraisalCyclesPage() {
   return <ResourcePage title="Appraisal Cycles" subtitle="Review periods" resource="appraisal-cycles"
     columns={[
       { key: 'name', label: 'Cycle' }, { key: 'starts_on', label: 'Starts' }, { key: 'ends_on', label: 'Ends' },
-      { key: 'status', label: 'Status', render: (r) => pill(r.status, { open: GREEN, closed: MUTED2 }) },
+      { key: 'status', label: 'Status', render: (r) => pill(r.status, { open: GREEN, closed: C.muted2 }) },
     ]}
     fields={[
       { key: 'name', label: 'Cycle Name', required: true },
@@ -353,7 +355,7 @@ export function AppraisalsPage() {
     columns={[
       { key: 'staff_name', label: 'Staff' }, { key: 'cycle_name', label: 'Cycle' },
       { key: 'score', label: 'Score', render: (r) => r.score != null ? <b>{r.score}%</b> : '—' },
-      { key: 'status', label: 'Status', render: (r) => pill(r.status, { draft: AMBER, final: GREEN }) },
+      { key: 'status', label: 'Status', render: (r) => pill(r.status, { draft: C.brand, final: GREEN }) },
     ]}
     fields={[
       { key: 'staff_id', label: 'Staff', type: 'select', required: true, optionsFrom: staffOpts },

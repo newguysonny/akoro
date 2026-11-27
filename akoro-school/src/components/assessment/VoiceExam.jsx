@@ -7,9 +7,12 @@ import {Bot, Mic } from 'lucide-react';
  * by voice, with a tucked-away text fallback.
  */
 import { useState } from 'react';
-import { BRAND, RED, GREEN } from '../../constants.js';
+import { BRAND, RED, GREEN, GOLD } from '../../constants.js';
+import { Ico } from '../../theme/Ico.jsx';
 
-const AMBER = '#F59E0B';
+/* The ring's warning colour: the local AMBER this file used to define was
+   '#F59E0B' — the GOLD status hue, not the constants palette's AMBER. */
+const AMBER = GOLD;
 
 // Ring colour from BOTH signals: local face-presence (instant) + server proctor.
 function ringState(status, signals, proctor) {
@@ -74,7 +77,7 @@ export default function VoiceExam({
           <div style={{ width: 132, height: 132, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
             fontSize: 54, background: `radial-gradient(circle at 50% 35%, ${BRAND}, #2A0E66)`,
             boxShadow: `0 0 46px ${orbGlow}`, transform: `scale(${orbScale})`, transition: 'transform .18s ease' }}>
-            <Bot size={26} color="#fff" />
+            <Ico ti="ti-robot" size={26} color="#fff" />
           </div>
         </div>
 
@@ -110,7 +113,7 @@ export default function VoiceExam({
           )}
         </button>
         <div style={{ fontSize: 12, color: '#64748B', fontWeight: 700 }}>{listening ? 'Tap to send your answer' : 'Hold a quiet space · stay in frame'}</div>
-        {voiceError && <div style={{ fontSize: 12, color: '#FCA5A5', fontWeight: 700, maxWidth: 420, textAlign: 'center' }}><Mic size={12} style={{ verticalAlign: '-2px', marginRight: 4 }} />{voiceError} — you can type your answer below instead.</div>}
+        {voiceError && <div style={{ fontSize: 12, color: '#FCA5A5', fontWeight: 700, maxWidth: 420, textAlign: 'center' }}><Ico ti="ti-microphone" size={12} style={{ verticalAlign: '-2px', marginRight: 4 }} />{voiceError} — you can type your answer below instead.</div>}
 
         <button onClick={() => setShowType(s => !s)} style={{ background: 'none', border: 'none', color: '#64748B', fontSize: 12, fontWeight: 800, cursor: 'pointer', textDecoration: 'underline' }}>
           {showType ? 'Hide typing' : 'Type instead'}

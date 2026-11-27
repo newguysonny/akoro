@@ -4,12 +4,14 @@
  * Generate Due Slip. The rest are ResourcePage configs.
  */
 import { useState, useEffect, useCallback } from 'react';
-import { Banknote, Wallet, TrendingUp, Receipt, Globe, Layers, Loader2, Save, Search } from 'lucide-react';
+import { Banknote, Wallet, TrendingUp, Receipt, Globe, Layers } from 'lucide-react';
 import { PageLayout } from '../../components/Layout.jsx';
 import ResourcePage, { inputStyle } from '../../components/mgmt/ResourcePage.jsx';
 import StatCards from '../../components/mgmt/StatCards.jsx';
 import { apiGet, apiPost } from '../../services/api.js';
-import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, BLUE, PURPLE, FONT } from '../../constants.js';
+import { GREEN, RED, BLUE, PURPLE } from '../../constants.js';
+import { C, tint } from '../../theme/colors.js';
+import { Ico } from '../../theme/Ico.jsx';
 
 const BASE = '/api/school/mgmt';
 const naira = (n) => `₦${Number(n || 0).toLocaleString('en-NG')}`;
@@ -19,7 +21,7 @@ const METHODS = ['cash', 'bank', 'online', 'pos', 'cheque'].map((m) => ({ value:
 const PAYMENT_COLUMNS = [
   { key: 'student_name', label: 'Student' },
   { key: 'amount', label: 'Amount', render: (r) => <b>{naira(r.amount)}</b> },
-  { key: 'method', label: 'Method', render: (r) => <span style={{ padding: '3px 9px', borderRadius: 6, background: '#0EA5E9', color: WHITE, fontSize: 11, fontWeight: 800, textTransform: 'capitalize' }}>{r.method}</span> },
+  { key: 'method', label: 'Method', render: (r) => <span style={{ padding: '3px 9px', borderRadius: 6, background: '#0EA5E9', color: '#fff', fontSize: 11, fontWeight: 800, textTransform: 'capitalize' }}>{r.method}</span> },
   { key: 'reference', label: 'Reference' },
   { key: 'paid_on', label: 'Date' },
   { key: 'received_by', label: 'Received By' },
@@ -30,13 +32,13 @@ export function FeesDashboardPage() {
   const [stats, setStats] = useState(null);
   useEffect(() => { apiGet(`${BASE}/dashboard/finance`).then((r) => setStats(r.data)).catch(() => setStats({})); }, []);
   const cards = stats ? [
-    { n: naira(stats.collected), label: 'Total Collected', icon: Wallet, c: GREEN, to: '/mgmt/all-transactions' },
-    { n: naira(stats.outstanding), label: 'Outstanding', icon: TrendingUp, c: RED, to: '/mgmt/search-due-fees' },
-    { n: naira(stats.assigned), label: 'Total Assigned', icon: Banknote, c: BLUE, to: '/mgmt/assign-fees' },
-    { n: naira(stats.collectedToday), label: 'Collected Today', icon: Wallet, c: AMBER, to: '/mgmt/collect-fees' },
-    { n: stats.transactions, label: 'Transactions', icon: Receipt, c: PURPLE, to: '/mgmt/all-transactions' },
-    { n: stats.onlineTransactions, label: 'Online Transactions', icon: Globe, c: BLUE, to: '/mgmt/online-transactions' },
-    { n: stats.feeTypes, label: 'Fee Types', icon: Layers, c: AMBER, to: '/mgmt/fee-types' },
+    { n: naira(stats.collected), label: 'Total Collected', icon: Wallet, ti: 'ti-wallet', c: GREEN, to: '/mgmt/all-transactions' },
+    { n: naira(stats.outstanding), label: 'Outstanding', icon: TrendingUp, ti: 'ti-trending-up', c: RED, to: '/mgmt/search-due-fees' },
+    { n: naira(stats.assigned), label: 'Total Assigned', icon: Banknote, ti: 'ti-cash-banknote', c: BLUE, to: '/mgmt/assign-fees' },
+    { n: naira(stats.collectedToday), label: 'Collected Today', icon: Wallet, ti: 'ti-wallet', c: C.brand, to: '/mgmt/collect-fees' },
+    { n: stats.transactions, label: 'Transactions', icon: Receipt, ti: 'ti-receipt', c: PURPLE, to: '/mgmt/all-transactions' },
+    { n: stats.onlineTransactions, label: 'Online Transactions', icon: Globe, ti: 'ti-world', c: BLUE, to: '/mgmt/online-transactions' },
+    { n: stats.feeTypes, label: 'Fee Types', icon: Layers, ti: 'ti-stack-2', c: C.brand, to: '/mgmt/fee-types' },
   ] : [];
   return (
     <PageLayout title="Fees Dashboard" subtitle="Collections, dues and fee setup at a glance">
@@ -77,11 +79,11 @@ export function CollectFeesPage() {
     finally { setBusy(false); }
   };
 
-  const lbl = { fontSize: 12, fontWeight: 700, color: INK, fontFamily: FONT, display: 'block', marginBottom: 5 };
+  const lbl = { fontSize: 12, fontWeight: 700, color: C.ink, fontFamily: C.font, display: 'block', marginBottom: 5 };
   return (
     <PageLayout title="Collect Fees" subtitle="Record a fee payment">
       <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-        <div style={{ flex: '1 1 340px', maxWidth: 480, background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 14, padding: '20px 22px' }}>
+        <div style={{ flex: '1 1 340px', maxWidth: 480, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: '20px 22px' }}>
           <label style={lbl}>Student</label>
           <select value={studentId} onChange={(e) => setStudentId(e.target.value)} style={{ ...inputStyle, cursor: 'pointer', marginBottom: 14 }}>
             <option value="">— select student —</option>
@@ -94,28 +96,28 @@ export function CollectFeesPage() {
                 {METHODS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
               </select></div>
           </div>
-          <label style={lbl}>Reference <span style={{ fontWeight: 500, color: MUTED2 }}>(auto if blank)</span></label>
+          <label style={lbl}>Reference <span style={{ fontWeight: 500, color: C.muted2 }}>(auto if blank)</span></label>
           <input value={reference} onChange={(e) => setReference(e.target.value)} style={{ ...inputStyle, marginBottom: 14 }} />
           <label style={lbl}>Note</label>
           <textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} style={{ ...inputStyle, resize: 'vertical', marginBottom: 16 }} />
-          <button onClick={collect} disabled={busy} style={{ width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '12px', borderRadius: 10, border: 'none', background: busy ? '#E5E7EB' : `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: busy ? '#9CA3AF' : WHITE, fontSize: 13.5, fontWeight: 800, cursor: busy ? 'default' : 'pointer', fontFamily: FONT }}>
-            {busy ? <Loader2 size={14} style={{ animation: 'spin .8s linear infinite' }} /> : <Save size={14} />} {busy ? 'Recording…' : 'Record Payment'}
+          <button onClick={collect} disabled={busy} style={{ width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '12px', borderRadius: 10, border: 'none', background: busy ? C.borderSoft : `linear-gradient(135deg, ${C.brand}, ${C.brandDeep})`, color: busy ? C.muted2 : '#fff', fontSize: 13.5, fontWeight: 800, cursor: busy ? 'default' : 'pointer', fontFamily: C.font }}>
+            {busy ? <Ico ti="ti-loader-2" size={14} style={{ animation: 'spin .8s linear infinite' }} /> : <Ico ti="ti-device-floppy" size={14} />} {busy ? 'Recording…' : 'Record Payment'}
           </button>
         </div>
 
         {dues && (
-          <div style={{ flex: '1 1 260px', maxWidth: 340, background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 14, padding: '20px 22px', fontFamily: FONT }}>
-            <p style={{ fontSize: 14, fontWeight: 800, color: INK, margin: '0 0 14px' }}>{dues.name}</p>
-            {[['Assigned', dues.assigned, INK], ['Paid', dues.paid, GREEN], ['Balance Due', dues.due, dues.due > 0 ? RED : GREEN]].map(([l, v, c]) => (
-              <div key={l} style={{ display: 'flex', justifyContent: 'space-between', padding: '9px 0', borderBottom: `1px solid ${BORDER}` }}>
-                <span style={{ fontSize: 12.5, color: MUTED }}>{l}</span>
+          <div style={{ flex: '1 1 260px', maxWidth: 340, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: '20px 22px', fontFamily: C.font }}>
+            <p style={{ fontSize: 14, fontWeight: 800, color: C.ink, margin: '0 0 14px' }}>{dues.name}</p>
+            {[['Assigned', dues.assigned, C.ink], ['Paid', dues.paid, GREEN], ['Balance Due', dues.due, dues.due > 0 ? RED : GREEN]].map(([l, v, c]) => (
+              <div key={l} style={{ display: 'flex', justifyContent: 'space-between', padding: '9px 0', borderBottom: `1px solid ${C.border}` }}>
+                <span style={{ fontSize: 12.5, color: C.muted }}>{l}</span>
                 <b style={{ fontSize: 13.5, color: c }}>{naira(v)}</b>
               </div>
             ))}
           </div>
         )}
       </div>
-      {toast && <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: INK, color: WHITE, padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999 }}>{toast}</div>}
+      {toast && <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: C.hero, color: '#fff', padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999 }}>{toast}</div>}
     </PageLayout>
   );
 }
@@ -148,27 +150,27 @@ export function SearchDueFeesPage() {
         <select value={classId} onChange={(e) => setClassId(e.target.value)} style={{ ...inputStyle, width: 170, cursor: 'pointer' }}>
           <option value="">All classes</option>{classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
-        <button onClick={load} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 16px', borderRadius: 9, border: 'none', background: BLUE, color: WHITE, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
-          <Search size={13} /> {loading ? 'Searching…' : 'Search Dues'}
+        <button onClick={load} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 16px', borderRadius: 9, border: 'none', background: BLUE, color: '#fff', fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: C.font }}>
+          <Ico ti="ti-search" size={13} /> {loading ? 'Searching…' : 'Search Dues'}
         </button>
         {rows && <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Filter results…" style={{ ...inputStyle, width: 220 }} />}
       </div>
 
       {rows && (
-        <div style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 14, overflow: 'hidden' }}>
+        <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, overflow: 'hidden' }}>
           {visible.length === 0 ? (
-            <div style={{ padding: '30px', textAlign: 'center', color: MUTED2, fontSize: 13, fontFamily: FONT }}>No outstanding dues</div>
+            <div style={{ padding: '30px', textAlign: 'center', color: C.muted2, fontSize: 13, fontFamily: C.font }}>No outstanding dues</div>
           ) : (
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: FONT }}>
-              <thead><tr style={{ background: LIGHT }}>
-                {['STUDENT', 'ADMISSION NO', 'ASSIGNED', 'PAID', 'DUE'].map((h) => <th key={h} style={{ textAlign: 'left', padding: '10px 14px', fontSize: 10.5, fontWeight: 800, color: MUTED2 }}>{h}</th>)}
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: C.font }}>
+              <thead><tr style={{ background: C.bg }}>
+                {['STUDENT', 'ADMISSION NO', 'ASSIGNED', 'PAID', 'DUE'].map((h) => <th key={h} style={{ textAlign: 'left', padding: '10px 14px', fontSize: 10.5, fontWeight: 800, color: C.muted2 }}>{h}</th>)}
               </tr></thead>
               <tbody>
                 {visible.map((r) => (
-                  <tr key={r.student_id} style={{ borderTop: `1px solid ${BORDER}` }}>
-                    <td style={{ padding: '11px 14px', fontSize: 12.5, fontWeight: 700, color: INK }}>{r.name}</td>
-                    <td style={{ padding: '11px 14px', fontSize: 12.5, color: MUTED }}>{r.admission_no}</td>
-                    <td style={{ padding: '11px 14px', fontSize: 12.5, color: INK }}>{naira(r.assigned)}</td>
+                  <tr key={r.student_id} style={{ borderTop: `1px solid ${C.border}` }}>
+                    <td style={{ padding: '11px 14px', fontSize: 12.5, fontWeight: 700, color: C.ink }}>{r.name}</td>
+                    <td style={{ padding: '11px 14px', fontSize: 12.5, color: C.muted }}>{r.admission_no}</td>
+                    <td style={{ padding: '11px 14px', fontSize: 12.5, color: C.ink }}>{naira(r.assigned)}</td>
                     <td style={{ padding: '11px 14px', fontSize: 12.5, color: GREEN }}>{naira(r.paid)}</td>
                     <td style={{ padding: '11px 14px', fontSize: 12.5, fontWeight: 800, color: RED }}>{naira(r.due)}</td>
                   </tr>
@@ -201,7 +203,7 @@ export function FeeChallansPage() {
     columns={[
       { key: 'challan_no', label: 'Challan No' }, { key: 'student_name', label: 'Student' },
       { key: 'amount', label: 'Amount', render: (r) => naira(r.amount) },
-      { key: 'status', label: 'Status', render: (r) => <span style={{ padding: '3px 10px', borderRadius: 999, background: `${{ unpaid: AMBER, paid: GREEN, cancelled: RED }[r.status]}15`, color: { unpaid: AMBER, paid: GREEN, cancelled: RED }[r.status], fontSize: 11, fontWeight: 800, textTransform: 'capitalize' }}>{r.status}</span> },
+      { key: 'status', label: 'Status', render: (r) => <span style={{ padding: '3px 10px', borderRadius: 999, background: tint(8, { unpaid: C.brand, paid: GREEN, cancelled: RED }[r.status]), color: { unpaid: C.brand, paid: GREEN, cancelled: RED }[r.status], fontSize: 11, fontWeight: 800, textTransform: 'capitalize' }}>{r.status}</span> },
       { key: 'due_date', label: 'Due Date' },
     ]}
     fields={[
@@ -289,19 +291,19 @@ export function GenerateDueSlipPage() {
 
   return (
     <PageLayout title="Generate Due Slip" subtitle="Create dues notices for a class">
-      <div style={{ maxWidth: 460, background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 14, padding: '20px 22px', fontFamily: FONT }}>
-        <label style={{ fontSize: 12, fontWeight: 700, color: INK, display: 'block', marginBottom: 5 }}>Class</label>
+      <div style={{ maxWidth: 460, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: '20px 22px', fontFamily: C.font }}>
+        <label style={{ fontSize: 12, fontWeight: 700, color: C.ink, display: 'block', marginBottom: 5 }}>Class</label>
         <select value={classId} onChange={(e) => setClassId(e.target.value)} style={{ ...inputStyle, cursor: 'pointer', marginBottom: 14 }}>
           <option value="">— select class —</option>{classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
-        <label style={{ fontSize: 12, fontWeight: 700, color: INK, display: 'block', marginBottom: 5 }}>Period Label</label>
+        <label style={{ fontSize: 12, fontWeight: 700, color: C.ink, display: 'block', marginBottom: 5 }}>Period Label</label>
         <input value={periodLabel} onChange={(e) => setPeriodLabel(e.target.value)} placeholder="e.g. JUL 2026" style={{ ...inputStyle, marginBottom: 16 }} />
-        <button onClick={generate} disabled={busy} style={{ width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '12px', borderRadius: 10, border: 'none', background: busy ? '#E5E7EB' : `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: busy ? '#9CA3AF' : WHITE, fontSize: 13.5, fontWeight: 800, cursor: busy ? 'default' : 'pointer', fontFamily: FONT }}>
-          {busy ? <Loader2 size={14} style={{ animation: 'spin .8s linear infinite' }} /> : <Receipt size={14} />} {busy ? 'Generating…' : 'Generate Due Slips'}
+        <button onClick={generate} disabled={busy} style={{ width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '12px', borderRadius: 10, border: 'none', background: busy ? C.borderSoft : `linear-gradient(135deg, ${C.brand}, ${C.brandDeep})`, color: busy ? C.muted2 : '#fff', fontSize: 13.5, fontWeight: 800, cursor: busy ? 'default' : 'pointer', fontFamily: C.font }}>
+          {busy ? <Ico ti="ti-loader-2" size={14} style={{ animation: 'spin .8s linear infinite' }} /> : <Ico ti="ti-receipt" size={14} />} {busy ? 'Generating…' : 'Generate Due Slips'}
         </button>
-        <p style={{ fontSize: 11.5, color: MUTED2, margin: '10px 0 0', lineHeight: 1.5 }}>A slip is created for every student in the class with an outstanding balance. View them under Due Slip History.</p>
+        <p style={{ fontSize: 11.5, color: C.muted2, margin: '10px 0 0', lineHeight: 1.5 }}>A slip is created for every student in the class with an outstanding balance. View them under Due Slip History.</p>
       </div>
-      {toast && <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: INK, color: WHITE, padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999 }}>{toast}</div>}
+      {toast && <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: C.hero, color: '#fff', padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999 }}>{toast}</div>}
     </PageLayout>
   );
 }
@@ -354,34 +356,34 @@ export function FeesCarryForwardPage() {
         <select value={toSession} onChange={(e) => setToSession(e.target.value)} style={{ ...inputStyle, width: 190, cursor: 'pointer' }}>
           <option value="">To session…</option>{sessions.filter((s) => s.id !== fromSession).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
         </select>
-        <button onClick={run} disabled={busy} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '10px 18px', borderRadius: 9, border: 'none', background: busy ? '#E5E7EB' : `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: busy ? '#9CA3AF' : WHITE, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
-          {busy ? <Loader2 size={14} style={{ animation: 'spin .8s linear infinite' }} /> : null} Carry Forward
+        <button onClick={run} disabled={busy} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '10px 18px', borderRadius: 9, border: 'none', background: busy ? C.borderSoft : `linear-gradient(135deg, ${C.brand}, ${C.brandDeep})`, color: busy ? C.muted2 : '#fff', fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: C.font }}>
+          {busy ? <Ico ti="ti-loader-2" size={14} style={{ animation: 'spin .8s linear infinite' }} /> : null} Carry Forward
         </button>
       </div>
 
-      <div style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 14, overflow: 'hidden' }}>
+      <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, overflow: 'hidden' }}>
         {history.length === 0 ? (
-          <div style={{ padding: '30px', textAlign: 'center', color: MUTED2, fontSize: 13, fontFamily: FONT }}>No carry-forward records yet.</div>
+          <div style={{ padding: '30px', textAlign: 'center', color: C.muted2, fontSize: 13, fontFamily: C.font }}>No carry-forward records yet.</div>
         ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: FONT }}>
-            <thead><tr style={{ background: LIGHT }}>
-              {['STUDENT', 'FROM', 'TO', 'AMOUNT', 'DATE'].map((h) => <th key={h} style={{ textAlign: 'left', padding: '10px 14px', fontSize: 10.5, fontWeight: 800, color: MUTED2 }}>{h}</th>)}
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: C.font }}>
+            <thead><tr style={{ background: C.bg }}>
+              {['STUDENT', 'FROM', 'TO', 'AMOUNT', 'DATE'].map((h) => <th key={h} style={{ textAlign: 'left', padding: '10px 14px', fontSize: 10.5, fontWeight: 800, color: C.muted2 }}>{h}</th>)}
             </tr></thead>
             <tbody>
               {history.map((r) => (
-                <tr key={r.id} style={{ borderTop: `1px solid ${BORDER}` }}>
-                  <td style={{ padding: '11px 14px', fontSize: 12.5, fontWeight: 700, color: INK }}>{r.student_name}</td>
-                  <td style={{ padding: '11px 14px', fontSize: 12.5, color: MUTED }}>{r.from_session_name || '—'}</td>
-                  <td style={{ padding: '11px 14px', fontSize: 12.5, color: MUTED }}>{r.to_session_name || '—'}</td>
+                <tr key={r.id} style={{ borderTop: `1px solid ${C.border}` }}>
+                  <td style={{ padding: '11px 14px', fontSize: 12.5, fontWeight: 700, color: C.ink }}>{r.student_name}</td>
+                  <td style={{ padding: '11px 14px', fontSize: 12.5, color: C.muted }}>{r.from_session_name || '—'}</td>
+                  <td style={{ padding: '11px 14px', fontSize: 12.5, color: C.muted }}>{r.to_session_name || '—'}</td>
                   <td style={{ padding: '11px 14px', fontSize: 12.5, fontWeight: 800, color: RED }}>{naira(r.amount)}</td>
-                  <td style={{ padding: '11px 14px', fontSize: 12, color: MUTED2 }}>{new Date(r.created_at).toLocaleDateString()}</td>
+                  <td style={{ padding: '11px 14px', fontSize: 12, color: C.muted2 }}>{new Date(r.created_at).toLocaleDateString()}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         )}
       </div>
-      {toast && <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: INK, color: WHITE, padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999 }}>{toast}</div>}
+      {toast && <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: C.hero, color: '#fff', padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999 }}>{toast}</div>}
     </PageLayout>
   );
 }

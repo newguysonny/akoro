@@ -4,12 +4,13 @@
  */
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import {Plus, Pencil, Trash2, RotateCcw, Save, Loader2, FileText, X, ChevronUp, ChevronDown, Link2, Menu as MenuIcon, Image as ImageIcon, UploadCloud, Sparkles, Type, LayoutGrid, Minus, Code, GripVertical, PencilLine, Image } from 'lucide-react';
 import { PageLayout } from '../../components/Layout.jsx';
 import BackButton from '../../components/BackButton.jsx';
 import ResourcePage, { inputStyle } from '../../components/mgmt/ResourcePage.jsx';
 import { API, apiGet, apiPost, apiPut, apiDelete } from '../../services/api.js';
-import { INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, AMBER, BLUE, PURPLE, RED, FONT } from '../../constants.js';
+import { GREEN, BLUE, PURPLE, RED } from '../../constants.js';
+import { C, tint } from '../../theme/colors.js';
+import { Ico } from '../../theme/Ico.jsx';
 import { BASE, slugify, pill, th, td, iconBtn, Tabs, addBtn, backBtn, toastEl, miniBtn } from './shared.jsx';
 import { newBlock, uid, renderBlocks, BlockEditor } from './blockEditor.jsx';
 import { isFullDoc, prepareEditableDoc } from './visualEditor.jsx';
@@ -17,7 +18,7 @@ import { MediaPicker } from './MediaPicker.jsx';
 
 /* ── Page editor (dedicated route, Back button) ──────────────────────────── */
 const PAGE_STATUS = [{ value: 'draft', label: 'Draft' }, { value: 'published', label: 'Published' }];
-const labelStyle = { display: 'block', fontSize: 12.5, fontWeight: 700, color: INK, margin: '0 0 6px', fontFamily: FONT };
+const labelStyle = { display: 'block', fontSize: 12.5, fontWeight: 700, color: C.ink, margin: '0 0 6px', fontFamily: C.font };
 
 export function SitePageEditorPage() {
   const navigate = useNavigate();
@@ -176,17 +177,17 @@ export function SitePageEditorPage() {
     <PageLayout title={isNew ? 'Add New Page' : 'Edit Page'} subtitle="Website Builder · Pages">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18, gap: 10, flexWrap: 'wrap' }}>
         <BackButton onClick={() => navigate('/website-builder/pages')} label="Back to Pages" />
-        <button onClick={save} disabled={saving || loading} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '10px 20px', borderRadius: 9, border: 'none', background: saving ? '#E5E7EB' : `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: saving ? '#9CA3AF' : WHITE, fontSize: 13, fontWeight: 800, cursor: saving ? 'default' : 'pointer', fontFamily: FONT }}>
-          {saving ? <Loader2 size={14} style={{ animation: 'spin .8s linear infinite' }} /> : <Save size={14} />} {saving ? 'Saving…' : 'Save Page'}
+        <button onClick={save} disabled={saving || loading} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '10px 20px', borderRadius: 9, border: 'none', background: saving ? C.borderSoft : `linear-gradient(135deg, ${C.brand}, ${C.brandDeep})`, color: saving ? C.muted2 : '#fff', fontSize: 13, fontWeight: 800, cursor: saving ? 'default' : 'pointer', fontFamily: C.font }}>
+          {saving ? <Ico ti="ti-loader-2" size={14} style={{ animation: 'spin .8s linear infinite' }} /> : <Ico ti="ti-device-floppy" size={14} />} {saving ? 'Saving…' : 'Save Page'}
         </button>
       </div>
 
       {loading ? (
-        <div style={{ padding: '60px 0', textAlign: 'center', color: MUTED2, fontFamily: FONT }}><Loader2 size={20} style={{ animation: 'spin .8s linear infinite' }} /></div>
+        <div style={{ padding: '60px 0', textAlign: 'center', color: C.muted2, fontFamily: C.font }}><Ico ti="ti-loader-2" size={20} style={{ animation: 'spin .8s linear infinite' }} /></div>
       ) : (
         <div style={{ display: 'flex', gap: 18, alignItems: 'stretch', flexWrap: 'wrap' }}>
           {/* Left: editing controls */}
-          <div style={{ flex: mode === 'visual' ? '0 1 300px' : '1 1 380px', minWidth: 280, maxWidth: mode === 'visual' ? 320 : 460, background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 14, padding: '20px 22px', maxHeight: 'calc(100vh - 190px)', overflowY: 'auto' }}>
+          <div style={{ flex: mode === 'visual' ? '0 1 300px' : '1 1 380px', minWidth: 280, maxWidth: mode === 'visual' ? 320 : 460, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: '20px 22px', maxHeight: 'calc(100vh - 190px)', overflowY: 'auto' }}>
             <div style={{ marginBottom: 16 }}>
               <label style={labelStyle}>Page Title <span style={{ color: RED }}>*</span></label>
               <input value={form.title} onChange={(e) => { const v = e.target.value; setForm((f) => ({ ...f, title: v, slug: slugEdited ? f.slug : slugify(v) })); }} placeholder="e.g. About Us" style={{ ...inputStyle, fontSize: 15 }} />
@@ -205,27 +206,27 @@ export function SitePageEditorPage() {
               <div style={{ marginBottom: 16 }}>
                 <label style={labelStyle}>Sections on this page</label>
                 {outline.length === 0 ? (
-                  <p style={{ fontSize: 12, color: MUTED2, fontFamily: FONT, margin: '4px 0 10px' }}>No headings found yet.</p>
+                  <p style={{ fontSize: 12, color: C.muted2, fontFamily: C.font, margin: '4px 0 10px' }}>No headings found yet.</p>
                 ) : (
-                  <div style={{ border: `1px solid ${BORDER}`, borderRadius: 10, overflow: 'hidden', marginBottom: 10 }}>
+                  <div style={{ border: `1px solid ${C.border}`, borderRadius: 10, overflow: 'hidden', marginBottom: 10 }}>
                     {outline.map((h) => (
-                      <button key={h.i} onClick={() => scrollToHeading(h.i)} title="Click to jump to this section" style={{ display: 'block', width: '100%', textAlign: 'left', padding: `7px 12px 7px ${12 + (h.tag === 'h1' ? 0 : h.tag === 'h2' ? 12 : 24)}px`, border: 'none', borderTop: h.i ? `1px solid ${BORDER}` : 'none', background: WHITE, color: h.tag === 'h1' ? INK : MUTED, fontSize: 12, fontWeight: h.tag === 'h1' ? 800 : 600, cursor: 'pointer', fontFamily: FONT, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      <button key={h.i} onClick={() => scrollToHeading(h.i)} title="Click to jump to this section" style={{ display: 'block', width: '100%', textAlign: 'left', padding: `7px 12px 7px ${12 + (h.tag === 'h1' ? 0 : h.tag === 'h2' ? 12 : 24)}px`, border: 'none', borderTop: h.i ? `1px solid ${C.border}` : 'none', background: C.surface, color: h.tag === 'h1' ? C.ink : C.muted, fontSize: 12, fontWeight: h.tag === 'h1' ? 800 : 600, cursor: 'pointer', fontFamily: C.font, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         {h.text}
                       </button>
                     ))}
                   </div>
                 )}
-                <p style={{ fontSize: 11.5, color: MUTED2, fontFamily: FONT, lineHeight: 1.55, margin: '0 0 12px' }}>
-                  <PencilLine size={13} style={{ verticalAlign: '-2px', marginRight: 4 }} />Click any text on the page and type to change it.<br />
-                  <Image size={13} style={{ verticalAlign: '-2px', marginRight: 4 }} />Double-click an image to replace it from the library.
+                <p style={{ fontSize: 11.5, color: C.muted2, fontFamily: C.font, lineHeight: 1.55, margin: '0 0 12px' }}>
+                  <Ico ti="ti-pencil" size={13} style={{ verticalAlign: '-2px', marginRight: 4 }} />Click any text on the page and type to change it.<br />
+                  <Ico ti="ti-photo" size={13} style={{ verticalAlign: '-2px', marginRight: 4 }} />Double-click an image to replace it from the library.
                 </p>
-                <button onClick={() => setShowCode((v) => !v)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 8, border: `1.5px solid ${BORDER}`, background: showCode ? LIGHT : WHITE, color: MUTED, fontSize: 11.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>
-                  <Code size={12} /> {showCode ? 'Back to visual editing' : 'Edit HTML (advanced)'}
+                <button onClick={() => setShowCode((v) => !v)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 8, border: `1.5px solid ${C.border}`, background: showCode ? C.bg : C.surface, color: C.muted, fontSize: 11.5, fontWeight: 700, cursor: 'pointer', fontFamily: C.font }}>
+                  <Ico ti="ti-code" size={12} /> {showCode ? 'Back to visual editing' : 'Edit HTML (advanced)'}
                 </button>
               </div>
             )}
 
-            <div style={{ display: 'flex', gap: 12, borderTop: `1px solid ${BORDER}`, paddingTop: 16 }}>
+            <div style={{ display: 'flex', gap: 12, borderTop: `1px solid ${C.border}`, paddingTop: 16 }}>
               <div style={{ flex: 1 }}>
                 <label style={labelStyle}>Status</label>
                 <select value={form.status} onChange={set('status')} style={{ ...inputStyle, cursor: 'pointer' }}>
@@ -240,20 +241,20 @@ export function SitePageEditorPage() {
           </div>
 
           {/* Right: live preview (blocks) or visual editor (WordPress-style) */}
-          <div style={{ flex: '2 1 480px', minWidth: 320, display: 'flex', flexDirection: 'column', border: `1px solid ${BORDER}`, borderRadius: 14, overflow: 'hidden', background: WHITE, minHeight: 480 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 14px', borderBottom: `1px solid ${BORDER}`, background: LIGHT }}>
-              <span style={{ display: 'inline-flex', gap: 5 }}>{[RED, AMBER, GREEN].map((c) => <span key={c} style={{ width: 8, height: 8, borderRadius: '50%', background: c }} />)}</span>
-              <span style={{ fontSize: 12, fontWeight: 700, color: MUTED2, fontFamily: FONT }}>
+          <div style={{ flex: '2 1 480px', minWidth: 320, display: 'flex', flexDirection: 'column', border: `1px solid ${C.border}`, borderRadius: 14, overflow: 'hidden', background: C.surface, minHeight: 480 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 14px', borderBottom: `1px solid ${C.border}`, background: C.bg }}>
+              <span style={{ display: 'inline-flex', gap: 5 }}>{[RED, C.brand, GREEN].map((c) => <span key={c} style={{ width: 8, height: 8, borderRadius: '50%', background: c }} />)}</span>
+              <span style={{ fontSize: 12, fontWeight: 700, color: C.muted2, fontFamily: C.font }}>
                 {mode === 'visual' ? (showCode ? 'HTML source' : 'Visual Editor — click text to edit') : 'Live Preview'}{form.slug ? ` · /${form.slug}` : ''}
               </span>
               {mode === 'visual' && !showCode && (
                 <span style={{ display: 'inline-flex', gap: 4, marginLeft: 'auto' }}>
-                  <button onClick={() => execCmd('bold')} title="Bold selection" style={{ ...miniBtn, fontWeight: 900, fontFamily: FONT, fontSize: 12 }}>B</button>
-                  <button onClick={() => execCmd('italic')} title="Italic selection" style={{ ...miniBtn, fontStyle: 'italic', fontFamily: FONT, fontSize: 12 }}>I</button>
-                  <button onClick={() => execCmd('underline')} title="Underline selection" style={{ ...miniBtn, textDecoration: 'underline', fontFamily: FONT, fontSize: 12 }}>U</button>
+                  <button onClick={() => execCmd('bold')} title="Bold selection" style={{ ...miniBtn, fontWeight: 900, fontFamily: C.font, fontSize: 12 }}>B</button>
+                  <button onClick={() => execCmd('italic')} title="Italic selection" style={{ ...miniBtn, fontStyle: 'italic', fontFamily: C.font, fontSize: 12 }}>I</button>
+                  <button onClick={() => execCmd('underline')} title="Underline selection" style={{ ...miniBtn, textDecoration: 'underline', fontFamily: C.font, fontSize: 12 }}>U</button>
                 </span>
               )}
-              {mode === 'blocks' && previewing && <Loader2 size={12} color={MUTED2} style={{ animation: 'spin .8s linear infinite', marginLeft: 'auto' }} />}
+              {mode === 'blocks' && previewing && <Ico ti="ti-loader-2" size={12} color={C.muted2} style={{ animation: 'spin .8s linear infinite', marginLeft: 'auto' }} />}
             </div>
             {mode === 'visual' ? (
               showCode ? (
@@ -266,20 +267,20 @@ export function SitePageEditorPage() {
                     else if (!isRegionEdit) setEditorDoc(prepareEditableDoc(`<!doctype html><html><head></head><body>${htmlRef.current}</body></html>`, null));
                   }}
                   spellCheck={false}
-                  style={{ flex: 1, width: '100%', border: 'none', outline: 'none', resize: 'none', padding: 16, fontFamily: 'ui-monospace, Menlo, monospace', fontSize: 12, lineHeight: 1.6, color: INK, background: WHITE, minHeight: 440 }}
+                  style={{ flex: 1, width: '100%', border: 'none', outline: 'none', resize: 'none', padding: 16, fontFamily: 'ui-monospace, Menlo, monospace', fontSize: 12, lineHeight: 1.6, color: C.ink, background: C.surface, minHeight: 440 }}
                 />
               ) : (
-                <iframe ref={editorFrameRef} title="Visual editor" srcDoc={editorDoc} style={{ flex: 1, width: '100%', border: 'none', minHeight: 440, background: WHITE }} />
+                <iframe ref={editorFrameRef} title="Visual editor" srcDoc={editorDoc} style={{ flex: 1, width: '100%', border: 'none', minHeight: 440, background: C.surface }} />
               )
             ) : (
-              <iframe title="Page preview" srcDoc={previewHtml} sandbox="" style={{ flex: 1, width: '100%', border: 'none', minHeight: 440, background: WHITE }} />
+              <iframe title="Page preview" srcDoc={previewHtml} sandbox="" style={{ flex: 1, width: '100%', border: 'none', minHeight: 440, background: C.surface }} />
             )}
           </div>
         </div>
       )}
 
       <MediaPicker open={!!pickerFor || !!visualImgId} onClose={() => { setPickerFor(null); setVisualImgId(null); }} onPick={onPickedImage} />
-      {toast && <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: INK, color: WHITE, padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999 }}>{toast}</div>}
+      {toast && <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: C.ink, color: '#fff', padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999 }}>{toast}</div>}
     </PageLayout>
   );
 }

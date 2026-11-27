@@ -4,19 +4,14 @@
  */
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import {
-  Users, UserCheck, UserX, Home, Tags, ShieldAlert, Loader2, Save, ClipboardCheck,
-  Eye, Pencil, Trash2, UserPlus, Search, Phone, Mail, MapPin, Droplet,
-  Cake, CreditCard, ShieldCheck, CircleDot, X, Copy, Printer, Columns, Image,
-  FileUp, Upload, Sheet, Download, CheckSquare, FileText,
-  FolderOpen, Key, HeartPulse, Bus, Bed, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, RefreshCw,
-  ClipboardList, ThumbsUp, ThumbsDown, Plus,
-} from 'lucide-react';
+import { Users, ShieldAlert, ClipboardCheck, Phone, Mail, Droplet, Cake, CreditCard, ShieldCheck, CircleDot, FolderOpen, Key, HeartPulse, Bus, ClipboardList } from 'lucide-react';
+import { Ico } from '../../../theme/Ico.jsx';
 import { PageLayout } from '../../../components/Layout.jsx';
 import BackButton from '../../../components/BackButton.jsx';
 import ResourcePage, { inputStyle } from '../../../components/mgmt/ResourcePage.jsx';
 import { API, apiGet, apiPost, apiPut, apiDelete } from '../../../services/api.js';
-import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, BLUE, PURPLE, FONT } from '../../../constants.js';
+import { GREEN, RED, BLUE, PURPLE } from '../../../constants.js';
+import { C, tint } from '../../../theme/colors.js';
 import { BASE, fullName, studentOpts, STATUS_PILL, STUDENT_FIELDS, STUDENT_COLUMNS, STUDENT_SEARCH, CLASS_FILTER, naira, STATUS_OPTS, InfoRow, GridInfo, InfoGrid, SectionCard, Ring, statPill, FEE_STATUS_COLOR, ModalShell } from './shared.jsx';
 import {
   FeesTab, DocumentsTab, CredentialsTab, HealthTab,
@@ -25,15 +20,15 @@ import {
 
 /* ── Profile tabs config ─────────────────────────────────────────────────── */
 const PROFILE_TABS = [
-  { key: 'profile', label: 'Profile', icon: Users },
-  { key: 'fees', label: 'Fees', icon: CreditCard },
-  { key: 'documents', label: 'Documents', icon: FolderOpen },
-  { key: 'credentials', label: 'Credentials', icon: Key },
-  { key: 'health', label: 'Health', icon: HeartPulse },
-  { key: 'exams', label: 'Exams', icon: ClipboardList },
-  { key: 'attendance', label: 'Attendance', icon: ClipboardCheck },
-  { key: 'behavior', label: 'Behavior', icon: ShieldAlert },
-  { key: 'transport', label: 'Transport', icon: Bus },
+  { key: 'profile', label: 'Profile', icon: Users, ti: 'ti-users' },
+  { key: 'fees', label: 'Fees', icon: CreditCard, ti: 'ti-credit-card' },
+  { key: 'documents', label: 'Documents', icon: FolderOpen, ti: 'ti-folder-open' },
+  { key: 'credentials', label: 'Credentials', icon: Key, ti: 'ti-key' },
+  { key: 'health', label: 'Health', icon: HeartPulse, ti: 'ti-heartbeat' },
+  { key: 'exams', label: 'Exams', icon: ClipboardList, ti: 'ti-clipboard-list' },
+  { key: 'attendance', label: 'Attendance', icon: ClipboardCheck, ti: 'ti-clipboard-check' },
+  { key: 'behavior', label: 'Behavior', icon: ShieldAlert, ti: 'ti-shield-exclamation' },
+  { key: 'transport', label: 'Transport', icon: Bus, ti: 'ti-bus' },
 ];
 
 /* ── Student Profile — dedicated page (view + inline edit) ──────────────── */
@@ -85,13 +80,13 @@ export function StudentProfilePage() {
     finally { setSaving(false); }
   };
 
-  if (loading) return <PageLayout title="Student Profile" subtitle=""><div style={{ padding: '60px 0', textAlign: 'center', color: MUTED2 }}><Loader2 size={22} style={{ animation: 'spin .8s linear infinite' }} /></div></PageLayout>;
-  if (!data) return <PageLayout title="Student Profile" subtitle=""><div style={{ padding: '40px', textAlign: 'center', color: MUTED2, fontFamily: FONT }}>Student not found.</div></PageLayout>;
+  if (loading) return <PageLayout title="Student Profile" subtitle=""><div style={{ padding: '60px 0', textAlign: 'center', color: C.muted2 }}><Ico ti="ti-loader-2" size={22} style={{ animation: 'spin .8s linear infinite' }} /></div></PageLayout>;
+  if (!data) return <PageLayout title="Student Profile" subtitle=""><div style={{ padding: '40px', textAlign: 'center', color: C.muted2, fontFamily: C.font }}>Student not found.</div></PageLayout>;
 
   const statCard = (label, value, color) => (
-    <div style={{ flex: '1 1 140px', background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 12, padding: '14px 16px' }}>
-      <div style={{ fontSize: 20, fontWeight: 800, color, fontFamily: FONT }}>{value}</div>
-      <div style={{ fontSize: 11, color: MUTED2, fontFamily: FONT, marginTop: 2 }}>{label}</div>
+    <div style={{ flex: '1 1 140px', background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: '14px 16px' }}>
+      <div style={{ fontSize: 20, fontWeight: 800, color, fontFamily: C.font }}>{value}</div>
+      <div style={{ fontSize: 11, color: C.muted2, fontFamily: C.font, marginTop: 2 }}>{label}</div>
     </div>
   );
 
@@ -101,20 +96,20 @@ export function StudentProfilePage() {
         <BackButton onClick={() => navigate('/mgmt/students')} label="Back to Student List" />
         {tab === 'profile' && (editing ? (
           <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={() => { setEditing(false); setForm(data); }} style={{ padding: '9px 16px', borderRadius: 9, border: `1.5px solid ${BORDER}`, background: WHITE, color: MUTED, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>Cancel</button>
-            <button onClick={save} disabled={saving} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 18px', borderRadius: 9, border: 'none', background: saving ? '#E5E7EB' : `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: saving ? '#9CA3AF' : WHITE, fontSize: 12.5, fontWeight: 800, cursor: saving ? 'default' : 'pointer', fontFamily: FONT }}>
-              {saving ? <Loader2 size={14} style={{ animation: 'spin .8s linear infinite' }} /> : <Save size={14} />} Save Changes
+            <button onClick={() => { setEditing(false); setForm(data); }} style={{ padding: '9px 16px', borderRadius: 9, border: `1.5px solid ${C.border}`, background: C.surface, color: C.muted, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: C.font }}>Cancel</button>
+            <button onClick={save} disabled={saving} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 18px', borderRadius: 9, border: 'none', background: saving ? C.borderSoft : `linear-gradient(135deg, ${C.brand}, ${C.brandDeep})`, color: saving ? C.muted2 : '#fff', fontSize: 12.5, fontWeight: 800, cursor: saving ? 'default' : 'pointer', fontFamily: C.font }}>
+              {saving ? <Ico ti="ti-loader-2" size={14} style={{ animation: 'spin .8s linear infinite' }} /> : <Ico ti="ti-device-floppy" size={14} />} Save Changes
             </button>
           </div>
         ) : (
-          <button onClick={() => setEditing(true)} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 16px', borderRadius: 9, border: 'none', background: `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: WHITE, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
-            <Pencil size={14} /> Edit Profile
+          <button onClick={() => setEditing(true)} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 16px', borderRadius: 9, border: 'none', background: `linear-gradient(135deg, ${C.brand}, ${C.brandDeep})`, color: '#fff', fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: C.font }}>
+            <Ico ti="ti-pencil" size={14} /> Edit Profile
           </button>
         ))}
       </div>
 
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 18 }}>
-        {statCard('Total Fees', naira(data.fees?.assigned), INK)}
+        {statCard('Total Fees', naira(data.fees?.assigned), C.ink)}
         {statCard('Amount Paid', naira(data.fees?.paid), GREEN)}
         {statCard('Balance Due', naira(data.fees?.due), data.fees?.due > 0 ? RED : GREEN)}
         {statCard('Attendance (Present)', data.attendance?.total ? `${Math.round((data.attendance.present / data.attendance.total) * 100)}%` : '—', BLUE)}
@@ -123,30 +118,30 @@ export function StudentProfilePage() {
       <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start', flexWrap: 'wrap' }}>
         {/* Left: photo + quick facts (constant across tabs) */}
         <div style={{ flex: '1 1 240px', maxWidth: 280 }}>
-          <div style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 14, padding: '22px 18px', textAlign: 'center' }}>
-            <div style={{ width: 88, height: 88, borderRadius: '50%', margin: '0 auto 12px', overflow: 'hidden', background: LIGHT, border: `3px solid ${BORDER}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              {data.photo_url ? <img src={data.photo_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <Users size={34} color={MUTED2} />}
+          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: '22px 18px', textAlign: 'center' }}>
+            <div style={{ width: 88, height: 88, borderRadius: '50%', margin: '0 auto 12px', overflow: 'hidden', background: C.bg, border: `3px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              {data.photo_url ? <img src={data.photo_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <Ico ti="ti-users" size={34} color={C.muted2} />}
             </div>
-            <div style={{ fontSize: 16, fontWeight: 800, color: INK, fontFamily: FONT }}>{fullName(data)}</div>
-            <div style={{ display: 'inline-block', marginTop: 6, padding: '3px 12px', borderRadius: 999, background: `${AMBER}15`, color: AMBER, fontSize: 11.5, fontWeight: 800, fontFamily: FONT }}>{data.class_name || 'No class'}{data.section_name ? ` — ${data.section_name}` : ''}</div>
+            <div style={{ fontSize: 16, fontWeight: 800, color: C.ink, fontFamily: C.font }}>{fullName(data)}</div>
+            <div style={{ display: 'inline-block', marginTop: 6, padding: '3px 12px', borderRadius: 999, background: tint(8), color: C.brand, fontSize: 11.5, fontWeight: 800, fontFamily: C.font }}>{data.class_name || 'No class'}{data.section_name ? ` — ${data.section_name}` : ''}</div>
             <div style={{ marginTop: 14, textAlign: 'left' }}>
-              <InfoRow icon={CreditCard} label="Admission No" value={data.admission_no} />
-              <InfoRow icon={CircleDot} label="Roll No" value={data.roll_no} />
-              <InfoRow icon={Droplet} label="Blood Group" value={data.blood_group} />
-              <InfoRow icon={ShieldCheck} label="Status" value={STATUS_PILL(data.status, { active: { c: GREEN }, inactive: { c: RED }, alumni: { c: BLUE } })} />
+              <InfoRow icon={CreditCard} ti="ti-credit-card" label="Admission No" value={data.admission_no} />
+              <InfoRow icon={CircleDot} ti="ti-circle-dot" label="Roll No" value={data.roll_no} />
+              <InfoRow icon={Droplet} ti="ti-droplet" label="Blood Group" value={data.blood_group} />
+              <InfoRow icon={ShieldCheck} ti="ti-shield-check" label="Status" value={STATUS_PILL(data.status, { active: { c: GREEN }, inactive: { c: RED }, alumni: { c: BLUE } })} />
             </div>
           </div>
         </div>
 
         {/* Right: tab bar + tab content */}
         <div style={{ flex: '2 1 420px', minWidth: 320 }}>
-          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', borderBottom: `1px solid ${BORDER}`, marginBottom: 16 }}>
+          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', borderBottom: `1px solid ${C.border}`, marginBottom: 16 }}>
             {PROFILE_TABS.map((t) => (
               <button key={t.key} onClick={() => setTab(t.key)} style={{
-                display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 13px', border: 'none', background: 'none', cursor: 'pointer', fontFamily: FONT,
-                fontSize: 12.5, fontWeight: 700, color: tab === t.key ? AMBER : MUTED2, borderBottom: `2px solid ${tab === t.key ? AMBER : 'transparent'}`, marginBottom: -1,
+                display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 13px', border: 'none', background: 'none', cursor: 'pointer', fontFamily: C.font,
+                fontSize: 12.5, fontWeight: 700, color: tab === t.key ? C.brand : C.muted2, borderBottom: `2px solid ${tab === t.key ? C.brand : 'transparent'}`, marginBottom: -1,
               }}>
-                <t.icon size={13} /> {t.label}
+                <Ico lucide={t.icon} ti={t.ti} size={13} /> {t.label}
               </button>
             ))}
           </div>
@@ -162,7 +157,7 @@ export function StudentProfilePage() {
           {tab === 'transport' && <TransportTab studentId={id} showToast={showToast} />}
         </div>
       </div>
-      {toast && <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: INK, color: WHITE, padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999, maxWidth: '80vw' }}>{toast}</div>}
+      {toast && <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: C.ink, color: '#fff', padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999, maxWidth: '80vw' }}>{toast}</div>}
     </PageLayout>
   );
 }
@@ -170,7 +165,7 @@ export function StudentProfilePage() {
 /* ── Profile tab (view + inline edit) ────────────────────────────────────── */
 /* ── Profile tab (view + inline edit) ────────────────────────────────────── */
 function ProfileTab({ data, editing, form, set, classes, sections, categories, houses }) {
-  const lbl = { fontSize: 11.5, fontWeight: 700, color: MUTED, fontFamily: FONT, display: 'block', marginBottom: 5 };
+  const lbl = { fontSize: 11.5, fontWeight: 700, color: C.muted, fontFamily: C.font, display: 'block', marginBottom: 5 };
   const editSel = (key, options, labelKey = 'name') => (
     <select value={form[key] || ''} onChange={set(key)} style={{ ...inputStyle, marginBottom: 8 }}>
       <option value="">— none —</option>
@@ -185,10 +180,10 @@ function ProfileTab({ data, editing, form, set, classes, sections, categories, h
 
   const initial = (name) => (name || '?').trim().charAt(0).toUpperCase();
   const parentCard = (title, color, initialSrc, fields) => (
-    <div style={{ flex: '1 1 240px', minWidth: 220, background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 12, padding: '16px 18px' }}>
+    <div style={{ flex: '1 1 240px', minWidth: 220, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: '16px 18px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-        <div style={{ width: 26, height: 26, borderRadius: '50%', background: `${color}18`, color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, fontFamily: FONT }}>{initial(initialSrc)}</div>
-        <span style={{ fontSize: 12.5, fontWeight: 800, color: INK, fontFamily: FONT }}>{title}</span>
+        <div style={{ width: 26, height: 26, borderRadius: '50%', background: tint(9, color), color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, fontFamily: C.font }}>{initial(initialSrc)}</div>
+        <span style={{ fontSize: 12.5, fontWeight: 800, color: C.ink, fontFamily: C.font }}>{title}</span>
       </div>
       <InfoGrid>{fields.map(([label, value]) => <GridInfo key={label} label={label} value={value} />)}</InfoGrid>
     </div>
@@ -208,7 +203,7 @@ function ProfileTab({ data, editing, form, set, classes, sections, categories, h
       </SectionCard>
       <SectionCard title="Personal Details" color={PURPLE}>
         <InfoGrid>
-          <GridInfo icon={Cake} label="Date of Birth" value={data.dob} />
+          <GridInfo icon={Cake} ti="ti-cake" label="Date of Birth" value={data.dob} />
           <GridInfo label="Place of Birth" value={data.place_of_birth} />
           <GridInfo label="Gender" value={data.gender} />
           <GridInfo label="Nationality" value={data.nationality} />
@@ -216,20 +211,20 @@ function ProfileTab({ data, editing, form, set, classes, sections, categories, h
           <GridInfo label="Caste" value={data.caste} />
           <GridInfo label="Sub-Caste" value={data.sub_caste} />
           <GridInfo label="Mother Tongue" value={data.mother_tongue} />
-          <GridInfo icon={Droplet} label="Blood Group" value={data.blood_group} />
+          <GridInfo icon={Droplet} ti="ti-droplet" label="Blood Group" value={data.blood_group} />
           <GridInfo label="Quotas" value={data.quota} />
-          <GridInfo icon={ShieldAlert} label="Disability" value={data.is_disabled ? (data.disability_note || 'Yes') : 'None'} />
+          <GridInfo icon={ShieldAlert} ti="ti-shield-exclamation" label="Disability" value={data.is_disabled ? (data.disability_note || 'Yes') : 'None'} />
         </InfoGrid>
       </SectionCard>
       <SectionCard title="Contact & Identity" color={GREEN}>
         <InfoGrid>
-          <GridInfo icon={Mail} label="Student Email" value={data.student_email} />
-          <GridInfo icon={Phone} label="Student Phone" value={data.student_phone} />
+          <GridInfo icon={Mail} ti="ti-mail" label="Student Email" value={data.student_email} />
+          <GridInfo icon={Phone} ti="ti-phone" label="Student Phone" value={data.student_phone} />
           <GridInfo label="Aadhaar / NID" value={data.aadhaar_no} />
           <GridInfo label="PEN / SSSM ID" value={data.pen_no} />
         </InfoGrid>
       </SectionCard>
-      <SectionCard title="Parent & Guardian Details" color={AMBER}>
+      <SectionCard title="Parent & Guardian Details" color={C.brand}>
         <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 14 }}>
           {parentCard('Father Details', BLUE, data.father_name, [
             ['Name', data.father_name], ['Phone', data.father_phone], ['Occupation', data.father_occupation],
@@ -265,7 +260,7 @@ function ProfileTab({ data, editing, form, set, classes, sections, categories, h
           <GridInfo label="Permanent" value={data.permanent_address} />
         </InfoGrid>
       </SectionCard>
-      <SectionCard title="Previous School" color={AMBER}>
+      <SectionCard title="Previous School" color={C.brand}>
         <GridInfo label="Details" value={data.previous_school || 'NO DATA'} />
       </SectionCard>
       {extra.length > 0 && (
@@ -309,21 +304,21 @@ function ProfileTab({ data, editing, form, set, classes, sections, categories, h
         <label style={lbl}>Aadhaar / NID</label><input value={form.aadhaar_no || ''} onChange={set('aadhaar_no')} style={{ ...inputStyle, marginBottom: 8 }} />
         <label style={lbl}>PEN / SSSM ID</label><input value={form.pen_no || ''} onChange={set('pen_no')} style={inputStyle} />
       </SectionCard>
-      <SectionCard title="Parent & Guardian Details" color={AMBER}>
-        <div style={{ fontSize: 12, fontWeight: 800, color: INK, marginBottom: 6 }}>Father Details</div>
+      <SectionCard title="Parent & Guardian Details" color={C.brand}>
+        <div style={{ fontSize: 12, fontWeight: 800, color: C.ink, marginBottom: 6 }}>Father Details</div>
         <label style={lbl}>Name</label><input value={form.father_name || ''} onChange={set('father_name')} style={{ ...inputStyle, marginBottom: 8 }} />
         <label style={lbl}>Phone</label><input value={form.father_phone || ''} onChange={set('father_phone')} style={{ ...inputStyle, marginBottom: 8 }} />
         <label style={lbl}>Occupation</label><input value={form.father_occupation || ''} onChange={set('father_occupation')} style={{ ...inputStyle, marginBottom: 8 }} />
         <label style={lbl}>Qualification</label><input value={form.father_qualification || ''} onChange={set('father_qualification')} style={{ ...inputStyle, marginBottom: 8 }} />
         <label style={lbl}>Income</label><input value={form.father_income || ''} onChange={set('father_income')} style={{ ...inputStyle, marginBottom: 8 }} />
         <label style={lbl}>Aadhaar</label><input value={form.father_aadhaar || ''} onChange={set('father_aadhaar')} style={{ ...inputStyle, marginBottom: 8 }} />
-        <div style={{ fontSize: 12, fontWeight: 800, color: INK, margin: '10px 0 6px' }}>Mother Details</div>
+        <div style={{ fontSize: 12, fontWeight: 800, color: C.ink, margin: '10px 0 6px' }}>Mother Details</div>
         <label style={lbl}>Name</label><input value={form.mother_name || ''} onChange={set('mother_name')} style={{ ...inputStyle, marginBottom: 8 }} />
         <label style={lbl}>Phone</label><input value={form.mother_phone || ''} onChange={set('mother_phone')} style={{ ...inputStyle, marginBottom: 8 }} />
         <label style={lbl}>Occupation</label><input value={form.mother_occupation || ''} onChange={set('mother_occupation')} style={{ ...inputStyle, marginBottom: 8 }} />
         <label style={lbl}>Qualification</label><input value={form.mother_qualification || ''} onChange={set('mother_qualification')} style={{ ...inputStyle, marginBottom: 8 }} />
         <label style={lbl}>Aadhaar</label><input value={form.mother_aadhaar || ''} onChange={set('mother_aadhaar')} style={{ ...inputStyle, marginBottom: 8 }} />
-        <div style={{ fontSize: 12, fontWeight: 800, color: INK, margin: '10px 0 6px' }}>Guardian &amp; Emergency</div>
+        <div style={{ fontSize: 12, fontWeight: 800, color: C.ink, margin: '10px 0 6px' }}>Guardian &amp; Emergency</div>
         <label style={lbl}>Guardian Name</label><input value={form.guardian_name || ''} onChange={set('guardian_name')} style={{ ...inputStyle, marginBottom: 8 }} />
         <label style={lbl}>Guardian Phone</label><input value={form.guardian_phone || ''} onChange={set('guardian_phone')} style={{ ...inputStyle, marginBottom: 8 }} />
         <label style={lbl}>Guardian Email</label><input value={form.guardian_email || ''} onChange={set('guardian_email')} style={{ ...inputStyle, marginBottom: 8 }} />
@@ -344,7 +339,7 @@ function ProfileTab({ data, editing, form, set, classes, sections, categories, h
         <label style={lbl}>Current Address</label><textarea value={form.address || ''} onChange={set('address')} style={{ ...inputStyle, minHeight: 60, resize: 'vertical', marginBottom: 8 }} />
         <label style={lbl}>Permanent Address</label><textarea value={form.permanent_address || ''} onChange={set('permanent_address')} style={{ ...inputStyle, minHeight: 60, resize: 'vertical' }} />
       </SectionCard>
-      <SectionCard title="Previous School" color={AMBER}>
+      <SectionCard title="Previous School" color={C.brand}>
         <textarea value={form.previous_school || ''} onChange={set('previous_school')} style={{ ...inputStyle, minHeight: 50, resize: 'vertical' }} />
       </SectionCard>
       <SectionCard title="Additional Information" color={GREEN}>
@@ -352,10 +347,10 @@ function ProfileTab({ data, editing, form, set, classes, sections, categories, h
           <div key={i} style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
             <input value={f.label} onChange={(e) => setExtra(i, { label: e.target.value })} placeholder="Field name" style={{ ...inputStyle, flex: 1 }} />
             <input value={f.value} onChange={(e) => setExtra(i, { value: e.target.value })} placeholder="Value" style={{ ...inputStyle, flex: 1 }} />
-            <button onClick={() => delExtra(i)} style={{ border: 'none', background: `${RED}12`, color: RED, borderRadius: 7, width: 32, cursor: 'pointer' }}><Trash2 size={12} /></button>
+            <button onClick={() => delExtra(i)} style={{ border: 'none', background: `${RED}12`, color: RED, borderRadius: 7, width: 32, cursor: 'pointer' }}><Ico ti="ti-trash" size={12} /></button>
           </div>
         ))}
-        <button onClick={addExtra} style={{ border: `1px dashed ${BORDER}`, background: WHITE, color: MUTED, borderRadius: 8, padding: '6px 12px', fontSize: 11.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>+ Add Field</button>
+        <button onClick={addExtra} style={{ border: `1px dashed ${C.border}`, background: C.surface, color: C.muted, borderRadius: 8, padding: '6px 12px', fontSize: 11.5, fontWeight: 700, cursor: 'pointer', fontFamily: C.font }}>+ Add Field</button>
       </SectionCard>
     </>
   );

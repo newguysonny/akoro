@@ -11,8 +11,9 @@
  * don't want to hand-select it out of a wall of text.
  */
 import { useState } from 'react';
-import { Copy, Check, Hash } from 'lucide-react';
-import { AMBER, INK, MUTED, BORDER, LIGHT, WHITE, GREEN, FONT } from '../constants.js';
+import { GREEN } from '../constants.js';
+import { C, tint } from '../theme/colors.js';
+import { Ico } from '../theme/Ico.jsx';
 
 const esc = (s) => String(s || '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
@@ -63,8 +64,8 @@ function CopyBtn({ text, label = 'Copy' }) {
   return (
     <button
       onClick={async () => { try { await navigator.clipboard.writeText(text); setDone(true); setTimeout(() => setDone(false), 1500); } catch { /* ignore */ } }}
-      style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: 'none', border: 'none', cursor: 'pointer', color: done ? GREEN : MUTED, fontSize: 12, fontWeight: 700, fontFamily: FONT }}>
-      {done ? <Check size={13} /> : <Copy size={13} />}{done ? 'Copied' : label}
+      style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: 'none', border: 'none', cursor: 'pointer', color: done ? GREEN : C.muted, fontSize: 12, fontWeight: 700, fontFamily: C.font }}>
+      {done ? <Ico ti="ti-check" size={13} /> : <Ico ti="ti-copy" size={13} />}{done ? 'Copied' : label}
     </button>
   );
 }
@@ -76,17 +77,17 @@ export default function ContentView({ content, kind, style }) {
     return (
       <div style={{ padding: '14px 16px', ...style }}>
         {options.map((o, i) => (
-          <div key={i} style={{ border: `1px solid ${BORDER}`, borderRadius: 12, padding: '13px 15px', marginBottom: 10, background: WHITE }}>
+          <div key={i} style={{ border: `1px solid ${C.border}`, borderRadius: 12, padding: '13px 15px', marginBottom: 10, background: C.surface }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-              <span style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: .5, textTransform: 'uppercase', color: AMBER }}>Option {i + 1}</span>
+              <span style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: .5, textTransform: 'uppercase', color: C.brand }}>Option {i + 1}</span>
               <CopyBtn text={[o.body, o.tags.join(' ')].filter(Boolean).join('\n\n')} />
             </div>
-            <div style={{ fontSize: 13.5, lineHeight: 1.65, color: INK, whiteSpace: 'pre-wrap', fontFamily: FONT }}>{o.body}</div>
+            <div style={{ fontSize: 13.5, lineHeight: 1.65, color: C.ink, whiteSpace: 'pre-wrap', fontFamily: C.font }}>{o.body}</div>
             {o.tags.length > 0 && (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10, paddingTop: 10, borderTop: `1px solid ${BORDER}` }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10, paddingTop: 10, borderTop: `1px solid ${C.border}` }}>
                 {o.tags.map((t, j) => (
-                  <span key={j} style={{ display: 'inline-flex', alignItems: 'center', gap: 2, padding: '3px 9px', borderRadius: 20, background: `${AMBER}12`, color: AMBER, fontSize: 11.5, fontWeight: 700, fontFamily: FONT }}>
-                    <Hash size={10} />{t.slice(1)}
+                  <span key={j} style={{ display: 'inline-flex', alignItems: 'center', gap: 2, padding: '3px 9px', borderRadius: 20, background: tint(7), color: C.brand, fontSize: 11.5, fontWeight: 700, fontFamily: C.font }}>
+                    <Ico ti="ti-hash" size={10} />{t.slice(1)}
                   </span>
                 ))}
               </div>
@@ -106,17 +107,17 @@ export default function ContentView({ content, kind, style }) {
 
 /* Mounted once by the pages that use ContentView. */
 export const contentViewStyles = `
-  .ak-content-view { font-family: ${FONT}; font-size: 13.5px; line-height: 1.72; color: ${INK}; }
-  .ak-content-view h2 { font-size: 18px; font-weight: 900; margin: 4px 0 10px; color: ${INK}; }
-  .ak-content-view h3 { font-size: 15.5px; font-weight: 800; margin: 20px 0 7px; color: ${INK}; }
-  .ak-content-view h4, .ak-content-view h5, .ak-content-view h6 { font-size: 13.5px; font-weight: 800; margin: 16px 0 5px; color: ${MUTED}; text-transform: uppercase; letter-spacing: .04em; }
+  .ak-content-view { font-family: ${C.font}; font-size: 13.5px; line-height: 1.72; color: ${C.ink}; }
+  .ak-content-view h2 { font-size: 18px; font-weight: 900; margin: 4px 0 10px; color: ${C.ink}; }
+  .ak-content-view h3 { font-size: 15.5px; font-weight: 800; margin: 20px 0 7px; color: ${C.ink}; }
+  .ak-content-view h4, .ak-content-view h5, .ak-content-view h6 { font-size: 13.5px; font-weight: 800; margin: 16px 0 5px; color: ${C.muted}; text-transform: uppercase; letter-spacing: .04em; }
   .ak-content-view p { margin: 0 0 11px; }
   .ak-content-view ul, .ak-content-view ol { margin: 0 0 12px; padding-left: 22px; }
   .ak-content-view li { margin-bottom: 5px; }
   .ak-content-view strong { font-weight: 800; }
-  .ak-content-view hr { border: none; border-top: 1px solid ${BORDER}; margin: 18px 0; }
-  .ak-content-view blockquote { margin: 0 0 12px; padding: 9px 14px; border-left: 3px solid ${AMBER}; background: ${LIGHT}; border-radius: 0 8px 8px 0; color: ${MUTED}; }
-  .ak-content-view .tag { color: ${AMBER}; font-weight: 700; }
+  .ak-content-view hr { border: none; border-top: 1px solid ${C.border}; margin: 18px 0; }
+  .ak-content-view blockquote { margin: 0 0 12px; padding: 9px 14px; border-left: 3px solid ${C.brand}; background: ${C.bg}; border-radius: 0 8px 8px 0; color: ${C.muted}; }
+  .ak-content-view .tag { color: ${C.brand}; font-weight: 700; }
   .ak-content-view > *:first-child { margin-top: 0; }
   .ak-content-view > *:last-child { margin-bottom: 0; }
 `;

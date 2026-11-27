@@ -5,33 +5,32 @@
  */
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  PenLine, Megaphone, Sparkles, Share2, SlidersHorizontal, BookOpen,
-  Facebook, Instagram, Twitter, Music2, Loader2, Copy, Check, CheckCircle2, ChevronRight, Send, X, Clock,
-} from 'lucide-react';
+import { PenLine, Megaphone, Sparkles, Share2, SlidersHorizontal, Facebook, Instagram, Twitter, Music2, Send } from 'lucide-react';
+import { Ico } from '../../theme/Ico.jsx';
 import { Btn, Inp } from '../../components/Primitives.jsx';
 import { apiGet, apiPost } from '../../services/api.js';
 import ContentView, { contentViewStyles } from '../../components/ContentView.jsx';
-import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, BLUE, PURPLE, FONT } from '../../constants.js';
+import { GREEN, BLUE, PURPLE } from '../../constants.js';
+import { C, tint } from '../../theme/colors.js';
 
 const TABS = [
-  { key: 'blog',     label: 'Blog Generator',        icon: PenLine },
-  { key: 'social',   label: 'Social Post Generator', icon: Megaphone },
-  { key: 'activity', label: 'Activities Creator',    icon: Sparkles },
+  { key: 'blog',     label: 'Blog Generator',        icon: PenLine, ti: 'ti-pencil' },
+  { key: 'social',   label: 'Social Post Generator', icon: Megaphone, ti: 'ti-speakerphone' },
+  { key: 'activity', label: 'Activities Creator',    icon: Sparkles, ti: 'ti-sparkles' },
 ];
 const EXTERNAL = [
-  { key: 'channels', label: 'External Channels', icon: Share2 },
+  { key: 'channels', label: 'External Channels', icon: Share2, ti: 'ti-share' },
 ];
-const SETTINGS_TAB = { key: 'settings', label: 'Content Settings', icon: SlidersHorizontal };
+const SETTINGS_TAB = { key: 'settings', label: 'Content Settings', icon: SlidersHorizontal, ti: 'ti-adjustments-horizontal' };
 
 const VALID_TABS = ['blog', 'social', 'activity', 'channels', 'settings'];
 const NO_SAVE_TABS = ['blog', 'social', 'activity', 'channels']; // only Settings uses the Save footer
 
 const CHANNELS = [
-  { key: 'facebook',  label: 'Facebook',    color: '#1877F2', Icon: Facebook },
-  { key: 'instagram', label: 'Instagram',   color: '#E4405F', Icon: Instagram },
-  { key: 'twitter',   label: 'X (Twitter)', color: '#0F1419', Icon: Twitter },
-  { key: 'tiktok',    label: 'TikTok',      color: '#010101', Icon: Music2 },
+  { key: 'facebook',  label: 'Facebook',    color: '#1877F2', Icon: Facebook, ti: 'ti-brand-facebook' },
+  { key: 'instagram', label: 'Instagram',   color: '#E4405F', Icon: Instagram, ti: 'ti-brand-instagram' },
+  { key: 'twitter',   label: 'X (Twitter)', color: '#0F1419', Icon: Twitter, ti: 'ti-brand-twitter' },
+  { key: 'tiktok',    label: 'TikTok',      color: '#010101', Icon: Music2, ti: 'ti-music' },
 ];
 
 const fmtDateTime = (iso) => {
@@ -76,49 +75,49 @@ function PostModal({ creation, onClose, onPosted, onToast }) {
 
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 3200, background: 'rgba(0,0,0,.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-      <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 400, background: WHITE, borderRadius: 16, padding: '20px 22px', fontFamily: FONT }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 400, background: C.surface, borderRadius: 16, padding: '20px 22px', fontFamily: C.font }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-          <span style={{ fontSize: 16, fontWeight: 800, color: INK }}>AI Post</span>
-          <button onClick={onClose} style={{ border: 'none', background: 'none', cursor: 'pointer', color: MUTED2 }}><X size={18} /></button>
+          <span style={{ fontSize: 16, fontWeight: 800, color: C.ink }}>AI Post</span>
+          <button onClick={onClose} style={{ border: 'none', background: 'none', cursor: 'pointer', color: C.muted2 }}><Ico ti="ti-x" size={18} /></button>
         </div>
         {results ? (
           <>
-            <p style={{ fontSize: 12.5, color: MUTED, margin: '0 0 12px' }}>Results by channel:</p>
+            <p style={{ fontSize: 12.5, color: C.muted, margin: '0 0 12px' }}>Results by channel:</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {Object.entries(results).map(([k, r]) => {
-                const c = CHANNELS.find((x) => x.key === k) || { label: k, color: MUTED, Icon: Send };
+                const c = CHANNELS.find((x) => x.key === k) || { label: k, color: C.muted, Icon: Send, ti: 'ti-send' };
                 return (
-                  <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 11px', border: `1px solid ${BORDER}`, borderRadius: 10 }}>
-                    <c.Icon size={16} color={c.color} />
-                    <span style={{ fontSize: 13, fontWeight: 700, color: INK, flex: 1 }}>{c.label}</span>
+                  <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 11px', border: `1px solid ${C.border}`, borderRadius: 10 }}>
+                    <Ico lucide={c.Icon} ti={c.ti} size={16} color={c.color} />
+                    <span style={{ fontSize: 13, fontWeight: 700, color: C.ink, flex: 1 }}>{c.label}</span>
                     {r.ok
-                      ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11.5, fontWeight: 800, color: GREEN }}><Check size={13} />{r.manual ? 'Ready' : 'Posted'}</span>
+                      ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11.5, fontWeight: 800, color: GREEN }}><Ico ti="ti-check" size={13} />{r.manual ? 'Ready' : 'Posted'}</span>
                       : <span style={{ fontSize: 11, fontWeight: 700, color: '#DC2626' }}>{REASON_LABEL[r.reason] || r.reason || 'Failed'}</span>}
                   </div>
                 );
               })}
             </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 18 }}>
-              <button onClick={onClose} style={{ padding: '9px 18px', borderRadius: 9, border: 'none', background: `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: WHITE, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>Done</button>
+              <button onClick={onClose} style={{ padding: '9px 18px', borderRadius: 9, border: 'none', background: `linear-gradient(135deg, ${C.brand}, ${C.brandDeep})`, color: '#fff', fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: C.font }}>Done</button>
             </div>
           </>
         ) : (
           <>
-            <p style={{ fontSize: 12.5, color: MUTED, margin: '0 0 14px' }}>Choose where to publish this content.</p>
+            <p style={{ fontSize: 12.5, color: C.muted, margin: '0 0 14px' }}>Choose where to publish this content.</p>
             {channels === null ? (
-              <div style={{ color: MUTED2, fontSize: 13, padding: '10px 0' }}>Loading channels…</div>
+              <div style={{ color: C.muted2, fontSize: 13, padding: '10px 0' }}>Loading channels…</div>
             ) : channels.length === 0 ? (
-              <div style={{ fontSize: 12.5, color: MUTED, lineHeight: 1.6 }}>No channels connected yet. Connect one from <b>External Channels</b> first.</div>
+              <div style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.6 }}>No channels connected yet. Connect one from <b>External Channels</b> first.</div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {CHANNELS.filter((c) => channels.includes(c.key)).map((c) => {
                   const needsMedia = (c.key === 'instagram' || c.key === 'tiktok');
                   const hasMedia = !!creation?.media_url;
                   return (
-                    <label key={c.key} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 11px', border: `1px solid ${BORDER}`, borderRadius: 10, cursor: 'pointer' }}>
+                    <label key={c.key} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 11px', border: `1px solid ${C.border}`, borderRadius: 10, cursor: 'pointer' }}>
                       <input type="checkbox" checked={!!sel[c.key]} onChange={(e) => setSel((s) => ({ ...s, [c.key]: e.target.checked }))} />
-                      <c.Icon size={16} color={c.color} />
-                      <span style={{ fontSize: 13, fontWeight: 700, color: INK, flex: 1 }}>{c.label}</span>
+                      <Ico lucide={c.Icon} ti={c.ti} size={16} color={c.color} />
+                      <span style={{ fontSize: 13, fontWeight: 700, color: C.ink, flex: 1 }}>{c.label}</span>
                       {needsMedia && !hasMedia && <span style={{ fontSize: 10, fontWeight: 700, color: '#B45309', background: '#FEF3C7', borderRadius: 20, padding: '2px 7px' }}>needs media</span>}
                     </label>
                   );
@@ -126,9 +125,9 @@ function PostModal({ creation, onClose, onPosted, onToast }) {
               </div>
             )}
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 18 }}>
-              <button onClick={onClose} style={{ padding: '9px 16px', borderRadius: 9, border: `1.5px solid ${BORDER}`, background: WHITE, color: INK, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>Cancel</button>
-              <button onClick={post} disabled={busy || !channels?.length} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 18px', borderRadius: 9, border: 'none', background: busy || !channels?.length ? '#E5E7EB' : `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: busy || !channels?.length ? '#9CA3AF' : WHITE, fontSize: 12.5, fontWeight: 800, cursor: busy || !channels?.length ? 'default' : 'pointer', fontFamily: FONT }}>
-                {busy ? <Loader2 size={14} style={{ animation: 'spin .8s linear infinite' }} /> : <Send size={13} />}{busy ? 'Posting…' : 'Post now'}
+              <button onClick={onClose} style={{ padding: '9px 16px', borderRadius: 9, border: `1.5px solid ${C.border}`, background: C.surface, color: C.ink, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: C.font }}>Cancel</button>
+              <button onClick={post} disabled={busy || !channels?.length} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 18px', borderRadius: 9, border: 'none', background: busy || !channels?.length ? C.borderSoft : `linear-gradient(135deg, ${C.brand}, ${C.brandDeep})`, color: busy || !channels?.length ? C.muted2 : '#fff', fontSize: 12.5, fontWeight: 800, cursor: busy || !channels?.length ? 'default' : 'pointer', fontFamily: C.font }}>
+                {busy ? <Ico ti="ti-loader-2" size={14} style={{ animation: 'spin .8s linear infinite' }} /> : <Ico ti="ti-send" size={13} />}{busy ? 'Posting…' : 'Post now'}
               </button>
             </div>
           </>
@@ -149,9 +148,9 @@ function AiPostPill({ creation, onUpdated, onToast, size = 'md' }) {
       <button
         onClick={(e) => { e.stopPropagation(); if (!posted) setOpen(true); }}
         title={posted ? `Posted${(creation.posted_channels || []).length ? ' · ' + creation.posted_channels.join(', ') : ''}` : 'Post with AI'}
-        style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: pad, borderRadius: 999, border: 'none', cursor: posted ? 'default' : 'pointer', fontFamily: FONT, fontSize: fs, fontWeight: 800,
-          background: posted ? `${GREEN}15` : `${AMBER}15`, color: posted ? GREEN : AMBER }}>
-        {posted ? <Check size={size === 'sm' ? 11 : 13} /> : <Sparkles size={size === 'sm' ? 11 : 13} />}{posted ? 'Posted' : 'AI post'}
+        style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: pad, borderRadius: 999, border: 'none', cursor: posted ? 'default' : 'pointer', fontFamily: C.font, fontSize: fs, fontWeight: 800,
+          background: posted ? `${GREEN}15` : tint(8), color: posted ? GREEN : C.brand }}>
+        {posted ? <Ico ti="ti-check" size={size === 'sm' ? 11 : 13} /> : <Ico ti="ti-sparkles" size={size === 'sm' ? 11 : 13} />}{posted ? 'Posted' : 'AI post'}
       </button>
       {open && <PostModal creation={creation} onClose={() => setOpen(false)} onPosted={onUpdated} onToast={onToast} />}
     </>
@@ -186,20 +185,20 @@ function QuickGuide({ tab }) {
   return (
     <div style={{ background: `${BLUE}08`, border: `1px solid ${BLUE}22`, borderRadius: 14, padding: '14px 15px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 8 }}>
-        <BookOpen size={15} color={BLUE} />
-        <span style={{ fontSize: 12.5, fontWeight: 800, color: BLUE, fontFamily: FONT }}>Quick Guide</span>
+        <Ico ti="ti-book" size={15} color={BLUE} />
+        <span style={{ fontSize: 12.5, fontWeight: 800, color: BLUE, fontFamily: C.font }}>Quick Guide</span>
       </div>
       {items.map((it, i) => (
-        <p key={it.t} style={{ fontSize: 11.5, color: MUTED, lineHeight: 1.6, margin: i === 0 ? 0 : '10px 0 0', fontFamily: FONT, ...(i > 0 ? { paddingTop: 10, borderTop: `1px solid ${BLUE}18` } : {}) }}>
-          <b style={{ color: INK }}>{it.t}:</b> {it.d}
+        <p key={it.t} style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.6, margin: i === 0 ? 0 : '10px 0 0', fontFamily: C.font, ...(i > 0 ? { paddingTop: 10, borderTop: `1px solid ${BLUE}18` } : {}) }}>
+          <b style={{ color: C.ink }}>{it.t}:</b> {it.d}
         </p>
       ))}
     </div>
   );
 }
 
-const lbl = { fontSize: 12, fontWeight: 700, color: MUTED, fontFamily: FONT, display: 'block', margin: '0 0 5px' };
-const inputStyle = { width: '100%', padding: '10px 12px', borderRadius: 10, border: `1.5px solid ${BORDER}`, outline: 'none', fontSize: 13, fontFamily: FONT, color: INK, background: WHITE, boxSizing: 'border-box' };
+const lbl = { fontSize: 12, fontWeight: 700, color: C.muted, fontFamily: C.font, display: 'block', margin: '0 0 5px' };
+const inputStyle = { width: '100%', padding: '10px 12px', borderRadius: 10, border: `1.5px solid ${C.border}`, outline: 'none', fontSize: 13, fontFamily: C.font, color: C.ink, background: C.surface, boxSizing: 'border-box' };
 
 /* ── Generator panel (blog / social / activity) ──────────────────────── */
 const GEN_CONFIG = {
@@ -258,9 +257,9 @@ function GeneratorPanel({ kind, onToast, onGenerated }) {
     <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
         <cfg.Icon2 />
-        <h3 style={{ fontSize: 15, fontWeight: 800, color: INK, margin: 0, fontFamily: FONT }}>{cfg.title}</h3>
+        <h3 style={{ fontSize: 15, fontWeight: 800, color: C.ink, margin: 0, fontFamily: C.font }}>{cfg.title}</h3>
       </div>
-      <p style={{ fontSize: 12.5, color: MUTED, margin: '0 0 16px', fontFamily: FONT }}>Generate on-brand content in seconds. Refine the options and hit Generate.</p>
+      <p style={{ fontSize: 12.5, color: C.muted, margin: '0 0 16px', fontFamily: C.font }}>Generate on-brand content in seconds. Refine the options and hit Generate.</p>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         <div>
@@ -301,21 +300,21 @@ function GeneratorPanel({ kind, onToast, onGenerated }) {
           <input value={extra} onChange={(e) => setExtra(e.target.value)} placeholder="Anything else to include or avoid" style={inputStyle} />
         </div>
         <div>
-          <button onClick={generate} disabled={busy} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '11px 22px', borderRadius: 10, border: 'none', background: busy ? '#E5E7EB' : `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: busy ? '#9CA3AF' : WHITE, fontSize: 13.5, fontWeight: 800, cursor: busy ? 'default' : 'pointer', fontFamily: FONT }}>
-            {busy ? <Loader2 size={15} style={{ animation: 'spin .8s linear infinite' }} /> : <Sparkles size={15} />}{busy ? 'Generating…' : 'Generate'}
+          <button onClick={generate} disabled={busy} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '11px 22px', borderRadius: 10, border: 'none', background: busy ? C.borderSoft : `linear-gradient(135deg, ${C.brand}, ${C.brandDeep})`, color: busy ? C.muted2 : '#fff', fontSize: 13.5, fontWeight: 800, cursor: busy ? 'default' : 'pointer', fontFamily: C.font }}>
+            {busy ? <Ico ti="ti-loader-2" size={15} style={{ animation: 'spin .8s linear infinite' }} /> : <Ico ti="ti-sparkles" size={15} />}{busy ? 'Generating…' : 'Generate'}
           </button>
         </div>
       </div>
 
       <style>{contentViewStyles}</style>
       {result && (
-        <div style={{ marginTop: 20, border: `1px solid ${BORDER}`, borderRadius: 12, overflow: 'hidden' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 14px', background: LIGHT, borderBottom: `1px solid ${BORDER}` }}>
-            <span style={{ fontSize: 12, fontWeight: 800, color: INK, fontFamily: FONT }}>Result</span>
+        <div style={{ marginTop: 20, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 14px', background: C.bg, borderBottom: `1px solid ${C.border}` }}>
+            <span style={{ fontSize: 12, fontWeight: 800, color: C.ink, fontFamily: C.font }}>Result</span>
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: 12 }}>
               {lastCreation && <AiPostPill creation={lastCreation} onUpdated={(c) => { setLastCreation(c); onGenerated?.(); }} onToast={onToast} size="sm" />}
-              <button onClick={copy} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: 'none', border: 'none', cursor: 'pointer', color: copied ? GREEN : MUTED, fontSize: 12, fontWeight: 700, fontFamily: FONT }}>
-                {copied ? <Check size={13} /> : <Copy size={13} />}{copied ? 'Copied' : 'Copy'}
+              <button onClick={copy} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: 'none', border: 'none', cursor: 'pointer', color: copied ? GREEN : C.muted, fontSize: 12, fontWeight: 700, fontFamily: C.font }}>
+                {copied ? <Ico ti="ti-check" size={13} /> : <Ico ti="ti-copy" size={13} />}{copied ? 'Copied' : 'Copy'}
               </button>
             </div>
           </div>
@@ -326,16 +325,16 @@ function GeneratorPanel({ kind, onToast, onGenerated }) {
       {/* Success modal */}
       {success && (
         <div onClick={() => setSuccess(false)} style={{ position: 'fixed', inset: 0, zIndex: 3100, background: 'rgba(0,0,0,.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-          <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 380, background: WHITE, borderRadius: 18, padding: '26px 24px', fontFamily: FONT, textAlign: 'center' }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 380, background: C.surface, borderRadius: 18, padding: '26px 24px', fontFamily: C.font, textAlign: 'center' }}>
             <div style={{ width: 52, height: 52, borderRadius: '50%', background: `${GREEN}18`, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px' }}>
-              <CheckCircle2 size={28} color={GREEN} />
+              <Ico ti="ti-circle-check" size={28} color={GREEN} />
             </div>
-            <div style={{ fontSize: 17, fontWeight: 800, color: INK, marginBottom: 6 }}>Your {KIND_NOUN} is ready</div>
-            <p style={{ fontSize: 12.5, color: MUTED, margin: '0 0 20px', lineHeight: 1.55 }}>It’s been added to your {cfg.pastLabel.toLowerCase()}. Post it now or open the full view.</p>
+            <div style={{ fontSize: 17, fontWeight: 800, color: C.ink, marginBottom: 6 }}>Your {KIND_NOUN} is ready</div>
+            <p style={{ fontSize: 12.5, color: C.muted, margin: '0 0 20px', lineHeight: 1.55 }}>It’s been added to your {cfg.pastLabel.toLowerCase()}. Post it now or open the full view.</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
               {lastCreation && <div style={{ display: 'flex', justifyContent: 'center' }}><AiPostPill creation={lastCreation} onUpdated={(c) => { setLastCreation(c); onGenerated?.(); }} onToast={onToast} /></div>}
-              <button onClick={() => { setSuccess(false); if (lastCreation) navigate(`/content/creation/${lastCreation.id}`); }} style={{ padding: '10px', borderRadius: 10, border: 'none', background: `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: WHITE, fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>Open full view</button>
-              <button onClick={() => setSuccess(false)} style={{ padding: '9px', borderRadius: 10, border: `1.5px solid ${BORDER}`, background: WHITE, color: INK, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>Close</button>
+              <button onClick={() => { setSuccess(false); if (lastCreation) navigate(`/content/creation/${lastCreation.id}`); }} style={{ padding: '10px', borderRadius: 10, border: 'none', background: `linear-gradient(135deg, ${C.brand}, ${C.brandDeep})`, color: '#fff', fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: C.font }}>Open full view</button>
+              <button onClick={() => setSuccess(false)} style={{ padding: '9px', borderRadius: 10, border: `1.5px solid ${C.border}`, background: C.surface, color: C.ink, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: C.font }}>Close</button>
             </div>
           </div>
         </div>
@@ -344,17 +343,17 @@ function GeneratorPanel({ kind, onToast, onGenerated }) {
   );
 }
 // tiny per-kind icon injected (keeps GEN_CONFIG data-only)
-GEN_CONFIG.blog.Icon2     = () => <PenLine size={17} color={AMBER} />;
-GEN_CONFIG.social.Icon2   = () => <Megaphone size={17} color={AMBER} />;
-GEN_CONFIG.activity.Icon2 = () => <Sparkles size={17} color={AMBER} />;
+GEN_CONFIG.blog.Icon2     = () => <Ico ti="ti-pencil" size={17} color={C.brand} />;
+GEN_CONFIG.social.Icon2   = () => <Ico ti="ti-speakerphone" size={17} color={C.brand} />;
+GEN_CONFIG.activity.Icon2 = () => <Ico ti="ti-sparkles" size={17} color={C.brand} />;
 
 /* ── Content settings panel (self-persisting via footer Save) ─────────── */
 function ContentSettingsPanel({ value, onChange }) {
   const set = (k, v) => onChange({ ...value, [k]: v });
   return (
     <div>
-      <h3 style={{ fontSize: 15, fontWeight: 800, color: INK, margin: '0 0 4px', fontFamily: FONT }}>Content Settings</h3>
-      <p style={{ fontSize: 12.5, color: MUTED, margin: '0 0 16px', fontFamily: FONT }}>These preferences shape every generated blog post, caption and activity.</p>
+      <h3 style={{ fontSize: 15, fontWeight: 800, color: C.ink, margin: '0 0 4px', fontFamily: C.font }}>Content Settings</h3>
+      <p style={{ fontSize: 12.5, color: C.muted, margin: '0 0 16px', fontFamily: C.font }}>These preferences shape every generated blog post, caption and activity.</p>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
         <div>
           <label style={lbl}>Brand voice</label>
@@ -390,26 +389,26 @@ function ExternalChannelsPanel({ onToast }) {
 
   return (
     <div>
-      <h3 style={{ fontSize: 15, fontWeight: 800, color: INK, margin: '0 0 4px', fontFamily: FONT }}>External Channels</h3>
-      <p style={{ fontSize: 12.5, color: MUTED, margin: '0 0 16px', fontFamily: FONT }}>Connect the social accounts you’ll publish to. Open a channel to link it via OAuth or paste credentials.</p>
+      <h3 style={{ fontSize: 15, fontWeight: 800, color: C.ink, margin: '0 0 4px', fontFamily: C.font }}>External Channels</h3>
+      <p style={{ fontSize: 12.5, color: C.muted, margin: '0 0 16px', fontFamily: C.font }}>Connect the social accounts you’ll publish to. Open a channel to link it via OAuth or paste credentials.</p>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 14 }}>
         {CHANNELS.map((c) => {
           const connected = !!state?.[c.key]?.connected;
           return (
             <button key={c.key} onClick={() => navigate(`/content/channel/${c.key}`)}
-              style={{ textAlign: 'left', cursor: 'pointer', background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 14, padding: '16px', display: 'flex', flexDirection: 'column', gap: 10, fontFamily: FONT, transition: 'border-color .15s, box-shadow .15s' }}
+              style={{ textAlign: 'left', cursor: 'pointer', background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: '16px', display: 'flex', flexDirection: 'column', gap: 10, fontFamily: C.font, transition: 'border-color .15s, box-shadow .15s' }}
               onMouseEnter={(e) => { e.currentTarget.style.borderColor = c.color; e.currentTarget.style.boxShadow = `0 4px 14px ${c.color}18`; }}
-              onMouseLeave={(e) => { e.currentTarget.style.borderColor = BORDER; e.currentTarget.style.boxShadow = 'none'; }}>
+              onMouseLeave={(e) => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.boxShadow = 'none'; }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div style={{ width: 38, height: 38, borderRadius: 10, background: `${c.color}15`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <c.Icon size={19} color={c.color} />
+                <div style={{ width: 38, height: 38, borderRadius: 10, background: tint(8, c.color), display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Ico lucide={c.Icon} ti={c.ti} size={19} color={c.color} />
                 </div>
-                <ChevronRight size={16} color={MUTED2} />
+                <Ico ti="ti-chevron-right" size={16} color={C.muted2} />
               </div>
               <div>
-                <div style={{ fontSize: 13.5, fontWeight: 800, color: INK }}>{c.label}</div>
-                <div style={{ fontSize: 11.5, fontWeight: 700, marginTop: 3, color: connected ? GREEN : MUTED, display: 'flex', alignItems: 'center', gap: 4 }}>
-                  {connected && <CheckCircle2 size={11} />}{state === null ? '…' : connected ? 'Connected' : 'Not connected'}
+                <div style={{ fontSize: 13.5, fontWeight: 800, color: C.ink }}>{c.label}</div>
+                <div style={{ fontSize: 11.5, fontWeight: 700, marginTop: 3, color: connected ? GREEN : C.muted, display: 'flex', alignItems: 'center', gap: 4 }}>
+                  {connected && <Ico ti="ti-circle-check" size={11} />}{state === null ? '…' : connected ? 'Connected' : 'Not connected'}
                 </div>
               </div>
             </button>
@@ -434,29 +433,29 @@ function PastCreations({ kind, refreshKey, onToast }) {
   if (past && past.length === 0) return null; // nothing yet — hide the section
 
   return (
-    <div style={{ marginTop: 22, background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 16, padding: '16px 18px' }}>
+    <div style={{ marginTop: 22, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: '16px 18px' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-        <div style={{ fontSize: 13, fontWeight: 800, color: INK, fontFamily: FONT }}>{PAST_LABEL[kind] || 'Past creations'}</div>
-        <div style={{ fontSize: 11, color: MUTED2, fontFamily: FONT }}>swipe →</div>
+        <div style={{ fontSize: 13, fontWeight: 800, color: C.ink, fontFamily: C.font }}>{PAST_LABEL[kind] || 'Past creations'}</div>
+        <div style={{ fontSize: 11, color: C.muted2, fontFamily: C.font }}>swipe →</div>
       </div>
       {past === null ? (
-        <div style={{ display: 'flex', gap: 12 }}>{[0, 1, 2].map((i) => <div key={i} style={{ flex: '0 0 214px', height: 92, borderRadius: 12, background: LIGHT }} />)}</div>
+        <div style={{ display: 'flex', gap: 12 }}>{[0, 1, 2].map((i) => <div key={i} style={{ flex: '0 0 214px', height: 92, borderRadius: 12, background: C.bg }} />)}</div>
       ) : (
         <div style={{ display: 'flex', gap: 12, overflowX: 'auto', paddingBottom: 4, scrollSnapType: 'x proximity', WebkitOverflowScrolling: 'touch' }}>
           {past.map((c) => (
             <div key={c.id} onClick={() => navigate(`/content/creation/${c.id}`)} title="Open"
-              style={{ flex: '0 0 auto', width: 214, scrollSnapAlign: 'start', textAlign: 'left', cursor: 'pointer', background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 12, padding: '12px 13px', fontFamily: FONT, display: 'flex', flexDirection: 'column', gap: 6 }}
-              onMouseEnter={(e) => { e.currentTarget.style.borderColor = AMBER; }}
-              onMouseLeave={(e) => { e.currentTarget.style.borderColor = BORDER; }}>
+              style={{ flex: '0 0 auto', width: 214, scrollSnapAlign: 'start', textAlign: 'left', cursor: 'pointer', background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: '12px 13px', fontFamily: C.font, display: 'flex', flexDirection: 'column', gap: 6 }}
+              onMouseEnter={(e) => { e.currentTarget.style.borderColor = C.brand; }}
+              onMouseLeave={(e) => { e.currentTarget.style.borderColor = C.border; }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
                 {c.subtype && kind === 'blog' && <span style={{ fontSize: 9.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: .4, color: BLUE, background: `${BLUE}12`, borderRadius: 20, padding: '2px 8px' }}>{BLOG_LABEL[c.subtype] || c.subtype}</span>}
                 {c.subtype && kind === 'social' && <span style={{ fontSize: 9.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: .4, color: PURPLE, background: `${PURPLE}12`, borderRadius: 20, padding: '2px 8px' }}>{c.subtype}</span>}
                 {(!c.subtype || kind === 'activity') && <span />}
                 <AiPostPill creation={c} onUpdated={() => load()} onToast={onToast} size="sm" />
               </div>
-              <div style={{ fontSize: 12.5, fontWeight: 700, color: INK, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.topic || 'Untitled'}</div>
-              <div style={{ fontSize: 11, color: MUTED, lineHeight: 1.45, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{(c.content || '').replace(/[#*_`>]/g, '').slice(0, 120)}</div>
-              <div style={{ fontSize: 10, color: MUTED2, marginTop: 'auto', display: 'inline-flex', alignItems: 'center', gap: 4 }}><Clock size={10} />{fmtDateTime(c.created_at)}</div>
+              <div style={{ fontSize: 12.5, fontWeight: 700, color: C.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.topic || 'Untitled'}</div>
+              <div style={{ fontSize: 11, color: C.muted, lineHeight: 1.45, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{(c.content || '').replace(/[#*_`>]/g, '').slice(0, 120)}</div>
+              <div style={{ fontSize: 10, color: C.muted2, marginTop: 'auto', display: 'inline-flex', alignItems: 'center', gap: 4 }}><Ico ti="ti-clock" size={10} />{fmtDateTime(c.created_at)}</div>
             </div>
           ))}
         </div>

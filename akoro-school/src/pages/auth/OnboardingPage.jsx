@@ -1,13 +1,13 @@
 import AkoroLogo from '../../components/common/AkoroLogo.jsx';
 import { Brain, GraduationCap, BookOpen, Bot, Lightbulb, Bird, Zap, Sparkles, Eye, Rocket, Target, Ban } from 'lucide-react';
+import { C, tint } from '../../theme/colors.js';
+import { Ico } from '../../theme/Ico.jsx';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext.jsx';
 import { API } from '../../services/api.js';
 import { COUNTRIES, NG_STATES } from '../../data/locations.js';
 
-const AMBER = '#E8884A';
-const MUTED2 = '#9490A0';
 const RED   = '#EF4444';
 const EDUCATION_LEVELS = ['Nursery / Pre-school', 'Primary', 'Junior Secondary', 'Senior Secondary'];
 const OWNERSHIP_TYPES  = ['Private', 'Public / Government', 'Faith-based / Mission', 'Community'];
@@ -16,8 +16,8 @@ const GENDER_TYPES     = ['Mixed', 'Boys only', 'Girls only'];
 const BOARDING_TYPES   = ['Day only', 'Boarding only', 'Day & Boarding'];
 const STUDENT_BANDS    = ['1 – 100', '101 – 300', '301 – 600', '601 – 1,000', '1,000+'];
 /* Icons render; the paired emoji is what agent_emoji stores (cross-app compat). */
-const GUIDE_ICONS      = [[Brain, '🧠'], [GraduationCap, '🎓'], [BookOpen, '📚'], [Bot, '🤖'], [Lightbulb, '💡'], [Bird, '🦉'], [Zap, '⚡'], [Sparkles, '🌟'], [Eye, '🔮'], [Rocket, '🚀'], [Target, '🎯'], [Ban, '📘']];
-const GUIDE_EMOJIS     = GUIDE_ICONS.map(([, em]) => em);
+const GUIDE_ICONS      = [[Brain, 'ti-brain', '🧠'], [GraduationCap, 'ti-school', '🎓'], [BookOpen, 'ti-book', '📚'], [Bot, 'ti-robot', '🤖'], [Lightbulb, 'ti-bulb', '💡'], [Bird, null, '🦉'], [Zap, 'ti-bolt', '⚡'], [Sparkles, 'ti-sparkles', '🌟'], [Eye, 'ti-eye', '🔮'], [Rocket, 'ti-rocket', '🚀'], [Target, 'ti-target', '🎯'], [Ban, 'ti-ban', '📘']];
+const GUIDE_EMOJIS     = GUIDE_ICONS.map(([, , em]) => em);
 
 export default function OnboardingPage() {
   const navigate = useNavigate();
@@ -106,36 +106,36 @@ export default function OnboardingPage() {
     }
   };
 
-  const inp = { width: '100%', padding: '11px 14px', borderRadius: 12, border: '1.5px solid #EDE8E1', outline: 'none', fontSize: 14, fontFamily: "'DM Sans', sans-serif", color: '#1A1A2E', boxSizing: 'border-box', background: '#fff' };
-  const lbl = { display: 'block', fontSize: 12, fontWeight: 700, color: '#1A1A2E', marginBottom: 6 };
-  const chip = (active) => ({ padding: '8px 14px', borderRadius: 99, fontSize: 13, fontWeight: 700, cursor: 'pointer', border: `1.5px solid ${active ? AMBER : '#EDE8E1'}`, background: active ? AMBER : '#fff', color: active ? '#fff' : '#6B6B80', fontFamily: "'DM Sans', sans-serif", transition: 'all .15s' });
+  const inp = { width: '100%', padding: '11px 14px', borderRadius: 12, border: `1.5px solid ${C.borderSoft}`, outline: 'none', fontSize: 14, fontFamily: C.font, color: C.ink, boxSizing: 'border-box', background: C.surface };
+  const lbl = { display: 'block', fontSize: 12, fontWeight: 700, color: C.ink, marginBottom: 6 };
+  const chip = (active) => ({ padding: '8px 14px', borderRadius: 99, fontSize: 13, fontWeight: 700, cursor: 'pointer', border: `1.5px solid ${active ? C.brand : C.borderSoft}`, background: active ? C.brand : C.surface, color: active ? '#fff' : C.muted, fontFamily: C.font, transition: 'all .15s' });
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#FAF8F5', padding: '24px 20px', fontFamily: "'DM Sans', sans-serif" }}>
+    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: C.bg, padding: '24px 20px', fontFamily: C.font }}>
       {/* Escape hatch: never get stuck on onboarding */}
-      <button onClick={logout} style={{ position: 'fixed', top: 16, right: 18, zIndex: 50, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 9, border: '1px solid rgba(0,0,0,0.12)', background: 'rgba(255,255,255,0.92)', color: '#6B6B80', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>Log out</button>
+      <button onClick={logout} style={{ position: 'fixed', top: 16, right: 18, zIndex: 50, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 9, border: '1px solid rgba(0,0,0,0.12)', background: 'rgba(255,255,255,0.92)', color: C.muted, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>Log out</button>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
         <AkoroLogo size={40} radius={12} />
         <div>
-          <span style={{ fontSize: 20, fontWeight: 800, color: '#1A1A2E', display: 'block' }}>Akoro</span>
-          <span style={{ fontSize: 11, color: '#9490A0', display: 'block', marginTop: -2 }}>School Portal</span>
+          <span style={{ fontSize: 20, fontWeight: 800, color: C.ink, display: 'block' }}>Akoro</span>
+          <span style={{ fontSize: 11, color: C.muted2, display: 'block', marginTop: -2 }}>School Portal</span>
         </div>
       </div>
 
       <div style={{ width: '100%', maxWidth: 460, marginBottom: 16, display: 'flex', gap: 8 }}>
         {STEPS.map((s, i) => (
           <div key={s} style={{ flex: 1 }}>
-            <div style={{ height: 5, borderRadius: 99, background: i <= step ? AMBER : '#EDE8E1', transition: 'background .2s' }} />
-            <div style={{ fontSize: 11, fontWeight: 700, marginTop: 6, color: i === step ? '#1A1A2E' : '#9490A0' }}>{s}</div>
+            <div style={{ height: 5, borderRadius: 99, background: i <= step ? C.brand : C.borderSoft, transition: 'background .2s' }} />
+            <div style={{ fontSize: 11, fontWeight: 700, marginTop: 6, color: i === step ? C.ink : C.muted2 }}>{s}</div>
           </div>
         ))}
       </div>
 
-      <div style={{ width: '100%', maxWidth: 460, background: '#fff', borderRadius: 24, padding: '28px 26px', boxShadow: '0 4px 32px rgba(0,0,0,.07)', border: '1px solid #EDE8E1' }}>
+      <div style={{ width: '100%', maxWidth: 460, background: C.surface, borderRadius: 24, padding: '28px 26px', boxShadow: '0 4px 32px rgba(0,0,0,.07)', border: `1px solid ${C.borderSoft}` }}>
         {step === 0 && (
           <>
-            <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1A1A2E', margin: '0 0 4px', fontFamily: "'Instrument Serif', serif" }}>Welcome</h1>
-            <p style={{ fontSize: 13, color: '#6B6B80', margin: '0 0 22px' }}>Tell us about your school.</p>
+            <h1 style={{ fontSize: 22, fontWeight: 800, color: C.ink, margin: '0 0 4px', fontFamily: "'Instrument Serif', serif" }}>Welcome</h1>
+            <p style={{ fontSize: 13, color: C.muted, margin: '0 0 22px' }}>Tell us about your school.</p>
             <div style={{ marginBottom: 14 }}>
               <label style={lbl}>School name</label>
               <input value={schoolName} onChange={(e) => setSchoolName(e.target.value)} placeholder="Akoro International School" style={inp} />
@@ -185,10 +185,10 @@ export default function OnboardingPage() {
 
         {step === 1 && (
           <>
-            <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1A1A2E', margin: '0 0 4px', fontFamily: "'Instrument Serif', serif" }}>Academics</h1>
-            <p style={{ fontSize: 13, color: '#6B6B80', margin: '0 0 20px' }}>What does your school offer?</p>
+            <h1 style={{ fontSize: 22, fontWeight: 800, color: C.ink, margin: '0 0 4px', fontFamily: "'Instrument Serif', serif" }}>Academics</h1>
+            <p style={{ fontSize: 13, color: C.muted, margin: '0 0 20px' }}>What does your school offer?</p>
 
-            <label style={lbl}>Education levels <span style={{ fontWeight: 500, color: '#9490A0' }}>(select all that apply)</span></label>
+            <label style={lbl}>Education levels <span style={{ fontWeight: 500, color: C.muted2 }}>(select all that apply)</span></label>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, margin: '2px 0 18px' }}>
               {EDUCATION_LEVELS.map((l) => (
                 <button key={l} type="button" onClick={() => toggleLevel(l)} style={chip(levels.includes(l))}>{l}</button>
@@ -238,22 +238,22 @@ export default function OnboardingPage() {
 
         {step === 2 && (
           <>
-            <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1A1A2E', margin: '0 0 4px', fontFamily: "'Instrument Serif', serif" }}>Your school assistant</h1>
-            <p style={{ fontSize: 13, color: '#6B6B80', margin: '0 0 20px' }}>Give your school's AI assistant a name and face. It helps students learn and answers their questions.</p>
+            <h1 style={{ fontSize: 22, fontWeight: 800, color: C.ink, margin: '0 0 4px', fontFamily: "'Instrument Serif', serif" }}>Your school assistant</h1>
+            <p style={{ fontSize: 13, color: C.muted, margin: '0 0 20px' }}>Give your school's AI assistant a name and face. It helps students learn and answers their questions.</p>
 
             <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 18 }}>
-              <div style={{ width: 72, height: 72, borderRadius: 20, background: '#FAF8F5', border: '1.5px solid #EDE8E1', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 36 }}>{agentEmoji}</div>
+              <div style={{ width: 72, height: 72, borderRadius: 20, background: C.bg, border: `1.5px solid ${C.borderSoft}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 36 }}>{agentEmoji}</div>
             </div>
 
             <div style={{ marginBottom: 16 }}>
-              <label style={lbl}>Assistant name <span style={{ fontWeight: 500, color: '#9490A0' }}>(optional)</span></label>
+              <label style={lbl}>Assistant name <span style={{ fontWeight: 500, color: C.muted2 }}>(optional)</span></label>
               <input value={agentName} onChange={(e) => setAgentName(e.target.value)} placeholder="e.g. Ako, Tutor, MySchool AI" style={inp} />
             </div>
 
             <label style={lbl}>Pick an avatar</label>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 2 }}>
-              {GUIDE_ICONS.map(([Icon, em]) => (
-                <button key={em} type="button" onClick={() => setAgentEmoji(em)} style={{ width: 46, height: 46, borderRadius: 12, fontSize: 22, cursor: 'pointer', background: agentEmoji === em ? '#FFF3EA' : '#fff', border: `1.5px solid ${agentEmoji === em ? AMBER : '#EDE8E1'}` }}><Icon size={22} color={agentEmoji === em ? AMBER : MUTED2} /></button>
+              {GUIDE_ICONS.map(([Icon, ti, em]) => (
+                <button key={em} type="button" onClick={() => setAgentEmoji(em)} style={{ width: 46, height: 46, borderRadius: 12, fontSize: 22, cursor: 'pointer', background: agentEmoji === em ? C.brandSoft : C.surface, border: `1.5px solid ${agentEmoji === em ? C.brand : C.borderSoft}` }}><Ico lucide={Icon} ti={ti || undefined} size={22} color={agentEmoji === em ? C.brand : C.muted2} /></button>
               ))}
             </div>
           </>
@@ -265,12 +265,12 @@ export default function OnboardingPage() {
 
         <div style={{ display: 'flex', gap: 10, marginTop: 24 }}>
           {step > 0 && (
-            <button onClick={back} style={{ padding: '13px 20px', borderRadius: 14, border: '1.5px solid #EDE8E1', background: '#fff', color: '#6B6B80', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: "'DM Sans', sans-serif" }}>Back</button>
+            <button onClick={back} style={{ padding: '13px 20px', borderRadius: 14, border: `1.5px solid ${C.borderSoft}`, background: C.surface, color: C.muted, fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: C.font }}>Back</button>
           )}
           <button
             onClick={step === STEPS.length - 1 ? finish : next}
             disabled={saving}
-            style={{ flex: 1, padding: '13px', borderRadius: 14, border: 'none', background: saving ? '#EDE8E1' : `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: saving ? '#9490A0' : '#fff', fontSize: 14, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', fontFamily: "'DM Sans', sans-serif", boxShadow: saving ? 'none' : `0 4px 14px ${AMBER}44` }}
+            style={{ flex: 1, padding: '13px', borderRadius: 14, border: 'none', background: saving ? C.borderSoft : `linear-gradient(135deg, ${C.brand}, ${C.brandDeep})`, color: saving ? C.muted2 : '#fff', fontSize: 14, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', fontFamily: C.font, boxShadow: saving ? 'none' : `0 4px 14px ${tint(27)}` }}
           >
             {saving ? 'Setting up…' : step === STEPS.length - 1 ? 'Finish setup' : 'Continue'}
           </button>

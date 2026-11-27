@@ -6,15 +6,16 @@ import ResourcePage from '../../components/mgmt/ResourcePage.jsx';
 import StatCards from '../../components/mgmt/StatCards.jsx';
 import { GuidePage, ModuleSettingsForm } from '../../components/mgmt/extras.jsx';
 import { apiGet } from '../../services/api.js';
-import { AMBER, MUTED2, GREEN, RED, BLUE, PURPLE } from '../../constants.js';
+import { GREEN, RED, BLUE, PURPLE } from '../../constants.js';
+import { C, tint } from '../../theme/colors.js';
 
 const BASE = '/api/school/mgmt';
 const TEACHER_OPTS = { url: '/api/school/instructors', labelFn: (r) => r.full_name || r.email };
 const pill = (v, map) => {
-  const c = map[v] || MUTED2;
-  return <span style={{ padding: '3px 10px', borderRadius: 999, background: `${c}15`, color: c, fontSize: 11, fontWeight: 800, textTransform: 'capitalize' }}>{v}</span>;
+  const c = map[v] || C.muted2;
+  return <span style={{ padding: '3px 10px', borderRadius: 999, background: tint(8, c), color: c, fontSize: 11, fontWeight: 800, textTransform: 'capitalize' }}>{v}</span>;
 };
-const LP_STATUS_COLORS = { draft: MUTED2, submitted: AMBER, approved: GREEN, rejected: RED };
+const LP_STATUS_COLORS = { draft: C.muted2, submitted: C.brand, approved: GREEN, rejected: RED };
 const LP_STATUSES = ['draft', 'submitted', 'approved', 'rejected'].map((s) => ({ value: s, label: s[0].toUpperCase() + s.slice(1) }));
 
 const LP_COLUMNS = [
@@ -41,11 +42,11 @@ export function LessonPlannerDashboardPage() {
   const [s, setS] = useState(null);
   useEffect(() => { apiGet(`${BASE}/dashboard/lesson-planner`).then((r) => setS(r.data)).catch(() => setS({})); }, []);
   const cards = s ? [
-    { n: s.plans, label: 'Lesson Plans', icon: NotebookPen, c: BLUE, to: '/mgmt/lesson-plans' },
-    { n: s.submitted, label: 'Awaiting Review', icon: Send, c: AMBER, to: '/mgmt/lesson-plan-review' },
-    { n: s.approved, label: 'Approved', icon: CheckCircle2, c: GREEN, to: '/mgmt/lesson-plan-approvals' },
-    { n: s.rejected, label: 'Rejected', icon: XCircle, c: RED, to: '/mgmt/lesson-plan-review' },
-    { n: s.draft, label: 'Drafts', icon: FileText, c: MUTED2, to: '/mgmt/lesson-plans' },
+    { n: s.plans, label: 'Lesson Plans', icon: NotebookPen, ti: 'ti-notebook', c: BLUE, to: '/mgmt/lesson-plans' },
+    { n: s.submitted, label: 'Awaiting Review', icon: Send, ti: 'ti-send', c: C.brand, to: '/mgmt/lesson-plan-review' },
+    { n: s.approved, label: 'Approved', icon: CheckCircle2, ti: 'ti-circle-check', c: GREEN, to: '/mgmt/lesson-plan-approvals' },
+    { n: s.rejected, label: 'Rejected', icon: XCircle, ti: 'ti-circle-x', c: RED, to: '/mgmt/lesson-plan-review' },
+    { n: s.draft, label: 'Drafts', icon: FileText, ti: 'ti-file-text', c: C.muted2, to: '/mgmt/lesson-plans' },
   ] : [];
   return <PageLayout title="Lesson Planner Dashboard" subtitle="Plan submission & approval pipeline"><StatCards cards={cards} loading={!s} /></PageLayout>;
 }
@@ -83,10 +84,10 @@ export function LessonPlanCoveragePage() {
   const total = s?.plans || 0;
   const pct = (n) => total ? `${Math.round(((n || 0) / total) * 100)}%` : '0%';
   const cards = s ? [
-    { n: total, label: 'Total Plans', icon: NotebookPen, c: BLUE, to: '/mgmt/lesson-plans' },
-    { n: pct(s.approved), label: 'Approved Coverage', icon: CheckCircle2, c: GREEN },
-    { n: pct(s.submitted), label: 'In Review', icon: Send, c: AMBER },
-    { n: pct(s.draft), label: 'Still Draft', icon: FileText, c: MUTED2 },
+    { n: total, label: 'Total Plans', icon: NotebookPen, ti: 'ti-notebook', c: BLUE, to: '/mgmt/lesson-plans' },
+    { n: pct(s.approved), label: 'Approved Coverage', icon: CheckCircle2, ti: 'ti-circle-check', c: GREEN },
+    { n: pct(s.submitted), label: 'In Review', icon: Send, ti: 'ti-send', c: C.brand },
+    { n: pct(s.draft), label: 'Still Draft', icon: FileText, ti: 'ti-file-text', c: C.muted2 },
   ] : [];
   return <PageLayout title="Lesson Plan Coverage" subtitle="How much of the curriculum is planned & approved"><StatCards cards={cards} loading={!s} /></PageLayout>;
 }
@@ -95,10 +96,10 @@ export function LessonPlanReportsPage() {
   const [s, setS] = useState(null);
   useEffect(() => { apiGet(`${BASE}/dashboard/lesson-planner`).then((r) => setS(r.data)).catch(() => setS({})); }, []);
   const cards = s ? [
-    { n: s.approved, label: 'Approved', icon: CheckCircle2, c: GREEN },
-    { n: s.rejected, label: 'Rejected', icon: XCircle, c: RED },
-    { n: s.submitted, label: 'Pending Review', icon: Send, c: AMBER, to: '/mgmt/lesson-plan-review' },
-    { n: s.draft, label: 'Drafts', icon: FileText, c: MUTED2 },
+    { n: s.approved, label: 'Approved', icon: CheckCircle2, ti: 'ti-circle-check', c: GREEN },
+    { n: s.rejected, label: 'Rejected', icon: XCircle, ti: 'ti-circle-x', c: RED },
+    { n: s.submitted, label: 'Pending Review', icon: Send, ti: 'ti-send', c: C.brand, to: '/mgmt/lesson-plan-review' },
+    { n: s.draft, label: 'Drafts', icon: FileText, ti: 'ti-file-text', c: C.muted2 },
   ] : [];
   return <PageLayout title="Lesson Plan Reports" subtitle="Status breakdown"><StatCards cards={cards} loading={!s} /></PageLayout>;
 }
@@ -119,11 +120,11 @@ export function OSMDashboardPage() {
   const [s, setS] = useState(null);
   useEffect(() => { apiGet(`${BASE}/dashboard/osm`).then((r) => setS(r.data)).catch(() => setS({})); }, []);
   const cards = s ? [
-    { n: s.sessions, label: 'Observation Sessions', icon: Eye, c: BLUE, to: '/mgmt/osm-sessions' },
-    { n: s.completed, label: 'Completed', icon: CheckCircle2, c: GREEN, to: '/mgmt/osm-sessions' },
-    { n: s.evaluations, label: 'Evaluations', icon: ClipboardCheck, c: PURPLE, to: '/mgmt/osm-evaluate' },
-    { n: s.pendingModeration, label: 'Pending Moderation', icon: ClipboardCheck, c: AMBER, to: '/mgmt/osm-moderation' },
-    { n: `${s.averageScore}%`, label: 'Average Score', icon: Gauge, c: s.averageScore >= 60 ? GREEN : AMBER },
+    { n: s.sessions, label: 'Observation Sessions', icon: Eye, ti: 'ti-eye', c: BLUE, to: '/mgmt/osm-sessions' },
+    { n: s.completed, label: 'Completed', icon: CheckCircle2, ti: 'ti-circle-check', c: GREEN, to: '/mgmt/osm-sessions' },
+    { n: s.evaluations, label: 'Evaluations', icon: ClipboardCheck, ti: 'ti-clipboard-check', c: PURPLE, to: '/mgmt/osm-evaluate' },
+    { n: s.pendingModeration, label: 'Pending Moderation', icon: ClipboardCheck, ti: 'ti-clipboard-check', c: C.brand, to: '/mgmt/osm-moderation' },
+    { n: `${s.averageScore}%`, label: 'Average Score', icon: Gauge, ti: 'ti-gauge', c: s.averageScore >= 60 ? GREEN : C.brand },
   ] : [];
   return <PageLayout title="OSM Dashboard" subtitle="Observation & supervision overview"><StatCards cards={cards} loading={!s} /></PageLayout>;
 }
@@ -133,7 +134,7 @@ export function OSMSessionsPage() {
     columns={[
       { key: 'teacher_name', label: 'Teacher' }, { key: 'observer_name', label: 'Observer' },
       { key: 'session_date', label: 'Date' }, { key: 'focus_area', label: 'Focus' },
-      { key: 'status', label: 'Status', render: (r) => pill(r.status, { scheduled: AMBER, completed: GREEN }) },
+      { key: 'status', label: 'Status', render: (r) => pill(r.status, { scheduled: C.brand, completed: GREEN }) },
     ]}
     fields={[
       { key: 'teacher_id', label: 'Teacher', type: 'select', optionsFrom: TEACHER_OPTS },
@@ -148,7 +149,7 @@ const OSM_EVAL_COLUMNS = [
   { key: 'session_name', label: 'Session Focus' },
   { key: 'score', label: 'Score', render: (r) => r.score != null ? <b>{r.score}%</b> : '—' },
   { key: 'strengths', label: 'Strengths' },
-  { key: 'status', label: 'Status', render: (r) => pill(r.status, { pending: AMBER, moderated: GREEN }) },
+  { key: 'status', label: 'Status', render: (r) => pill(r.status, { pending: C.brand, moderated: GREEN }) },
 ];
 const OSM_EVAL_FIELDS = [
   { key: 'session_id', label: 'Session', type: 'select', required: true, optionsFrom: { resource: 'osm-sessions', labelFn: (r) => `${r.focus_area || 'Session'} — ${r.session_date || ''}` } },
@@ -172,10 +173,10 @@ export function OSMReportsPage() {
   const [s, setS] = useState(null);
   useEffect(() => { apiGet(`${BASE}/dashboard/osm`).then((r) => setS(r.data)).catch(() => setS({})); }, []);
   const cards = s ? [
-    { n: `${s.averageScore}%`, label: 'Average Score', icon: Gauge, c: s.averageScore >= 60 ? GREEN : AMBER },
-    { n: s.evaluations, label: 'Total Evaluations', icon: ClipboardCheck, c: BLUE },
-    { n: s.pendingModeration, label: 'Pending Moderation', icon: ClipboardCheck, c: AMBER, to: '/mgmt/osm-moderation' },
-    { n: s.completed, label: 'Sessions Completed', icon: CheckCircle2, c: GREEN },
+    { n: `${s.averageScore}%`, label: 'Average Score', icon: Gauge, ti: 'ti-gauge', c: s.averageScore >= 60 ? GREEN : C.brand },
+    { n: s.evaluations, label: 'Total Evaluations', icon: ClipboardCheck, ti: 'ti-clipboard-check', c: BLUE },
+    { n: s.pendingModeration, label: 'Pending Moderation', icon: ClipboardCheck, ti: 'ti-clipboard-check', c: C.brand, to: '/mgmt/osm-moderation' },
+    { n: s.completed, label: 'Sessions Completed', icon: CheckCircle2, ti: 'ti-circle-check', c: GREEN },
   ] : [];
   return <PageLayout title="OSM Reports" subtitle="Observation outcomes"><StatCards cards={cards} loading={!s} /></PageLayout>;
 }

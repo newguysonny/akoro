@@ -1,32 +1,45 @@
-import { useState, useEffect, useCallback } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
-import AkoroLogo from './common/AkoroLogo.jsx';
+import { useState, useEffect } from 'react';
 import {
   LayoutDashboard, Banknote, Landmark, Users, GraduationCap, DoorOpen,
   ClipboardList, Layers, Laptop, UserCog, UserCheck, CalendarClock, NotebookPen,
-  ClipboardCheck, QrCode, ShieldCheck, BookOpenCheck, Award, Megaphone, Coins,
-  Library, Package, Bus, BedDouble, LifeBuoy, MessageCircleQuestion, Boxes, BarChart3, CreditCard,
-  LayoutGrid, MessageSquare, LogOut, Bell, ChevronDown, Menu, Search, X, UserCircle, Settings,
-  User, ShieldQuestion,
-  BookOpen, Presentation, Swords, ListTodo, FileCheck, Store,
+  ClipboardCheck, QrCode, BookOpenCheck, Award, Megaphone, Coins,
+  Library, Package, Bus, BedDouble, LifeBuoy, Boxes, BarChart3, CreditCard,
+  LayoutGrid, MessageSquare, User, ShieldQuestion,
+  BookOpen, Swords, ListTodo, FileCheck, Store,
   PanelsTopLeft,
 } from 'lucide-react';
-import { useAuth } from '../contexts/AuthContext.jsx';
-import AppHeader, { ReferenceChatIcon } from './AppHeader.jsx';
+import NextLayout from './NextLayout.jsx';
 
-/* Setup progress for the header ring — a fraction of the profile that is
-   actually filled in (plus an app-specific extra, e.g. a created business).
-   Derived from real data; never a hard-coded number. */
-const setupProgressOf = (u, extra = null) =>
-  [u?.fullName || u?.name, u?.email, u?.phone, extra].filter(Boolean).length / 4;
+/* The page frame: the shared frame (NextLayout, the learner app's look).
+   NAV_SECTIONS below stays the nav's data source — NextLayout's
+   schoolNav() converts it to the shared frame's nav data, module gates
+   included. The legacy Sidebar/TopBar frame is retired; AppHeader went
+   with it (the shared frame supplies the header and the phone bottom nav). */
 
-import { apiGet } from '../services/api.js';
-import { AMBER, INK, MUTED, MUTED2, BORDER, WHITE, FONT } from '../constants.js';
+const MOBILE_QUERY = '(max-width: 767px)';
+
+export function useIsMobile() {
+  const [mobile, setMobile] = useState(() => {
+    try { return window.matchMedia(MOBILE_QUERY).matches; } catch { return false; }
+  });
+  useEffect(() => {
+    let mq;
+    try { mq = window.matchMedia(MOBILE_QUERY); } catch { return; }
+    const onChange = (e) => setMobile(e.matches);
+    mq.addEventListener?.('change', onChange);
+    return () => mq.removeEventListener?.('change', onChange);
+  }, []);
+  return mobile;
+}
+
+export function PageLayout(props) {
+  return <NextLayout {...props}/>;
+}
 
 /* ── Nav tree ──────────────────────────────────────────────────────
    Leaves with a real `to` navigate; children (strings) are placeholders
    for now (pages not built yet). Groups expand/collapse. */
-const NAV_SECTIONS = [
+export const NAV_SECTIONS = [
   { section: 'MAIN NAVIGATION', items: [
     { label: 'Dashboard', icon: LayoutDashboard, to: '/' },
   ]},
@@ -306,341 +319,3 @@ const NAV_SECTIONS = [
     { label: 'Help & Support', icon: ShieldQuestion, to: '/settings-billing?tab=help' },
   ]},
 ];
-
-/* ── Leaf (real link or placeholder) ─────────────────────────────── */
-function Leaf({ item, collapsed }) {
-  const base = {
-    display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 12,
-    justifyContent: collapsed ? 'center' : 'flex-start',
-    padding: collapsed ? '11px 0' : '9px 16px', borderRadius: 10,
-    margin: collapsed ? '2px 10px' : '2px 8px', textDecoration: 'none',
-    fontFamily: FONT, fontSize: 13.5, cursor: 'pointer', border: 'none',
-    background: 'transparent', width: collapsed ? 'auto' : 'calc(100% - 16px)',
-  };
-  if (item.to && item.to !== '#') {
-    return (
-      <NavLink to={item.to} end={item.to === '/'} title={collapsed ? item.label : undefined}
-        style={({ isActive }) => ({ ...base, color: isActive ? WHITE : MUTED2, background: isActive ? `${AMBER}22` : 'transparent', fontWeight: isActive ? 600 : 400 })}>
-        <item.icon size={18} />{!collapsed && <span>{item.label}</span>}
-      </NavLink>
-    );
-  }
-  return (
-    <button title={collapsed ? item.label : undefined} style={{ ...base, color: MUTED2, textAlign: 'left' }}
-      onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,.05)'; e.currentTarget.style.color = WHITE; }}
-      onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = MUTED2; }}>
-      <item.icon size={18} />{!collapsed && <span>{item.label}</span>}
-    </button>
-  );
-}
-
-/* ── Group (expandable) ──────────────────────────────────────────── */
-function Group({ item, collapsed, open, onToggle }) {
-  const navigate = useNavigate();
-  return (
-    <div>
-      <button title={collapsed ? item.label : undefined} onClick={onToggle}
-        style={{ display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 12, justifyContent: collapsed ? 'center' : 'flex-start', width: 'calc(100% - 16px)', padding: collapsed ? '11px 0' : '9px 16px', margin: '2px 8px', borderRadius: 10, border: 'none', cursor: 'pointer', fontFamily: FONT, fontSize: 13.5, background: open && !collapsed ? 'rgba(255,255,255,.04)' : 'transparent', color: open ? WHITE : MUTED2 }}
-        onMouseEnter={(e) => { e.currentTarget.style.color = WHITE; }}
-        onMouseLeave={(e) => { e.currentTarget.style.color = open ? WHITE : MUTED2; }}>
-        <item.icon size={18} />
-        {!collapsed && <span style={{ flex: 1, textAlign: 'left' }}>{item.label}</span>}
-        {!collapsed && <ChevronDown size={14} style={{ transition: 'transform .2s', transform: open ? 'rotate(180deg)' : 'none', flexShrink: 0 }} />}
-      </button>
-      {open && !collapsed && (
-        <div style={{ margin: '2px 8px 6px 8px', paddingLeft: 22, borderLeft: '1px solid rgba(255,255,255,.08)' }}>
-          {item.children.map((c) => {
-            const label = typeof c === 'string' ? c : c.label;
-            const to = typeof c === 'string' ? null : c.to;
-            return (
-              <button key={label} onClick={() => to && navigate(to)}
-                style={{ display: 'flex', alignItems: 'center', gap: 9, width: '100%', padding: '7px 10px', border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: FONT, fontSize: 12.5, color: MUTED2, textAlign: 'left', borderRadius: 8 }}
-                onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,.05)'; e.currentTarget.style.color = WHITE; }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = MUTED2; }}>
-                <span style={{ width: 4, height: 4, borderRadius: '50%', background: 'currentColor', flexShrink: 0 }} />{label}
-              </button>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-export function Sidebar({ collapsed, onClose }) {
-  const { user, logout } = useAuth();
-  const [open, setOpen] = useState({});
-  const [query, setQuery] = useState('');
-  const [modules, setModules] = useState(null);
-  const [access, setAccess] = useState(null);   // optional modules this school owns
-  const toggle = (key) => setOpen((o) => ({ ...o, [key]: !o[key] }));
-
-  // Load the school's enabled/disabled modules once, then keep it fresh:
-  // re-check whenever the tab regains focus (e.g. after saving on the
-  // Module Management page) so a disable/enable shows up without a reload.
-  useEffect(() => {
-    let cancelled = false;
-    const loadModules = () => {
-      apiGet('/api/school/settings')
-        .then((res) => {
-          if (cancelled) return;
-          setModules(res.data?.modules || {});
-          setAccess(res.data?.moduleAccess || {});
-        })
-        .catch(() => {});
-    };
-    loadModules();
-    window.addEventListener('focus', loadModules);
-    window.addEventListener('akoro:modules-updated', loadModules);
-    return () => {
-      cancelled = true;
-      window.removeEventListener('focus', loadModules);
-      window.removeEventListener('akoro:modules-updated', loadModules);
-    };
-  }, []);
-
-  // Two independent gates, and both must pass:
-  //   owned   — the school bought this module in the Apps Center
-  //   enabled — the school hasn't switched it off in Module Management
-  // Core areas carry no moduleKey and skip both. Until settings load, nothing
-  // is hidden, so the sidebar never flashes items away on a slow connection.
-  const isModuleOn = (key) => {
-    if (!key || !modules) return true;
-    if (access && access[key] !== true) return false;
-    return modules[key] !== false;
-  };
-
-  const moduleFiltered = NAV_SECTIONS.map((sec) => ({
-    ...sec,
-    items: sec.items.filter((item) => isModuleOn(item.moduleKey)),
-  })).filter((sec) => sec.items.length);
-
-  const q = query.trim().toLowerCase();
-  const sections = q
-    ? moduleFiltered.map((sec) => ({
-        ...sec,
-        items: sec.items
-          .map((item) => {
-            if (item.label.toLowerCase().includes(q)) return item;
-            if (item.children) {
-              const kids = item.children.filter((c) => (typeof c === 'string' ? c : c.label).toLowerCase().includes(q));
-              if (kids.length) return { ...item, children: kids };
-            }
-            return null;
-          })
-          .filter(Boolean),
-      })).filter((sec) => sec.items.length)
-    : moduleFiltered;
-
-  return (
-    <aside style={{ width: collapsed ? 72 : 256, flexShrink: 0, background: INK, display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', transition: 'width .15s' }}>
-      {/* Logo */}
-      <div style={{ padding: collapsed ? '20px 0 14px' : '20px 20px 14px', borderBottom: '1px solid rgba(255,255,255,.07)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: collapsed ? 'center' : 'flex-start', gap: 10 }}>
-          <AkoroLogo size={34} radius={10} />
-          {!collapsed && (
-            <div>
-              <div style={{ fontSize: 16, fontWeight: 700, color: WHITE, fontFamily: FONT }}>Akoro</div>
-              <div style={{ fontSize: 10, color: MUTED2, fontFamily: FONT }}>School Portal</div>
-            </div>
-          )}
-          {onClose && (
-            <button onClick={onClose} aria-label="Close menu" title="Close menu" style={{ marginLeft: 'auto', width: 34, height: 34, borderRadius: 9, border: '1px solid rgba(255,255,255,.12)', background: 'rgba(255,255,255,.05)', color: WHITE, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
-              <X size={16} />
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Search menu */}
-      {!collapsed ? (
-        <div style={{ padding: '12px 14px 4px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(255,255,255,.06)', border: '1px solid rgba(255,255,255,.08)', borderRadius: 10, padding: '8px 12px' }}>
-            <Search size={15} color={MUTED2} style={{ flexShrink: 0 }} />
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search menu…"
-              style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', color: WHITE, fontSize: 13, fontFamily: FONT, minWidth: 0 }}
-            />
-          </div>
-        </div>
-      ) : (
-        <div style={{ display: 'flex', justifyContent: 'center', padding: '12px 0 4px' }}>
-          <Search size={17} color={MUTED2} />
-        </div>
-      )}
-
-      {/* Nav — min-height:0 lets this flex child scroll internally instead of
-          growing to its content height and pushing the account row off-screen. */}
-      <nav onClickCapture={onClose ? (e) => { if (e.target.closest?.('a')) onClose(); } : undefined} style={{ flex: 1, minHeight: 0, padding: '8px 0', overflowY: 'auto', scrollbarWidth: 'thin' }}>
-        {sections.map((sec) => (
-          <div key={sec.section} style={{ marginBottom: 6 }}>
-            {!collapsed && <div style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: 1.2, color: 'rgba(255,255,255,.35)', padding: '10px 20px 4px', fontFamily: FONT }}>{sec.section}</div>}
-            {collapsed && <div style={{ height: 1, background: 'rgba(255,255,255,.06)', margin: '8px 14px' }} />}
-            {sec.items.map((item) => item.children
-              ? <Group key={item.label} item={item} collapsed={collapsed} open={q ? true : !!open[item.label]} onToggle={() => toggle(item.label)} />
-              : <Leaf key={item.label} item={item} collapsed={collapsed} />)}
-          </div>
-        ))}
-        {q && sections.length === 0 && (
-          <div style={{ padding: '16px 20px', fontSize: 12.5, color: MUTED2, fontFamily: FONT }}>No menu matches “{query}”.</div>
-        )}
-      </nav>
-
-      {/* Account / user */}
-      <div style={{ padding: '14px', borderTop: '1px solid rgba(255,255,255,.07)', display: 'flex', flexDirection: collapsed ? 'column' : 'row', alignItems: 'center', gap: collapsed ? 10 : 10 }}>
-        <div title={collapsed ? (user?.fullName || user?.email || '') : undefined} style={{ width: 34, height: 34, borderRadius: '50%', background: `linear-gradient(135deg, ${AMBER}, ${AMBER}88)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, color: WHITE, flexShrink: 0 }}>
-          {(user?.fullName || user?.email || 'S')[0].toUpperCase()}
-        </div>
-        {!collapsed && (
-          <div style={{ flex: 1, overflow: 'hidden' }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: WHITE, fontFamily: FONT, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user?.fullName || 'School Admin'}</div>
-            <div style={{ fontSize: 11, color: MUTED2, fontFamily: FONT, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user?.email || ''}</div>
-          </div>
-        )}
-        <button onClick={logout} title="Sign out" style={{ background: 'none', border: 'none', cursor: 'pointer', color: MUTED2, padding: 4, borderRadius: 6, flexShrink: 0 }}><LogOut size={16} /></button>
-      </div>
-    </aside>
-  );
-}
-
-function BellButton() {
-  const navigate = useNavigate();
-  const [unread, setUnread] = useState(0);
-  const poll = useCallback(async () => {
-    try { const res = await apiGet('/api/notifications?limit=1'); setUnread(res.unread ?? 0); } catch {}
-  }, []);
-  useEffect(() => {
-    poll();
-    const t = setInterval(poll, 60_000);
-    const onFocus = () => poll();
-    window.addEventListener('focus', onFocus);
-    return () => { clearInterval(t); window.removeEventListener('focus', onFocus); };
-  }, [poll]);
-  return (
-    <button onClick={() => navigate('/notifications')} style={{ position: 'relative', background: WHITE, border: `1.5px solid ${BORDER}`, borderRadius: 10, padding: '8px', cursor: 'pointer', color: MUTED, display: 'flex', alignItems: 'center' }}>
-      <Bell size={16} />
-      {unread > 0 && <span style={{ position: 'absolute', top: -4, right: -4, background: AMBER, color: WHITE, borderRadius: '50%', width: 16, height: 16, fontSize: 9, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: FONT, border: `2px solid ${WHITE}` }}>{unread > 9 ? '9+' : unread}</span>}
-    </button>
-  );
-}
-
-export function TopBar({ title, subtitle, action, onToggleSidebar, showBell = true }) {
-  return (
-    <div style={{ position: 'sticky', top: 0, zIndex: 10, background: 'rgba(250,248,245,.95)', backdropFilter: 'blur(8px)', borderBottom: `1px solid ${BORDER}`, padding: '14px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-        {/* Hamburger — collapses the sidebar to icons-only (desktop; on mobile
-            the AppHeader hamburger owns the drawer) */}
-        {onToggleSidebar && (
-          <button onClick={onToggleSidebar} title="Toggle sidebar" style={{ background: WHITE, border: `1.5px solid ${BORDER}`, borderRadius: 10, padding: '8px', cursor: 'pointer', color: INK, display: 'flex', alignItems: 'center' }}>
-            <Menu size={17} />
-          </button>
-        )}
-        <div>
-          <h1 style={{ fontSize: 19, fontWeight: 700, color: INK, margin: 0, fontFamily: FONT }}>{title}</h1>
-          {subtitle && <p style={{ fontSize: 13, color: MUTED, margin: '2px 0 0', fontFamily: FONT }}>{subtitle}</p>}
-        </div>
-      </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        {action}
-        {showBell && <BellButton />}
-      </div>
-    </div>
-  );
-}
-
-export function BottomNav() { return null; }
-
-// Phones (below 768px) get the app-shaped shell: the shared Akoro AppHeader
-// (hamburger | spacer | actions | avatar menu) and full-width pages — the
-// sidebar exists ONLY as a drawer the hamburger opens, closed by its X, the
-// hamburger again, the backdrop, or Escape. Tablet/desktop keep the
-// permanent collapsible sidebar unchanged.
-const MOBILE_QUERY = '(max-width: 767px)';
-function useIsMobile() {
-  const [mobile, setMobile] = useState(() => {
-    try { return window.matchMedia(MOBILE_QUERY).matches; } catch { return false; }
-  });
-  useEffect(() => {
-    let mq;
-    try { mq = window.matchMedia(MOBILE_QUERY); } catch { return; }
-    const onChange = (e) => setMobile(e.matches);
-    mq.addEventListener?.('change', onChange);
-    return () => mq.removeEventListener?.('change', onChange);
-  }, []);
-  return mobile;
-}
-
-export function PageLayout({ children, title, subtitle, action }) {
-  const [collapsed, setCollapsed] = useState(false);
-  const mobile = useIsMobile();
-  const { user, logout } = useAuth();
-  const navigate = useNavigate();
-  const [drawerOpen, setDrawerOpen] = useState(false);
-
-  // Scroll lock while the drawer is open; never carry it back to desktop.
-  useEffect(() => {
-    if (!mobile) { setDrawerOpen(false); return; }
-    if (!drawerOpen) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = prev; };
-  }, [mobile, drawerOpen]);
-
-  // Escape closes the drawer.
-  useEffect(() => {
-    if (!mobile || !drawerOpen) return;
-    const onKey = (e) => { if (e.key === 'Escape') setDrawerOpen(false); };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [mobile, drawerOpen]);
-
-  if (mobile) {
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
-        <AppHeader
-          onMenu={() => setDrawerOpen((o) => !o)}
-          user={user}
-          actions={[
-            { key: 'chat',          icon: ReferenceChatIcon, label: 'AI Chat',      variant: 'square', onClick: () => navigate('/chat') },
-            { key: 'notifications', icon: Bell,          label: 'Notifications',  variant: 'square', onClick: () => navigate('/notifications') },
-            { key: 'help',          icon: MessageCircleQuestion, label: 'Help & support', variant: 'circle', onClick: () => { window.location.href = 'mailto:support@akoro.app'; } },
-          ]}
-          progress={setupProgressOf(user)}
-          onSetup={() => navigate('/profile')}
-          menuItems={[
-            { key: 'profile',  label: 'Profile',  icon: UserCircle, to: '/profile' },
-            { key: 'settings', label: 'Settings', icon: Settings,   to: '/settings' },
-            'divider',
-            { key: 'logout',   label: 'Log out',  icon: LogOut,     danger: true, onClick: logout },
-          ]}
-        />
-        <TopBar title={title} subtitle={subtitle} action={action} onToggleSidebar={null} showBell={false} />
-        <main style={{ flex: 1, overflowY: 'auto', padding: '16px 14px' }}>{children}</main>
-        {drawerOpen && (
-          <div onClick={() => setDrawerOpen(false)} aria-hidden="true" style={{ position: 'fixed', inset: 0, zIndex: 1090, background: 'rgba(0,0,0,.45)' }} />
-        )}
-        <aside role="navigation" aria-label="Main menu" aria-hidden={!drawerOpen} style={{
-          position: 'fixed', top: 0, left: 0, bottom: 0, width: 288, zIndex: 1100,
-          transform: drawerOpen ? 'translateX(0)' : 'translateX(-100%)',
-          visibility: drawerOpen ? 'visible' : 'hidden',
-          transition: 'transform .22s ease, visibility .22s',
-          boxShadow: drawerOpen ? '12px 0 32px rgba(0,0,0,.35)' : 'none',
-        }}>
-          <Sidebar collapsed={false} onClose={() => setDrawerOpen(false)} />
-        </aside>
-      </div>
-    );
-  }
-
-  return (
-    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
-      <Sidebar collapsed={collapsed} />
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-        <TopBar title={title} subtitle={subtitle} action={action} onToggleSidebar={() => setCollapsed((c) => !c)} />
-        <main style={{ flex: 1, overflowY: 'auto', padding: '24px 28px' }}>{children}</main>
-      </div>
-    </div>
-  );
-}

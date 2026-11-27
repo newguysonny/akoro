@@ -16,15 +16,29 @@ const cfg = siteHostConfig(import.meta.env);
 
 // The portal's code is loaded only when the portal is what's being shown — a school's visitors never download it.
 async function bootPortal() {
-  const [appMod, errMod, confirmMod, bannerMod] = await Promise.all([
+  const [appMod, errMod, confirmMod, bannerMod, themeMod, varsMod] = await Promise.all([
     import('./App.jsx'), import('./components/ErrorBoundary.jsx'), import('./components/ConfirmHost.jsx'), import('./components/ConnectionBanner.jsx'),
+    import('./ui/theme.jsx'), import('./theme/schoolVars.js'),
+    import('@tabler/icons-webfont/dist/tabler-icons.min.css'), import('./ui/base.css'),
   ]);
   const App = appMod.default;
   const ErrorBoundary = errMod.default;
   const ConfirmHost = confirmMod.default;
   const ConnectionBanner = bannerMod.default;
+  const { ThemeProvider, learnerVars, applyTheme, readMode } = themeMod;
+  // The learner app's look: its theme (light + dark) and Nunito. The shared
+  // kit's base styles apply under <html data-ui="next">. Portal only — the
+  // public-website path below must not see any of this.
+  document.documentElement.setAttribute('data-ui', 'next');
+  const themeVars = (isDark) => ({ ...learnerVars(isDark), ...varsMod.SCHOOL_VARS });
+  const font = document.createElement('link');
+  font.rel = 'stylesheet';
+  font.href = 'https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap';
+  document.head.appendChild(font);
+  applyTheme(readMode(), { vars: themeVars, dark: true });
   ReactDOM.createRoot(document.getElementById('root')).render(
     <React.StrictMode>
+      <ThemeProvider vars={themeVars} dark>
       <ErrorBoundary>
         <App />
         {/* One host for every confirmDialog() call in the app. */}
@@ -32,6 +46,7 @@ async function bootPortal() {
         {/* Explains an outage that pages would otherwise render as "nothing here". */}
         <ConnectionBanner />
       </ErrorBoundary>
+      </ThemeProvider>
     </React.StrictMode>
   );
 }

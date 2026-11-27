@@ -3,17 +3,17 @@
  */
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ExternalLink, Save, Loader2 } from 'lucide-react';
+import { Ico } from '../../theme/Ico.jsx';
 import { PageLayout } from '../../components/Layout.jsx';
 import { apiGet, apiPut, apiPost } from '../../services/api.js';
-import { AMBER, INK, MUTED2, BORDER, WHITE, FONT } from '../../constants.js';
+import { C, tint } from '../../theme/colors.js';
 import { SettingsCard, SettingsGroup } from '../../shared/SettingsCard.jsx';
 import { WalletPanel } from '../../shared/WalletShell.jsx';
 
 import { TABS, EXTERNAL, SchoolProfilePanel, SystemFormatsPanel, AttendancePanel, SecurityPanel, IntegrationsPanel, HelpSupportPanel, AboutPanel, QuickGuide, VALID_TABS, NO_SAVE_TABS } from './parts.jsx';
 
-const ACCENT = AMBER;
-const ACTIVE_CARD = { background: `${AMBER}14`, border: `1px solid ${ACCENT}`, boxShadow: 'none' };
+const ACCENT = C.brand;
+const ACTIVE_CARD = { background: tint(8), border: `1px solid ${ACCENT}`, boxShadow: 'none' };
 
 export default function SettingsBillingPage() {
   const navigate = useNavigate();
@@ -85,11 +85,11 @@ export default function SettingsBillingPage() {
     };
     return (
       <SettingsCard
-        icon={<t.icon size={17} color={on ? ACCENT : 'var(--ak-text-muted, #8a8aa3)'} />}
+        icon={<Ico lucide={t.icon} ti={t.ti} size={17} color={on ? ACCENT : 'var(--ak-text-muted, #8a8aa3)'} />}
         title={t.label}
         onClick={go}
         style={on ? ACTIVE_CARD : undefined}
-        chevron={t.external ? <ExternalLink size={14} color="var(--ak-text-muted, #8a8aa3)" /> : undefined}
+        chevron={t.external ? <Ico ti="ti-external-link" size={14} color="var(--ak-text-muted, #8a8aa3)" /> : undefined}
       />
     );
   };
@@ -113,8 +113,8 @@ export default function SettingsBillingPage() {
         {/* Right content card */}
         <WalletPanel style={{ flex: 1, minWidth: 300, padding: '22px 24px', marginBottom: 0 }}>
           {loading ? (
-            <div style={{ padding: '60px 0', textAlign: 'center', color: MUTED2, fontFamily: FONT, fontSize: 13.5, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
-              <Loader2 size={22} style={{ animation: 'spin .8s linear infinite' }} /> Loading settings…
+            <div style={{ padding: '60px 0', textAlign: 'center', color: C.muted2, fontFamily: C.font, fontSize: 13.5, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+              <Ico ti="ti-loader-2" size={22} style={{ animation: 'spin .8s linear infinite' }} /> Loading settings…
             </div>
           ) : (
             <>
@@ -127,9 +127,9 @@ export default function SettingsBillingPage() {
               {tab === 'about'        && <AboutPanel />}
 
               {!NO_SAVE_TABS.includes(tab) && (
-                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 26, paddingTop: 18, borderTop: `1px solid ${BORDER}` }}>
-                  <button onClick={save} disabled={saving} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '11px 22px', borderRadius: 10, border: 'none', background: saving ? '#E5E7EB' : `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: saving ? '#9CA3AF' : WHITE, fontSize: 13.5, fontWeight: 800, cursor: saving ? 'default' : 'pointer', fontFamily: FONT, boxShadow: saving ? 'none' : `0 4px 14px ${AMBER}44` }}>
-                    {saving ? <Loader2 size={15} style={{ animation: 'spin .8s linear infinite' }} /> : <Save size={15} />} {saving ? 'Saving…' : 'Save Settings'}
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 26, paddingTop: 18, borderTop: `1px solid ${C.border}` }}>
+                  <button onClick={save} disabled={saving} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '11px 22px', borderRadius: 10, border: 'none', background: saving ? C.borderSoft : `linear-gradient(135deg, ${C.brand}, ${C.brandDeep})`, color: saving ? C.muted2 : '#fff', fontSize: 13.5, fontWeight: 800, cursor: saving ? 'default' : 'pointer', fontFamily: C.font, boxShadow: saving ? 'none' : `0 4px 14px ${tint(27)}` }}>
+                    {saving ? <Ico ti="ti-loader-2" size={15} style={{ animation: 'spin .8s linear infinite' }} /> : <Ico ti="ti-device-floppy" size={15} />} {saving ? 'Saving…' : 'Save Settings'}
                   </button>
                 </div>
               )}
@@ -139,7 +139,7 @@ export default function SettingsBillingPage() {
       </div>
 
       {toast && (
-        <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: INK, color: WHITE, padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999, whiteSpace: 'nowrap', boxShadow: '0 4px 14px rgba(0,0,0,.2)' }}>{toast}</div>
+        <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: C.ink, color: '#fff', padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999, whiteSpace: 'nowrap', boxShadow: '0 4px 14px rgba(0,0,0,.2)' }}>{toast}</div>
       )}
     </PageLayout>
   );

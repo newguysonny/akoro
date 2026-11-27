@@ -1,10 +1,10 @@
 import AkoroLogo from '../../components/common/AkoroLogo.jsx';
-import { AlertTriangle, CheckCircle2, Lock, EyeOff, Eye } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { API } from '../../services/api.js';
+import { C, tint } from '../../theme/colors.js';
+import { Ico } from '../../theme/Ico.jsx';
 
-const AMBER = '#E8884A';
 const RED   = '#EF4444';
 const GREEN = '#10B981';
 
@@ -62,65 +62,65 @@ export default function ResetPasswordPage() {
 
   const inp = {
     width: '100%', padding: '11px 14px', borderRadius: 12,
-    border: '1.5px solid #EDE8E1', outline: 'none', fontSize: 14,
-    fontFamily: "'DM Sans', sans-serif", color: '#1A1A2E',
-    background: '#fff', boxSizing: 'border-box',
+    border: `1.5px solid ${C.borderSoft}`, outline: 'none', fontSize: 14,
+    fontFamily: C.font, color: C.ink,
+    background: C.surface, boxSizing: 'border-box',
   };
 
   if (!token && !codeFlow) return (
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
-      background: '#FAF8F5', fontFamily: "'DM Sans', sans-serif", padding: 24 }}>
+      background: C.bg, fontFamily: C.font, padding: 24 }}>
       <div style={{ textAlign: 'center', maxWidth: 380 }}>
-        <div style={{ marginBottom: 16 }}><AlertTriangle size={40} color="#D97706" /></div>
-        <h2 style={{ color: '#1A1A2E', marginBottom: 8 }}>Invalid reset link</h2>
-        <p style={{ color: '#6B6B80', marginBottom: 24 }}>This link is missing or malformed. Please request a new password reset.</p>
+        <div style={{ marginBottom: 16 }}><Ico ti="ti-alert-triangle" size={40} color="#D97706" /></div>
+        <h2 style={{ color: C.ink, marginBottom: 8 }}>Invalid reset link</h2>
+        <p style={{ color: C.muted, marginBottom: 24 }}>This link is missing or malformed. Please request a new password reset.</p>
         <button onClick={() => navigate('/forgot-password')} style={{ padding: '12px 28px',
-          borderRadius: 14, border: 'none', background: `linear-gradient(135deg,${AMBER},#D4651E)`,
+          borderRadius: 14, border: 'none', background: `linear-gradient(135deg,${C.brand},${C.brandDeep})`,
           color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer',
-          fontFamily: "'DM Sans', sans-serif" }}>Request new link</button>
+          fontFamily: C.font }}>Request new link</button>
       </div>
     </div>
   );
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column',
-      alignItems: 'center', justifyContent: 'center', background: '#FAF8F5',
-      padding: '24px 20px', fontFamily: "'DM Sans', sans-serif" }}>
+      alignItems: 'center', justifyContent: 'center', background: C.bg,
+      padding: '24px 20px', fontFamily: C.font }}>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 32 }}>
         <AkoroLogo size={40} radius={12} />
         <div>
-          <span style={{ fontSize: 20, fontWeight: 800, color: '#1A1A2E', display: 'block' }}>Akoro</span>
-          <span style={{ fontSize: 11, color: '#9490A0', display: 'block', marginTop: -2 }}>Instructor Portal</span>
+          <span style={{ fontSize: 20, fontWeight: 800, color: C.ink, display: 'block' }}>Akoro</span>
+          <span style={{ fontSize: 11, color: C.muted2, display: 'block', marginTop: -2 }}>Instructor Portal</span>
         </div>
       </div>
 
-      <div style={{ width: '100%', maxWidth: 420, background: '#fff', borderRadius: 24,
+      <div style={{ width: '100%', maxWidth: 420, background: C.surface, borderRadius: 24,
         padding: '32px 28px', boxShadow: '0 4px 32px rgba(0,0,0,.07)',
-        border: '1px solid #EDE8E1' }}>
+        border: `1px solid ${C.borderSoft}` }}>
 
         <div style={{ width: 52, height: 52, borderRadius: 16,
-          background: done ? `linear-gradient(135deg,${GREEN},#059669)` : `linear-gradient(135deg,${AMBER},#D4651E)`,
+          background: done ? `linear-gradient(135deg,${GREEN},#059669)` : `linear-gradient(135deg,${C.brand},${C.brandDeep})`,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          marginBottom: 20 }}>{done ? <CheckCircle2 size={24} color="#10B981" /> : <Lock size={24} color="#1A1A2E" />}</div>
+          marginBottom: 20 }}>{done ? <Ico ti="ti-circle-check" size={24} color={GREEN} /> : <Ico ti="ti-lock" size={24} color="#1A1A2E" />}</div>
 
         {done ? (
           <>
-            <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1A1A2E', margin: '0 0 8px', fontFamily: "'Instrument Serif', serif" }}>Password updated!</h1>
-            <p style={{ fontSize: 14, color: '#6B6B80', margin: '0 0 24px', lineHeight: 1.6 }}>
+            <h1 style={{ fontSize: 22, fontWeight: 800, color: C.ink, margin: '0 0 8px', fontFamily: "'Instrument Serif', serif" }}>Password updated!</h1>
+            <p style={{ fontSize: 14, color: C.muted, margin: '0 0 24px', lineHeight: 1.6 }}>
               Your password has been changed. You've been signed out on all devices — please sign in again.
             </p>
             <button onClick={() => navigate('/signin')} style={{ width: '100%', padding: '13px',
-              borderRadius: 14, border: 'none', background: `linear-gradient(135deg,${AMBER},#D4651E)`,
+              borderRadius: 14, border: 'none', background: `linear-gradient(135deg,${C.brand},${C.brandDeep})`,
               color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer',
-              fontFamily: "'DM Sans', sans-serif", boxShadow: `0 4px 14px ${AMBER}44` }}>
+              fontFamily: C.font, boxShadow: `0 4px 14px ${tint(27)}` }}>
               Sign in
             </button>
           </>
         ) : (
           <>
-            <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1A1A2E', margin: '0 0 8px', fontFamily: "'Instrument Serif', serif" }}>Set new password</h1>
-            <p style={{ fontSize: 14, color: '#6B6B80', margin: '0 0 24px' }}>
+            <h1 style={{ fontSize: 22, fontWeight: 800, color: C.ink, margin: '0 0 8px', fontFamily: "'Instrument Serif', serif" }}>Set new password</h1>
+            <p style={{ fontSize: 14, color: C.muted, margin: '0 0 24px' }}>
               Choose a strong password of at least 8 characters.
             </p>
 
@@ -145,7 +145,7 @@ export default function ResetPasswordPage() {
                 </>
               )}
               <div style={{ marginBottom: 16 }}>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#1A1A2E', marginBottom: 6 }}>New password</label>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: C.ink, marginBottom: 6 }}>New password</label>
                 <div style={{ position: 'relative' }}>
                   <input type={showPw ? 'text' : 'password'} value={password}
                     onChange={e => setPassword(e.target.value)}
@@ -153,8 +153,8 @@ export default function ResetPasswordPage() {
                     style={{ ...inp, paddingRight: 44 }} autoFocus />
                   <button type="button" onClick={() => setShowPw(v => !v)}
                     style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)',
-                      background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, color: '#9490A0' }}>
-                    {showPw ? <EyeOff size={15} /> : <Eye size={15} />}
+                      background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, color: C.muted2 }}>
+                    {showPw ? <Ico ti="ti-eye-off" size={15} /> : <Ico ti="ti-eye" size={15} />}
                   </button>
                 </div>
                 {password && (
@@ -162,7 +162,7 @@ export default function ResetPasswordPage() {
                     <div style={{ display: 'flex', gap: 4, marginBottom: 4 }}>
                       {[1,2,3,4].map(i => (
                         <div key={i} style={{ flex: 1, height: 4, borderRadius: 99,
-                          background: i <= strength ? strengthColor : '#EDE8E1',
+                          background: i <= strength ? strengthColor : C.borderSoft,
                           transition: 'background .2s' }} />
                       ))}
                     </div>
@@ -172,19 +172,19 @@ export default function ResetPasswordPage() {
               </div>
 
               <div style={{ marginBottom: 24 }}>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#1A1A2E', marginBottom: 6 }}>Confirm password</label>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: C.ink, marginBottom: 6 }}>Confirm password</label>
                 <input type={showPw ? 'text' : 'password'} value={confirm}
                   onChange={e => setConfirm(e.target.value)}
                   placeholder="Repeat your new password"
-                  style={{ ...inp, borderColor: confirm && confirm !== password ? RED : confirm && confirm === password ? GREEN : '#EDE8E1' }} />
+                  style={{ ...inp, borderColor: confirm && confirm !== password ? RED : confirm && confirm === password ? GREEN : C.borderSoft }} />
               </div>
 
               <button type="submit" disabled={loading} style={{ width: '100%', padding: '13px',
                 borderRadius: 14, border: 'none',
-                background: loading ? '#EDE8E1' : `linear-gradient(135deg,${AMBER},#D4651E)`,
-                color: loading ? '#9490A0' : '#fff', fontSize: 14, fontWeight: 700,
-                cursor: loading ? 'not-allowed' : 'pointer', fontFamily: "'DM Sans', sans-serif",
-                boxShadow: loading ? 'none' : `0 4px 14px ${AMBER}44` }}>
+                background: loading ? C.borderSoft : `linear-gradient(135deg,${C.brand},${C.brandDeep})`,
+                color: loading ? C.muted2 : '#fff', fontSize: 14, fontWeight: 700,
+                cursor: loading ? 'not-allowed' : 'pointer', fontFamily: C.font,
+                boxShadow: loading ? 'none' : `0 4px 14px ${tint(27)}` }}>
                 {loading ? 'Saving…' : 'Set new password'}
               </button>
             </form>

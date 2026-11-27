@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, Trash2, ChevronDown, Calendar, Clock, Link2, FileText, StickyNote, Loader } from 'lucide-react';
 import { Modal, Btn, Inp, Sel, FileUploadZone, StatusPill } from './Primitives.jsx';
 import { useCoursesAPI } from '../hooks/useCoursesAPI.js';
-import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, FONT } from '../constants.js';
+import { GREEN } from '../constants.js';
+import { C, tint } from '../theme/colors.js';
+import { Ico } from '../theme/Ico.jsx';
 
 const PLATFORMS = [['zoom', 'Zoom'], ['meet', 'Google Meet'], ['teams', 'Teams']];
 const fmtDate = (iso) => iso ? new Date(iso).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }) : '—';
@@ -40,25 +41,25 @@ function Materials({ sessionId, api, onToast }) {
   };
 
   const KindIcon = ({ k }) => {
-    const I = k === 'link' ? Link2 : k === 'note' ? StickyNote : FileText;
-    return <I size={12} color={MUTED} />;
+    const ti = k === 'link' ? 'ti-link' : k === 'note' ? 'ti-note' : 'ti-file-text';
+    return <Ico ti={ti} size={12} color={C.muted} />;
   };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6, paddingTop: 6 }}>
       {mats === null ? (
-        <span style={{ fontSize: 11, color: MUTED, display: 'flex', alignItems: 'center', gap: 4 }}><Loader size={11} className="spinner" /> Loading…</span>
+        <span style={{ fontSize: 11, color: C.muted, display: 'flex', alignItems: 'center', gap: 4 }}><Ico ti="ti-loader-2" size={11} className="spinner" /> Loading…</span>
       ) : mats.map((m) => (
-        <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: INK }}>
+        <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: C.ink }}>
           <KindIcon k={m.kind} />
-          {m.url ? <a href={m.url} target="_blank" rel="noreferrer" style={{ color: AMBER, textDecoration: 'none', flex: 1 }}>{m.title}</a>
+          {m.url ? <a href={m.url} target="_blank" rel="noreferrer" style={{ color: C.brand, textDecoration: 'none', flex: 1 }}>{m.title}</a>
                  : <span style={{ flex: 1 }}>{m.title}</span>}
-          <button onClick={() => remove(m.id)} style={iconBtn}><Trash2 size={12} /></button>
+          <button onClick={() => remove(m.id)} style={iconBtn}><Ico ti="ti-trash" size={12} /></button>
         </div>
       ))}
 
       {adding ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 8, padding: 8 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, padding: 8 }}>
           <div style={{ display: 'flex', gap: 6 }}>
             <select value={draft.kind} onChange={(e) => setDraft({ ...draft, kind: e.target.value })} style={miniSel}>
               <option value="file">File</option><option value="link">Link</option><option value="note">Note</option>
@@ -77,7 +78,7 @@ function Materials({ sessionId, api, onToast }) {
           </div>
         </div>
       ) : (
-        <button onClick={() => setAdding(true)} style={{ ...linkBtn, alignSelf: 'flex-start' }}><Plus size={12} /> Add material</button>
+        <button onClick={() => setAdding(true)} style={{ ...linkBtn, alignSelf: 'flex-start' }}><Ico ti="ti-plus" size={12} /> Add material</button>
       )}
     </div>
   );
@@ -103,7 +104,7 @@ function TopicRow({ session, api, onChanged, onToast }) {
   };
 
   return (
-    <div style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 10, padding: 10 }}>
+    <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: 10 }}>
       {edit ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <Inp value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="Topic" />
@@ -119,20 +120,20 @@ function TopicRow({ session, api, onChanged, onToast }) {
       ) : (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: INK, fontFamily: FONT, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: C.ink, fontFamily: C.font, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {session.title || 'Untitled topic'}
             </div>
-            <div style={{ fontSize: 11, color: MUTED, display: 'flex', alignItems: 'center', gap: 8, marginTop: 2 }}>
-              <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}><Calendar size={10} /> {fmtDate(session.startTime || session.scheduled_start)}</span>
-              <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}><Clock size={10} /> {fmtTime(session.startTime || session.scheduled_start)}</span>
+            <div style={{ fontSize: 11, color: C.muted, display: 'flex', alignItems: 'center', gap: 8, marginTop: 2 }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}><Ico ti="ti-calendar" size={10} /> {fmtDate(session.startTime || session.scheduled_start)}</span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}><Ico ti="ti-clock" size={10} /> {fmtTime(session.startTime || session.scheduled_start)}</span>
             </div>
           </div>
           <StatusPill status={session.status} />
           <button onClick={() => setOpen((o) => !o)} style={iconBtn} title="Materials">
-            <ChevronDown size={14} style={{ transform: open ? 'rotate(180deg)' : 'none', transition: '.15s' }} />
+            <Ico ti="ti-chevron-down" size={14} style={{ transform: open ? 'rotate(180deg)' : 'none', transition: '.15s' }} />
           </button>
           <button onClick={() => setEdit(true)} style={linkBtn}>Edit</button>
-          <button onClick={del} style={iconBtn}><Trash2 size={13} /></button>
+          <button onClick={del} style={iconBtn}><Ico ti="ti-trash" size={13} /></button>
         </div>
       )}
       {open && !edit && <Materials sessionId={session.id} api={api} onToast={onToast} />}
@@ -165,14 +166,14 @@ function ModuleCard({ module: mod, courseId, api, onChanged, onToast }) {
   };
 
   return (
-    <div style={{ background: LIGHT, borderRadius: 12, padding: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
+    <div style={{ background: C.bg, borderRadius: 12, padding: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <button onClick={() => setOpen((o) => !o)} style={iconBtn}>
-          <ChevronDown size={16} style={{ transform: open ? 'rotate(180deg)' : 'none', transition: '.15s' }} />
+          <Ico ti="ti-chevron-down" size={16} style={{ transform: open ? 'rotate(180deg)' : 'none', transition: '.15s' }} />
         </button>
-        <span style={{ flex: 1, fontSize: 14, fontWeight: 800, color: INK, fontFamily: FONT }}>{mod.title}</span>
-        <span style={{ fontSize: 11, color: MUTED, fontFamily: FONT }}>{mod.sessions.length} topic{mod.sessions.length !== 1 ? 's' : ''}</span>
-        <button onClick={delModule} style={iconBtn}><Trash2 size={14} /></button>
+        <span style={{ flex: 1, fontSize: 14, fontWeight: 800, color: C.ink, fontFamily: C.font }}>{mod.title}</span>
+        <span style={{ fontSize: 11, color: C.muted, fontFamily: C.font }}>{mod.sessions.length} topic{mod.sessions.length !== 1 ? 's' : ''}</span>
+        <button onClick={delModule} style={iconBtn}><Ico ti="ti-trash" size={14} /></button>
       </div>
       {open && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -180,7 +181,7 @@ function ModuleCard({ module: mod, courseId, api, onChanged, onToast }) {
             <TopicRow key={s.id} session={s} api={api} onChanged={onChanged} onToast={onToast} />
           ))}
           {addingTopic ? (
-            <div style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 10, padding: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
               <Inp value={t.title} onChange={(e) => setT({ ...t, title: e.target.value })} placeholder="Topic / lesson focus" />
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                 <Inp type="date" value={t.date} onChange={(e) => setT({ ...t, date: e.target.value })} />
@@ -198,7 +199,7 @@ function ModuleCard({ module: mod, courseId, api, onChanged, onToast }) {
               </div>
             </div>
           ) : (
-            <Btn size="sm" variant="secondary" onClick={() => setAddingTopic(true)}><Plus size={13} /> Add topic</Btn>
+            <Btn size="sm" variant="secondary" onClick={() => setAddingTopic(true)}><Ico ti="ti-plus" size={13} /> Add topic</Btn>
           )}
         </div>
       )}
@@ -236,21 +237,21 @@ export default function CourseCurriculum({ open, course, onClose, onToast }) {
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <span style={{ fontSize: 12, color: MUTED, fontFamily: FONT }}>{modules.length} modules · {totalTopics} topics</span>
+          <span style={{ fontSize: 12, color: C.muted, fontFamily: C.font }}>{modules.length} modules · {totalTopics} topics</span>
 
           {modules.map((m) => (
             <ModuleCard key={m.id} module={m} courseId={course.id} api={api} onChanged={load} onToast={onToast} />
           ))}
 
           {modules.length === 0 && (
-            <div style={{ border: `1px dashed ${BORDER}`, borderRadius: 12, padding: 24, textAlign: 'center', color: MUTED, fontSize: 13, fontFamily: FONT }}>
+            <div style={{ border: `1px dashed ${C.border}`, borderRadius: 12, padding: 24, textAlign: 'center', color: C.muted, fontSize: 13, fontFamily: C.font }}>
               No modules yet. Add the first one below.
             </div>
           )}
 
           <div style={{ display: 'flex', gap: 8 }}>
             <Inp value={newModule} onChange={(e) => setNewModule(e.target.value)} placeholder="New module name (e.g. Week 5)" style={{ flex: 1 }} />
-            <Btn onClick={addModule}><Plus size={14} /> Add module</Btn>
+            <Btn onClick={addModule}><Ico ti="ti-plus" size={14} /> Add module</Btn>
           </div>
         </div>
       )}
@@ -259,7 +260,7 @@ export default function CourseCurriculum({ open, course, onClose, onToast }) {
 }
 
 /* ── styles ──────────────────────────────────────────────────────────── */
-const iconBtn = { background: 'none', border: 'none', cursor: 'pointer', color: MUTED, display: 'flex', alignItems: 'center', padding: 2 };
-const linkBtn = { background: 'none', border: 'none', cursor: 'pointer', color: AMBER, fontSize: 12, fontWeight: 700, fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 4 };
-const miniInp = { fontSize: 12, border: `1px solid ${BORDER}`, borderRadius: 6, padding: '5px 6px', fontFamily: FONT, color: INK, boxSizing: 'border-box', width: '100%' };
-const miniSel = { fontSize: 11, border: `1px solid ${BORDER}`, borderRadius: 6, padding: '2px 4px', fontFamily: FONT };
+const iconBtn = { background: 'none', border: 'none', cursor: 'pointer', color: C.muted, display: 'flex', alignItems: 'center', padding: 2 };
+const linkBtn = { background: 'none', border: 'none', cursor: 'pointer', color: C.brand, fontSize: 12, fontWeight: 700, fontFamily: C.font, display: 'flex', alignItems: 'center', gap: 4 };
+const miniInp = { fontSize: 12, border: `1px solid ${C.border}`, borderRadius: 6, padding: '5px 6px', fontFamily: C.font, color: C.ink, boxSizing: 'border-box', width: '100%' };
+const miniSel = { fontSize: 11, border: `1px solid ${C.border}`, borderRadius: 6, padding: '2px 4px', fontFamily: C.font };

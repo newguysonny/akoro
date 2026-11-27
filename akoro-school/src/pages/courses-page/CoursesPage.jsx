@@ -2,14 +2,15 @@
  * CoursesPage — composes the components from ./parts.jsx.
  */
 import { useState, useEffect } from 'react';
-import {Plus, Video, BookOpen, Users, Clock, Calendar, Trash2, Edit2, ChevronRight, Share2, Check, AlertTriangle } from 'lucide-react';
+import { Ico } from '../../theme/Ico.jsx';
 import { PageLayout } from '../../components/Layout.jsx';
 import { Btn, Modal, Inp, Sel, StatusPill, PlatBadge, CoursTypeBadge, Toast } from '../../components/Primitives.jsx';
 import { useCoursesAPI } from '../../hooks/useCoursesAPI.js';
 import LiveClassWizard from '../../components/LiveClassWizard.jsx';
 import OnDemandWizard from '../../components/OnDemandWizard.jsx';
 import CourseCurriculum from '../../components/CourseCurriculum.jsx';
-import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, PURPLE, BLUE, FONT } from '../../constants.js';
+import { GREEN, PURPLE, BLUE } from '../../constants.js';
+import { C, tint } from '../../theme/colors.js';
 
 /* ── Mock data ─────────────────────────────────────────────────────── */
 import { ScheduleSessionModal, EditCourseModal, LEARNER_URL, CourseCard, SessionRow } from './parts.jsx';
@@ -157,13 +158,13 @@ export default function CoursesPage() {
       action={
         <div style={{ display: 'flex', gap: 8 }}>
           <Btn size="sm" variant="secondary" onClick={() => setScheduleModal(true)}>
-            <Calendar size={14} /> Schedule Session
+            <Ico ti="ti-calendar" size={14} /> Schedule Session
           </Btn>
           <Btn size="sm" variant="secondary" onClick={() => setOnDemandModal(true)}>
-            <BookOpen size={14} /> New On-Demand
+            <Ico ti="ti-book" size={14} /> New On-Demand
           </Btn>
           <Btn size="sm" onClick={() => setLiveWizard(true)}>
-            <Plus size={14} /> New Live Class
+            <Ico ti="ti-plus" size={14} /> New Live Class
           </Btn>
         </div>
       }
@@ -172,20 +173,20 @@ export default function CoursesPage() {
         <div style={{
           display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16,
           padding: '11px 14px', borderRadius: 12,
-          background: '#FEF3C7', border: '1px solid #FDE68A', fontFamily: FONT,
+          background: '#FEF3C7', border: '1px solid #FDE68A', fontFamily: C.font,
         }}>
-          <span style={{ display: 'flex' }}><AlertTriangle size={16} color="#B45309" /></span>
+          <span style={{ display: 'flex' }}><Ico ti="ti-alert-triangle" size={16} color="#B45309" /></span>
           <span style={{ flex: 1, fontSize: 12.5, fontWeight: 600, color: '#92400E' }}>{loadError}</span>
           <button onClick={() => { setLoading(true); load(); }} style={{
             padding: '6px 13px', borderRadius: 9, border: '1px solid #FDE68A',
-            background: WHITE, color: '#92400E', fontSize: 12, fontWeight: 800,
-            cursor: 'pointer', fontFamily: FONT,
+            background: C.surface, color: '#92400E', fontSize: 12, fontWeight: 800,
+            cursor: 'pointer', fontFamily: C.font,
           }}>Retry</button>
         </div>
       )}
       {/* Courses grid */}
       <div style={{ marginBottom: 32 }}>
-        <h2 style={{ fontSize: 16, fontWeight: 700, color: INK, margin: '0 0 16px', fontFamily: FONT }}>
+        <h2 style={{ fontSize: 16, fontWeight: 700, color: C.ink, margin: '0 0 16px', fontFamily: C.font }}>
           Your Courses ({loading ? '…' : courses.length})
         </h2>
         {loading ? (
@@ -197,12 +198,12 @@ export default function CoursesPage() {
             {courses.map(c => <CourseCard key={c.id} course={c} onManage={setCurriculumFor} onEdit={setEditCourse} onDelete={handleDeleteCourse} />)}
             {courses.length === 0 && (
               <div style={{
-                gridColumn: '1 / -1', background: WHITE, border: `1px dashed ${BORDER}`,
+                gridColumn: '1 / -1', background: C.surface, border: `1px dashed ${C.border}`,
                 borderRadius: 16, padding: '40px', textAlign: 'center',
               }}>
-                <BookOpen size={32} color={MUTED} style={{ marginBottom: 12 }} />
-                <p style={{ fontSize: 14, color: MUTED, margin: '0 0 16px', fontFamily: FONT }}>No courses yet</p>
-                <Btn onClick={() => setLiveWizard(true)}><Plus size={14} /> Create your first course</Btn>
+                <Ico ti="ti-book" size={32} color={C.muted} style={{ marginBottom: 12 }} />
+                <p style={{ fontSize: 14, color: C.muted, margin: '0 0 16px', fontFamily: C.font }}>No courses yet</p>
+                <Btn onClick={() => setLiveWizard(true)}><Ico ti="ti-plus" size={14} /> Create your first course</Btn>
               </div>
             )}
           </div>
@@ -211,7 +212,7 @@ export default function CoursesPage() {
 
       {/* Upcoming sessions */}
       <div>
-        <h2 style={{ fontSize: 16, fontWeight: 700, color: INK, margin: '0 0 16px', fontFamily: FONT }}>
+        <h2 style={{ fontSize: 16, fontWeight: 700, color: C.ink, margin: '0 0 16px', fontFamily: C.font }}>
           Live Sessions
         </h2>
         {loading ? (
@@ -222,10 +223,10 @@ export default function CoursesPage() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {sessions.map(s => <SessionRow key={s.id} session={s} onDelete={handleDeleteSession} />)}
             {sessions.length === 0 && (
-              <div style={{ background: WHITE, border: `1px dashed ${BORDER}`, borderRadius: 12, padding: '32px', textAlign: 'center' }}>
-                <p style={{ fontSize: 14, color: MUTED, margin: '0 0 12px', fontFamily: FONT }}>No sessions scheduled</p>
+              <div style={{ background: C.surface, border: `1px dashed ${C.border}`, borderRadius: 12, padding: '32px', textAlign: 'center' }}>
+                <p style={{ fontSize: 14, color: C.muted, margin: '0 0 12px', fontFamily: C.font }}>No sessions scheduled</p>
                 <Btn size="sm" variant="secondary" onClick={() => setScheduleModal(true)}>
-                  <Calendar size={14} /> Schedule one
+                  <Ico ti="ti-calendar" size={14} /> Schedule one
                 </Btn>
               </div>
             )}

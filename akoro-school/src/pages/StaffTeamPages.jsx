@@ -13,16 +13,32 @@
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
-  Crown, GraduationCap, ClipboardList, HeartHandshake, Users,
-  LogOut, ChevronRight, Briefcase, Calculator, Headphones, Shield, Sparkles,
-  Bus, UtensilsCrossed, Wrench, Stethoscope, Monitor, BookOpen,
-  Library, Megaphone, BedDouble,
+  Crown,
+  GraduationCap,
+  ClipboardList,
+  HeartHandshake,
+  Users,
+  Briefcase,
+  Calculator,
+  Headphones,
+  Shield,
+  Sparkles,
+  Bus,
+  UtensilsCrossed,
+  Wrench,
+  Stethoscope,
+  Monitor,
+  Library,
+  Megaphone,
+  BedDouble,
 } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import ResourcePage from '../components/mgmt/ResourcePage.jsx';
 import BackButton from '../components/BackButton.jsx';
 import { apiPost } from '../services/api.js';
-import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, BLUE, FONT } from '../constants.js';
+import { GREEN, RED, BLUE } from '../constants.js';
+import { C, tint } from '../theme/colors.js';
+import { Ico } from '../theme/Ico.jsx';
 import { confirmDialog } from '../components/ConfirmHost.jsx';
 
 const slug = (s) => s.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
@@ -31,30 +47,30 @@ const ACADEMIC = {
   key: 'academic', path: '/staff/academic', label: 'Academic Staff',
   subtitle: 'Teaching and academic team, grouped by role',
   groups: [
-    { name: 'Leadership', icon: Crown, desc: 'Principal, VPs, Heads of School' },
-    { name: 'Class Teacher', icon: GraduationCap, desc: 'Form and subject teachers' },
-    { name: 'Academic Coordinators', icon: ClipboardList, desc: 'Curriculum & exam coordinators' },
-    { name: 'Special Needs Teacher', icon: HeartHandshake, desc: 'SEN & inclusion specialists' },
-    { name: 'Teaching Assistants', icon: Users, desc: 'Classroom support staff' },
+    { name: 'Leadership', icon: Crown, ti: 'ti-crown', desc: 'Principal, VPs, Heads of School' },
+    { name: 'Class Teacher', icon: GraduationCap, ti: 'ti-school', desc: 'Form and subject teachers' },
+    { name: 'Academic Coordinators', icon: ClipboardList, ti: 'ti-clipboard-list', desc: 'Curriculum & exam coordinators' },
+    { name: 'Special Needs Teacher', icon: HeartHandshake, ti: 'ti-heart-handshake', desc: 'SEN & inclusion specialists' },
+    { name: 'Teaching Assistants', icon: Users, ti: 'ti-users', desc: 'Classroom support staff' },
   ],
 };
 const NON_ACADEMIC = {
   key: 'non-academic', path: '/staff/non-academic', label: 'Non-Academic Staff',
   subtitle: 'Administrative and support team, grouped by role',
   groups: [
-    { name: 'Administration', icon: Briefcase, desc: 'Office & admin staff' },
-    { name: 'Bursary & Accounts', icon: Calculator, desc: 'Finance and fees team' },
-    { name: 'Front Desk & Reception', icon: Headphones, desc: 'Reception and enquiries' },
-    { name: 'Security', icon: Shield, desc: 'Gate and campus security' },
-    { name: 'Custodial & Cleaning', icon: Sparkles, desc: 'Cleaners and janitorial' },
-    { name: 'Drivers & Transport', icon: Bus, desc: 'Bus drivers and transport' },
-    { name: 'Kitchen & Catering', icon: UtensilsCrossed, desc: 'Kitchen and catering staff' },
-    { name: 'Maintenance', icon: Wrench, desc: 'Facilities and repairs' },
-    { name: 'Medical & Nursing', icon: Stethoscope, desc: 'School nurse and clinic' },
-    { name: 'ICT Support', icon: Monitor, desc: 'IT and technical support' },
-    { name: 'Library', icon: Library, desc: 'Librarians and library assistants' },
-    { name: 'Marketing & Communications', icon: Megaphone, desc: 'Marketing, PR and comms' },
-    { name: 'Boarding & Welfare', icon: BedDouble, desc: 'Matrons and house parents' },
+    { name: 'Administration', icon: Briefcase, ti: 'ti-briefcase', desc: 'Office & admin staff' },
+    { name: 'Bursary & Accounts', icon: Calculator, ti: 'ti-calculator', desc: 'Finance and fees team' },
+    { name: 'Front Desk & Reception', icon: Headphones, ti: 'ti-headphones', desc: 'Reception and enquiries' },
+    { name: 'Security', icon: Shield, ti: 'ti-shield', desc: 'Gate and campus security' },
+    { name: 'Custodial & Cleaning', icon: Sparkles, ti: 'ti-sparkles', desc: 'Cleaners and janitorial' },
+    { name: 'Drivers & Transport', icon: Bus, ti: 'ti-bus', desc: 'Bus drivers and transport' },
+    { name: 'Kitchen & Catering', icon: UtensilsCrossed, ti: 'ti-tools-kitchen-2', desc: 'Kitchen and catering staff' },
+    { name: 'Maintenance', icon: Wrench, ti: 'ti-tool', desc: 'Facilities and repairs' },
+    { name: 'Medical & Nursing', icon: Stethoscope, ti: 'ti-stethoscope', desc: 'School nurse and clinic' },
+    { name: 'ICT Support', icon: Monitor, ti: 'ti-device-desktop', desc: 'IT and technical support' },
+    { name: 'Library', icon: Library, ti: 'ti-library', desc: 'Librarians and library assistants' },
+    { name: 'Marketing & Communications', icon: Megaphone, ti: 'ti-speakerphone', desc: 'Marketing, PR and comms' },
+    { name: 'Boarding & Welfare', icon: BedDouble, ti: 'ti-bed', desc: 'Matrons and house parents' },
   ],
 };
 const SECTIONS = { academic: ACADEMIC, 'non-academic': NON_ACADEMIC };
@@ -64,12 +80,12 @@ function Guide({ title = 'Quick Guide', items }) {
   return (
     <div style={{ background: `${BLUE}08`, border: `1px solid ${BLUE}22`, borderRadius: 14, padding: '14px 15px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 10 }}>
-        <BookOpen size={15} color={BLUE} />
-        <span style={{ fontSize: 12.5, fontWeight: 800, color: BLUE, fontFamily: FONT }}>{title}</span>
+        <Ico ti="ti-book" size={15} color={BLUE} />
+        <span style={{ fontSize: 12.5, fontWeight: 800, color: BLUE, fontFamily: C.font }}>{title}</span>
       </div>
       {items.map((it, i) => (
-        <p key={it.t} style={{ fontSize: 11.5, color: MUTED, lineHeight: 1.6, margin: i === 0 ? 0 : '10px 0 0', fontFamily: FONT, ...(i > 0 ? { paddingTop: 10, borderTop: `1px solid ${BLUE}18` } : {}) }}>
-          <b style={{ color: INK }}>{it.t}:</b> {it.d}
+        <p key={it.t} style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.6, margin: i === 0 ? 0 : '10px 0 0', fontFamily: C.font, ...(i > 0 ? { paddingTop: 10, borderTop: `1px solid ${BLUE}18` } : {}) }}>
+          <b style={{ color: C.ink }}>{it.t}:</b> {it.d}
         </p>
       ))}
     </div>
@@ -98,17 +114,17 @@ function StaffGroupsPage({ section }) {
         <div style={{ flex: '2 1 460px', minWidth: 300, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 14 }}>
           {section.groups.map((g) => (
             <button key={g.name} onClick={() => navigate(`${section.path}/${slug(g.name)}`)}
-              style={{ display: 'flex', alignItems: 'center', gap: 14, textAlign: 'left', padding: '16px 16px', borderRadius: 14, border: `1px solid ${BORDER}`, background: WHITE, cursor: 'pointer', fontFamily: FONT, transition: 'all .12s' }}
-              onMouseEnter={(e) => { e.currentTarget.style.borderColor = AMBER; e.currentTarget.style.background = LIGHT; }}
-              onMouseLeave={(e) => { e.currentTarget.style.borderColor = BORDER; e.currentTarget.style.background = WHITE; }}>
-              <div style={{ width: 44, height: 44, borderRadius: 11, background: `${AMBER}18`, color: AMBER, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <g.icon size={20} />
+              style={{ display: 'flex', alignItems: 'center', gap: 14, textAlign: 'left', padding: '16px 16px', borderRadius: 14, border: `1px solid ${C.border}`, background: C.surface, cursor: 'pointer', fontFamily: C.font, transition: 'all .12s' }}
+              onMouseEnter={(e) => { e.currentTarget.style.borderColor = C.brand; e.currentTarget.style.background = C.bg; }}
+              onMouseLeave={(e) => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.background = C.surface; }}>
+              <div style={{ width: 44, height: 44, borderRadius: 11, background: tint(9), color: C.brand, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <Ico lucide={g.icon} ti={g.ti} size={20} />
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 14, fontWeight: 800, color: INK }}>{g.name}</div>
-                <div style={{ fontSize: 11.5, color: MUTED2, marginTop: 2 }}>{g.desc}</div>
+                <div style={{ fontSize: 14, fontWeight: 800, color: C.ink }}>{g.name}</div>
+                <div style={{ fontSize: 11.5, color: C.muted2, marginTop: 2 }}>{g.desc}</div>
               </div>
-              <ChevronRight size={17} color={MUTED2} style={{ flexShrink: 0 }} />
+              <Ico ti="ti-chevron-right" size={17} color={C.muted2} style={{ flexShrink: 0 }} />
             </button>
           ))}
         </div>
@@ -132,8 +148,8 @@ const EMPLOYMENT = [
 const STATUSES = [{ value: 'active', label: 'Active' }, { value: 'inactive', label: 'Inactive' }];
 
 const statusPill = (v) => {
-  const c = v === 'active' ? GREEN : MUTED2;
-  return <span style={{ padding: '3px 10px', borderRadius: 999, background: `${c}15`, color: c, fontSize: 11, fontWeight: 800, textTransform: 'capitalize' }}>{v || '—'}</span>;
+  const c = v === 'active' ? GREEN : C.muted2;
+  return <span style={{ padding: '3px 10px', borderRadius: 999, background: tint(8, c), color: c, fontSize: 11, fontWeight: 800, textTransform: 'capitalize' }}>{v || '—'}</span>;
 };
 
 // Name cell: photo (or initials) + "First LASTNAME" with qualification beneath,
@@ -144,12 +160,12 @@ function StaffName({ row }) {
   const initials = `${first[0] || ''}${last[0] || ''}`.toUpperCase();
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-      <div style={{ width: 34, height: 34, borderRadius: '50%', flexShrink: 0, overflow: 'hidden', background: `${AMBER}18`, color: AMBER, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800 }}>
+      <div style={{ width: 34, height: 34, borderRadius: '50%', flexShrink: 0, overflow: 'hidden', background: tint(9), color: C.brand, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800 }}>
         {row.photo_url ? <img src={row.photo_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : initials}
       </div>
       <div style={{ minWidth: 0 }}>
-        <div style={{ fontSize: 13, fontWeight: 800, color: INK }}>{first} {last.toUpperCase()}</div>
-        {row.qualification && <div style={{ fontSize: 11, color: MUTED2, marginTop: 1 }}>({row.qualification})</div>}
+        <div style={{ fontSize: 13, fontWeight: 800, color: C.ink }}>{first} {last.toUpperCase()}</div>
+        {row.qualification && <div style={{ fontSize: 11, color: C.muted2, marginTop: 1 }}>({row.qualification})</div>}
       </div>
     </div>
   );
@@ -169,7 +185,7 @@ export function StaffGroupPage() {
     return (
       <PageLayout title="Not found" subtitle="">
         <BackButton onClick={() => navigate('/staff/academic')} label="Back" />
-        <p style={{ marginTop: 16, color: MUTED, fontFamily: FONT }}>That staff group doesn’t exist.</p>
+        <p style={{ marginTop: 16, color: C.muted, fontFamily: C.font }}>That staff group doesn’t exist.</p>
       </PageLayout>
     );
   }
@@ -245,7 +261,7 @@ export function StaffGroupPage() {
               { key: 'status', label: 'Status', type: 'select', default: 'active', options: STATUSES },
             ]}
             rowActions={[
-              { icon: <LogOut size={13} />, label: 'Log out', title: 'Force-log-out this staff', color: RED, onClick: logout },
+              { icon: <Ico ti="ti-logout" size={13} />, label: 'Log out', title: 'Force-log-out this staff', color: RED, onClick: logout },
             ]}
           />
         </div>
@@ -259,6 +275,6 @@ export function StaffGroupPage() {
 
 const backBtn = {
   display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 9,
-  border: `1.5px solid ${BORDER}`, background: WHITE, color: MUTED, fontSize: 12.5, fontWeight: 700,
-  cursor: 'pointer', fontFamily: FONT,
+  border: `1.5px solid ${C.border}`, background: C.surface, color: C.muted, fontSize: 12.5, fontWeight: 700,
+  cursor: 'pointer', fontFamily: C.font,
 };

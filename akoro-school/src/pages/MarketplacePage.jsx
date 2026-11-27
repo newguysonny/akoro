@@ -1,14 +1,15 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Check, Lock, Loader2, Plus, Trash2, Upload, FileText } from 'lucide-react';
 import ToolsWorkbench from '../components/teaching/ToolsWorkbench.jsx';
 import { PageLayout } from '../components/Layout.jsx';
 import { apiGet, apiPost, API } from '../services/api.js';
 import { uploadAndOcr } from '../services/uploadApi.js';
-import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, GREEN, RED, FONT } from '../constants.js';
+import { GREEN, RED } from '../constants.js';
+import { C, tint } from '../theme/colors.js';
+import { Ico } from '../theme/Ico.jsx';
 
-const BRAND = AMBER;
-const FONTF = FONT;
+const BRAND = C.brand;
+const FONTF = C.font;
 const naira = (n) => `₦${Number(n || 0).toLocaleString('en-NG')}`;
 
 const TEMPLATE_TARGETS = [
@@ -55,30 +56,30 @@ function CreateTemplateModal({ onClose, onSaved }) {
     }
   };
 
-  const inp = { width: '100%', padding: '10px 13px', borderRadius: 10, border: `1.5px solid ${BORDER}`, outline: 'none', fontSize: 13.5, fontFamily: FONTF, color: INK, boxSizing: 'border-box' };
+  const inp = { width: '100%', padding: '10px 13px', borderRadius: 10, border: `1.5px solid ${C.border}`, outline: 'none', fontSize: 13.5, fontFamily: FONTF, color: C.ink, boxSizing: 'border-box' };
 
   return (
     <>
-      <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 3000, background: 'rgba(0,0,0,.45)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 3000, background: C.overlay, backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
       <div onClick={(e) => e.stopPropagation()} style={{ zIndex: 3100, width: '100%', background: '#fff', borderRadius: 22, padding: '20px 18px 28px', boxShadow: '0 12px 48px rgba(0,0,0,.22)', animation: 'sheet-up .25s ease', fontFamily: FONTF, maxHeight: '90vh', overflowY: 'auto', maxWidth: 520 }}>
-        <p style={{ fontSize: 16, fontWeight: 900, color: INK, margin: '0 0 4px' }}>Create a template</p>
-        <p style={{ fontSize: 12.5, color: MUTED, margin: '0 0 18px', lineHeight: 1.5 }}>Upload a photo of your existing notes, worksheet or report. We’ll turn it into a reusable template your agent copies when generating new material.</p>
+        <p style={{ fontSize: 16, fontWeight: 900, color: C.ink, margin: '0 0 4px' }}>Create a template</p>
+        <p style={{ fontSize: 12.5, color: C.muted, margin: '0 0 18px', lineHeight: 1.5 }}>Upload a photo of your existing notes, worksheet or report. We’ll turn it into a reusable template your agent copies when generating new material.</p>
 
         <input ref={fileRef} type="file" accept="image/*,application/pdf" style={{ display: 'none' }} onChange={pick} />
 
         {stage !== 'review' && (
-          <div onClick={() => stage !== 'extracting' && fileRef.current?.click()} style={{ border: `2px dashed ${BORDER}`, borderRadius: 16, padding: '30px 20px', textAlign: 'center', cursor: stage === 'extracting' ? 'default' : 'pointer', marginBottom: 16 }}>
+          <div onClick={() => stage !== 'extracting' && fileRef.current?.click()} style={{ border: `2px dashed ${C.border}`, borderRadius: 16, padding: '30px 20px', textAlign: 'center', cursor: stage === 'extracting' ? 'default' : 'pointer', marginBottom: 16 }}>
             {stage === 'extracting' ? (
               <>
-                <Loader2 size={26} color={BRAND} style={{ animation: 'spin .8s linear infinite', marginBottom: 8 }} />
-                <p style={{ fontSize: 13.5, fontWeight: 700, color: INK, margin: 0 }}>Reading {fileName}…</p>
-                <p style={{ fontSize: 12, color: MUTED2, margin: '4px 0 0' }}>Extracting the structure</p>
+                <Ico ti="ti-loader-2" size={26} color={BRAND} style={{ animation: 'spin .8s linear infinite', marginBottom: 8 }} />
+                <p style={{ fontSize: 13.5, fontWeight: 700, color: C.ink, margin: 0 }}>Reading {fileName}…</p>
+                <p style={{ fontSize: 12, color: C.muted2, margin: '4px 0 0' }}>Extracting the structure</p>
               </>
             ) : (
               <>
-                <Upload size={26} color={MUTED2} style={{ marginBottom: 8 }} />
-                <p style={{ fontSize: 13.5, fontWeight: 800, color: INK, margin: 0 }}>Tap to upload a sample</p>
-                <p style={{ fontSize: 12, color: MUTED2, margin: '4px 0 0' }}>Image or PDF · lesson notes, worksheet, report…</p>
+                <Ico ti="ti-upload" size={26} color={C.muted2} style={{ marginBottom: 8 }} />
+                <p style={{ fontSize: 13.5, fontWeight: 800, color: C.ink, margin: 0 }}>Tap to upload a sample</p>
+                <p style={{ fontSize: 12, color: C.muted2, margin: '4px 0 0' }}>Image or PDF · lesson notes, worksheet, report…</p>
               </>
             )}
           </div>
@@ -86,15 +87,15 @@ function CreateTemplateModal({ onClose, onSaved }) {
 
         {stage === 'review' && (
           <>
-            <label style={{ fontSize: 12, fontWeight: 800, color: '#374151' }}>Template name</label>
+            <label style={{ fontSize: 12, fontWeight: 800, color: C.ink2 }}>Template name</label>
             <input value={title} onChange={(e) => setTitle(e.target.value)} style={{ ...inp, marginTop: 6, marginBottom: 14 }} placeholder="e.g. My weekly worksheet format" />
 
-            <label style={{ fontSize: 12, fontWeight: 800, color: '#374151' }}>Use for</label>
+            <label style={{ fontSize: 12, fontWeight: 800, color: C.ink2 }}>Use for</label>
             <select value={target} onChange={(e) => setTarget(e.target.value)} style={{ ...inp, marginTop: 6, marginBottom: 14, cursor: 'pointer' }}>
               {TEMPLATE_TARGETS.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
             </select>
 
-            <label style={{ fontSize: 12, fontWeight: 800, color: '#374151' }}>Extracted content — edit if needed</label>
+            <label style={{ fontSize: 12, fontWeight: 800, color: C.ink2 }}>Extracted content — edit if needed</label>
             <textarea value={text} onChange={(e) => setText(e.target.value)} rows={6} style={{ ...inp, marginTop: 6, resize: 'vertical', lineHeight: 1.55 }} />
           </>
         )}
@@ -102,9 +103,9 @@ function CreateTemplateModal({ onClose, onSaved }) {
         {error && <p style={{ fontSize: 12.5, fontWeight: 600, color: RED, margin: '12px 0 0' }}>{error}</p>}
 
         <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
-          <button onClick={onClose} style={{ flex: 1, padding: '13px', borderRadius: 14, border: `1.5px solid ${BORDER}`, background: LIGHT, fontSize: 13, fontWeight: 800, color: MUTED, cursor: 'pointer', fontFamily: FONTF }}>Cancel</button>
+          <button onClick={onClose} style={{ flex: 1, padding: '13px', borderRadius: 14, border: `1.5px solid ${C.border}`, background: C.bg, fontSize: 13, fontWeight: 800, color: C.muted, cursor: 'pointer', fontFamily: FONTF }}>Cancel</button>
           {stage === 'review' && (
-            <button onClick={save} disabled={saving} style={{ flex: 1.5, padding: '13px', borderRadius: 14, border: 'none', background: saving ? '#E5E7EB' : `linear-gradient(135deg,${BRAND},#D4651E)`, color: saving ? '#9CA3AF' : '#fff', fontSize: 13, fontWeight: 800, cursor: saving ? 'default' : 'pointer', fontFamily: FONTF }}>
+            <button onClick={save} disabled={saving} style={{ flex: 1.5, padding: '13px', borderRadius: 14, border: 'none', background: saving ? C.borderSoft : `linear-gradient(135deg,${BRAND},${C.brandDeep})`, color: saving ? C.muted2 : '#fff', fontSize: 13, fontWeight: 800, cursor: saving ? 'default' : 'pointer', fontFamily: FONTF }}>
               {saving ? 'Saving…' : 'Save template'}
             </button>
           )}
@@ -119,32 +120,32 @@ function CreateTemplateModal({ onClose, onSaved }) {
 function ViewTemplateModal({ tpl, onClose }) {
   const s = tpl.structure || {};
   return (
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 3000, background: 'rgba(0,0,0,.45)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 3000, background: C.overlay, backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 560, maxHeight: '88vh', overflowY: 'auto', background: '#fff', borderRadius: 22, padding: '22px 20px 26px', boxShadow: '0 12px 48px rgba(0,0,0,.22)', fontFamily: FONTF, animation: 'sheet-up .25s ease' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-          <p style={{ fontSize: 16, fontWeight: 900, color: INK, margin: 0 }}>{tpl.title}</p>
+          <p style={{ fontSize: 16, fontWeight: 900, color: C.ink, margin: 0 }}>{tpl.title}</p>
           {tpl.is_sample && <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 20, background: `${GREEN}15`, color: GREEN }}>SAMPLE</span>}
         </div>
-        <p style={{ fontSize: 12, color: MUTED2, margin: '0 0 16px' }}>{(TEMPLATE_TARGETS.find((x) => x.value === tpl.tool_target) || {}).label || tpl.tool_target}</p>
+        <p style={{ fontSize: 12, color: C.muted2, margin: '0 0 16px' }}>{(TEMPLATE_TARGETS.find((x) => x.value === tpl.tool_target) || {}).label || tpl.tool_target}</p>
 
         {s.sections?.length > 0 && (
           <div style={{ marginBottom: 16 }}>
             <p style={{ fontSize: 11, fontWeight: 900, color: BRAND, letterSpacing: 1, textTransform: 'uppercase', margin: '0 0 7px' }}>Structure</p>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-              {s.sections.map((sec, i) => <span key={i} style={{ fontSize: 12, fontWeight: 700, color: INK, background: LIGHT, border: `1px solid ${BORDER}`, borderRadius: 8, padding: '4px 10px' }}>{i + 1}. {sec}</span>)}
+              {s.sections.map((sec, i) => <span key={i} style={{ fontSize: 12, fontWeight: 700, color: C.ink, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: '4px 10px' }}>{i + 1}. {sec}</span>)}
             </div>
-            {s.style && <p style={{ fontSize: 12.5, color: MUTED, margin: '10px 0 0' }}><b>Style:</b> {s.style}</p>}
+            {s.style && <p style={{ fontSize: 12.5, color: C.muted, margin: '10px 0 0' }}><b>Style:</b> {s.style}</p>}
           </div>
         )}
 
         {tpl.body_markdown && (
           <div>
             <p style={{ fontSize: 11, fontWeight: 900, color: BRAND, letterSpacing: 1, textTransform: 'uppercase', margin: '0 0 7px' }}>Template body (AI fills this)</p>
-            <pre style={{ fontSize: 12.5, color: INK, lineHeight: 1.6, whiteSpace: 'pre-wrap', wordBreak: 'break-word', background: LIGHT, border: `1px solid ${BORDER}`, borderRadius: 12, padding: '14px 16px', margin: 0, fontFamily: 'ui-monospace, Menlo, monospace' }}>{tpl.body_markdown}</pre>
+            <pre style={{ fontSize: 12.5, color: C.ink, lineHeight: 1.6, whiteSpace: 'pre-wrap', wordBreak: 'break-word', background: C.bg, border: `1px solid ${C.border}`, borderRadius: 12, padding: '14px 16px', margin: 0, fontFamily: 'ui-monospace, Menlo, monospace' }}>{tpl.body_markdown}</pre>
           </div>
         )}
 
-        <button onClick={onClose} style={{ width: '100%', marginTop: 18, padding: '12px', borderRadius: 14, border: `1.5px solid ${BORDER}`, background: LIGHT, fontSize: 13, fontWeight: 800, color: MUTED, cursor: 'pointer', fontFamily: FONTF }}>Close</button>
+        <button onClick={onClose} style={{ width: '100%', marginTop: 18, padding: '12px', borderRadius: 14, border: `1.5px solid ${C.border}`, background: C.bg, fontSize: 13, fontWeight: 800, color: C.muted, cursor: 'pointer', fontFamily: FONTF }}>Close</button>
       </div>
     </div>
   );
@@ -153,27 +154,27 @@ function ViewTemplateModal({ tpl, onClose }) {
 /* ─── Item card ───────────────────────────────────────────────────── */
 function ItemCard({ item, busy, onBuy }) {
   return (
-    <div style={{ background: '#fff', borderRadius: 16, border: `1px solid ${item.owned ? `${GREEN}40` : BORDER}`, boxShadow: '0 1px 4px rgba(0,0,0,.05)', padding: '14px 16px', display: 'flex', gap: 13, alignItems: 'flex-start' }}>
-      <div style={{ width: 44, height: 44, flexShrink: 0, borderRadius: 12, background: `${BRAND}12`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>{item.emoji}</div>
+    <div style={{ background: '#fff', borderRadius: 16, border: `1px solid ${item.owned ? `${GREEN}40` : C.border}`, boxShadow: '0 1px 4px rgba(0,0,0,.05)', padding: '14px 16px', display: 'flex', gap: 13, alignItems: 'flex-start' }}>
+      <div style={{ width: 44, height: 44, flexShrink: 0, borderRadius: 12, background: tint(7, BRAND), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>{item.emoji}</div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <p style={{ fontSize: 14, fontWeight: 800, color: INK, margin: 0 }}>{item.name}</p>
-          {item.tag && <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 20, background: `${BRAND}12`, color: BRAND }}>{item.tag}</span>}
+          <p style={{ fontSize: 14, fontWeight: 800, color: C.ink, margin: 0 }}>{item.name}</p>
+          {item.tag && <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 20, background: tint(7, BRAND), color: BRAND }}>{item.tag}</span>}
         </div>
-        <p style={{ fontSize: 12.5, color: MUTED, margin: '5px 0 10px', lineHeight: 1.55 }}>{item.description}</p>
-        <span style={{ fontSize: 14, fontWeight: 900, color: item.price === 0 ? GREEN : INK }}>
+        <p style={{ fontSize: 12.5, color: C.muted, margin: '5px 0 10px', lineHeight: 1.55 }}>{item.description}</p>
+        <span style={{ fontSize: 14, fontWeight: 900, color: item.price === 0 ? GREEN : C.ink }}>
           {item.price === 0 ? 'Free' : naira(item.price)}
         </span>
       </div>
       {/* Owned badge or Unlock button */}
       {item.owned ? (
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '7px 12px', borderRadius: 10, background: `${GREEN}15`, color: GREEN, fontSize: 12, fontWeight: 800, flexShrink: 0, marginTop: 2 }}>
-          <Check size={13} /> Unlocked
+          <Ico ti="ti-check" size={13} /> Unlocked
         </span>
       ) : (
         <button onClick={() => onBuy(item)} disabled={busy}
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 10, border: 'none', background: busy ? '#E5E7EB' : `linear-gradient(135deg,${BRAND},#D4651E)`, color: busy ? '#9CA3AF' : '#fff', fontSize: 12.5, fontWeight: 800, cursor: busy ? 'default' : 'pointer', fontFamily: FONTF, flexShrink: 0, marginTop: 2 }}>
-          {busy ? <Loader2 size={13} style={{ animation: 'spin .8s linear infinite' }} /> : <Lock size={12} />}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 10, border: 'none', background: busy ? C.borderSoft : `linear-gradient(135deg,${BRAND},${C.brandDeep})`, color: busy ? C.muted2 : '#fff', fontSize: 12.5, fontWeight: 800, cursor: busy ? 'default' : 'pointer', fontFamily: FONTF, flexShrink: 0, marginTop: 2 }}>
+          {busy ? <Ico ti="ti-loader-2" size={13} style={{ animation: 'spin .8s linear infinite' }} /> : <Ico ti="ti-lock" size={12} />}
           {item.price === 0 ? 'Get' : 'Unlock'}
         </button>
       )}
@@ -264,7 +265,7 @@ export default function MarketplacePage() {
     <PageLayout title="Tools & Assets" subtitle="Your unlocked tools, assets & templates">
       <div style={{ maxWidth: tab === 'tools' ? 1040 : 600, margin: '0 auto' }}>
         {/* Tabs */}
-        <div style={{ display: 'flex', background: '#fff', borderRadius: 12, padding: 4, marginBottom: 18, border: `1px solid ${BORDER}`, gap: 4 }}>
+        <div style={{ display: 'flex', background: '#fff', borderRadius: 12, padding: 4, marginBottom: 18, border: `1px solid ${C.border}`, gap: 4 }}>
           {(() => {
             const ot = tools.filter((i) => i.owned).length, oa = assets.filter((i) => i.owned).length;
             return [['tools', `Tools${ot ? ` (${ot})` : ''}`], ['assets', `Assets${oa ? ` (${oa})` : ''}`]];
@@ -272,7 +273,7 @@ export default function MarketplacePage() {
             <button key={t} onClick={() => setTab(t)} style={{
               flex: 1, padding: '9px 0', borderRadius: 9, border: 'none',
               background: tab === t ? BRAND : 'transparent',
-              color: tab === t ? '#fff' : MUTED2,
+              color: tab === t ? '#fff' : C.muted2,
               fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: FONTF, transition: 'all .2s',
             }}>{label}</button>
           ))}
@@ -290,27 +291,27 @@ export default function MarketplacePage() {
           <div style={{ marginBottom: 22 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, padding: '0 2px' }}>
               <p style={{ fontSize: 11, fontWeight: 900, color: BRAND, letterSpacing: 1.5, textTransform: 'uppercase', margin: 0 }}>My Templates</p>
-              <button onClick={() => setShowTpl(true)} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 20, border: `1.5px solid ${BRAND}`, background: 'rgba(232,136,74,.08)', color: BRAND, fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: FONTF }}>
-                <Plus size={13} /> Create template
+              <button onClick={() => setShowTpl(true)} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 20, border: `1.5px solid ${BRAND}`, background: tint(8), color: BRAND, fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: FONTF }}>
+                <Ico ti="ti-plus" size={13} /> Create template
               </button>
             </div>
             {templates.length === 0 ? (
-              <div style={{ padding: '18px', borderRadius: 14, border: `1.5px dashed ${BORDER}`, background: LIGHT, textAlign: 'center', fontSize: 12.5, color: MUTED }}>
+              <div style={{ padding: '18px', borderRadius: 14, border: `1.5px dashed ${C.border}`, background: C.bg, textAlign: 'center', fontSize: 12.5, color: C.muted }}>
                 Upload a photo of your notes or worksheet to make a reusable template your agent copies.
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {templates.map((t) => (
-                  <div key={t.id} onClick={() => setViewTpl(t)} style={{ display: 'flex', alignItems: 'center', gap: 11, background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 12, padding: '11px 13px', cursor: 'pointer' }}>
-                    <div style={{ width: 36, height: 36, flexShrink: 0, borderRadius: 9, background: `${BRAND}12`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><FileText size={16} color={BRAND} /></div>
+                  <div key={t.id} onClick={() => setViewTpl(t)} style={{ display: 'flex', alignItems: 'center', gap: 11, background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, padding: '11px 13px', cursor: 'pointer' }}>
+                    <div style={{ width: 36, height: 36, flexShrink: 0, borderRadius: 9, background: tint(7, BRAND), display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Ico ti="ti-file-text" size={16} color={BRAND} /></div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                        <span style={{ fontSize: 13, fontWeight: 800, color: INK, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.title}</span>
+                        <span style={{ fontSize: 13, fontWeight: 800, color: C.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.title}</span>
                         {t.is_sample && <span style={{ fontSize: 9, fontWeight: 800, padding: '1px 7px', borderRadius: 20, background: `${GREEN}15`, color: GREEN, flexShrink: 0 }}>SAMPLE</span>}
                       </div>
-                      <div style={{ fontSize: 11, color: MUTED2 }}>{(TEMPLATE_TARGETS.find((x) => x.value === t.tool_target) || {}).label || t.tool_target}</div>
+                      <div style={{ fontSize: 11, color: C.muted2 }}>{(TEMPLATE_TARGETS.find((x) => x.value === t.tool_target) || {}).label || t.tool_target}</div>
                     </div>
-                    {!t.is_sample && <button onClick={(e) => { e.stopPropagation(); deleteTemplate(t.id); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: MUTED2, padding: 4 }}><Trash2 size={15} /></button>}
+                    {!t.is_sample && <button onClick={(e) => { e.stopPropagation(); deleteTemplate(t.id); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.muted2, padding: 4 }}><Ico ti="ti-trash" size={15} /></button>}
                   </div>
                 ))}
               </div>
@@ -324,18 +325,18 @@ export default function MarketplacePage() {
           <p style={{ fontSize: 11, fontWeight: 900, color: BRAND, letterSpacing: 1.5, textTransform: 'uppercase', margin: 0 }}>
             {tab === 'tools' ? 'Other unlocked tools' : 'Exam Resources'}
           </p>
-          {!loading && <span style={{ fontSize: 12, fontWeight: 700, color: MUTED }}>{ownedCount} unlocked</span>}
+          {!loading && <span style={{ fontSize: 12, fontWeight: 700, color: C.muted }}>{ownedCount} unlocked</span>}
         </div>
 
         {/* List */}
         {loading ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {[0, 1, 2, 3].map((i) => (
-              <div key={i} style={{ height: 92, borderRadius: 16, background: '#F3F4F6', animation: 'pulse-dot 1.5s ease-in-out infinite' }} />
+              <div key={i} style={{ height: 92, borderRadius: 16, background: C.tagBg, animation: 'pulse-dot 1.5s ease-in-out infinite' }} />
             ))}
           </div>
         ) : items.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '40px 24px', color: MUTED2, fontSize: 13.5, lineHeight: 1.6 }}>
+          <div style={{ textAlign: 'center', padding: '40px 24px', color: C.muted2, fontSize: 13.5, lineHeight: 1.6 }}>
             You haven’t unlocked any {tab} yet.<br />
             <a href="/apps" style={{ color: BRAND, fontWeight: 800, textDecoration: 'none' }}>Browse the Apps Center →</a>
           </div>
@@ -358,7 +359,7 @@ export default function MarketplacePage() {
       {viewTpl && <ViewTemplateModal tpl={viewTpl} onClose={() => setViewTpl(null)} />}
 
       {toast && (
-        <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: INK, color: '#fff', padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999, whiteSpace: 'nowrap', boxShadow: '0 4px 14px rgba(0,0,0,.2)' }}>{toast}</div>
+        <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: C.ink, color: '#fff', padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999, whiteSpace: 'nowrap', boxShadow: '0 4px 14px rgba(0,0,0,.2)' }}>{toast}</div>
       )}
     </PageLayout>
   );

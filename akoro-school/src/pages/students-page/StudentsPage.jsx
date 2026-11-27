@@ -2,18 +2,14 @@
  * StudentsPage — composes the components from ./parts.jsx.
  */
 import { useState, useEffect, useRef } from 'react';
-import {
-  Search, Plus, X, User, Mail, Calendar, BookOpen, TrendingUp,
-  Trash2, ChevronRight, Copy, Check, Upload, Link2, UserPlus,
-} from 'lucide-react';
+import { Ico } from '../../theme/Ico.jsx';
 import { useSearchParams } from 'react-router-dom';
 import { PageLayout } from '../../components/Layout.jsx';
 import { Btn, Modal, Inp, StatusPill, Toast } from '../../components/Primitives.jsx';
 import { useStudentsAPI } from '../../hooks/useStudentsAPI.js';
 import { useCoursesAPI }  from '../../hooks/useCoursesAPI.js';
-import {
-  AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, PURPLE, BLUE, RED, FONT,
-} from '../../constants.js';
+import { GREEN, PURPLE, BLUE, RED } from '../../constants.js';
+import { C, tint } from '../../theme/colors.js';
 
 /* ── Enrol Modal — tabs: Manual | Invite Link | Bulk CSV ─────────────── */
 import { EnrolModal, StudentSheet, StudentRow } from './parts.jsx';
@@ -79,21 +75,21 @@ export default function StudentsPage() {
       subtitle={`${loading ? '…' : students.length} learner${students.length === 1 ? '' : 's'}`}
       action={
         <Btn size="sm" onClick={() => setModal(true)}>
-          <Plus size={14} /> Add Student
+          <Ico ti="ti-plus" size={14} /> Add Student
         </Btn>
       }
     >
       {/* Search */}
       <div style={{ position: 'relative', marginBottom: 20, maxWidth: 420 }}>
-        <Search size={16} color={MUTED} style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)' }} />
+        <Ico ti="ti-search" size={16} color={C.muted} style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)' }} />
         <input
           value={search}
           onChange={e => setSearch(e.target.value)}
           placeholder="Search by name or email…"
           style={{
             width: '100%', padding: '10px 14px 10px 40px', borderRadius: 12,
-            border: `1.5px solid ${BORDER}`, outline: 'none', fontSize: 14,
-            fontFamily: FONT, color: INK, background: WHITE,
+            border: `1.5px solid ${C.border}`, outline: 'none', fontSize: 14,
+            fontFamily: C.font, color: C.ink, background: C.surface,
           }}
         />
       </div>
@@ -102,20 +98,20 @@ export default function StudentsPage() {
       {loading ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {[1,2,3,4].map(i => (
-            <div key={i} style={{ height: 66, borderRadius: 12, background: BORDER, opacity: .4, animation: 'shimmer 1.4s infinite linear', backgroundSize: '200% 100%', backgroundImage: `linear-gradient(90deg, ${BORDER} 0%, ${WHITE} 50%, ${BORDER} 100%)` }} />
+            <div key={i} style={{ height: 66, borderRadius: 12, background: C.border, opacity: .4, animation: 'shimmer 1.4s infinite linear', backgroundSize: '200% 100%', backgroundImage: `linear-gradient(90deg, ${C.border} 0%, ${C.surface} 50%, ${C.border} 100%)` }} />
           ))}
         </div>
       ) : filtered.length === 0 ? (
-        <div style={{ background: WHITE, border: `1px dashed ${BORDER}`, borderRadius: 16, padding: '48px', textAlign: 'center' }}>
-          <User size={32} color={MUTED} style={{ marginBottom: 12 }} />
-          <p style={{ fontSize: 14, color: MUTED, fontFamily: FONT, margin: '0 0 16px' }}>
+        <div style={{ background: C.surface, border: `1px dashed ${C.border}`, borderRadius: 16, padding: '48px', textAlign: 'center' }}>
+          <Ico ti="ti-user" size={32} color={C.muted} style={{ marginBottom: 12 }} />
+          <p style={{ fontSize: 14, color: C.muted, fontFamily: C.font, margin: '0 0 16px' }}>
             {search ? 'No students match your search' : 'No students enrolled yet'}
           </p>
           {!search && (
             <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
-              <Btn onClick={() => setModal(true)}><UserPlus size={14} /> Manual Entry</Btn>
-              <Btn variant="secondary" onClick={() => setModal(true)}><Mail size={14} /> Send Invite</Btn>
-              <Btn variant="secondary" onClick={() => setModal(true)}><Upload size={14} /> Import CSV</Btn>
+              <Btn onClick={() => setModal(true)}><Ico ti="ti-user-plus" size={14} /> Manual Entry</Btn>
+              <Btn variant="secondary" onClick={() => setModal(true)}><Ico ti="ti-mail" size={14} /> Send Invite</Btn>
+              <Btn variant="secondary" onClick={() => setModal(true)}><Ico ti="ti-upload" size={14} /> Import CSV</Btn>
             </div>
           )}
         </div>

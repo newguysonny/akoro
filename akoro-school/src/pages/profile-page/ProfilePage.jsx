@@ -3,7 +3,6 @@
  */
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { PageLayout } from '../../components/Layout.jsx';
-import {User, AtSign, Mail, Phone, MapPin, Building2, GraduationCap, BookOpen, Pencil, Upload, Search, Bolt, Star, BarChart3, Palette, Tag, Sparkles, Store, CheckCircle2, ChevronRight, Bot } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext.jsx';
 import {
   getProfile, patchProfile, patchAgent,
@@ -11,7 +10,8 @@ import {
   loadListingId, saveListingId,
 } from '../../services/settingsApi.js';
 import { apiGet, apiPut } from '../../services/api.js';
-import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, FONT } from '../../constants.js';
+import { GREEN, RED } from '../../constants.js';
+import { C, tint } from '../../theme/colors.js';
 
 import { BRAND, FONTF, ALL_SUBJECTS, SCHOOL_TYPES, COUNTRIES, EMOJI_LIST, ACCENTS, ProgressBar, SubjectChip, Section, rowBase, Row, AvatarCircle, Sheet, SheetButtons, AvatarPickerSheet, SubjectsSheet, GenericSheet, PublishSheet, SubjectsRow, TPL_TOOLS, ToolTemplatesSection, ProfileTab, AgentTab, LoadingSkeleton } from './parts.jsx';
 import { API as API_URL } from '../../config/urls.js';
@@ -115,12 +115,12 @@ export default function ProfilePage() {
     <PageLayout title="Profile" subtitle="Manage your info and AI agent">
       <div style={{ maxWidth: 600, margin: '0 auto' }}>
         {/* Tabs */}
-        <div style={{ display: 'flex', background: '#fff', borderRadius: 12, padding: 4, marginBottom: 24, border: `1px solid ${BORDER}`, gap: 4 }}>
+        <div style={{ display: 'flex', background: '#fff', borderRadius: 12, padding: 4, marginBottom: 24, border: `1px solid ${C.border}`, gap: 4 }}>
           {[['profile', 'Profile'], ['agent', 'Agent']].map(([t, label, Ico]) => (
             <button key={t} onClick={() => setTab(t)} style={{
               flex: 1, padding: '9px 0', borderRadius: 9, border: 'none',
               background: tab === t ? BRAND : 'transparent',
-              color: tab === t ? '#fff' : MUTED2,
+              color: tab === t ? '#fff' : C.muted2,
               fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: FONTF, transition: 'all .2s',
             }}>{label}</button>
           ))}
@@ -134,7 +134,7 @@ export default function ProfilePage() {
       </div>
 
       {toast && (
-        <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: INK, color: '#fff', padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999, whiteSpace: 'nowrap', boxShadow: '0 4px 14px rgba(0,0,0,.2)' }}>{toast}</div>
+        <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: C.ink, color: '#fff', padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999, whiteSpace: 'nowrap', boxShadow: '0 4px 14px rgba(0,0,0,.2)' }}>{toast}</div>
       )}
     </PageLayout>
   );

@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
-import { Mic, Square, Loader, AlertTriangle, CheckCircle2 } from 'lucide-react';
-import { AMBER, INK, MUTED, BORDER, LIGHT, WHITE, GREEN, RED, FONT } from '../constants.js';
+import { GREEN, RED } from '../constants.js';
+import { C, tint } from '../theme/colors.js';
+import { Ico } from '../theme/Ico.jsx';
 
 /* Pick a MediaRecorder mime the backend's /upload filter accepts. */
 function pickMime() {
@@ -81,19 +82,19 @@ export default function LiveRecorder({ onRecorded }) {
   };
 
   const box = {
-    border: `2px dashed ${state === 'recording' ? RED : state === 'ready' ? GREEN : 'rgba(232,136,74,.4)'}`,
+    border: `2px dashed ${state === 'recording' ? RED : state === 'ready' ? GREEN : tint(40)}`,
     borderRadius: 14, padding: '22px 20px', textAlign: 'center',
-    background: state === 'recording' ? 'rgba(220,38,38,.05)' : state === 'ready' ? 'rgba(16,185,129,.06)' : 'rgba(232,136,74,.04)',
-    marginBottom: 14, fontFamily: FONT,
+    background: state === 'recording' ? 'rgba(220,38,38,.05)' : state === 'ready' ? 'rgba(16,185,129,.06)' : tint(4),
+    marginBottom: 14, fontFamily: C.font,
   };
 
   if (state === 'error') {
     return (
       <div style={box}>
-        <AlertTriangle size={22} color={RED} style={{ marginBottom: 6 }} />
-        <div style={{ fontWeight: 700, color: INK, marginBottom: 4 }}>Can’t record</div>
-        <div style={{ fontSize: 12, color: MUTED, marginBottom: 12 }}>{error}</div>
-        <button onClick={() => setState('idle')} style={btn(WHITE, INK)}>Try again</button>
+        <Ico ti="ti-alert-triangle" size={22} color={RED} style={{ marginBottom: 6 }} />
+        <div style={{ fontWeight: 700, color: C.ink, marginBottom: 4 }}>Can’t record</div>
+        <div style={{ fontSize: 12, color: C.muted, marginBottom: 12 }}>{error}</div>
+        <button onClick={() => setState('idle')} style={btn(C.surface, C.ink)}>Try again</button>
       </div>
     );
   }
@@ -101,10 +102,10 @@ export default function LiveRecorder({ onRecorded }) {
   if (state === 'ready') {
     return (
       <div style={box}>
-        <CheckCircle2 size={22} color={GREEN} style={{ marginBottom: 6 }} />
-        <div style={{ fontWeight: 700, color: INK, marginBottom: 2 }}>Recording captured · {fmt(seconds)}</div>
-        <div style={{ fontSize: 12, color: MUTED, marginBottom: 12 }}>{fileName}</div>
-        <button onClick={reset} style={btn(WHITE, INK)}>Record again</button>
+        <Ico ti="ti-circle-check" size={22} color={GREEN} style={{ marginBottom: 6 }} />
+        <div style={{ fontWeight: 700, color: C.ink, marginBottom: 2 }}>Recording captured · {fmt(seconds)}</div>
+        <div style={{ fontSize: 12, color: C.muted, marginBottom: 12 }}>{fileName}</div>
+        <button onClick={reset} style={btn(C.surface, C.ink)}>Record again</button>
       </div>
     );
   }
@@ -114,20 +115,20 @@ export default function LiveRecorder({ onRecorded }) {
       <div style={box}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 8 }}>
           <span style={{ width: 10, height: 10, borderRadius: '50%', background: RED, animation: 'pulse-dot 1.2s infinite' }} />
-          <span style={{ fontWeight: 800, color: INK, fontSize: 18, fontVariantNumeric: 'tabular-nums' }}>{fmt(seconds)}</span>
+          <span style={{ fontWeight: 800, color: C.ink, fontSize: 18, fontVariantNumeric: 'tabular-nums' }}>{fmt(seconds)}</span>
         </div>
-        <div style={{ fontSize: 12, color: MUTED, marginBottom: 14 }}>Recording… speak naturally as you teach.</div>
-        <button onClick={stop} style={btn(RED, WHITE)}><Square size={13} fill={WHITE} /> Stop recording</button>
+        <div style={{ fontSize: 12, color: C.muted, marginBottom: 14 }}>Recording… speak naturally as you teach.</div>
+        <button onClick={stop} style={btn(RED, C.surface)}><Ico ti="ti-square" size={13} /> Stop recording</button>
       </div>
     );
   }
 
   return (
     <div style={box}>
-      <Mic size={24} color={AMBER} style={{ marginBottom: 6 }} />
-      <div style={{ fontWeight: 700, color: INK, marginBottom: 4 }}>Record live from your device</div>
-      <div style={{ fontSize: 12, color: MUTED, marginBottom: 14 }}>Capture a lesson now — it trains your agent on stop.</div>
-      <button onClick={start} style={btn(AMBER, WHITE)}><Mic size={13} /> Start recording</button>
+      <Ico ti="ti-microphone" size={24} color={C.brand} style={{ marginBottom: 6 }} />
+      <div style={{ fontWeight: 700, color: C.ink, marginBottom: 4 }}>Record live from your device</div>
+      <div style={{ fontSize: 12, color: C.muted, marginBottom: 14 }}>Capture a lesson now — it trains your agent on stop.</div>
+      <button onClick={start} style={btn(C.brand, C.surface)}><Ico ti="ti-microphone" size={13} /> Start recording</button>
     </div>
   );
 }
@@ -135,7 +136,7 @@ export default function LiveRecorder({ onRecorded }) {
 function btn(bg, color) {
   return {
     display: 'inline-flex', alignItems: 'center', gap: 6,
-    padding: '9px 16px', borderRadius: 10, border: bg === WHITE ? `1.5px solid ${BORDER}` : 'none',
-    background: bg, color, fontFamily: FONT, fontSize: 13, fontWeight: 700, cursor: 'pointer',
+    padding: '9px 16px', borderRadius: 10, border: bg === C.surface ? `1.5px solid ${C.border}` : 'none',
+    background: bg, color, fontFamily: C.font, fontSize: 13, fontWeight: 700, cursor: 'pointer',
   };
 }
