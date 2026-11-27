@@ -480,11 +480,19 @@ export function useTeachAgent({ session, config, onClose, onMinimize, onSessionS
         if (!state) return;
         if (endedRef.current) return;   // the meters freeze at their final values — a torn-down session's blank snapshot must not zero them
         const c = state.cognitive || state;
-        setCogState(prev => ({
-          understanding: c.understanding ?? prev?.understanding ?? 0,
-          confusion:     c.confusion     ?? prev?.confusion     ?? 0,
-          phase:         state.session?.phase ?? prev?.phase ?? null,
-        }));
+        setCogState(prev => {
+          const u  = c.understanding ?? prev?.understanding ?? 0;
+          const cf = c.confusion     ?? prev?.confusion     ?? 0;
+          // The blank snapshot a torn-down session leaves behind (both
+          // meters 0) can land just BEFORE session_ended does — never let
+          // it wipe a real reading; no single turn drops 85% to 0.
+          if (prev && prev.understanding > 0 && u === 0 && cf === 0) return prev;
+          return {
+            understanding: u,
+            confusion:     cf,
+            phase:         state.session?.phase ?? prev?.phase ?? null,
+          };
+        });
       };
       ws.on("state_update",   (state) => applyState(state));
       ws.on("state_snapshot", ({ state }) => applyState(state));
