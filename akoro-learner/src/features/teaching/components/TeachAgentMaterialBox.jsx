@@ -21,8 +21,6 @@ export default function TeachAgentMaterialBox({ reader }) {
 
   const first = list[0];
   const ready = first.state === 'ready';
-  const multi = list.length > 1;
-  const pct = ready && first.pct != null ? Math.max(0, Math.min(100, first.pct)) : null;
 
   const openMaterial = (item) => {
     setOpen(false);
@@ -46,25 +44,20 @@ export default function TeachAgentMaterialBox({ reader }) {
         disabled={!ready}
         title={ready ? 'Session materials' : first.state === 'loading' ? 'Opening…' : (first.err || 'Material unavailable')}
         style={{
-          width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px',
-          borderRadius: 14, cursor: ready ? 'pointer' : 'default',
-          background: 'var(--ak-surface)', border: `1.5px solid ${ready ? `${BRAND}45` : 'var(--ak-border2)'}`,
+          width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px',
+          borderRadius: 11, cursor: ready ? 'pointer' : 'default',
+          background: 'var(--ak-surface)', border: '1px solid var(--ak-border)',
           opacity: ready ? 1 : 0.75, textAlign: 'left', fontFamily: FONT,
         }}>
-        <span style={{ width: 28, height: 28, borderRadius: 9, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: first.state === 'error' ? 'rgba(239,68,68,.12)' : `${BRAND}16` }}>
-          {first.state === 'loading'
-            ? <span className="ti ti-loader-2" style={{ fontSize: 15, color: BRAND, animation: 'tam-spin 1s linear infinite' }} />
-            : <Icon name={first.state === 'error' ? 'ti-cloud-off' : (multi ? 'ti-files' : (first.box?.icon || 'ti-file-text'))} size={15} color={first.state === 'error' ? RED : BRAND} />}
-        </span>
-        <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 800, color: 'var(--ak-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+        {first.state === 'loading'
+          ? <span className="ti ti-loader-2" style={{ fontSize: 14, color: BRAND, animation: 'tam-spin 1s linear infinite', flexShrink: 0 }} />
+          : <Icon name={first.state === 'error' ? 'ti-cloud-off' : 'ti-list'} size={15} color={first.state === 'error' ? RED : BRAND} />}
+        <span style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: 700, color: 'var(--ak-text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
           {first.state === 'loading' ? 'Opening the material…'
             : first.state === 'error' ? (first.err || 'Couldn’t open this material.')
-            : multi ? `${list.length} materials` : (first.box?.title || topic)}
+            : <><span style={{ fontWeight: 900, color: 'var(--ak-text)' }}>{list.length} {list.length === 1 ? 'content' : 'contents'}</span>{' in this session'}</>}
         </span>
-        {!multi && pct != null && (
-          <span style={{ fontSize: 11, fontWeight: 900, color: BRAND, flexShrink: 0 }}>{Math.round(pct)}%</span>
-        )}
-        {ready && <span className="ti ti-chevron-up" style={{ fontSize: 15, color: 'var(--ak-text-sub)', flexShrink: 0 }} />}
+        {ready && <span className="ti ti-chevron-up" style={{ fontSize: 14, color: 'var(--ak-text-sub)', flexShrink: 0 }} />}
       </button>
 
       {open && ready && (
