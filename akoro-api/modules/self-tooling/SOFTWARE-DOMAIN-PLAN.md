@@ -151,10 +151,54 @@ a later, separate decision.
 - **Phase 3** — browser automation (14–19) + verification loop: agent opens
   its own plugin's preview, screenshots, fixes defects. Acceptance: a plugin
   with a UI verified from a real screenshot.
-- **Phase 4** — teach/protégé integration: code projects inside teach
-  sessions (the protégé writes code with the learner). Separate design pass —
-  session model questions (whose sandbox, what persists into the session
-  record) are open.
+- **Phase 4** — session plugins (designed 2026-11-28, below; corrected by
+  Matt the same day — NOT code steps inside the existing teach session).
+
+## 6b. Phase 4 design — session plugins: creator-built session types
+
+Matt's model: TeachAgentModal is ONE built-in session type. With the
+software domain, a learner can have the agent create an **entirely new
+session type** — its own UI code and its own backend code, its own teaching
+strategy — installed as a plugin and started like any other session. Each
+learning session can therefore run a different strategy, fully customisable.
+
+- **What a session plugin is**: a plugin whose manifest declares
+  `kind: session`, containing (a) UI code — web UI (HTML/CSS/JS) authored by
+  the agent, (b) backend code — Python, running in the sandbox, holding the
+  session's strategy: flow, prompts/steers, progression rules, state schema,
+  (c) the manifest: name, description, icon, which bridge capabilities and
+  model access it needs.
+- **The session host contract** (the platform's side, the thing the agent
+  inspects before writing): lifecycle hooks (start / on-learner-message /
+  resume / end), a per-instance state store, the session screen (the app
+  hosts the plugin's UI in a sandboxed web view inside its own session
+  screen — chrome, composer integration, materials and navigation stay the
+  app's), and bridge capabilities including a **model-call capability** so
+  the plugin's backend can drive its own tutor/protégé persona with the
+  learner's model pick and normal usage metering. UI code is web code in a
+  hosted view — it is never injected into the app's native React tree (the
+  DSH in-process model does not transfer to a shipped app).
+- **Creation flow**: learner describes the session they want → agent inspects
+  the session-host contract → `scaffold_plugin` with the session template →
+  writes UI + backend in the sandbox → previews and test-runs the actual
+  session in the sandbox (browser verification on its own preview) →
+  `validate_plugin` (manifest, syntax, bridge surface, host-contract
+  conformance) → Keep card → installed.
+- **Usage**: the installed session plugin appears beside the built-in Teach
+  entry wherever sessions start, and in My Sessions once running. Starting
+  it creates a session instance: backend restored on-demand per turn
+  (snapshot → handle message → persist state → sleep), UI rendered by the
+  session host, resumable like a teach session. Different plugins =
+  different strategies (Socratic drill, timed exam simulation, a protégé
+  variant with different rules) because the strategy is real code, not the
+  fixed teach state machine.
+- **Tiers**: mode/session tools (declarative, already live) stay the light
+  tier; session plugins are the full-code tier. TeachAgentModal remains the
+  built-in flagship on its existing runtime; re-implementing it on the host
+  contract is possible dogfooding, not a Phase 4 requirement.
+- **Gates**: Premium-only (inherited), the plugin's declared bridge +
+  model capabilities are listed on the Keep card, per-instance sandbox
+  minutes meter against the same budget.
 
 ## 7. Decisions for Matt
 
