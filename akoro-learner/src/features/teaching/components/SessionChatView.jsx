@@ -381,8 +381,7 @@ function SessionChatView({
             bookAction={onOpenReader}
               boardAction={onOpenBoard}
             bookLabel="Open reading material"
-            voiceAction={onToggleVoice}
-            voiceLabel={t('teaching.voice')}
+            hideVoice
             audioAction={onToggleRecording}
             audioLabel={t('teaching.audio')}
             attachmentUnavailable

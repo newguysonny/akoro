@@ -236,6 +236,7 @@ export default function FortizoChatComposer({
   onModelChange,
   modelLabelDescription = '',
   hideModelMenu = false,   // the host shows the model switch itself (AgentChatTab)
+  hideVoice = false,   // the host offers a single audio path itself (teaching: audio note only)
   sendDisabled = false,
   // While a reply is streaming the send arrow becomes a ■ stop button
   // (Agent Chat, Grand Plan §13.4). Callers without onStop are unchanged.
@@ -329,8 +330,10 @@ export default function FortizoChatComposer({
           <ComposerTool icon="ti-edit" label="Whiteboard" onClick={boardAction}
             disabled={disabled} dark={dark}/>
         )}
-        <ComposerTool icon="ti-microphone" label={voiceLabel} onClick={voiceAction}
-          disabled={disabled || !voiceAction} active={voiceActive} dark={dark}/>
+        {!hideVoice && (
+          <ComposerTool icon="ti-microphone" label={voiceLabel} onClick={voiceAction}
+            disabled={disabled || !voiceAction} active={voiceActive} dark={dark}/>
+        )}
         <ComposerTool icon="ti-paperclip" label={attachmentLabel} onClick={attachmentAction}
           disabled={disabled || attachmentUnavailable || !attachmentAction} dark={dark}/>
         <ComposerTool icon={audioIcon} label={audioLabel} onClick={audioAction} toggle={audioToggle}
