@@ -382,6 +382,7 @@ function SessionChatView({
               boardAction={onOpenBoard}
             bookLabel="Open reading material"
             hideVoice
+            audioIcon="ti-microphone"
             audioAction={onToggleRecording}
             audioLabel={t('teaching.audio')}
             attachmentUnavailable
