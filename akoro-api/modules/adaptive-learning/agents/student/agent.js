@@ -30,6 +30,21 @@ import {
 import { normaliseTeachingObservation } from "../../learner/teaching-evidence.js";
 import { learnerNotesBlock } from "../../teaching-session/learnerNotesCore.js";
 
+const LEARNED_CHUNK_TYPES = new Set(["taught", "corrected", "recalled", "reinforced"]);
+
+/** The judge's learned chunk, made safe to store: bounded text, a known
+ *  chunk type, a clamped confidence — or null when there is nothing durable. */
+export function sanitiseLearnedChunk(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const content = String(raw.content || "").replace(/\s+/g, " ").trim().slice(0, 700);
+  if (!content) return null;
+  return {
+    content,
+    chunkType: LEARNED_CHUNK_TYPES.has(raw.chunkType) ? raw.chunkType : "taught",
+    confidence: Math.min(0.85, Math.max(0.1, Number(raw.confidence) || 0.1)),
+  };
+}
+
 export class StudentAgent {
   constructor({ agentId, studentId, teacherId = null, agentRecord, subject = null, referenceMaterial = null, learnerNotes = [] }) {
     this.agentId    = agentId;
@@ -82,8 +97,11 @@ export class StudentAgent {
     this.studentKnowledgeRefs += context.studentChunks.length;
     this.teacherChunksUsed    += context.teacherChunks.length;
 
+    // Cost work (2026-11-28): each history entry is capped — the protégé
+    // needs the thread, not a verbatim archive; the current message always
+    // rides in full as the user turn.
     const recentHistory = history.slice(-6).map(h =>
-      `${h.role === "human_teacher" ? "Teacher" : "Student Agent"}: ${h.content}`
+      `${h.role === "human_teacher" ? "Teacher" : "Student Agent"}: ${String(h.content || "").slice(0, 400)}`
     ).join("\n");
 
     // Intelligence is scoped to THIS subject. The stored `level` is global, so
@@ -230,6 +248,12 @@ export class StudentAgent {
     const checkpoint = protegeLastMessage
       ? "\n\nThe protégé's previous message (protegeLastMessage in the input) may have asked the learner a question. If it did, also return \"answersQuestion\": true when this message genuinely answers that question, false when it ignores, dodges or talks past it. If it asked no question, omit the field."
       : "";
+    // Cost work (2026-11-28): the judge also names the durable knowledge the
+    // message demonstrates, so the separate extraction call is gone — the
+    // record step saves this chunk when (and only when) the server-owned
+    // evidence rule verifies the turn. Like the checkpoint, the instruction
+    // rides in code; the golden EVIDENCE.md template stays untouched.
+    const learnedInstruction = "\n\nAlso return \"learned\": when this message itself teaches a durable, specific piece of knowledge about the current idea, an object {\"content\": a clear 2-3 sentence summary of what was taught, \"chunkType\": one of \"taught\" | \"corrected\" | \"recalled\" | \"reinforced\", \"confidence\": 0-1}; when it teaches nothing durable (small talk, a question, a vague or copied-feeling definition), return \"learned\": null.";
     const res = await openai.chat.completions.create({
       model: "gpt-4.1-mini",
       temperature: 0,
@@ -237,7 +261,7 @@ export class StudentAgent {
       messages: [
         {
           role: "system",
-          content: (await buildStudentAgentEvidencePrompt({ topic, currentIdea: currentSubtopic || topic })) + checkpoint
+          content: (await buildStudentAgentEvidencePrompt({ topic, currentIdea: currentSubtopic || topic })) + checkpoint + learnedInstruction
         },
         {
           role: "user",
@@ -256,7 +280,12 @@ export class StudentAgent {
     ].some((key) => Object.hasOwn(result, key))) {
       throw new Error("Teaching-evidence evaluator returned no observation");
     }
-    return normaliseTeachingObservation(result);
+    const observation = normaliseTeachingObservation(result);
+    // The learned chunk rides OUTSIDE the normalised observation (the
+    // evidence state's shape is unchanged); the workflow carries it to the
+    // record step, which saves it only on a verified turn.
+    observation.learned = sanitiseLearnedChunk(result.learned);
+    return observation;
   }
 
   // ── Analyse student reply for understanding metrics ────────
@@ -336,6 +365,33 @@ export class StudentAgent {
     });
 
     return result;
+  }
+
+  // ── Record the judge-named knowledge chunk (no model call) ──
+  // Cost work (2026-11-28): the evidence judge already read this turn, so
+  // it names the durable chunk in its own output (see assessTeachingEvidence)
+  // and the workflow calls this only on a verified turn — the separate
+  // extraction call (extractKnowledgeFromTurn) is no longer in the turn loop.
+  // The filing rules are the extraction call's own: the LESSON's topic and
+  // concept (never a model-invented topic), conservative confidence.
+  recordLearnedChunk(learned, { topic, subject, concept = null } = {}) {
+    const chunk = sanitiseLearnedChunk(learned);
+    if (!chunk) return null;
+    const lessonTopic = String(topic || "").trim();
+    if (!lessonTopic) return null;
+    const lessonConcept = concept && String(concept).trim().toLowerCase() !== lessonTopic.toLowerCase() ? String(concept).trim().slice(0, 180) : "";
+    const entry = {
+      agentId:    this.agentId,
+      studentId:  this.studentId,
+      topic:      lessonTopic,
+      subtopic:   lessonConcept,
+      subject,
+      content:    chunk.content,
+      chunkType:  chunk.chunkType,
+      confidence: chunk.confidence,
+    };
+    this.sessionKnowledgeBuffer.push(entry);
+    return entry;
   }
 
   // ── Extract student knowledge references to save ───────────

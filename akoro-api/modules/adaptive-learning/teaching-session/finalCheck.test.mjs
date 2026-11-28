@@ -27,18 +27,19 @@ const fakeAssess = (gapOnes = []) => async ({ concepts }) => ({
   })),
 });
 
-test("a full run batches every part and lands held/gap per part", async () => {
+test("a full run judges every part in one pass and lands held/gap per part", async () => {
   const fc = createFinalCheck(PARTS);
   const orchestrator = sessionWith(fc);
-  let batches = 0;
+  let calls = 0;
   let firstArgs = null;
-  const assess = async (args) => { batches += 1; firstArgs ??= args; return fakeAssess(["F"])(args); };
+  const assess = async (args) => { calls += 1; firstArgs ??= args; return fakeAssess(["F"])(args); };
   const progress = [];
   const { judged } = await runFinalCheckConcepts({
     orchestrator, concepts: PARTS, assess, onProgress: (snap) => progress.push(snap),
   });
 
-  assert.equal(batches, 3); // 8 parts, the assessment's batch size is 3
+  assert.equal(calls, 1); // one pass over all 8 parts — the session notes are sent once, not per batch
+  assert.deepEqual(firstArgs.concepts, PARTS);
   assert.equal(firstArgs.notesLimit, 80); // the verdict reads the whole session's teaching, not the recent window
   assert.equal(judged, 8);
   const snap = finalCheckSnapshot(orchestrator.session);
@@ -46,7 +47,7 @@ test("a full run batches every part and lands held/gap per part", async () => {
   assert.equal(snap.gaps, 1);
   assert.equal(snap.items.find((i) => i.concept === "F").status, "gap");
   assert.equal(finalCheckResolution(fc), "open"); // the gap has had no re-check yet
-  assert.ok(progress.length >= 3); // the strip fills in as batches land
+  assert.equal(progress.length, 2); // the strip updates when the pass starts and when it lands
 });
 
 test("a guess never counts as held, even when the answer happens to be right", () => {
@@ -85,7 +86,7 @@ test("a re-check that lands turns the gap held and the check passes", async () =
   assert.equal(finalCheckResolution(fc), "passed");
 });
 
-test("a failed batch judges nothing and restores the parts' prior status", async () => {
+test("a failed pass judges nothing and restores the parts' prior status", async () => {
   const fc = createFinalCheck(["A", "B"]);
   const orchestrator = sessionWith(fc);
   const { judged } = await runFinalCheckConcepts({

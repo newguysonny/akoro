@@ -42,8 +42,13 @@ async function setupTeachingSeam() {
   };
 }
 
-/** A strong observation: verified mastery for the active concept. */
-const STRONG = { coreExplanation: 1, application: 1, reasoning: 0.8 };
+/** A strong observation: verified mastery for the active concept. The
+ *  learned chunk is what the judge names in the same output (cost work,
+ *  2026-11-28) — the record step files it without a second model call. */
+const STRONG = {
+  coreExplanation: 1, application: 1, reasoning: 0.8,
+  learned: { content: "Light reactions convert light energy into ATP and NADPH in the thylakoid membrane.", chunkType: "taught", confidence: 0.8 },
+};
 /** A weak observation: core explanation still emerging. */
 const WEAK = { coreExplanation: 0.25 };
 
@@ -79,7 +84,7 @@ function makeOrchestrator({
       log.push(["analyzeUnderstanding", args]);
       return { understanding: 90, confusion: 5, engagement: 80, newConceptLearned: "chlorophyll absorbs light", mistakes: [], strengths: ["clear"] };
     },
-    async extractKnowledgeFromTurn(...args) { log.push(["extractKnowledgeFromTurn", args]); return { id: "k-1" }; },
+    recordLearnedChunk(...args) { log.push(["recordLearnedChunk", args]); return { id: "k-1" }; },
     async extractStudentKnowledge(...args) { log.push(["extractStudentKnowledge", args]); return null; },
   };
   return {
@@ -158,7 +163,7 @@ test("a full turn runs all 8 steps in order with started/completed events and st
   // (Step 4 derives its read from the step-2 evidence — no collaborator call.)
   assert.deepEqual(log.map(([name]) => name), [
     "assessTeachingEvidence", "reply",
-    "extractKnowledgeFromTurn", "extractStudentKnowledge", "getTip",
+    "extractStudentKnowledge", "getTip",
   ]);
   assert.deepEqual(context.publicWorkflow, {
     type: "adaptive_teaching_turn", policyVersion: "adaptive-teaching-workflow-v1",
@@ -185,8 +190,10 @@ test("collaborators receive the turn's context; callbacks and stats are updated"
   assert.equal(replyArgs[4], STUDENT_PHASES.PHASE_1);
   assert.equal(replyArgs[6].dialogue.canAdvance, true);
   assert.equal(replyArgs[6].evidence.masteryStatus, "verified");
-  const extractArgs = log.find(([n]) => n === "extractKnowledgeFromTurn")[1];
-  assert.equal(extractArgs[3], "Biology", "subject comes from decayPayload");
+  const recordArgs = log.find(([n]) => n === "recordLearnedChunk")[1];
+  assert.equal(recordArgs[0].content, STRONG.learned.content, "the judge's own chunk is filed, no second call");
+  assert.equal(recordArgs[1].subject, "Biology", "subject comes from decayPayload");
+  assert.equal(recordArgs[1].concept, "light reactions", "filed under the concept this turn taught");
   assert.deepEqual(studentChunks, ["chunk"]);
   assert.deepEqual(guideChunks, ["tip"]);
 

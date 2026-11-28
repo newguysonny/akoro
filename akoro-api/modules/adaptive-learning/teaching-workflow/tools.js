@@ -25,6 +25,40 @@ function teachingContext(orchestrator) {
   return orchestrator.getTeachingEvidenceSnapshot?.() || null;
 }
 
+/** The coach's passages are capped (cost work, 2026-11-28): the tip cites
+ *  them, it does not study them — the first passages carry the citation
+ *  value at a third of the reply's full grounding block. */
+export const COACH_REFERENCE_CAP = 3000;
+
+export function capCoachReference(reference, cap = COACH_REFERENCE_CAP) {
+  if (!reference?.text || reference.text.length <= cap) return reference;
+  const head = reference.text.slice(0, cap);
+  const boundary = head.lastIndexOf("\n\n");
+  return { ...reference, text: boundary > cap * 0.6 ? head.slice(0, boundary) : head };
+}
+
+/**
+ * Whether the coach earns its call this turn (cost work, 2026-11-28). Its
+ * visible product is the guide tip + pills; on the merged path the gate no
+ * longer reads its advice, so a turn where nothing changed gets no call —
+ * the previous turn's pills still stand. Due when the evidence moved:
+ * a verification, a misconception found or repaired, a dodged checkpoint,
+ * an advance — or as a heartbeat at least every fifth turn.
+ */
+export function coachDue(context) {
+  const ev = context.evidenceUpdate?.current || {};
+  const dlg = context.evidenceUpdate?.dialogue || {};
+  if (ev.masteryStatus === "verified") return true;
+  if (ev.misconceptionPresent) return true;
+  if (context.evidenceUpdate?.misconceptionRepaired) return true;
+  if (dlg.questionDodged) return true;
+  if (dlg.canAdvance) return true;
+  const session = context.orchestrator?.session;
+  if (!session) return true;
+  if (session.lastCoachTurn == null) return true;
+  return (Number(session.turnCount) || 0) - session.lastCoachTurn >= 5;
+}
+
 /**
  * Tool implementations are created per invocation so no turn's messages or
  * state can leak into another authenticated session.
@@ -144,6 +178,9 @@ export function createTeachingTurnTools() {
           context.mustKnowIndex,
           observation,
         );
+        // The judge's learned chunk (cost work, 2026-11-28) rides outside
+        // the evidence state; the record step saves it on a verified turn.
+        context.judgeLearned = observation?.learned || null;
         orchestrator.teachingEvidence = context.evidenceUpdate.state;
         orchestrator.session.teachingEvidence = orchestrator.teachingEvidence;
         // Phase 4a (D37): a misconception found, or repaired, goes to the learner
@@ -215,15 +252,15 @@ export function createTeachingTurnTools() {
     record_verified_learning: {
       async execute(context) {
         const { orchestrator, evidenceUpdate, analysis } = context;
-        const extracted = await orchestrator.studentAgent.extractKnowledgeFromTurn(
-          context.humanMessage,
-          context.studentReply,
-          context.topic,
-          context.subject,
-          analysis,
-          evidenceUpdate.current,
-          activeConcept(context),   // the concept this turn taught (D44)
-        );
+        // The judge named this turn's durable chunk in its own output; the
+        // save keeps the old extraction call's exact gates (verified mastery,
+        // understanding ≥ 30 — extractKnowledgeFromTurn's own rule) but costs
+        // no second model call. judgeLearned null plays shouldSave: false.
+        const extracted = (evidenceUpdate.current.masteryStatus === "verified" && analysis.understanding >= 30 && context.judgeLearned)
+          ? orchestrator.studentAgent.recordLearnedChunk(context.judgeLearned, {
+              topic: context.topic, subject: context.subject, concept: activeConcept(context),
+            })
+          : null;
         if (extracted) orchestrator.stats.agentKnowledgeAdded++;
 
         await orchestrator.studentAgent.extractStudentKnowledge(
@@ -248,6 +285,19 @@ export function createTeachingTurnTools() {
     coach_teaching_dialogue: {
       async execute(context) {
         const { orchestrator, evidenceUpdate, updatedState } = context;
+        const fallback = {
+          tip: null,
+          nextAction: "DIG_DEEPER",
+          nextPhase: null,
+          nextMustKnowIndex: context.mustKnowIndex,
+          isUrgent: false,
+        };
+        // A quiet turn skips the call entirely (coachDue above); the
+        // guide result keeps the same default shape the deferred path uses,
+        // and coachSkipped tells the controller not to emit a guide_update
+        // (guideIdeas would otherwise fill the gap with generic pills).
+        if (!coachDue(context)) { context.guideResult = fallback; context.coachSkipped = true; return; }
+        if (orchestrator.session) orchestrator.session.lastCoachTurn = Number(orchestrator.session.turnCount) || 0;
         context.guideResult = orchestrator.guideOrchestrator.guide?.getTip
           ? await orchestrator.guideOrchestrator.guide.getTip(
               {
@@ -263,18 +313,12 @@ export function createTeachingTurnTools() {
                 mustKnowIndex: context.mustKnowIndex,
                 teachingEvidence: teachingContext(orchestrator),
                 dialogue: evidenceUpdate.dialogue,
-                // The document's passages for this turn (documentGrounding.js) — the tip cites them.
-                reference: orchestrator.studentAgent?.referenceMaterial || null,
+                // The document's passages for this turn (documentGrounding.js) — the tip cites them (capped: capCoachReference).
+                reference: capCoachReference(orchestrator.studentAgent?.referenceMaterial || null),
               },
               context.callbacks.onGuideChunk || null,
             )
-          : {
-              tip: null,
-              nextAction: "DIG_DEEPER",
-              nextPhase: null,
-              nextMustKnowIndex: context.mustKnowIndex,
-              isUrgent: false,
-            };
+          : fallback;
       },
     },
 

@@ -15,7 +15,7 @@
  * socket snapshots (the Final check strip above the material strip).
  * Kill switch: AKORO_FINAL_CHECK=off restores the old completion path.
  */
-import { MAX_ASSESSMENT_CONCEPTS, runTeachingAssessment } from "./assessment.js";
+import { runTeachingAssessment } from "./assessment.js";
 
 // The protégé answers the check from its notes — the learner's teaching
 // messages. The mid-session check reads only the recent ones (it checks
@@ -100,49 +100,44 @@ export function applyAssessmentItems(fc, marked = [], recheckIndexes = new Set()
 }
 
 /**
- * Run the check over the given concepts, in the assessment's own batch
- * size, reporting progress after each batch so the strip fills in live.
- * `assess` is injectable (tests); production is runTeachingAssessment.
+ * Run the check over the given concepts in ONE assessment pass, reporting
+ * progress when the pass starts and when it lands. (Cost work, 2026-11-28:
+ * the old per-batch loop re-sent the protégé the ENTIRE session notes once
+ * per batch — the notes are the bulk of the answer call's input, so three
+ * batches paid for them three times. One pass pays once; the strip fills
+ * in a single update instead of per batch.) `assess` is injectable
+ * (tests); production is runTeachingAssessment.
  */
 export async function runFinalCheckConcepts({ orchestrator, concepts = [], assess = runTeachingAssessment, onProgress = null }) {
   const fc = orchestrator?.session?.finalCheck;
-  if (!fc) return { judged: 0 };
-  // The batches judge disjoint parts and never read each other's results —
-  // run them in parallel (latency work, 2026-11-28: serial batches made the
-  // completing turn wait for three rounds of assessment calls; now ~one).
-  const batches = [];
-  for (let i = 0; i < concepts.length; i += MAX_ASSESSMENT_CONCEPTS) batches.push(concepts.slice(i, i + MAX_ASSESSMENT_CONCEPTS));
-  const runBatch = async (batch) => {
-    const prevStatus = new Map();
-    for (const concept of batch) {
+  if (!fc || !concepts.length) return { judged: 0 };
+  const prevStatus = new Map();
+  for (const concept of concepts) {
+    const item = findItem(fc, concept);
+    if (item && item.status !== "held") { prevStatus.set(item.index, item.status); item.status = "asking"; }
+  }
+  onProgress?.(finalCheckSnapshot(orchestrator.session));
+  try {
+    const result = await assess({ orchestrator, concepts, notesLimit: FINAL_CHECK_NOTES_LIMIT });
+    // A result applied to a part that was already judged a gap (or is
+    // mid-re-teach) is that part's re-check — counted from the status the
+    // part carried INTO this run, before "asking" overwrote it.
+    const recheckIndexes = new Set(
+      [...prevStatus.entries()].filter(([, s]) => s === "gap" || s === "reteaching").map(([idx]) => idx),
+    );
+    return { judged: applyAssessmentItems(fc, result?.items || [], recheckIndexes) };
+  } catch (e) {
+    // A failed pass judges nothing: its parts go back to the status they
+    // had rather than sitting at "asking" forever.
+    for (const concept of concepts) {
       const item = findItem(fc, concept);
-      if (item && item.status !== "held") { prevStatus.set(item.index, item.status); item.status = "asking"; }
+      if (item && item.status === "asking") item.status = prevStatus.get(item.index) || "waiting";
     }
+    console.warn("[final-check] assessment pass failed:", e?.message || e);
+    return { judged: 0 };
+  } finally {
     onProgress?.(finalCheckSnapshot(orchestrator.session));
-    try {
-      const result = await assess({ orchestrator, concepts: batch, notesLimit: FINAL_CHECK_NOTES_LIMIT });
-      // A result applied to a part that was already judged a gap (or is
-      // mid-re-teach) is that part's re-check — counted from the status the
-      // part carried INTO this run, before "asking" overwrote it.
-      const recheckIndexes = new Set(
-        [...prevStatus.entries()].filter(([, s]) => s === "gap" || s === "reteaching").map(([idx]) => idx),
-      );
-      return applyAssessmentItems(fc, result?.items || [], recheckIndexes);
-    } catch (e) {
-      // A failed batch judges nothing: its parts go back to the status they
-      // had rather than sitting at "asking" forever.
-      for (const concept of batch) {
-        const item = findItem(fc, concept);
-        if (item && item.status === "asking") item.status = prevStatus.get(item.index) || "waiting";
-      }
-      console.warn("[final-check] batch failed:", e?.message || e);
-      return 0;
-    } finally {
-      onProgress?.(finalCheckSnapshot(orchestrator.session));
-    }
-  };
-  const counts = await Promise.all(batches.map(runBatch));
-  return { judged: counts.reduce((a, b) => a + b, 0) };
+  }
 }
 
 /**

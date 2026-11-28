@@ -346,7 +346,7 @@ export async function executeAgentTeachingTurn({ orchestrator, humanMessage, cal
     context.deferredWork = (async () => {
       await Promise.allSettled([
         runFixed("record_verified_learning"),
-        runFixed("coach_teaching_dialogue").then(() => { try { callbacks.onGuideUpdate?.(context.guideResult, { concept: part, topic: context.topic }); } catch { /* a lost pill update never fails a turn */ } }),
+        runFixed("coach_teaching_dialogue").then(() => { if (context.coachSkipped) return; try { callbacks.onGuideUpdate?.(context.guideResult, { concept: part, topic: context.topic }); } catch { /* a lost pill update never fails a turn */ } }),
       ]);
     })();
   } else {

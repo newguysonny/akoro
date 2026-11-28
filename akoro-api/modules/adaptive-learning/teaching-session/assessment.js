@@ -79,10 +79,15 @@ export async function runTeachingAssessment({ orchestrator, concepts, modelPick 
   const userId = orchestrator?.userId || orchestrator?.studentId || null;
   const base = { response_format: { type: "json_object" }, temperature: 0, max_tokens: 700, __feature: "teaching_assessment", ...(userId ? { __userId: userId } : {}) };
   if (!concepts.length) return { concepts, items: [], ...scoreAssessment([]) };
+  // Output budgets scale with the concept count (cost work, 2026-11-28):
+  // the Final check now runs ONE pass over every part instead of batches
+  // of 3, so a flat 700 would truncate an 8-part verdict JSON.
+  const n = concepts.length;
+  const budgets = { questions: 300 + 150 * n, answers: 300 + 200 * n, judge: 300 + 150 * n };
 
   // 1. NaNa asks: one short question per part (assessor — locked).
   const asked = json(await complete({
-    ...base, __role: "assessor",
+    ...base, max_tokens: budgets.questions, __role: "assessor",
     messages: [
       { role: "system", content: "You are NaNa, a teaching guide. Write ONE short check question per concept, answerable in a sentence or two by a student who was taught it. JSON: {\"questions\":[{\"concept\":string,\"question\":string}]}" },
       { role: "user", content: JSON.stringify({ topic, concepts }) },
@@ -92,7 +97,7 @@ export async function runTeachingAssessment({ orchestrator, concepts, modelPick 
 
   // 2. The protégé answers from its notes only (persona — the learner's pick applies).
   const answered = json(await complete({
-    ...base, temperature: 0.2, __role: "persona", ...(modelPick || {}),
+    ...base, max_tokens: budgets.answers, temperature: 0.2, __role: "persona", ...(modelPick || {}),
     messages: [
       { role: "system", content: "You are a student agent. Answer each question using ONLY the notes your teacher gave you. If the notes don't cover it, answer your best guess and set fromNotes false. JSON: {\"answers\":[{\"answer\":string,\"fromNotes\":boolean}]}" },
       { role: "user", content: JSON.stringify({ notes, questions: questions.map((q) => q.question) }) },
@@ -102,7 +107,7 @@ export async function runTeachingAssessment({ orchestrator, concepts, modelPick 
   // 3. Sergeant judges each answer (assessor — locked).
   const items = questions.map((q, i) => ({ ...q, answer: String(answered?.answers?.[i]?.answer || "").slice(0, 400), fromNotes: answered?.answers?.[i]?.fromNotes === true }));
   const judged = json(await complete({
-    ...base, __role: "assessor",
+    ...base, max_tokens: budgets.judge, __role: "assessor",
     messages: [
       { role: "system", content: "You are Sergeant, a strict, fair examiner. For each question and answer say whether the answer is correct for the concept. JSON: {\"verdicts\":[{\"correct\":boolean,\"note\":string}]}" },
       { role: "user", content: JSON.stringify({ topic, items: items.map(({ concept, question, answer }) => ({ concept, question, answer })) }) },
