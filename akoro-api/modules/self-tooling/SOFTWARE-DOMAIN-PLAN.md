@@ -228,3 +228,46 @@ learning session can therefore run a different strategy, fully customisable.
 5. **Browser automation scope**: DECIDED 2026-11-28 — **the plugin's own
    preview only** at launch (the verification tool); general web browsing
    is a later decision.
+
+## 8. Environment & setup (Cloudflare executor)
+
+Four places need configuration.
+
+**Akoro API — new env vars**
+- `AKORO_SOFTWARE_DOMAIN=true` — the kill switch (§5).
+- `SOFTWARE_EXECUTOR=cloudflare` — the provider seam selector.
+- `CF_SANDBOX_GATEWAY_URL` — the gateway Worker's URL
+  (e.g. https://sandbox-gw.akoro.ng).
+- `CF_SANDBOX_GATEWAY_KEY` — shared secret the API presents on every
+  gateway call (vault only).
+- `SOFTWARE_SANDBOX_INSTANCE_TYPE` — container size, e.g. `basic` at launch.
+- Quota knobs with code defaults, env-overridable:
+  `SOFTWARE_DAILY_SANDBOX_MINUTES`, `SOFTWARE_MAX_SESSION_MINUTES`.
+- Plugin UI bundles reuse the existing R2 credentials — one new bucket
+  (`akoro-plugin-bundles`), no new keys.
+
+**Cloudflare account — one-time setup**
+- Workers Paid plan ($5/mo) — Containers do not run without it.
+- `CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_API_TOKEN` (vault only; Workers /
+  Containers / Durable Objects permissions) to deploy the gateway.
+- A custom domain on the gateway with a wildcard route — the Sandbox SDK's
+  preview URLs are per-port subdomains, so `expose_port` previews require it.
+
+**The gateway Worker (new, small; deployed to Cloudflare)**
+- `wrangler.toml`: the Sandbox Durable Object binding + the container
+  definition (image, instance type).
+- One secret (`wrangler secret put`): the same gateway key the API holds,
+  checked on every call. The gateway accepts calls from the Akoro API only —
+  never from learners or plugin code directly.
+
+**Container image (a Dockerfile, built once and versioned)**
+- Python 3 + pip (primary runtime), Node + esbuild (bundling plugin UI),
+  ripgrep, git, bash.
+- The Akoro bridge SDK baked in as a Python package.
+- Phase 3 adds Playwright + Chromium.
+- Non-root user; workspace at `/workspace`; NO Akoro credentials inside —
+  the bridge calls out to the API, which checks the learner's permissions.
+
+Sandbox and production get separate gateways and separate keys (live tests
+never touch production). The learner app needs no new env for Phase 1 —
+plugin-bundle URLs reach it through API responses in later phases.
