@@ -170,14 +170,28 @@ learning session can therefore run a different strategy, fully customisable.
   model access it needs.
 - **The session host contract** (the platform's side, the thing the agent
   inspects before writing): lifecycle hooks (start / on-learner-message /
-  resume / end), a per-instance state store, the session screen (the app
-  hosts the plugin's UI in a sandboxed web view inside its own session
-  screen — chrome, composer integration, materials and navigation stay the
-  app's), and bridge capabilities including a **model-call capability** so
-  the plugin's backend can drive its own tutor/protégé persona with the
-  learner's model pick and normal usage metering. UI code is web code in a
-  hosted view — it is never injected into the app's native React tree (the
-  DSH in-process model does not transfer to a shipped app).
+  resume / end), a per-instance state store, and bridge capabilities
+  including a **model-call capability** so the plugin's backend can drive
+  its own tutor/protégé persona with the learner's model pick and normal
+  usage metering.
+- **UI — in-app modules, the DSH model (corrected 2026-11-28)**: the
+  learner app is a React PWA, so the DSH client-plugin model transfers on
+  the client side. The agent writes UI source against the app's real
+  component kit (composer, strips, cards, SpecView primitives, theme,
+  icons — supplied by the host as externals, exactly like DSH's module
+  table supplies React); the sandbox bundles it (esbuild) into one module;
+  install pins the built bundle; the app loads it dynamically and registers
+  it into the session surface (and, later, approved slots elsewhere).
+  The plugin renders as part of the app — not a web-view iframe. What does
+  NOT transfer from DSH is in-process HOST code: Akoro's server is
+  multi-tenant, so plugin BACKEND code stays in the sandbox; only UI code
+  runs in the learner's own browser, which is the user's own device either
+  way. Plugins declare a compatible host version (the engines pattern);
+  the host refuses incompatible bundles. Trust note: a UI module runs with
+  page privileges, as DSH's do — acceptable for a learner's own
+  agent-built, Keep-card-approved plugins; if plugins are ever SHARED
+  between learners, that tier needs signing/review or iframe isolation
+  before it ships.
 - **Creation flow**: learner describes the session they want → agent inspects
   the session-host contract → `scaffold_plugin` with the session template →
   writes UI + backend in the sandbox → previews and test-runs the actual
