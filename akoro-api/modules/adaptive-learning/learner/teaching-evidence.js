@@ -58,6 +58,7 @@ function emptyConcept(index) {
     reasoning: 0,
     correction: 0,
     unresolvedMisconception: false,
+    lastAnswerCheck: null,
     learnerMastery: 0,
     protegeUnderstanding: 0,
     teachingSkill: 0,
@@ -75,6 +76,7 @@ function compactConcept(raw, index) {
   concept.reasoning = quality(raw.reasoning);
   concept.correction = quality(raw.correction);
   concept.unresolvedMisconception = raw.unresolvedMisconception === true;
+  concept.lastAnswerCheck = raw.lastAnswerCheck === "answered" || raw.lastAnswerCheck === "dodged" ? raw.lastAnswerCheck : null;
   concept.learnerMastery = round(raw.learnerMastery);
   concept.protegeUnderstanding = round(raw.protegeUnderstanding);
   concept.teachingSkill = round(raw.teachingSkill);
@@ -122,6 +124,10 @@ export function normaliseTeachingObservation(raw = {}) {
     reasoning: quality(source.reasoning),
     correction: quality(source.correction),
     misconceptionPresent: source.misconceptionPresent === true || source.misconception_present === true,
+    // The pending-question checkpoint: did this message answer the question
+    // the protégé asked in its previous message? null = no question was pending.
+    answersQuestion: source.answersQuestion === true || source.answers_question === true ? true
+      : source.answersQuestion === false || source.answers_question === false ? false : null,
     reasoningStyle: STYLE_SET.has(style) ? style : "not_observed",
   };
 }
@@ -129,10 +135,12 @@ export function normaliseTeachingObservation(raw = {}) {
 function isVerified(concept) {
   // Proper mastery rule: one clear core explanation PLUS one different form of
   // evidence (application, reasoning, or a repaired misconception), with no
-  // unresolved misconception. A pasted definition alone cannot meet it.
+  // unresolved misconception — gathered over at least TWO separate learner
+  // messages. One maxed-out turn, however complete, is a single performance,
+  // not verification; a pasted definition alone cannot meet it either.
   const hasCoreExplanation = concept.coreExplanation >= 0.75;
   const hasTransferOrReasoning = Math.max(concept.application, concept.reasoning, concept.correction) >= 0.75;
-  return hasCoreExplanation && hasTransferOrReasoning && !concept.unresolvedMisconception;
+  return concept.attempts >= 2 && hasCoreExplanation && hasTransferOrReasoning && !concept.unresolvedMisconception;
 }
 
 function applyScores(concept) {
@@ -159,6 +167,10 @@ function chooseDialogueMove(concept, pace) {
       ? DIALOGUE_MOVES.STRETCH_TRANSFER
       : DIALOGUE_MOVES.APPLY_IN_CONTEXT;
   }
+  // The scores are there but the evidence is not complete: a second separate
+  // message is still owed, or the protégé's question was dodged. Either way
+  // the next move asks for more — consolidation waits for the checkpoint.
+  if (concept.attempts < 2 || concept.lastAnswerCheck === "dodged") return DIALOGUE_MOVES.APPLY_IN_CONTEXT;
   return DIALOGUE_MOVES.CONSOLIDATE_AND_ADVANCE;
 }
 
@@ -216,6 +228,10 @@ export function applyTeachingObservation(state, index, rawObservation) {
   concept.reasoning = Math.max(concept.reasoning, observation.reasoning);
   concept.correction = Math.max(concept.correction, observation.correction);
   if (observation.misconceptionPresent) concept.unresolvedMisconception = true;
+  // The pending-question checkpoint: the latest judgement stands until a
+  // later message is judged against the protégé's (re-asked) question.
+  if (observation.answersQuestion === true) concept.lastAnswerCheck = "answered";
+  else if (observation.answersQuestion === false) concept.lastAnswerCheck = "dodged";
   // A clear correction after a clean response resolves a prior misconception.
   if (!observation.misconceptionPresent && hadUnresolvedMisconception && observation.correction >= 0.75) {
     concept.unresolvedMisconception = false;
@@ -251,12 +267,17 @@ export function buildDialoguePlan(state, index) {
     move,
     pace: pace.mode,
     masteryVerified: concept.masteryStatus === "verified",
-    canAdvance: concept.masteryStatus === "verified",
+    // Verified scores alone do not advance the session while the protégé's
+    // last question stands unanswered — the checkpoint is part of the gate.
+    canAdvance: concept.masteryStatus === "verified" && concept.lastAnswerCheck !== "dodged",
+    questionDodged: concept.lastAnswerCheck === "dodged",
     allConceptsVerified,
     missingEvidence: {
       coreExplanation: concept.coreExplanation < 0.75,
       elaboration: Math.max(concept.application, concept.reasoning, concept.correction) < 0.75,
       misconceptionRepair: concept.unresolvedMisconception,
+      secondMessage: concept.attempts < 2,
+      questionAnswer: concept.lastAnswerCheck === "dodged",
     },
   };
 }

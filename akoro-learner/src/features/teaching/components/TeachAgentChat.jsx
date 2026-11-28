@@ -1,6 +1,7 @@
 // The live session chat — SessionChatView with everything the session owns.
 import SessionChatView from './SessionChatView.jsx';
 import TeachAgentMaterialBox from './TeachAgentMaterialBox.jsx';
+import TeachFinalCheckStrip from './TeachFinalCheckStrip.jsx';
 
 export default function TeachAgentChat({ reader, embedded }) {
   const {
@@ -9,7 +10,7 @@ export default function TeachAgentChat({ reader, embedded }) {
     handleMinimize, recording, toggleRecording, seconds, voiceStreaming, interimText,
     voiceLevel, toggleVoiceStream, cogState, guide, wsReady, openSwitch, switching,
     connState, onClose, readerOpen, closeReader, openReader, content, jumpToCitation,
-    setBoardOpen, liveStudent, liveGuide, ended,
+    setBoardOpen, liveStudent, liveGuide, ended, finalCheck, reteachFinalCheck,
   } = reader;
 
   return (
@@ -50,6 +51,7 @@ export default function TeachAgentChat({ reader, embedded }) {
       onCite={content ? jumpToCitation : null}
       onOpenBoard={() => setBoardOpen(true)}
       materialBox={<TeachAgentMaterialBox reader={reader}/>}
+      finalCheckBox={finalCheck ? <TeachFinalCheckStrip finalCheck={finalCheck} onReteach={reteachFinalCheck}/> : null}
       liveStudent={liveStudent}
       liveGuide={liveGuide}
       ended={ended}

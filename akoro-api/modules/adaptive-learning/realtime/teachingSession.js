@@ -9,9 +9,20 @@ import {
 } from "../teaching-session/lifecycle.js";
 import { carryForward } from "../teaching-session/context.js";
 import { resultToTypedBlocks } from "../teaching-session/blocks.js";
+import {
+  finalCheckEnabled, createFinalCheck, finalCheckSnapshot, runFinalCheckConcepts,
+  finalCheckResolution, beginFinalCheckReteach, finalCheckReteachReady, finishFinalCheck,
+} from "../teaching-session/finalCheck.js";
 import { prepareTeachingSession } from "../teaching-session/start.js";
 import { activeSessions } from "./sessions.js";
 import { endLiveSession } from "./teachingLifecycle.js";
+
+// The Final check owns the ending of a protégé teaching session (not guide
+// mode, not a decay review — those keep their own completion paths).
+const finalCheckApplies = (orchestrator, result) =>
+  finalCheckEnabled()
+  && result.teachingMode === "teach_agent"
+  && orchestrator.sessionType !== "decay_review";
 
 export function registerTeachingSessionHandlers(socket) {
   // ══════════════════════════════════════════════════════════
@@ -128,6 +139,8 @@ export function registerTeachingSessionHandlers(socket) {
           renderStyle: orchestrator.guideOrchestrator?.guide?.renderStyle || null,
           ttsVoice:    orchestrator.guideOrchestrator?.guide?.renderStyle?.ttsVoice || "alloy",
         },
+        // The Final check's state, when one is already running on this session.
+        finalCheck: finalCheckSnapshot(orchestrator.session),
       });
 
       // (sessionMeta — the identity lifecycle.js saves from — was set by
@@ -155,6 +168,65 @@ export function registerTeachingSessionHandlers(socket) {
       socket.emit("error", { message: err.message });
     }
   });
+
+  // ── The Final check driver (2026-11-28) ───────────────────
+  // The verdict on a teach session is the end-of-session assessment, not
+  // the per-turn scores: when the evidence says every part is taught, the
+  // check runs (its snapshots drive the strip in the app); gaps loop back
+  // through re-teaching; only a passed or settled check ends the session.
+  const emitFinalCheck = (orchestrator) => {
+    const snap = finalCheckSnapshot(orchestrator.session);
+    if (snap) socket.emit("final_check", { finalCheck: snap });
+  };
+
+  // Run the check over `concepts`, then resolve. fullRun: the first,
+  // whole-topic run (a machinery failure there must not trap the session).
+  const runCheckAndResolve = async (orchestrator, concepts, { fullRun = false } = {}) => {
+    if (orchestrator.finalCheckRunning) return;
+    orchestrator.finalCheckRunning = true;
+    const fc = orchestrator.session.finalCheck;
+    try {
+      let { judged } = await runFinalCheckConcepts({
+        orchestrator, concepts, onProgress: () => emitFinalCheck(orchestrator),
+      });
+      if (fullRun) {
+        // One retry pass over anything a failed batch left unjudged.
+        const unjudged = fc.items.filter((i) => i.status === "waiting").map((i) => i.concept);
+        if (unjudged.length && judged > 0) {
+          const retry = await runFinalCheckConcepts({
+            orchestrator, concepts: unjudged, onProgress: () => emitFinalCheck(orchestrator),
+          });
+          judged += retry.judged;
+        }
+        if (judged === 0) {
+          // The verdict machinery itself failed: fall back to the per-turn
+          // bar (which WAS met) rather than trapping a finished learner.
+          console.warn("[final-check] no part could be judged — completing on the per-turn bar");
+          delete orchestrator.session.finalCheck;
+          await endLiveSession(socket, { endedBy: "objective_met" });
+          return;
+        }
+        // Still unjudged after the retry: an honest gap the learner can act on.
+        for (const item of fc.items) {
+          if (item.status === "waiting") {
+            item.status = "gap";
+            item.note = "The check couldn't judge this part — re-teach it and it will be checked again.";
+          }
+        }
+      }
+    } finally {
+      orchestrator.finalCheckRunning = false;
+    }
+    const resolution = finalCheckResolution(fc);
+    if (resolution === "open") {
+      fc.status = fc.items.some((i) => i.status === "reteaching") ? "reteach" : "open";
+      emitFinalCheck(orchestrator);
+      return;
+    }
+    finishFinalCheck(fc, resolution);
+    emitFinalCheck(orchestrator);
+    await endLiveSession(socket, { endedBy: "objective_met" });
+  };
 
   // ── teacher_message (all session types) ──────────────────
   socket.on("teacher_message", async ({ message, mode } = {}) => {
@@ -237,13 +309,60 @@ export function registerTeachingSessionHandlers(socket) {
       }
       // The agent paused it: keep it resumable (the row exists), as a minimise does.
       if (result.pauseRequested) await ensureSessionRecord(orchestrator).catch(() => null);
-      // Every part verified and the agent proposed finishing, or a §9.5 bound was reached: the session ends itself.
-      if (result.endRequested) await endLiveSession(socket, { endedBy: result.endRequested, bounded: result.boundedEnd });
+      // A §9.5 bound ends the session outright — the safety valve outranks the check.
+      if (result.boundedEnd) {
+        await endLiveSession(socket, { endedBy: result.endRequested, bounded: result.boundedEnd });
+      } else if (finalCheckApplies(orchestrator, result)) {
+        const fc = orchestrator.session.finalCheck;
+        const reteachItem = finalCheckReteachReady(fc);
+        if (reteachItem) {
+          // A re-teach is in flight: once the gate itself moves past the
+          // part (or the evidence completes), re-check just that part.
+          if (result.subtopicAdvanced || result.objectiveMet || result.endRequested === "objective_met") {
+            fc.status = "running";
+            await runCheckAndResolve(orchestrator, [reteachItem.concept]);
+          }
+          // Otherwise the re-teach is still landing — the check waits.
+        } else if (!fc && (result.objectiveMet || result.endRequested === "objective_met")) {
+          // Every part taught to the per-turn bar. The scores steered us
+          // here; the verdict belongs to the Final check now. Triggering on
+          // objectiveMet (not only on the agent proposing completion) also
+          // ends the old end-decision lag.
+          const parts = orchestrator.session.mustKnowParts?.length
+            ? orchestrator.session.mustKnowParts
+            : [orchestrator.session.topic];
+          orchestrator.session.finalCheck = createFinalCheck(parts);
+          emitFinalCheck(orchestrator);
+          await runCheckAndResolve(orchestrator, parts, { fullRun: true });
+        }
+        // With a check open, an endRequested is the check's to grant, not
+        // the turn's — it is deliberately not honoured here.
+      } else if (result.endRequested) {
+        await endLiveSession(socket, { endedBy: result.endRequested, bounded: result.boundedEnd });
+      }
     } catch (err) {
       console.error("[teacher_message]", err);
       socket.emit("student_done"); socket.emit("guide_done");
       socket.emit("error", { message: err.message });
     }
+  });
+
+  // ── final_check_reteach ───────────────────────────────────
+  // The learner tapped Re-teach on a gap in the Final check strip: the
+  // session goes back to teaching that part in the chat. When the gate
+  // moves past it again, teacher_message re-checks just that part.
+  socket.on("final_check_reteach", async ({ index } = {}) => {
+    const { sessionId } = socket.data;
+    const orchestrator = activeSessions.get(sessionId);
+    if (!orchestrator) {
+      if (socket.data.sessionEnded) return;   // a completed session has no check to re-teach
+      return socket.emit("error", { message: "No active session." });
+    }
+    const fc = orchestrator.session.finalCheck;
+    if (!beginFinalCheckReteach(fc, Number(index))) return;   // not an open gap — nothing to do
+    orchestrator.session.mustKnowIndex = Number(index);
+    if (orchestrator.session.phase === "MASTERY") orchestrator.session.phase = "PHASE_2";
+    emitFinalCheck(orchestrator);
   });
 
   // ── request_summary ───────────────────────────────────────

@@ -122,11 +122,16 @@ export function createTeachingTurnTools() {
 
         let observation;
         try {
+          // The protégé's previous message, for the pending-question
+          // checkpoint: the judge rules whether this message answers it.
+          const protegeLastMessage = [...context.history].reverse()
+            .find((h) => h?.role === "student_agent" && String(h.content || "").trim())?.content?.slice(0, 500) || null;
           observation = await orchestrator.studentAgent.assessTeachingEvidence({
             humanMessage: context.humanMessage,
             topic: context.topic,
             currentSubtopic: activeConcept(context),
             history: context.history,
+            protegeLastMessage,
           });
         } catch (error) {
           // An unavailable evaluator is no evidence—not weak evidence—and must

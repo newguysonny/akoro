@@ -74,6 +74,39 @@ test("learner-profile pace is expiry-aware and repeated gaps add temporary suppo
   assert.equal(result.state.pace.source, "live_session");
 });
 
+test("one maxed-out message does not verify — two separate messages are required", () => {
+  const state = createTeachingEvidenceState({ conceptCount: 1 });
+  const first = applyTeachingObservation(state, 0, {
+    coreExplanation: "clear", application: "clear", reasoning: "clear", misconceptionPresent: false,
+  });
+  assert.equal(first.current.attempts, 1);
+  assert.equal(first.current.masteryStatus, "developing");
+  assert.equal(first.dialogue.canAdvance, false);
+  assert.equal(first.dialogue.missingEvidence.secondMessage, true);
+
+  const second = applyTeachingObservation(state, 0, { coreExplanation: "partial", misconceptionPresent: false });
+  assert.equal(second.current.masteryStatus, "verified");
+  assert.equal(second.dialogue.canAdvance, true);
+});
+
+test("a dodged protégé question blocks the advance until it is answered", () => {
+  const state = createTeachingEvidenceState({ conceptCount: 1 });
+  applyTeachingObservation(state, 0, { coreExplanation: "clear", misconceptionPresent: false });
+  const dodged = applyTeachingObservation(state, 0, {
+    application: "clear", misconceptionPresent: false, answersQuestion: false,
+  });
+  assert.equal(dodged.current.masteryStatus, "verified");
+  assert.equal(dodged.dialogue.canAdvance, false);
+  assert.equal(dodged.dialogue.questionDodged, true);
+  assert.equal(dodged.dialogue.missingEvidence.questionAnswer, true);
+
+  const answered = applyTeachingObservation(state, 0, {
+    reasoning: "partial", misconceptionPresent: false, answersQuestion: true,
+  });
+  assert.equal(answered.dialogue.canAdvance, true);
+  assert.equal(answered.dialogue.questionDodged, false);
+});
+
 test("an unavailable evaluator fails closed without adding a negative learner signal", () => {
   const state = createTeachingEvidenceState({ conceptCount: 1 });
   const result = applyTeachingObservation(state, 0, { notChecked: true });

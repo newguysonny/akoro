@@ -129,8 +129,14 @@ export class StudentAgent {
     const turnMove = teachingContext?.protegeMove
       ? `\n\nThis reply, as the student: ${teachingContext.protegeMove}${teachingContext.focusConcept ? ` — about ${String(teachingContext.focusConcept).slice(0, 120)}` : ""}.`
       : "";
+    // Checkpoint steer: the learner talked past the question asked in the
+    // previous message — the protégé asks that same question again, warmly,
+    // before anything new (the evidence gate holds the part until it lands).
+    const dodgeSteer = dialogue.questionDodged
+      ? "\n\nThe learner did not answer the question you asked in your previous message. Ask that same question again, warmly and plainly, before moving on to anything new; do not treat this part as finished."
+      : "";
     const messages = [
-      { role: "system", content: systemPrompt + turnMove },
+      { role: "system", content: systemPrompt + turnMove + dodgeSteer },
       { role: "user",   content: humanMessage },
     ];
 
@@ -158,7 +164,14 @@ export class StudentAgent {
   // This is intentionally separate from analysing the protege's generated
   // reply. The agent sounding positive cannot be proof that the human learned
   // or taught the concept accurately.
-  async assessTeachingEvidence({ humanMessage, topic, currentSubtopic, history }) {
+  async assessTeachingEvidence({ humanMessage, topic, currentSubtopic, history, protegeLastMessage = null }) {
+    // The pending-question checkpoint (2026-11-28): when the protégé's last
+    // message asked the learner something, the same judge also rules whether
+    // this message actually answers it. The instruction rides in code, not in
+    // the persona template, so the golden-pinned EVIDENCE.md stays untouched.
+    const checkpoint = protegeLastMessage
+      ? "\n\nThe protégé's previous message (protegeLastMessage in the input) may have asked the learner a question. If it did, also return \"answersQuestion\": true when this message genuinely answers that question, false when it ignores, dodges or talks past it. If it asked no question, omit the field."
+      : "";
     const res = await openai.chat.completions.create({
       model: "gpt-4.1-mini",
       temperature: 0,
@@ -166,11 +179,11 @@ export class StudentAgent {
       messages: [
         {
           role: "system",
-          content: await buildStudentAgentEvidencePrompt({ topic, currentIdea: currentSubtopic || topic })
+          content: (await buildStudentAgentEvidencePrompt({ topic, currentIdea: currentSubtopic || topic })) + checkpoint
         },
         {
           role: "user",
-          content: JSON.stringify({ humanMessage, recentHistory: history.slice(-4) }),
+          content: JSON.stringify({ humanMessage, recentHistory: history.slice(-4), ...(protegeLastMessage ? { protegeLastMessage } : {}) }),
         },
       ],
     });
@@ -181,7 +194,7 @@ export class StudentAgent {
       throw new Error("Teaching-evidence evaluator returned invalid JSON");
     }
     if (!result || typeof result !== "object" || ![
-      "coreExplanation", "application", "reasoning", "correction", "misconceptionPresent",
+      "coreExplanation", "application", "reasoning", "correction", "misconceptionPresent", "answersQuestion",
     ].some((key) => Object.hasOwn(result, key))) {
       throw new Error("Teaching-evidence evaluator returned no observation");
     }

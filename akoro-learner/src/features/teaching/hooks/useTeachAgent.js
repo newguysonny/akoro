@@ -84,6 +84,7 @@ export function useTeachAgent({ session, config, onClose, onMinimize, onSessionS
   const sessionIdRef  = useRef(resumeSid);
   const endedRef      = useRef(false);    // the session ended (by the learner, or by itself: every part taught / a limit)   // live session id — drives seamless resume on reconnect AND on minimize→restore
   const [ended, setEnded] = useState(false);   // state mirror of endedRef — the chat view disables its composer on it
+  const [finalCheck, setFinalCheck] = useState(null);   // the end-of-session verdict (Final check strip): { status, items, held, gaps, total }
   // True the moment the learner minimizes: the unmount cleanup must NOT end
   // the server session then — a park keeps it resumable.
   const parkedRef     = useRef(false);
@@ -387,6 +388,7 @@ export function useTeachAgent({ session, config, onClose, onMinimize, onSessionS
         onSessionStarted?.(d.sessionId);
         sessionIdRef.current = d.sessionId;
         setWsReady(true);
+        setFinalCheck(d.finalCheck || null);   // a live session's running check rides along; a fresh one clears any stale strip
         setInitLoading(false); setPrepNote('');
         const gName  = d.guideProfile?.name  || guideNm;
         const gEmoji = d.guideProfile?.emoji || guideEm;
@@ -528,6 +530,9 @@ export function useTeachAgent({ session, config, onClose, onMinimize, onSessionS
       });
       ws.on("student_done", ()=>{});
       ws.on("guide_done",   ()=>{});
+      // The Final check's snapshots: the strip above the material strip
+      // renders the verdict as it lands, part by part.
+      ws.on("final_check", ({ finalCheck }) => { if (finalCheck) setFinalCheck(finalCheck); });
       ws.on("error", err => {
         console.warn("[TeachModal WS]", err.message);
         setLoading(false); setSwitching(false);
@@ -861,12 +866,18 @@ export function useTeachAgent({ session, config, onClose, onMinimize, onSessionS
     }
   };
 
+  // Re-teach a part the Final check marked as a gap: the server returns the
+  // session to that part; the check re-runs for it once it is taught again.
+  const reteachFinalCheck = (index) => {
+    if (wsRef.current?.connected) wsRef.current.emit("final_check_reteach", { index });
+  };
+
   return {
     session, config, onClose, onMinimize, onSessionStarted, onSessionSaved, content,
     topic, subject, agentNm, agentEm, guideNm, guideEm, guideRS, mode, t,
     sessionId, blocks, initLoading, prepNote, input, setInput, quote, setQuote,
     recording, seconds, loading, activeTab, setActiveTab, summary, summaryErr, review,
-    requestReview, wsReady, connState, userTurns, fmt, ended,
+    requestReview, wsReady, connState, userTurns, fmt, ended, finalCheck, reteachFinalCheck,
     handleSend, handleMinimize, toggleRecording, toggleVoiceStream,
     voiceStreaming, interimText, voiceLevel, cogState, liveStudent, liveGuide,
     guide, switching, switchOpen, setSwitchOpen, agentChoices, openSwitch, performSwitch,

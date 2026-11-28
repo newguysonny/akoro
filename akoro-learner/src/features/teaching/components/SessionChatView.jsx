@@ -98,6 +98,10 @@ function SessionChatView({
   // the content is (record, lesson video…), one tap from the chat to the
   // reader and back. Absent → not rendered (plain teaching session).
   materialBox = null,
+  // The FINAL CHECK strip — the end-of-session verdict's own strip, stacked
+  // directly above the material strip (its own strip, never shared).
+  // Absent → not rendered (no check running on this session).
+  finalCheckBox = null,
   // Streaming token feedback — the Protégé / Guide reply for the turn in
   // flight, accumulated token-by-token by the host from student_token /
   // guide_token events. Non-null renders a live bubble with a caret.
@@ -359,6 +363,9 @@ function SessionChatView({
             control opens the session reader (Fortizo split: reader left, this
             chat right on desktop/tablet; full-screen modal on mobile).
             Guide mode: text only — voice/audio have no backend there yet. */}
+        {finalCheckBox && (
+          <div style={{ marginBottom:6 }}>{finalCheckBox}</div>
+        )}
         {materialBox && (
           <div>{materialBox}</div>
         )}
