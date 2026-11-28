@@ -170,7 +170,9 @@ export default function TeachFinalCheckStrip({ finalCheck, onReteach }) {
                     <>
                       <div style={{ display: 'flex', gap: 7, marginTop: 9, fontSize: 12, lineHeight: 1.5, color: '#8A6414' }}>
                         <span className="ti ti-alert-circle" style={{ fontSize: 15, flexShrink: 0, marginTop: 1 }} />
-                        <span><b>Gap:</b> {item.note || 'Your protégé couldn’t answer this from what you taught.'}</span>
+                        {item.outcome === 'guessed' || item.outcome === 'guessed_right'
+                          ? <span><b>Gap:</b> your protégé answered this from its own knowledge, not from your teaching — and a guess doesn’t count, however right it sounds. It needs to come from you.</span>
+                          : <span><b>Gap:</b> {item.note || 'Your protégé couldn’t answer this from what you taught.'}</span>}
                       </div>
                       <button
                         type="button"

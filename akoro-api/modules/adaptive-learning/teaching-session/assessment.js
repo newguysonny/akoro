@@ -33,9 +33,10 @@ export function assessmentConcepts({ requested = [], parts = [], index = 0, veri
 }
 
 /** PURE: what the learner taught the protégé this session — the only thing it may answer from. */
-export function teachingNotes(history = []) {
+export function teachingNotes(history = [], limit = 12) {
+  const cap = Math.max(1, Math.floor(Number(limit) || 12));
   return history.filter((h) => h?.role === "human_teacher" && String(h.content || "").trim())
-    .map((h) => String(h.content).replace(/\s+/g, " ").trim().slice(0, 600)).slice(-12);
+    .map((h) => String(h.content).replace(/\s+/g, " ").trim().slice(0, 600)).slice(-cap);
 }
 
 /** PURE: correct = right AND from the notes; a guess never counts. */
@@ -71,10 +72,10 @@ async function defaultComplete(params) {
  * Run the check. → { concepts, items: [{ concept, question, answer, fromNotes, outcome, note }], correct, total, outcome }
  * outcome per item: correct | guessed | guessed_right | wrong
  */
-export async function runTeachingAssessment({ orchestrator, concepts, modelPick = {}, complete = defaultComplete }) {
+export async function runTeachingAssessment({ orchestrator, concepts, modelPick = {}, complete = defaultComplete, notesLimit = 12 }) {
   const session = orchestrator?.session || {};
   const topic = session.topic || "this topic";
-  const notes = teachingNotes(session.history || []);
+  const notes = teachingNotes(session.history || [], notesLimit);
   const userId = orchestrator?.userId || orchestrator?.studentId || null;
   const base = { response_format: { type: "json_object" }, temperature: 0, max_tokens: 700, __feature: "teaching_assessment", ...(userId ? { __userId: userId } : {}) };
   if (!concepts.length) return { concepts, items: [], ...scoreAssessment([]) };

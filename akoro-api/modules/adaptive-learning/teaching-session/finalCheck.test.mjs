@@ -31,13 +31,15 @@ test("a full run batches every part and lands held/gap per part", async () => {
   const fc = createFinalCheck(PARTS);
   const orchestrator = sessionWith(fc);
   let batches = 0;
-  const assess = async (args) => { batches += 1; return fakeAssess(["F"])(args); };
+  let firstArgs = null;
+  const assess = async (args) => { batches += 1; firstArgs ??= args; return fakeAssess(["F"])(args); };
   const progress = [];
   const { judged } = await runFinalCheckConcepts({
     orchestrator, concepts: PARTS, assess, onProgress: (snap) => progress.push(snap),
   });
 
   assert.equal(batches, 3); // 8 parts, the assessment's batch size is 3
+  assert.equal(firstArgs.notesLimit, 80); // the verdict reads the whole session's teaching, not the recent window
   assert.equal(judged, 8);
   const snap = finalCheckSnapshot(orchestrator.session);
   assert.equal(snap.held, 7);

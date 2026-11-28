@@ -53,6 +53,33 @@ test("a malformed model answer is a miss, never a crash", async () => {
   assert.equal(r.correct, 0);
 });
 
+test("the notes window: recent-only by default; a wider limit keeps early teaching in the protégé's notes", async () => {
+  const history = [
+    { role: "human_teacher", content: "The very first lesson: mass comes from air." },
+    ...Array.from({ length: 14 }, (_, i) => ({ role: "human_teacher", content: `Later teaching message ${i + 2}.` })),
+  ];
+  const capture = async (notesLimit) => {
+    const calls = [];
+    const complete = async (params) => {
+      calls.push(params);
+      if (calls.length === 1) return JSON.stringify({ questions: [{ question: "Where does mass come from?" }] });
+      if (calls.length === 2) return JSON.stringify({ answers: [{ answer: "From the air.", fromNotes: true }] });
+      return JSON.stringify({ verdicts: [{ correct: true }] });
+    };
+    await runTeachingAssessment({
+      orchestrator: { session: { topic: "Photosynthesis", history } },
+      concepts: ["Mass"], complete, ...(notesLimit ? { notesLimit } : {}),
+    });
+    return JSON.parse(calls[1].messages[1].content).notes;
+  };
+  const recentOnly = await capture();
+  assert.equal(recentOnly.length, 12);
+  assert.ok(!recentOnly.some((n) => n.includes("very first lesson")), "default window drops the earliest teaching");
+  const wide = await capture(80);
+  assert.equal(wide.length, 15);
+  assert.ok(wide.some((n) => n.includes("very first lesson")), "the Final check's window keeps it");
+});
+
 test("policy: teach_agent only, capped per session, conceptIds must be a list", () => {
   assert.ok(TOOLS_BY_MODE.teach_agent.includes("teaching_request_assessment"));
   assert.ok(!TOOLS_BY_MODE.learn_with_guide.includes("teaching_request_assessment"));

@@ -17,6 +17,16 @@
  */
 import { MAX_ASSESSMENT_CONCEPTS, runTeachingAssessment } from "./assessment.js";
 
+// The protégé answers the check from its notes — the learner's teaching
+// messages. The mid-session check reads only the recent ones (it checks
+// what was just taught), but the Final check judges the WHOLE session:
+// with the recent-only window, a long session's earliest parts fall out of
+// the notes and their answers come back as honest "not from my notes"
+// guesses — correct answers marked as gaps (seen live 2026-11-28: parts
+// 1–3 of 8 gapped on affirmed-correct answers in a 23-message session).
+// The verdict therefore reads the full teaching history.
+export const FINAL_CHECK_NOTES_LIMIT = 80;
+
 export const finalCheckEnabled = () => {
   const v = String(process.env.AKORO_FINAL_CHECK || "on").toLowerCase();
   return v !== "off" && v !== "false" && v !== "0";
@@ -31,6 +41,7 @@ export function createFinalCheck(parts = []) {
       index,
       concept: String(concept || ""),
       status: "waiting", // waiting | asking | held | gap | reteaching
+      outcome: null, // the assessment's raw outcome (correct | wrong | guessed | guessed_right)
       question: null,
       answer: null,
       note: null,
@@ -57,6 +68,7 @@ export function finalCheckSnapshot(session) {
       index: i.index,
       concept: i.concept,
       status: i.status,
+      outcome: i.outcome || null,
       question: i.question || null,
       answer: i.answer || null,
       note: i.note || null,
@@ -79,6 +91,7 @@ export function applyAssessmentItems(fc, marked = [], recheckIndexes = new Set()
     applied += 1;
     if (recheckIndexes.has(item.index)) item.rechecks = (item.rechecks || 0) + 1;
     item.status = m.outcome === "correct" ? "held" : "gap";
+    item.outcome = m.outcome || null;
     item.question = m.question ? String(m.question).slice(0, 300) : null;
     item.answer = m.answer ? String(m.answer).slice(0, 400) : null;
     item.note = m.note ? String(m.note).slice(0, 200) : null;
@@ -104,7 +117,7 @@ export async function runFinalCheckConcepts({ orchestrator, concepts = [], asses
     }
     onProgress?.(finalCheckSnapshot(orchestrator.session));
     try {
-      const result = await assess({ orchestrator, concepts: batch });
+      const result = await assess({ orchestrator, concepts: batch, notesLimit: FINAL_CHECK_NOTES_LIMIT });
       // A result applied to a part that was already judged a gap (or is
       // mid-re-teach) is that part's re-check — counted from the status the
       // part carried INTO this run, before "asking" overwrote it.
