@@ -13,6 +13,7 @@ process.env.OPENAI_API_KEY ||= "test";
 const { TEACHING_TURN_WORKFLOW, executeTeachingTurnWorkflow } = await import("./runner.js");
 const { createTeachingTurnTools, TEACHING_TURN_TOOL_CATALOG } = await import("./tools.js");
 const { STUDENT_PHASES, ACTION_FOR_DIALOGUE_MOVE, applyTeachingProgress } = await import("../teaching-session/state-machine.js");
+const { createTeachingEvidenceState, applyTeachingObservation } = await import("../learner/teaching-evidence.js");
 
 const { installFakeDb } = await import("../../../lib/testing/fakeDb.mjs");
 
@@ -124,6 +125,15 @@ async function runTurn(orchestrator, { callbacks = {}, humanMessage = "Plants us
 }
 const upserts = (fake) => fake.calls.filter((c) => c.table === STATES && c.op === "upsert").length;
 
+/** One earlier scored attempt on the active part, so the turn under test is
+ *  the second — a part verifies only after two scored messages (the
+ *  2026-11-28 evidence rule), which the gate/MASTERY tests rely on. */
+function seedPriorAttempt(orchestrator, observation) {
+  const state = createTeachingEvidenceState({ conceptCount: orchestrator.session.mustKnowParts.length });
+  orchestrator.teachingEvidence = applyTeachingObservation(state, 0, observation).state;
+  return orchestrator;
+}
+
 test("the documented 8 steps are the workflow, in order, each with a public catalog label", () => {
   assert.deepEqual([...TEACHING_TURN_WORKFLOW.tools], STEPS);
   assert.deepEqual(Object.keys(createTeachingTurnTools()), STEPS);
@@ -144,9 +154,10 @@ test("a full turn runs all 8 steps in order with started/completed events and st
     assert.equal(e.label, TEACHING_TURN_TOOL_CATALOG.find((t) => t.name === e.step).label);
     assert.deepEqual(Object.keys(e).sort(), ["label", "policyVersion", "status", "step", "workflow"], "no outputs / learner text cross the boundary");
   }
-  // Steps 2,3,4,6,7 are the LLM-backed collaborators; they run in step order.
+  // Steps 2,3,6,7 are the LLM-backed collaborators; they run in step order.
+  // (Step 4 derives its read from the step-2 evidence — no collaborator call.)
   assert.deepEqual(log.map(([name]) => name), [
-    "assessTeachingEvidence", "reply", "analyzeUnderstanding",
+    "assessTeachingEvidence", "reply",
     "extractKnowledgeFromTurn", "extractStudentKnowledge", "getTip",
   ]);
   assert.deepEqual(context.publicWorkflow, {
@@ -163,13 +174,13 @@ test("collaborators receive the turn's context; callbacks and stats are updated"
   const fake = seam.install();
   const log = [];
   const studentChunks = []; const guideChunks = [];
-  const orchestrator = makeOrchestrator({ log, observation: STRONG });
+  const orchestrator = seedPriorAttempt(makeOrchestrator({ log, observation: STRONG }), STRONG);
   const { context, stateUpdates } = await runTurn(orchestrator, {
     callbacks: { onStudentChunk: (c) => studentChunks.push(c), onGuideChunk: (c) => guideChunks.push(c) },
   });
 
   const assessArgs = log.find(([n]) => n === "assessTeachingEvidence")[1];
-  assert.deepEqual(assessArgs, { humanMessage: "Plants use light to make sugar.", topic: "Photosynthesis", currentSubtopic: "light reactions", history: orchestrator.session.history });
+  assert.deepEqual(assessArgs, { humanMessage: "Plants use light to make sugar.", topic: "Photosynthesis", currentSubtopic: "light reactions", history: orchestrator.session.history, protegeLastMessage: null });
   const replyArgs = log.find(([n]) => n === "reply")[1];
   assert.equal(replyArgs[4], STUDENT_PHASES.PHASE_1);
   assert.equal(replyArgs[6].dialogue.canAdvance, true);
@@ -179,13 +190,13 @@ test("collaborators receive the turn's context; callbacks and stats are updated"
   assert.deepEqual(studentChunks, ["chunk"]);
   assert.deepEqual(guideChunks, ["tip"]);
 
-  // The protege's self-reported 90% understanding is capped by observed evidence.
+  // The turn's understanding read IS the observed evidence (derived, capped by construction).
   assert.ok(context.analysis.understanding <= Math.round(context.evidenceUpdate.current.protegeUnderstanding * 100));
   assert.equal(stateUpdates.length, 1);
   assert.equal(stateUpdates[0].understanding, Math.round(context.updatedState.cognitive.understanding * 100));
 
   assert.equal(orchestrator.stats.agentKnowledgeAdded, 1);
-  assert.deepEqual(orchestrator.stats.conceptsLearned, ["chlorophyll absorbs light"]);
+  assert.deepEqual(orchestrator.stats.conceptsLearned, ["light reactions"], "the verified part, named by the evidence-derived analysis");
   assert.deepEqual(orchestrator.stats.studentKnowledgeRefs, ["sk-1"]);
   assert.equal(orchestrator.stats.teacherChunksUsed, 2);
   assert.equal(orchestrator.teachingEvidence.concepts.length, 2);
@@ -221,7 +232,7 @@ test("an evaluator failure in step 2 records notChecked (no evidence) and the tu
 
 test("phase/subtopic change exactly as applyTeachingProgress decides (guide request honoured only with evidence)", async () => {
   const fake = seam.install();
-  const orchestrator = makeOrchestrator({ observation: STRONG, guideResult: { tip: "t", nextAction: "X", nextPhase: "PHASE_3" } });
+  const orchestrator = seedPriorAttempt(makeOrchestrator({ observation: STRONG, guideResult: { tip: "t", nextAction: "X", nextPhase: "PHASE_3" } }), STRONG);
   const { context } = await runTurn(orchestrator);
 
   const expected = applyTeachingProgress({
@@ -267,7 +278,7 @@ test("a guide-requested unknown phase or MASTERY never changes the phase; weak e
 
 test("the last concept verified enters MASTERY through the gate", async () => {
   const fake = seam.install();
-  const orchestrator = makeOrchestrator({ observation: STRONG, mustKnowParts: ["only concept"], phase: "PHASE_4" });
+  const orchestrator = seedPriorAttempt(makeOrchestrator({ observation: STRONG, mustKnowParts: ["only concept"], phase: "PHASE_4" }), STRONG);
   const { context } = await runTurn(orchestrator);
   assert.equal(orchestrator.session.phase, "MASTERY");
   assert.equal(context.phaseLabel, STUDENT_PHASES.MASTERY);

@@ -533,6 +533,22 @@ export function useTeachAgent({ session, config, onClose, onMinimize, onSessionS
       // The Final check's snapshots: the strip above the material strip
       // renders the verdict as it lands, part by part.
       ws.on("final_check", ({ finalCheck }) => { if (finalCheck) setFinalCheck(finalCheck); });
+      // The guide's ideas for the turn that just settled arrive a few
+      // seconds later (the coach runs off the turn's critical path): patch
+      // them onto the latest protégé reply — unless the learner has already
+      // sent the next message, in which case they're stale and dropped.
+      ws.on("guide_update", ({ ideas }) => {
+        if (!ideas?.length) return;
+        setBlocks(prev => {
+          let idx = -1;
+          for (let i = prev.length - 1; i >= 0; i--) { if (prev[i].type === "student-agent") { idx = i; break; } }
+          if (idx < 0) return prev;
+          if (prev.slice(idx + 1).some(b => b.type === "user")) return prev;
+          const next = [...prev];
+          next[idx] = { ...next[idx], guide: { ...(next[idx].guide || {}), ideas } };
+          return next;
+        });
+      });
       ws.on("error", err => {
         console.warn("[TeachModal WS]", err.message);
         setLoading(false); setSwitching(false);

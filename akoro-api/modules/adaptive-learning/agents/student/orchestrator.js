@@ -26,6 +26,7 @@ import { normaliseMode } from "../../teaching-session/policy.js";
 import { blocksToConversationHistory } from "./continuation-history.js";
 import { STUDENT_PHASES, ACTION_FOR_DIALOGUE_MOVE } from "../../teaching-session/state-machine.js";
 import { buildOpening, buildResumeOpening } from "./opening.js";
+import { createDeferredWorkTracker } from "./deferred-work.js";
 import { createClient } from "@supabase/supabase-js";
 
 // Lazy: a barrel re-export must not build the client (or throw) in a test env.
@@ -77,6 +78,7 @@ export class StudentSessionOrchestrator extends BaseOrchestrator {
     this.teachingEvidence       = null;
     this.studentAgentRecord = null;
     this.studentAgent       = null;
+    this.deferred           = createDeferredWorkTracker();   // off-critical-path turn work (coach + record)
     this.sessionDeltaId     = null;
     this.sessionStartTime   = Date.now();
     this.notificationId     = decayPayload?.notificationId || null;
@@ -287,6 +289,7 @@ export class StudentSessionOrchestrator extends BaseOrchestrator {
     };
   }
 
+  // Deferred per-turn work is tracked by ./deferred-work.js (this.deferred).
   // ── PROCESS ONE TURN ─────────────────────────────────────────
   async processTeachingMessage(humanMessage, callbacks = {}, { mode = null } = {}) {
     // Phase 6: the turn is agent-driven (teaching-session/controller.js) — the
@@ -309,6 +312,7 @@ export class StudentSessionOrchestrator extends BaseOrchestrator {
     const workflow = agentTurns || teachingMode === "learn_with_guide"
       ? await executeAgentTeachingTurn({ ...workflowArgs, mode: teachingMode })
       : await executeTeachingTurnWorkflow(workflowArgs);
+    if (workflow.deferredWork) this.deferred.track(workflow.deferredWork);
     const {
       topic,
       mustKnowParts,
@@ -369,6 +373,8 @@ export class StudentSessionOrchestrator extends BaseOrchestrator {
       assessment: workflow.assessment || null,
       // The guide's ideas for the human's next message (shown as pills, not a message).
       guideSuggestions: Array.isArray(guideResult.suggestions) ? guideResult.suggestions : null,
+      // The coach ran off the critical path: pills arrive on guide_update (blocks.js holds ideas empty until then).
+      guideDeferred: !!workflow.deferredWork,
       guideNextAction: guideResult.nextAction || null,
       guideIsUrgent: guideResult.isUrgent || false,
       guideName,
@@ -467,6 +473,7 @@ export class StudentSessionOrchestrator extends BaseOrchestrator {
   }
 
   async endSession() {
+    await this.deferred.settle();   // the last turn's deferred coach/record lands before the flush reads it
     const { topic, history } = this.session;
     const agentId   = this.studentAgentRecord.id;
     const studentId = this.studentId;

@@ -98,6 +98,28 @@ test("guide mode: NaNa replies, the protégé is never called, and its tools are
   assert.ok(!controllerTools("learn_with_guide").some((t) => t.function.name === "protege_respond"));
 });
 
+test("merged decide+reply: one persona call picks the move; the controller is never called", async () => {
+  const s = setup();
+  s.orchestrator.studentAgent.reply = async (msg, topic, cog, hist, phaseLabel, onChunk, ctx) => {
+    assert.ok(ctx.mergedMove, "the merged protocol is offered to the persona call");
+    assert.equal(ctx.mergedMove.defaultMove, "request_clarification", "the evidence's default move rides along");
+    ctx.mergedMove.onMove("challenge");
+    return "Wait, why does water move that way?";
+  };
+  const ctx = await run(s, async () => { throw new Error("decide must not be called on the merged path"); }, { mergeReply: true });
+  assert.equal(ctx.reply.tool, "protege.respond");
+  assert.equal(ctx.reply.move, "challenge");
+  assert.deepEqual(ctx.decisions.map((d) => [d.tool, d.merged]), [["protege_respond", true]]);
+  assert.ok(s.ran.includes("gate_teaching_progress"), "the gate still runs");
+});
+
+test("merged path: no move reported → the evidence's default move stands", async () => {
+  const s = setup({ dialogue: { move: "repair_misconception", canAdvance: false, allConceptsVerified: false } });
+  s.orchestrator.studentAgent.reply = async () => "Hmm, I thought it was the other way round.";
+  const ctx = await run(s, async () => null, { mergeReply: true });
+  assert.equal(ctx.reply.move, "confused_student");
+});
+
 test("policy: strategy cap, bounded end, fallback table", () => {
   assert.equal(validateDecision("teach_agent", { tool: "strategy_select", args: { strategy: "contrast_pairs" } }, { strategyChanges: 2 }).error, "strategy_cap_reached");
   // Strategy Library v3: in-session strategies only; unknown names are invalid, harness ones not permitted mid-session.

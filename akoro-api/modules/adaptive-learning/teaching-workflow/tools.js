@@ -8,7 +8,6 @@
 import { getStudentState, updateStudentState } from "../../learner-state/index.js";
 import {
   applyTeachingObservation,
-  capProtegeAnalysis,
   createTeachingEvidenceState,
 } from "../learner/teaching-evidence.js";
 import { TEACHING_TURN_TOOL_CATALOG } from "./catalog.js";
@@ -174,14 +173,25 @@ export function createTeachingTurnTools() {
 
     assess_protege_understanding: {
       async execute(context) {
-        const agentAnalysis = await context.orchestrator.studentAgent.analyzeUnderstanding(
-          context.studentReply,
-          context.topic,
-          context.history,
-        );
-        // A fluent synthetic reply remains subordinate to independently
-        // observed learner teaching evidence.
-        context.analysis = capProtegeAnalysis(agentAnalysis, context.evidenceUpdate.current);
+        // Derived from the server-owned evidence, not a second model call
+        // (latency work, 2026-11-28): the old analyzeUnderstanding call read
+        // the protégé's fluent reply and was then CAPPED by this same
+        // evidence (capProtegeAnalysis) — the cap was the binding value, so
+        // the meters now come straight from it. Engagement is left unset:
+        // updateStudentState keeps the stored value when it's absent.
+        const ev = context.evidenceUpdate?.current || {};
+        const part = activeConcept(context);
+        const readiness = Math.max(0, Math.min(1, Number(ev.protegeUnderstanding) || 0));
+        context.analysis = {
+          understanding: Math.round(readiness * 100),
+          confusion: ev.misconceptionPresent
+            ? Math.max(55, Math.round((1 - readiness) * 100))
+            : Math.round((1 - readiness) * 35),
+          strengths: ev.masteryStatus === "verified" ? [part] : [],
+          misconceptionDetected: ev.misconceptionPresent ? part : null,
+          newConceptLearned: ev.masteryStatus === "verified" ? part : null,
+          priorKnowledgeUsed: false,
+        };
       },
     },
 

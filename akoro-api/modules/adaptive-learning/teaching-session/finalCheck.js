@@ -107,9 +107,12 @@ export function applyAssessmentItems(fc, marked = [], recheckIndexes = new Set()
 export async function runFinalCheckConcepts({ orchestrator, concepts = [], assess = runTeachingAssessment, onProgress = null }) {
   const fc = orchestrator?.session?.finalCheck;
   if (!fc) return { judged: 0 };
-  let judged = 0;
-  for (let i = 0; i < concepts.length; i += MAX_ASSESSMENT_CONCEPTS) {
-    const batch = concepts.slice(i, i + MAX_ASSESSMENT_CONCEPTS);
+  // The batches judge disjoint parts and never read each other's results —
+  // run them in parallel (latency work, 2026-11-28: serial batches made the
+  // completing turn wait for three rounds of assessment calls; now ~one).
+  const batches = [];
+  for (let i = 0; i < concepts.length; i += MAX_ASSESSMENT_CONCEPTS) batches.push(concepts.slice(i, i + MAX_ASSESSMENT_CONCEPTS));
+  const runBatch = async (batch) => {
     const prevStatus = new Map();
     for (const concept of batch) {
       const item = findItem(fc, concept);
@@ -124,7 +127,7 @@ export async function runFinalCheckConcepts({ orchestrator, concepts = [], asses
       const recheckIndexes = new Set(
         [...prevStatus.entries()].filter(([, s]) => s === "gap" || s === "reteaching").map(([idx]) => idx),
       );
-      judged += applyAssessmentItems(fc, result?.items || [], recheckIndexes);
+      return applyAssessmentItems(fc, result?.items || [], recheckIndexes);
     } catch (e) {
       // A failed batch judges nothing: its parts go back to the status they
       // had rather than sitting at "asking" forever.
@@ -133,10 +136,13 @@ export async function runFinalCheckConcepts({ orchestrator, concepts = [], asses
         if (item && item.status === "asking") item.status = prevStatus.get(item.index) || "waiting";
       }
       console.warn("[final-check] batch failed:", e?.message || e);
+      return 0;
+    } finally {
+      onProgress?.(finalCheckSnapshot(orchestrator.session));
     }
-    onProgress?.(finalCheckSnapshot(orchestrator.session));
-  }
-  return { judged };
+  };
+  const counts = await Promise.all(batches.map(runBatch));
+  return { judged: counts.reduce((a, b) => a + b, 0) };
 }
 
 /**

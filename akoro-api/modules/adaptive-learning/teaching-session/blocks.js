@@ -71,7 +71,7 @@ export function resultToTypedBlocks(result, agentPairId) {
       whyThisResponse: learningState.whyThisResponse || null,
       text:            result.studentAgentResponse,
       guide: { name: guideName, emoji: guideEmoji,
-        ideas: guideIdeas(result.guideSuggestions, { nextAction: result.guideNextAction, concept: result.topic || shortConcept(result.currentSubtopic) }) },
+        ideas: result.guideDeferred ? [] : guideIdeas(result.guideSuggestions, { nextAction: result.guideNextAction, concept: result.topic || shortConcept(result.currentSubtopic) }) },
     });
   }
 

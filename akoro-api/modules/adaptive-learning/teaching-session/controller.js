@@ -139,7 +139,7 @@ async function strategyLimitReached(advisor, context, orchestrator, strategy) {
   return !!limit?.refusal;
 }
 
-export async function executeAgentTeachingTurn({ orchestrator, humanMessage, callbacks = {}, phaseLabels, actionForDialogueMove, mode, decide = modelDecide, policy = TEACHING_POLICY, tools: harnessTools = null, teachGuide = guideTeach, pickFor = defaultPick, assess = runTeachingAssessment, strategyAdvisor = teachingStrategyAdvisor }) {
+export async function executeAgentTeachingTurn({ orchestrator, humanMessage, callbacks = {}, phaseLabels, actionForDialogueMove, mode, decide = modelDecide, policy = TEACHING_POLICY, tools: harnessTools = null, teachGuide = guideTeach, pickFor = defaultPick, assess = runTeachingAssessment, strategyAdvisor = teachingStrategyAdvisor, mergeReply = undefined }) {
   const session = orchestrator?.session;
   if (!orchestrator?.studentAgent || !orchestrator?.studentAgentRecord || !session?.topic) throw new Error("Adaptive teaching workflow requires an initialized session");
   const context = {
@@ -156,7 +156,15 @@ export async function executeAgentTeachingTurn({ orchestrator, humanMessage, cal
   // Asked once per turn: a switch in the chat box applies from the next turn.
   context.modelPick = await Promise.resolve(pickFor ? pickFor({ orchestrator }) : {}).catch(() => ({})) || {};
   const tools = harnessTools || createTeachingTurnTools();
-  const step = (name, status) => callbacks.onWorkflowStep?.({ workflow: "adaptive_teaching_turn", policyVersion: AGENT_TURN_POLICY_VERSION, step: PLAN_NAME[name] || name, label: AGENT_LABELS[name] || LABELS[name] || "Updating teaching session", status });
+  const stepStarts = new Map();
+  const step = (name, status) => {
+    // Per-step durations (latency work, 2026-11-28): the turn's cost lives
+    // in these steps; log them so the next optimisation is measured, not felt.
+    let ms;
+    if (status === "started") stepStarts.set(name, Date.now());
+    else if (stepStarts.has(name)) { ms = Date.now() - stepStarts.get(name); stepStarts.delete(name); console.info(`[teach-turn] step ${PLAN_NAME[name] || name} ${ms}ms`); }
+    callbacks.onWorkflowStep?.({ workflow: "adaptive_teaching_turn", policyVersion: AGENT_TURN_POLICY_VERSION, step: PLAN_NAME[name] || name, label: AGENT_LABELS[name] || LABELS[name] || "Updating teaching session", status, ...(ms !== undefined ? { ms } : {}) });
+  };
   const runFixed = async (name) => {
     step(name, "started");
     try { await tools[name].execute(context); context.completedTools.push(name); step(name, "completed"); }
@@ -164,13 +172,54 @@ export async function executeAgentTeachingTurn({ orchestrator, humanMessage, cal
   };
   session.toolCalls = Number(session.toolCalls) || 0;
 
-  // ① pre-steps
+  // ① pre-steps. The reply's RAG pull starts NOW and runs in parallel with
+  // the evidence judge — it depends only on the learner's message, and
+  // serialising it put the whole retrieval on the reply's critical path.
   await runFixed("load_session_state");
+  const contextPromise = context.mode === "teach_agent" && typeof orchestrator.studentAgent.fetchContext === "function"
+    ? orchestrator.studentAgent.fetchContext(humanMessage).catch(() => null)
+    : null;
   await runFixed("observe_teaching_evidence");
 
-  // ② the agent: up to MAX_ITERATIONS_PER_TURN decisions; a reply tool ends it
+  // ② the reply. Default (teach_agent, production decide): ONE merged
+  // persona call picks the move (its tag line) and writes the reply. The
+  // decision loop remains as the escape hatch for turns that need its
+  // tools — a completion proposal (all parts verified), a strategy change
+  // (a part stuck after repeated attempts), a learner-asked check, a pause
+  // — and for guide mode, whose reply is NaNa's own call.
+  const mergeAllowed = mergeReply !== undefined
+    ? !!mergeReply
+    : decide === modelDecide && process.env.AKORO_TEACH_MERGED_REPLY !== "off";
+  const evNow = context.evidenceUpdate;
+  const msgText = String(humanMessage || "");
+  const needsLoop = context.mode !== "teach_agent"
+    || !mergeAllowed
+    || !!evNow?.dialogue?.allConceptsVerified
+    || (Number(session.assessments || 0) < policy.MAX_ASSESSMENTS && /\b(check|test|quiz|assess)\b/i.test(msgText))
+    || /\b(pause|stop here|continue later|end (the )?session|finish for now|wrap up)\b/i.test(msgText)
+    || ((evNow?.current?.attempts || 0) >= 3 && !evNow?.dialogue?.canAdvance);
   const observations = [];
   let reply = null;   // { tool, args }
+  const part = context.mustKnowParts[context.mustKnowIndex] || context.topic;
+  if (!needsLoop) {
+    const fallback = fallbackReply(context.mode, evNow?.dialogue?.move);
+    const defaultMove = fallback?.args?.move && PROTEGE_MOVES[fallback.args.move] ? fallback.args.move : "request_clarification";
+    let chosenMove = null;
+    step("protege_respond", "started");
+    context.studentReply = await orchestrator.studentAgent.reply(
+      humanMessage, context.topic, context.state.cognitive, context.history, phaseLabels?.[session.phase],
+      callbacks.onStudentChunk || null,
+      { dialogue: evNow.dialogue, evidence: evNow.current, focusConcept: null, modelPick: context.modelPick,
+        contextPromise,
+        mergedMove: { moves: PROTEGE_MOVES, defaultMove, onMove: (m) => { chosenMove = m; } } },
+    );
+    const move = chosenMove || defaultMove;
+    reply = { tool: "protege_respond", args: { move } };
+    context.decisions.push({ iteration: 1, tool: "protege_respond", args: { move }, ok: true, merged: true });
+    context.reply = { tool: PLAN_NAME[reply.tool], move, focusConcept: null };
+    step("protege_respond", "completed");
+    context.completedTools.push(reply.tool);
+  } else {
   for (let i = 0; i < policy.MAX_ITERATIONS_PER_TURN && !reply; i++) {
     let decision = null;
     let error = null;
@@ -227,7 +276,6 @@ export async function executeAgentTeachingTurn({ orchestrator, humanMessage, cal
   context.reply = { tool: PLAN_NAME[reply.tool], move: reply.args.move, focusConcept: reply.args.focusConcept || null };
 
   // the one reply
-  const part = context.mustKnowParts[context.mustKnowIndex] || context.topic;
   step(reply.tool, "started");
   if (reply.tool === "teaching_request_assessment") {
     // A short Agent Check on what was taught: the result is the turn's card; the protégé says how it did.
@@ -252,11 +300,12 @@ export async function executeAgentTeachingTurn({ orchestrator, humanMessage, cal
     context.studentReply = await orchestrator.studentAgent.reply(
       humanMessage, context.topic, context.state.cognitive, context.history, phaseLabels?.[session.phase],
       callbacks.onStudentChunk || null,
-      { dialogue: context.evidenceUpdate.dialogue, evidence: context.evidenceUpdate.current, protegeMove: PROTEGE_MOVES[reply.args.move], focusConcept: reply.args.focusConcept || null, modelPick: context.modelPick },
+      { dialogue: context.evidenceUpdate.dialogue, evidence: context.evidenceUpdate.current, protegeMove: PROTEGE_MOVES[reply.args.move], focusConcept: reply.args.focusConcept || null, modelPick: context.modelPick, contextPromise },
     );
   }
   step(reply.tool, "completed");
   context.completedTools.push(reply.tool);
+  }
 
   // ③ post-steps
   if (context.mode === "learn_with_guide") {
@@ -284,6 +333,22 @@ export async function executeAgentTeachingTurn({ orchestrator, humanMessage, cal
     if (context.evidenceUpdate.misconceptionRepaired) orchestrator.stats.misconceptionsCleared.push(part);
     step("record_verified_learning", "completed");
     context.guideResult = { tip: null, nextAction: recommendNextAction({ dialogueMove: context.evidenceUpdate.dialogue.move, actionForDialogueMove }).action, nextPhase: null, nextMustKnowIndex: context.mustKnowIndex, isUrgent: false };
+  } else if (process.env.AKORO_TEACH_DEFER_POST !== "off") {
+    // Latency work (2026-11-28): the coach and the knowledge record leave
+    // the critical path. They start now — overlapping the gate, the socket
+    // round-trip and the learner's reading time — and the guide's result
+    // follows on the onGuideUpdate callback (the guide_update event: the
+    // pills land on the reply a few seconds after it settles). The gate
+    // therefore runs on the evidence alone this turn; the guide's phase
+    // request was advisory, and the gate's doctrine is evidence decides.
+    // The orchestrator settles this work before the session ends.
+    context.guideResult = { tip: null, nextAction: "DIG_DEEPER", nextPhase: null, nextMustKnowIndex: context.mustKnowIndex, isUrgent: false, suggestions: null };
+    context.deferredWork = (async () => {
+      await Promise.allSettled([
+        runFixed("record_verified_learning"),
+        runFixed("coach_teaching_dialogue").then(() => { try { callbacks.onGuideUpdate?.(context.guideResult, { concept: part, topic: context.topic }); } catch { /* a lost pill update never fails a turn */ } }),
+      ]);
+    })();
   } else {
     await runFixed("record_verified_learning");
     await runFixed("coach_teaching_dialogue");

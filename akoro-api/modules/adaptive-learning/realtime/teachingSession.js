@@ -14,6 +14,7 @@ import {
   finalCheckResolution, beginFinalCheckReteach, finalCheckReteachReady, finishFinalCheck,
 } from "../teaching-session/finalCheck.js";
 import { prepareTeachingSession } from "../teaching-session/start.js";
+import { guideIdeas, shortConcept } from "../teaching-session/guideIdeas.js";
 import { activeSessions } from "./sessions.js";
 import { endLiveSession } from "./teachingLifecycle.js";
 
@@ -240,6 +241,8 @@ export function registerTeachingSessionHandlers(socket) {
     try {
       socket.emit("typing_start");
       socket.emit("student_typing", { typing: true });
+      const turnStartedAt = Date.now();
+      const turnNo = (orchestrator.session.turnCount || 0) + 1;
 
       // Ground this turn in the document's passages most relevant to what
       // the learner just said. Best-effort: no target / nothing indexed /
@@ -262,7 +265,24 @@ export function registerTeachingSessionHandlers(socket) {
         // Observable workflow labels only—never raw messages, model rationale,
         // or an instruction that the browser may use to choose a tool.
         onWorkflowStep: (step) => socket.emit("teaching_workflow_step", step),
+        // The coach's result, when it lands after the turn has settled (it
+        // runs off the critical path): the guide's pills for this turn.
+        onGuideUpdate: (guideResult, meta = {}) => {
+          if (!guideResult) return;
+          socket.emit("guide_update", {
+            turn: turnNo,
+            ideas: guideIdeas(guideResult.suggestions, {
+              nextAction: guideResult.nextAction,
+              concept: meta.topic || shortConcept(meta.concept),
+            }),
+            tip: guideResult.tip || null,
+            nextAction: guideResult.nextAction || null,
+            isUrgent: !!guideResult.isUrgent,
+            offTopic: !!guideResult.offTopic,
+          });
+        },
       }, { mode: mode || null });
+      console.info(`[teach-turn] teacher_message total ${Date.now() - turnStartedAt}ms (turn ${turnNo})`);
 
       socket.emit("student_done");
       socket.emit("guide_done");

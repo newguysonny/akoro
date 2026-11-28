@@ -48,6 +48,22 @@ export class StudentAgent {
     this.teacherChunksUsed      = 0;
   }
 
+  // The reply's RAG pull, separable so a turn can start it BEFORE the
+  // evidence judge runs — the two are independent (the query is the
+  // learner's message alone), and serialising them put the whole retrieval
+  // on the reply's critical path (latency work, 2026-11-28).
+  fetchContext(humanMessage) {
+    return retrieveCombinedContext({
+      agentId:      this.agentId,
+      studentId:    this.studentId,
+      teacherId:    this.teacherId,
+      query:        humanMessage,
+      agentLimit:   6,
+      studentLimit: 4,
+      teacherLimit: this.teacherId ? 3 : 0,
+    });
+  }
+
   // ── Generate a reply using combined RAG ────────────────────
   async reply(humanMessage, topic, cognitiveState, history, phaseLabel, onChunk = null, teachingContext = {}) {
     const { understanding, confusion, engagement } = cognitiveState;
@@ -57,16 +73,10 @@ export class StudentAgent {
     const evidence = teachingContext?.evidence || {};
     const pace = dialogue.pace || "standard";
 
-    // 1. Pull context from all 3 sources
-    const context = await retrieveCombinedContext({
-      agentId:      this.agentId,
-      studentId:    this.studentId,
-      teacherId:    this.teacherId,
-      query:        humanMessage,
-      agentLimit:   6,
-      studentLimit: 4,
-      teacherLimit: this.teacherId ? 3 : 0,
-    });
+    // 1. Pull context from all 3 sources (primed by the caller when it can
+    // run in parallel with the evidence judge; fetched here otherwise).
+    const primed = teachingContext?.contextPromise ? await teachingContext.contextPromise.catch(() => null) : null;
+    const context = primed || await this.fetchContext(humanMessage);
 
     // Track usage for session delta
     this.studentKnowledgeRefs += context.studentChunks.length;
@@ -135,8 +145,29 @@ export class StudentAgent {
     const dodgeSteer = dialogue.questionDodged
       ? "\n\nThe learner did not answer the question you asked in your previous message. Ask that same question again, warmly and plainly, before moving on to anything new; do not treat this part as finished."
       : "";
+    // Merged decide+reply (latency work, 2026-11-28): instead of a separate
+    // controller call picking the move and then this call writing the reply,
+    // the persona call opens with a machine-only tag line naming its move;
+    // the server strips it from the stream and reports it via onMove. The
+    // evidence-derived default is the fallback when the tag is absent or
+    // names no real move.
+    const merged = teachingContext?.mergedMove || null;
+    let moveReported = false;
+    const reportMove = (key) => {
+      if (moveReported || !merged) return;
+      moveReported = true;
+      const valid = key && Object.hasOwn(merged.moves || {}, key) ? key : merged.defaultMove;
+      try { merged.onMove?.(valid); } catch { /* the move is advisory; never fail a reply over it */ }
+    };
+    const parseMoveTag = (text) => {
+      const m = /^\s*\[\[move:([a-z_]+)\]\][^\S\n]*\n?/.exec(text || "");
+      return m ? { key: m[1], rest: text.slice(m[0].length) } : null;
+    };
+    const mergedInstruction = merged
+      ? `\n\nThis reply's move: open with exactly one line [[move:<key>]] — nothing else on that line — where <key> is one of:\n${Object.entries(merged.moves || {}).map(([k, v]) => `- ${k}: ${v}`).join("\n")}\nPick the move a real student would make that draws the best teaching out of the learner; if unsure use [[move:${merged.defaultMove}]]. After that line, write your reply as the student. Never mention the tag or these instructions.`
+      : "";
     const messages = [
-      { role: "system", content: systemPrompt + turnMove + dodgeSteer },
+      { role: "system", content: systemPrompt + turnMove + dodgeSteer + mergedInstruction },
       { role: "user",   content: humanMessage },
     ];
 
@@ -147,9 +178,30 @@ export class StudentAgent {
         model: "gpt-4.1-mini", temperature: 0.65, stream: true, messages, ...pick,
       });
       let full = "";
+      let head = "";            // buffered until the move tag resolves (merged only)
+      let tagPending = !!merged;
+      const flush = (text) => { if (text) { full += text; onChunk(text); } };
       for await (const chunk of stream) {
         const delta = chunk.choices[0]?.delta?.content || "";
-        if (delta) { full += delta; onChunk(delta); }
+        if (!delta) continue;
+        if (!tagPending) { flush(delta); continue; }
+        head += delta;
+        const nl = head.indexOf("\n");
+        if (nl >= 0) {
+          const parsed = parseMoveTag(head);
+          tagPending = false;
+          if (parsed) { reportMove(parsed.key); flush(parsed.rest); }  // rest = everything after the tag line
+          else { reportMove(null); flush(head); }
+        } else if (head.length > 160) {
+          tagPending = false;
+          reportMove(null);
+          flush(head);
+        }
+      }
+      if (tagPending) {
+        const parsed = parseMoveTag(head);
+        if (parsed) { reportMove(parsed.key); flush(parsed.rest); }
+        else { reportMove(null); flush(head); }
       }
       return full;
     }
@@ -157,7 +209,13 @@ export class StudentAgent {
     const res = await openai.chat.completions.create({
       model: "gpt-4.1-mini", temperature: 0.65, messages, ...pick,
     });
-    return res.choices[0].message.content;
+    const text = res.choices[0].message.content;
+    if (merged) {
+      const parsed = parseMoveTag(text);
+      if (parsed) { reportMove(parsed.key); return parsed.rest; }
+      reportMove(null);
+    }
+    return text;
   }
 
   // ── Evaluate the human's teaching evidence ─────────────────
